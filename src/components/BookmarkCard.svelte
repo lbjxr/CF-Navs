@@ -14,7 +14,8 @@
   $: openInNewTab = bookmark.open_method === 1
   $: iconText = bookmark.title.trim().slice(0, 1) || '书'
   $: infoIconSize = Math.max(0, Math.min(height > 0 ? height : 70, width))
-  $: compactIconSize = Math.max(0, Math.min(iconSize, height > 0 ? height : iconSize, width))
+  $: compactIconSize = Math.max(0, iconSize)
+  $: tooltipText = bookmark.description ? `${bookmark.title}\n${bookmark.description}` : bookmark.title
 
   // 图标来源：有 URL 时优先加载；失败时尝试缓存；再失败用首字母
   $: iconUrl = (() => {
@@ -70,17 +71,18 @@
     href={bookmark.url}
     target={openInNewTab ? '_blank' : undefined}
     rel={openInNewTab ? 'noopener noreferrer' : undefined}
-    style="min-width: {width}px; {height > 0 ? `height: ${height}px;` : ''}"
+    style="width: {compactIconSize}px; height: {compactIconSize}px;"
+    title={tooltipText}
+    aria-label={tooltipText}
+    data-tooltip={tooltipText}
   >
-    <div class="bookmark-icon" style="width: {compactIconSize}px; height: {compactIconSize}px; max-width: 100%;">
+    <div class="bookmark-icon">
       {#if bookmark.icon && !fallbackFailed}
         <img src={iconUrl} alt={bookmark.title} loading="lazy" on:error={handleIconError} on:load={handleIconLoad} />
       {:else}
         <span class="icon-text">{iconText}</span>
       {/if}
     </div>
-
-    <h3 class="bookmark-title-icon">{bookmark.title}</h3>
   </a>
 {/if}
 
@@ -143,10 +145,11 @@
 
   /* 极简风格 */
   .bookmark-card-icon {
+    position: relative;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    padding: 0; /* 去掉内边距，Sun-Panel 标准 */
+    justify-content: center;
+    padding: 0;
     border-radius: 1.2rem;
     background: rgb(var(--card-bg-rgb, 255 255 255) / var(--card-bg-opacity, 0.9));
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
@@ -158,22 +161,38 @@
   }
 
   .bookmark-card-icon .bookmark-icon {
-    border-radius: 0.75rem;
-    margin: 0.25rem 0 0 0; /* 进一步减小到 4px */
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
   }
 
-  .bookmark-card-icon .bookmark-title-icon {
-    margin: 0.25rem 0; /* 进一步减小到 4px */
-    font-size: 0.75rem;
-    font-weight: 500;
-    text-align: center;
-    text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 100%;
-    line-height: 1.2;
-    padding: 0 0.25rem;
+  .bookmark-card-icon::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    z-index: 20;
+    width: max-content;
+    max-width: 240px;
+    padding: 0.45rem 0.65rem;
+    border-radius: 0.55rem;
+    background: rgba(15, 23, 42, 0.95);
+    color: #ffffff;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    text-align: left;
+    white-space: pre-line;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.24);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+
+  .bookmark-card-icon:hover::after,
+  .bookmark-card-icon:focus-visible::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
   }
 
   /* 图标样式 */

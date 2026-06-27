@@ -15,7 +15,7 @@
   export let onAddBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
 
   $: sectionId = `category-${category.id}`
-  $: gridMinWidth = cardStyle === 'info' ? 200 : 75 // Sun-Panel 标准值
+  $: gridMinWidth = cardStyle === 'info' ? 200 : cardIconSize // Sun-Panel 标准值
 
   async function handleAddBookmark() {
     await onAddBookmark?.(category.id)
