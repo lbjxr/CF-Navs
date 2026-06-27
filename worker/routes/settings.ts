@@ -44,6 +44,12 @@ settingsRoutes.put('/', async (c) => {
   if (body.site_title !== undefined && typeof body.site_title !== 'string') {
     return badRequest(c, 'invalid site_title')
   }
+  if (body.site_title_color !== undefined && typeof body.site_title_color !== 'string') {
+    return badRequest(c, 'invalid site_title_color')
+  }
+  if (body.site_title_font_size !== undefined && typeof body.site_title_font_size !== 'number') {
+    return badRequest(c, 'invalid site_title_font_size')
+  }
   if (body.custom_css !== undefined && typeof body.custom_css !== 'string') {
     return badRequest(c, 'invalid custom_css')
   }

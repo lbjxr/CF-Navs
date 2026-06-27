@@ -66,6 +66,8 @@ export type CardStyle = 'info' | 'icon' // info=详情风格, icon=极简风格
 // 全部设置的强类型视图（后端按 key 存 JSON，这里是聚合形态）
 export interface Settings {
   site_title: string
+  site_title_color: string
+  site_title_font_size: number
   public_mode: boolean
   theme: ThemeMode
   background: BackgroundSetting
@@ -122,6 +124,8 @@ export interface PublicData {
 // 公开输出的设置子集（不含密码等敏感项）
 export interface PublicSettings {
   site_title: string
+  site_title_color: string
+  site_title_font_size: number
   theme: ThemeMode
   background: BackgroundSetting
   custom_css: string

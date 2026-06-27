@@ -13,6 +13,7 @@
   export let cardIconSize = 70
   export let cardShowDescription = true
   export let onAddBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
+  export let onEditBookmark: ((bookmark: Bookmark) => AsyncVoid) | undefined = undefined
 
   $: sectionId = `category-${category.id}`
   $: gridMinWidth = cardStyle === 'info' ? 200 : cardIconSize // Sun-Panel 标准值
@@ -51,6 +52,8 @@
           showDescription={cardShowDescription}
           width={cardWidth}
           height={cardHeight}
+          canEdit={Boolean(onEditBookmark)}
+          onEdit={onEditBookmark}
         />
       {/each}
     </div>

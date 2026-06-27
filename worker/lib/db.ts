@@ -12,6 +12,8 @@ import type {
 // 用于在某个 key 缺失时回退，确保聚合出的 Settings 字段完整。
 const DEFAULT_SETTINGS: Settings = {
   site_title: 'CF-Navs',
+  site_title_color: '#ffffff',
+  site_title_font_size: 32,
   public_mode: true,
   theme: 'auto',
   background: { type: 'color', value: '#0f172a', blur: 0, mask: 0.3, maskColor: '#000000' },

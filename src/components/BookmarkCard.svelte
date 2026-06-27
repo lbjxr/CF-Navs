@@ -1,15 +1,22 @@
 <script lang="ts">
   import type { Bookmark, CardStyle } from '../../shared/types'
 
+  type AsyncVoid<T = void> = T | Promise<T>
+
   export let bookmark: Bookmark
   export let style: CardStyle = 'info'
   export let iconSize: number = 100
   export let showDescription: boolean = true
   export let width: number = 200
   export let height: number = 0
+  export let canEdit = false
+  export let onEdit: ((bookmark: Bookmark) => AsyncVoid) | undefined = undefined
 
   let useFallbackIcon = false
   let fallbackFailed = false
+  let contextMenuOpen = false
+  let contextMenuX = 0
+  let contextMenuY = 0
 
   $: openInNewTab = bookmark.open_method === 1
   $: iconText = bookmark.title.trim().slice(0, 1) || '书'
@@ -38,7 +45,36 @@
   function handleIconLoad() {
     fallbackFailed = false
   }
+
+  function closeContextMenu() {
+    contextMenuOpen = false
+  }
+
+  function handleContextMenu(event: MouseEvent) {
+    if (!canEdit || !onEdit) return
+    event.preventDefault()
+    contextMenuX = Math.min(event.clientX, window.innerWidth - 132)
+    contextMenuY = Math.min(event.clientY, window.innerHeight - 52)
+    contextMenuOpen = true
+  }
+
+  async function handleEditClick() {
+    closeContextMenu()
+    await onEdit?.(bookmark)
+  }
+
+
+  function handleWindowClick() {
+    if (contextMenuOpen) closeContextMenu()
+  }
+
+  function handleDocumentKeydown(event: KeyboardEvent) {
+    if (contextMenuOpen && event.key === 'Escape') closeContextMenu()
+  }
+
 </script>
+
+<svelte:window on:click={handleWindowClick} on:keydown={handleDocumentKeydown} />
 
 {#if style === 'info'}
   <!-- 详情风格：水平布局 -->
@@ -48,6 +84,7 @@
     target={openInNewTab ? '_blank' : undefined}
     rel={openInNewTab ? 'noopener noreferrer' : undefined}
     style="min-width: {width}px; {height > 0 ? `height: ${height}px;` : ''}"
+    on:contextmenu={handleContextMenu}
   >
     <div class="bookmark-icon" style="width: {infoIconSize}px; height: {infoIconSize}px; max-width: 100%;">
       {#if bookmark.icon && !fallbackFailed}
@@ -75,6 +112,7 @@
     title={tooltipText}
     aria-label={tooltipText}
     data-tooltip={tooltipText}
+    on:contextmenu={handleContextMenu}
   >
     <div class="bookmark-icon">
       {#if bookmark.icon && !fallbackFailed}
@@ -84,6 +122,15 @@
       {/if}
     </div>
   </a>
+{/if}
+
+{#if contextMenuOpen}
+  <div
+    class="bookmark-context-menu"
+    style="left: {contextMenuX}px; top: {contextMenuY}px;"
+  >
+    <button type="button" on:click={handleEditClick}>编辑</button>
+  </div>
 {/if}
 
 <style>

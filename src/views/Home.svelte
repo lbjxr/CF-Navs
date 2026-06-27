@@ -14,6 +14,7 @@
   export let isAuthenticated = false
   export let authLoading = false
   export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
+  export let onEditBookmark: ((bookmark: Bookmark) => AsyncVoid) | undefined = undefined
   export let onSwitchToAdmin: (() => AsyncVoid) | undefined = undefined
   export let onLogout: (() => AsyncVoid) | undefined = undefined
   export let onOpenLogin: (() => AsyncVoid) | undefined = undefined
@@ -45,6 +46,8 @@
 
   $: totalBookmarks = sortedBookmarks.length
   $: pageTitle = title || settings?.site_title || '导航首页'
+  $: siteTitleColor = settings?.site_title_color?.trim() || 'inherit'
+  $: siteTitleFontSize = clampTitleFontSize(settings?.site_title_font_size)
   $: pageDescription =
     totalBookmarks > 0
       ? `已整理 ${sortedCategories.length} 个分类，收录 ${totalBookmarks} 个站点。`
@@ -52,6 +55,11 @@
 
   $: if (!sections.some((section) => section.id === activeId)) {
     activeId = sections[0]?.id ?? ''
+  }
+
+  function clampTitleFontSize(value: number | undefined): number {
+    if (!Number.isFinite(value)) return 32
+    return Math.min(72, Math.max(16, Number(value)))
   }
 
   function handleMainScroll() {
@@ -120,45 +128,45 @@
 </svelte:head>
 
 <div class="home-shell">
-  <header class="site-header">
-    <h1 class="site-title">{pageTitle}</h1>
-    <div class="header-actions">
-      {#if isAuthenticated}
-        <button
-          type="button"
-          class="icon-button"
-          on:click={() => onSwitchToAdmin?.()}
-          title="管理后台"
-          aria-label="管理后台"
-        >
-          ⚙️
-        </button>
-        <button
-          type="button"
-          class="icon-button"
-          on:click={() => onLogout?.()}
-          disabled={authLoading}
-          title="退出登录"
-          aria-label="退出登录"
-        >
-          🚪
-        </button>
-      {:else}
-        <button
-          type="button"
-          class="icon-button"
-          on:click={() => onOpenLogin?.()}
-          title="管理员登录"
-          aria-label="管理员登录"
-        >
-          🔑
-        </button>
-      {/if}
-    </div>
-  </header>
+  <div class="floating-actions">
+    {#if isAuthenticated}
+      <button
+        type="button"
+        class="icon-button"
+        on:click={() => onSwitchToAdmin?.()}
+        title="管理后台"
+        aria-label="管理后台"
+      >
+        &#9881;
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        on:click={() => onLogout?.()}
+        disabled={authLoading}
+        title="退出登录"
+        aria-label="退出登录"
+      >
+        &#8618;
+      </button>
+    {:else}
+      <button
+        type="button"
+        class="icon-button"
+        on:click={() => onOpenLogin?.()}
+        title="管理员登录"
+        aria-label="管理员登录"
+      >
+        &#9881;
+      </button>
+    {/if}
+  </div>
 
-  <section class="search-card">
-    <SearchBox searchEngine={settings?.search_engine ?? null} />
+  <section class="hero-search" aria-label="站点搜索">
+    <h1 class="site-title" style="color: {siteTitleColor}; font-size: {siteTitleFontSize}px;">{pageTitle}</h1>
+    <div class="search-card">
+      <SearchBox searchEngine={settings?.search_engine ?? null} />
+    </div>
   </section>
 
   <Sidebar items={sections} {activeId} onNavigate={handleNavigate} />
@@ -186,6 +194,7 @@
                 cardIconSize={settings?.card_icon_size ?? 70}
                 cardShowDescription={settings?.card_show_description ?? true}
                 onAddBookmark={onOpenCreateBookmark}
+                onEditBookmark={onEditBookmark}
               />
             </div>
           {/each}
@@ -237,33 +246,29 @@
     opacity: var(--home-background-mask, 0.3);
   }
 
-  .site-header {
+  .floating-actions {
     position: fixed;
-    top: 1.5rem;
-    left: 1.5rem;
-    right: 1.5rem;
-    z-index: 40;
+    top: 1.25rem;
+    right: 1.25rem;
+    z-index: 50;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem 1.25rem;
-    background: rgb(71 85 105 / 13%);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: 16px;
-    box-shadow: 0 2px 8px rgb(0 0 0 / 24%);
+    gap: 0.5rem;
+  }
+
+  .hero-search {
+    display: grid;
+    gap: 0.85rem;
+    max-width: 680px;
+    margin: 3rem auto 1.25rem;
+    text-align: center;
   }
 
   .site-title {
     margin: 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: inherit;
-  }
-
-  .header-actions {
-    display: flex;
-    gap: 0.5rem;
+    font-weight: 700;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+    text-shadow: 0 2px 12px rgba(15, 23, 42, 0.22);
   }
 
   .icon-button {
@@ -273,7 +278,8 @@
     border-radius: 0.75rem;
     background: rgba(255, 255, 255, 0.82);
     backdrop-filter: blur(12px);
-    font-size: 1.1rem;
+    font-size: 1.15rem;
+    line-height: 1;
     cursor: pointer;
     transition: all 0.2s ease;
     display: flex;
@@ -296,6 +302,7 @@
   :global([data-theme='dark']) .icon-button {
     background: rgba(15, 23, 42, 0.7);
     border-color: rgba(148, 163, 184, 0.32);
+    color: #e5eefb;
   }
 
   :global([data-theme='dark']) .icon-button:hover:not(:disabled) {
@@ -304,7 +311,7 @@
 
   .search-card {
     max-width: 680px;
-    margin: 5rem auto 1rem;
+    margin: 0;
     padding: 0.75rem 1rem;
     border-radius: 1.5rem;
     border: 1px solid rgba(148, 163, 184, 0.18);
@@ -397,14 +404,13 @@
       padding: 1rem;
     }
 
-    .site-header {
+    .floating-actions {
       top: 1rem;
-      left: 1rem;
       right: 1rem;
     }
 
-    .site-title {
-      font-size: 1.1rem;
+    .hero-search {
+      margin-top: 3.5rem;
     }
 
     .icon-button {
@@ -417,12 +423,5 @@
       margin-top: 4rem;
       border-radius: 1.2rem;
     }
-  }
-
-  :global(body.dark-theme) .site-header {
-    background: rgba(30, 34, 39, 0.8);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   }
 </style>

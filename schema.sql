@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS settings (
 -- 默认设置（仅当不存在时插入）
 INSERT OR IGNORE INTO settings (key, value) VALUES
   ('site_title', '"CF-Navs"'),
+  ('site_title_color', '"#ffffff"'),
+  ('site_title_font_size', '32'),
   ('public_mode', 'true'),
   ('theme', '"auto"'),
   ('background', '{"type":"color","value":"#0f172a","blur":0,"mask":0.3}'),

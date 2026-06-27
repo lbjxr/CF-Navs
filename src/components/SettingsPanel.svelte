@@ -10,6 +10,8 @@
   type SettingsPanelValue = Pick<
     Settings,
     | 'site_title'
+    | 'site_title_color'
+    | 'site_title_font_size'
     | 'public_mode'
     | 'theme'
     | 'image_host_url'
@@ -47,6 +49,8 @@
 
   const emptyForm: SettingsPanelValue = {
     site_title: '',
+    site_title_color: '#ffffff',
+    site_title_font_size: 32,
     public_mode: true,
     theme: 'auto',
     image_host_url: '',
@@ -73,6 +77,8 @@
   function cloneForm(source: SettingsPanelValue): SettingsPanelValue {
     return {
       site_title: source.site_title,
+      site_title_color: source.site_title_color,
+      site_title_font_size: source.site_title_font_size,
       public_mode: source.public_mode,
       theme: source.theme,
       image_host_url: source.image_host_url,
@@ -96,6 +102,8 @@
     const cardSize = source?.card_size
     return {
       site_title: source?.site_title ?? '',
+      site_title_color: source?.site_title_color ?? '#ffffff',
+      site_title_font_size: typeof source?.site_title_font_size === 'number' ? source.site_title_font_size : 32,
       public_mode: source?.public_mode ?? true,
       theme: source?.theme ?? 'auto',
       image_host_url: source?.image_host_url ?? '',
@@ -144,6 +152,8 @@
       : engines[0]?.name ?? ''
     return {
       site_title: source.site_title.trim(),
+      site_title_color: source.site_title_color?.trim() || '#ffffff',
+      site_title_font_size: clampNumber(source.site_title_font_size, 16, 72),
       public_mode: source.public_mode,
       theme: source.theme,
       image_host_url: source.image_host_url.trim(),
@@ -271,6 +281,26 @@
               required
             />
             <small>将显示在页面标题与管理界面中。</small>
+          </label>
+
+          <label class="field">
+            <span>标题颜色</span>
+            <div class="color-picker-row">
+              <input
+                bind:value={form.site_title_color}
+                type="text"
+                placeholder="#ffffff"
+                maxlength="30"
+              />
+              <span class="color-swatch" style="background: {form.site_title_color};" title="当前标题颜色预览"></span>
+            </div>
+            <small>首页搜索栏上方标题的文字颜色。</small>
+          </label>
+
+          <label class="field">
+            <span>标题文字大小 <em>{form.site_title_font_size}px</em></span>
+            <input bind:value={form.site_title_font_size} type="range" min="16" max="72" step="1" />
+            <small>控制首页标题字号，建议 28-44px。</small>
           </label>
 
           <label class="field">

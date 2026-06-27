@@ -107,7 +107,7 @@
 
   type SettingsSubset = Pick<
     Settings,
-    'site_title' | 'public_mode' | 'theme' | 'image_host_url' | 'background' | 'search_engine' | 'card_size' | 'card_style' | 'card_icon_size' | 'card_show_description' | 'card_background_color' | 'card_background_opacity'
+    'site_title' | 'site_title_color' | 'site_title_font_size' | 'public_mode' | 'theme' | 'image_host_url' | 'background' | 'search_engine' | 'card_size' | 'card_style' | 'card_icon_size' | 'card_show_description' | 'card_background_color' | 'card_background_opacity'
   >
 
   function toSettingsForm(settings: Settings | null): SettingsSubset | null {
@@ -115,6 +115,8 @@
 
     return {
       site_title: settings.site_title,
+      site_title_color: settings.site_title_color,
+      site_title_font_size: settings.site_title_font_size,
       public_mode: settings.public_mode,
       theme: settings.theme,
       image_host_url: settings.image_host_url,
@@ -439,7 +441,14 @@
   }
 
   async function handleEditBookmark(bookmark: { id: string | number }): Promise<void> {
-    const current = adminData.bookmarks.find((item) => item.id === Number(bookmark.id))
+    if (!isLoggedIn()) {
+      await handleOpenLogin()
+      return
+    }
+
+    const current =
+      adminData.bookmarks.find((item) => item.id === Number(bookmark.id)) ??
+      publicData?.bookmarks.find((item) => item.id === Number(bookmark.id))
     if (!current) return
 
     bookmarkError = ''
@@ -483,6 +492,7 @@
 
     try {
       await api.bookmarks.remove(Number(bookmark.id))
+      resetBookmarkState()
       await adminStore.refreshBookmarks()
       await refreshPublicData()
     } catch (error) {
@@ -646,6 +656,7 @@
           isAuthenticated={$isAuthenticated}
           authLoading={$authStore.loading}
           onOpenCreateBookmark={handleOpenCreateBookmark}
+          onEditBookmark={handleEditBookmark}
           onSwitchToAdmin={() => { currentView = 'admin' }}
           onLogout={handleLogout}
           onOpenLogin={handleOpenLogin}
@@ -707,6 +718,8 @@
       onSubmit={handleSubmitBookmark}
       onCancel={handleCloseBookmarkModal}
       onFetchFavicon={handleFetchFavicon}
+      onDelete={handleDeleteBookmark}
+      deleting={deletingBookmarkId === Number(activeBookmark?.id)}
       imageHostUrl={adminData.settings?.image_host_url ?? ''}
     />
   </div>

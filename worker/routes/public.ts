@@ -8,6 +8,8 @@ import type { HonoEnv } from '../types'
 function toPublicSettings(settings: Settings): PublicSettings {
   return {
     site_title: settings.site_title,
+    site_title_color: settings.site_title_color,
+    site_title_font_size: settings.site_title_font_size,
     theme: settings.theme,
     background: settings.background,
     custom_css: settings.custom_css,

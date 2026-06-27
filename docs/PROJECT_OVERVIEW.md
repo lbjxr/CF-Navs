@@ -14,6 +14,7 @@
 ### 用户功能
 - ✅ 响应式导航界面（桌面/移动端）
 - ✅ 分类和书签浏览
+- ✅ 首页标题独立展示，支持颜色和文字大小配置
 - ✅ 多搜索引擎快速切换
 - ✅ 两种卡片风格（详情/极简）
 - ✅ 自定义背景（纯色/渐变/图片）
@@ -26,6 +27,7 @@
 - ✅ 单管理员登录系统
 - ✅ 分类 CRUD 操作
 - ✅ 书签 CRUD 操作
+- ✅ 前台右键编辑书签，编辑弹窗内可二次确认删除
 - ✅ 拖拽排序（分类和书签）
 - ✅ 四种方式获取图标（自动解析 / Favicon.im / 文字图标 / Google）
 - ✅ 图标本地缓存回退
@@ -90,14 +92,14 @@ bookmarks (id, category_id, title, url, icon, icon_source, icon_blob,
 ## 📦 主要依赖
 
 ### 前端
-- `svelte`: ^5.27.4
+- `svelte`: ^4.2.19
 - `vite`: ^5.4.21
-- `typescript`: ^5.7.3
-- `sortablejs`: ^1.15.6
+- `typescript`: ^5.5.4
+- `sortablejs`: ^1.15.3
 
 ### 后端
-- `hono`: ^4.7.11
-- `@cloudflare/workers-types`: ^4.20250115.0
+- `hono`: ^4.6.3
+- `@cloudflare/workers-types`: ^4.20240909.0
 
 ## 🔧 配置说明
 
@@ -143,6 +145,7 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 
 ### UI 设计
 - 现代化圆角设计
+- 首页标题置于搜索框上方，管理操作以右上角悬浮图标呈现
 - 毛玻璃效果（backdrop-filter）
 - 柔和的阴影和过渡动画
 - 响应式网格布局
@@ -154,6 +157,7 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 - 加载状态反馈
 - 错误提示
 - 确认对话框
+- 前台书签右键菜单复用后台编辑弹窗和 API 流程
 
 ### 可访问性
 - 语义化 HTML
@@ -228,11 +232,8 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 docs/
 ├── QUICKSTART.md       # 快速开始
 ├── DEPLOYMENT.md       # 部署指南
-└── development/        # 开发文档（不提交到仓库）
-    ├── API_CONTRACT.md
-    ├── DESIGN.md
-    ├── PROJECT_STATUS.md
-    └── ...其他开发记录
+├── PROJECT_OVERVIEW.md # 项目概览
+└── SUNPANEL_IMPORT.md  # Sun-Panel 数据导入说明
 ```
 
 ## 🎯 未来规划

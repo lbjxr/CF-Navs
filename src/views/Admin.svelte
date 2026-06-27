@@ -95,6 +95,8 @@
     Pick<
       Settings,
       | 'site_title'
+      | 'site_title_color'
+      | 'site_title_font_size'
       | 'public_mode'
       | 'theme'
       | 'image_host_url'
@@ -139,6 +141,8 @@
         payload: Pick<
           Settings,
           | 'site_title'
+          | 'site_title_color'
+          | 'site_title_font_size'
           | 'public_mode'
           | 'theme'
           | 'image_host_url'
