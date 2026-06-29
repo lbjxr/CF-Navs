@@ -58,8 +58,10 @@ node scripts/convert-sunpanel.cjs SunPanel-Data.json cf-navs-import.json
 
 1. **图标转换**：
    - HTTP/HTTPS 图标：直接使用
-   - Sun-Panel 上传的图标：自动使用 favicon.im 服务获取
-   - 文本图标/Iconify 图标：留空，导入后自动获取
+   - Sun-Panel 上传的图标：可转换为 favicon.im 候选地址保存
+   - 非图片图标：留空，导入后按现有图标候选逻辑自动补全
+
+   运行时前台不会直接请求 favicon.im。书签图标会通过 `/api/icon/:id` 代理读取 D1 与 Cloudflare 边缘缓存，分类图标会通过 `/api/category-icon/:id` 代理读取；第三方图标服务限流或失败时显示文字 fallback，避免浏览器控制台出现 favicon.im 429。
 
 2. **打开方式**：
    - Sun-Panel 的 `2`（新窗口）→ CF-Navs 的 `1`
@@ -139,7 +141,8 @@ node scripts/convert-sunpanel.cjs SunPanel-Data.json cf-navs-import.json
 
 **解决方法：**
 1. 编辑书签，点击"获取图标"按钮
-2. 或使用图床上传图标后手动填写 URL
+2. 选择文字图标或 Google / Favicon.im 候选
+3. 或使用图床上传图标后手动填写 URL；运行时仍会优先通过 CF-Navs 图标代理缓存展示
 
 ### Q: 导入后排序不对？
 

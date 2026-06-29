@@ -18,8 +18,9 @@ export interface Bookmark {
   url: string
   icon: string | null
   icon_source: IconSource | null // 图标获取方式（direct/favicon_im/logo_surf/google/custom）
+  icon_background_color: string | null
   description: string | null
-  open_method: 1 | 2 // 1=新窗口 2=当前页
+  open_method: 1 | 2 | 3 // 1=新窗口 2=当前页 3=当前页弹层
   sort: number
   created_at: number
 }
@@ -60,6 +61,14 @@ export interface CardSizeSetting {
   height: number // 卡片最小高度 (px)
 }
 
+export interface ContentLayoutSetting {
+  max_width: number
+  max_width_unit: 'px' | '%'
+  margin_x: number // 0-100, px
+  margin_top: number // 0-50, %
+  margin_bottom: number // 0-50, %
+}
+
 // 卡片风格类型
 export type CardStyle = 'info' | 'icon' // info=详情风格, icon=极简风格
 
@@ -81,6 +90,12 @@ export interface Settings {
   card_show_description: boolean // 新增：是否显示描述（详情风格）
   card_background_color: string // 卡片背景颜色，例如 '#ffffff'
   card_background_opacity: number // 卡片背景不透明度 0-1
+  card_icon_show_title: boolean // 极简风格是否显示标题
+  card_text_color: string // 卡片标题/描述文字颜色
+  search_box_show: boolean
+  search_engine_selector_show: boolean
+  content_layout: ContentLayoutSetting
+  footer_html: string
 }
 
 // ========== API 统一响应包络 ==========
@@ -138,6 +153,12 @@ export interface PublicSettings {
   card_show_description: boolean // 添加描述显示开关
   card_background_color: string
   card_background_opacity: number
+  card_icon_show_title: boolean
+  card_text_color: string
+  search_box_show: boolean
+  search_engine_selector_show: boolean
+  content_layout: ContentLayoutSetting
+  footer_html: string
 }
 
 // GET /api/config （极简公开配置，登录页用）
@@ -159,8 +180,9 @@ export interface BookmarkUpsertReq {
   url: string
   icon?: string | null
   icon_source?: IconSource | null
+  icon_background_color?: string | null
   description?: string | null
-  open_method?: 1 | 2
+  open_method?: 1 | 2 | 3
 }
 
 // GET /api/fetch-favicon?url=...

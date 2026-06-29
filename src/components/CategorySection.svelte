@@ -12,12 +12,46 @@
   export let cardStyle: CardStyle = 'info'
   export let cardIconSize = 70
   export let cardShowDescription = true
+  export let cardIconShowTitle = true
   export let onAddBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
   export let onEditBookmark: ((bookmark: Bookmark) => AsyncVoid) | undefined = undefined
 
+  let categoryIconFailed = false
+  let categoryIconStateKey = ''
+
   $: sectionId = `category-${category.id}`
+  $: categoryIconKey = `${category.id}:${category.icon ?? ''}:${category.title}`
+  $: categoryIconUrl = getCategoryIconUrl(category)
+  $: hasCategoryImageIcon = Boolean(categoryIconUrl) && !categoryIconFailed
   $: gridMinWidth = cardStyle === 'info' ? 200 : cardIconSize // Sun-Panel 标准值
   $: mobileGridMinWidth = cardStyle === 'info' ? 150 : cardIconSize
+  $: gridGap = cardStyle === 'info' ? '18px' : '50px'
+  $: mobileGridGap = cardStyle === 'info' ? '1rem' : '50px'
+  $: if (categoryIconKey !== categoryIconStateKey) {
+    categoryIconStateKey = categoryIconKey
+    categoryIconFailed = false
+  }
+
+  function createIconVersion(input: string): string {
+    let hash = 0
+    for (let i = 0; i < input.length; i += 1) {
+      hash = Math.imul(31, hash) + input.charCodeAt(i) | 0
+    }
+    return Math.abs(hash).toString(36)
+  }
+
+  function getCategoryIconUrl(value: Category): string {
+    const icon = value.icon ?? ''
+    if (/^data:image\//i.test(icon)) return icon
+    if (/^https?:\/\//i.test(icon)) {
+      return `/api/category-icon/${value.id}?v=${createIconVersion(`${value.id}:${icon}:${value.title}`)}`
+    }
+    return ''
+  }
+
+  function handleCategoryIconError() {
+    categoryIconFailed = true
+  }
 
   async function handleAddBookmark() {
     await onAddBookmark?.(category.id)
@@ -27,8 +61,10 @@
 <section class="category-section" id={sectionId}>
   <header class="section-header">
     <div class="section-title-wrap">
-      {#if category.icon}
-        <img class="section-icon" src={category.icon} alt="" loading="lazy" />
+      {#if hasCategoryImageIcon}
+        <img class="section-icon" src={categoryIconUrl} alt="" on:error={handleCategoryIconError} />
+      {:else if category.icon}
+        <span class="section-icon section-icon-text">{category.icon}</span>
       {/if}
       <div>
         <div class="section-heading-row">
@@ -43,13 +79,17 @@
   </header>
 
   {#if bookmarks.length > 0}
-    <div class="bookmark-grid" style="--card-min-width: {gridMinWidth}px; --mobile-card-min-width: {mobileGridMinWidth}px;">
+    <div
+      class="bookmark-grid"
+      style="--card-min-width: {gridMinWidth}px; --mobile-card-min-width: {mobileGridMinWidth}px; --bookmark-grid-gap: {gridGap}; --mobile-bookmark-grid-gap: {mobileGridGap};"
+    >
       {#each bookmarks as bookmark (bookmark.id)}
         <BookmarkCard
           {bookmark}
           style={cardStyle}
           iconSize={cardIconSize}
           showDescription={cardShowDescription}
+          showIconTitle={cardIconShowTitle}
           width={cardWidth}
           height={cardHeight}
           canEdit={Boolean(onEditBookmark)}
@@ -85,12 +125,24 @@
   }
 
   .section-icon {
+    flex: 0 0 auto;
     width: 2.6rem;
     height: 2.6rem;
     border-radius: 0.85rem;
     object-fit: cover;
     background: rgba(255, 255, 255, 0.8);
     border: 1px solid rgba(148, 163, 184, 0.18);
+  }
+
+  .section-icon-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #0f172a;
+    font-size: 1.15rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .section-title-wrap h2,
@@ -130,7 +182,7 @@
   .bookmark-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(var(--card-min-width, 200px), 1fr));
-    gap: 18px;
+    gap: var(--bookmark-grid-gap, 18px);
     justify-content: start;
   }
 
@@ -138,7 +190,7 @@
   @media (max-width: 500px) {
     .bookmark-grid {
       grid-template-columns: repeat(auto-fill, minmax(var(--mobile-card-min-width, 150px), 1fr));
-      gap: 1rem;
+      gap: var(--mobile-bookmark-grid-gap, 1rem);
     }
   }
 
@@ -154,6 +206,10 @@
   :global([data-theme='dark']) .section-icon {
     background: rgba(148, 163, 184, 0.16);
     border-color: rgba(148, 163, 184, 0.22);
+  }
+
+  :global([data-theme='dark']) .section-icon-text {
+    color: #e5eefb;
   }
 
   :global([data-theme='dark']) .add-link-button {

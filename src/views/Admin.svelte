@@ -15,8 +15,9 @@
     url: string
     icon?: string
     icon_source?: string
+    icon_background_color?: string
     description?: string
-    open_method?: 'same_tab' | 'new_tab'
+    open_method?: 'same_tab' | 'new_tab' | 'modal'
   }
 
   export type CategoryFormValue = {
@@ -31,8 +32,9 @@
     title: string
     url: string
     icon: string
+    icon_background_color: string
     description: string
-    open_method: 'same_tab' | 'new_tab'
+    open_method: 'same_tab' | 'new_tab' | 'modal'
   }
 </script>
 
@@ -108,6 +110,12 @@
       | 'card_show_description'
       | 'card_background_color'
       | 'card_background_opacity'
+      | 'card_icon_show_title'
+      | 'card_text_color'
+      | 'search_box_show'
+      | 'search_engine_selector_show'
+      | 'content_layout'
+      | 'footer_html'
     >
   > | null = null
   export let categoryModalMode: 'create' | 'edit' = 'create'
@@ -154,6 +162,12 @@
           | 'card_show_description'
           | 'card_background_color'
           | 'card_background_opacity'
+          | 'card_icon_show_title'
+          | 'card_text_color'
+          | 'search_box_show'
+          | 'search_engine_selector_show'
+          | 'content_layout'
+          | 'footer_html'
         >,
       ) => AsyncVoid)
     | undefined = undefined
@@ -272,6 +286,24 @@
 
   const getBookmarksByCategory = (categoryId: string | number) =>
     bookmarks.filter((bookmark) => bookmark.category_id === categoryId)
+
+  function createIconVersion(input: string): string {
+    let hash = 0
+    for (let i = 0; i < input.length; i += 1) {
+      hash = Math.imul(31, hash) + input.charCodeAt(i) | 0
+    }
+    return Math.abs(hash).toString(36)
+  }
+
+  function getBookmarkIconUrl(bookmark: AdminBookmark): string {
+    const icon = bookmark.icon ?? ''
+    if (/^data:image\//i.test(icon)) return icon
+    if (/^https?:\/\//i.test(icon)) {
+      const version = createIconVersion(`${bookmark.id}:${bookmark.icon_source ?? ''}:${icon}:${bookmark.title}:${bookmark.url}`)
+      return `/api/icon/${bookmark.id}?v=${version}`
+    }
+    return icon
+  }
 
   let bookmarkSearch = ''
 
@@ -553,9 +585,9 @@
                   </td>
                   <td>
                     <div class="bookmark-cell">
-                      <span class="icon-badge small">
-                        {#if bookmark.icon && (bookmark.icon.startsWith('http://') || bookmark.icon.startsWith('https://'))}
-                          <img src={bookmark.icon} alt="" style="width: 100%; height: 100%; object-fit: contain;" />
+                      <span class="icon-badge small" style={bookmark.icon_background_color ? `background: ${bookmark.icon_background_color};` : ''}>
+                        {#if bookmark.icon && (/^https?:\/\//i.test(bookmark.icon) || /^data:image\//i.test(bookmark.icon))}
+                          <img src={getBookmarkIconUrl(bookmark)} alt="" style="width: 100%; height: 100%; object-fit: contain;" />
                         {:else}
                           {bookmark.icon || '🔖'}
                         {/if}
@@ -572,7 +604,9 @@
                   <td class="url-cell">
                     <a href={bookmark.url} target="_blank" rel="noreferrer">{bookmark.url}</a>
                   </td>
-                  <td class="method-cell">{bookmark.open_method === 'same_tab' ? '当前标签页' : '新标签页'}</td>
+                  <td class="method-cell">
+                    {bookmark.open_method === 'same_tab' ? '当前标签页' : bookmark.open_method === 'modal' ? '当前页弹层' : '新标签页'}
+                  </td>
                   <td>
                     <div class="inline-actions compact">
                       <button type="button" class="ghost-button compact" on:click={() => onEditBookmark?.(bookmark)} disabled={!isAuthenticated}>

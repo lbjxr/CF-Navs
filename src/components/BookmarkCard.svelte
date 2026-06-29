@@ -8,56 +8,81 @@
   export let style: CardStyle = 'info'
   export let iconSize: number = 100
   export let showDescription: boolean = true
+  export let showIconTitle: boolean = true
   export let width: number = 200
   export let height: number = 0
   export let canEdit = false
   export let onEdit: ((bookmark: Bookmark) => AsyncVoid) | undefined = undefined
 
-  let useFallbackIcon = false
+  let useExternalIcon = false
   let fallbackFailed = false
   let contextMenuOpen = false
+  let modalOpen = false
   let iconStateKey = ''
 
   $: openInNewTab = bookmark.open_method === 1
+  $: openInModal = bookmark.open_method === 3
   $: iconText = bookmark.title.trim().slice(0, 1) || '书'
   $: infoIconSize = Math.max(0, Math.min(height > 0 ? height : 70, width))
   $: compactIconSize = Math.max(0, iconSize)
   $: tooltipText = bookmark.description ? `${bookmark.title}\n${bookmark.description}` : bookmark.title
   $: nextIconStateKey = `${bookmark.id}:${bookmark.icon_source ?? ''}:${bookmark.icon ?? ''}:${bookmark.title}:${bookmark.url}`
+  $: iconVersion = createIconVersion(nextIconStateKey)
   $: cardShellStyle =
     style === 'info'
       ? `min-width: ${width}px; ${height > 0 ? `height: ${height}px;` : ''}`
       : `width: ${compactIconSize}px; height: ${compactIconSize}px;`
   $: cardLinkStyle = height > 0 ? `height: ${height}px;` : ''
+  $: canUseExternalIconFallback = bookmark.icon_source === 'custom' && !isFaviconImIconUrl(bookmark.icon ?? '')
   $: if (nextIconStateKey !== iconStateKey) {
     iconStateKey = nextIconStateKey
-    useFallbackIcon = false
+    useExternalIcon = false
     fallbackFailed = false
   }
 
-  // 图标来源：有 URL 时优先加载；失败时尝试缓存；再失败用首字母
+  // 图标来源：外部 URL 默认走 Worker 缓存代理；代理失败时再回退直连外站。
   $: iconUrl = (() => {
     if (bookmark.icon_source === 'logo_surf') return bookmark.icon || logoSurfIcon(bookmark.title, bookmark.url)
     if (!bookmark.icon) return ''
-    if (useFallbackIcon) return `/api/icon/${bookmark.id}`
+    if (/^data:image\//i.test(bookmark.icon)) return bookmark.icon
+    if (/^https?:\/\//i.test(bookmark.icon)) {
+      return useExternalIcon ? bookmark.icon : `/api/icon/${bookmark.id}?v=${iconVersion}`
+    }
     return bookmark.icon
   })()
   $: hasRenderableIcon = Boolean(iconUrl) && !fallbackFailed
 
+  function createIconVersion(input: string): string {
+    let hash = 0
+    for (let i = 0; i < input.length; i += 1) {
+      hash = Math.imul(31, hash) + input.charCodeAt(i) | 0
+    }
+    return Math.abs(hash).toString(36)
+  }
+
+  function isFaviconImIconUrl(value: string): boolean {
+    try {
+      const hostname = new URL(value).hostname.toLowerCase()
+      return hostname === 'favicon.im' || hostname.endsWith('.favicon.im')
+    } catch {
+      return false
+    }
+  }
+
   function handleIconError() {
     if (bookmark.icon_source === 'logo_surf' || !bookmark.icon || !/^https?:\/\//i.test(bookmark.icon)) {
       fallbackFailed = true
-      useFallbackIcon = false
+      useExternalIcon = false
       return
     }
 
-    if (useFallbackIcon) {
-      // 缓存也失败了 → 显示首字母
+    if (useExternalIcon || !canUseExternalIconFallback) {
+      // 外站直连也失败了 → 显示首字母
       fallbackFailed = true
-      useFallbackIcon = false
+      useExternalIcon = false
     } else {
-      // 外部图标失败 → 尝试本地缓存
-      useFallbackIcon = true
+      // 缓存代理失败时，最后尝试一次直连外站。
+      useExternalIcon = true
     }
   }
 
@@ -81,12 +106,23 @@
     await onEdit?.(bookmark)
   }
 
+  function handleLinkClick(event: MouseEvent) {
+    if (!openInModal) return
+    event.preventDefault()
+    modalOpen = true
+  }
+
+  function closeModal() {
+    modalOpen = false
+  }
+
 
   function handleWindowClick() {
     if (contextMenuOpen) closeContextMenu()
   }
 
   function handleDocumentKeydown(event: KeyboardEvent) {
+    if (modalOpen && event.key === 'Escape') closeModal()
     if (contextMenuOpen && event.key === 'Escape') closeContextMenu()
   }
 
@@ -108,11 +144,15 @@
       target={openInNewTab ? '_blank' : undefined}
       rel={openInNewTab ? 'noopener noreferrer' : undefined}
       style={cardLinkStyle}
+      on:click={handleLinkClick}
       on:contextmenu={handleContextMenu}
     >
-      <div class="bookmark-icon" style="width: {infoIconSize}px; height: {infoIconSize}px; max-width: 100%;">
+      <div
+        class="bookmark-icon"
+        style="width: {infoIconSize}px; height: {infoIconSize}px; max-width: 100%; {bookmark.icon_background_color ? `background: ${bookmark.icon_background_color};` : ''}"
+      >
         {#if hasRenderableIcon}
-          <img src={iconUrl} alt={bookmark.title} loading="lazy" on:error={handleIconError} on:load={handleIconLoad} />
+          <img src={iconUrl} alt={bookmark.title} on:error={handleIconError} on:load={handleIconLoad} />
         {:else}
           <span class="icon-text">{iconText}</span>
         {/if}
@@ -136,21 +176,49 @@
       title={tooltipText}
       aria-label={tooltipText}
       data-tooltip={tooltipText}
+      on:click={handleLinkClick}
       on:contextmenu={handleContextMenu}
     >
-      <div class="bookmark-icon">
+      <div class="bookmark-icon" style={bookmark.icon_background_color ? `background: ${bookmark.icon_background_color};` : ''}>
         {#if hasRenderableIcon}
-          <img src={iconUrl} alt={bookmark.title} loading="lazy" on:error={handleIconError} on:load={handleIconLoad} />
+          <img src={iconUrl} alt={bookmark.title} on:error={handleIconError} on:load={handleIconLoad} />
         {:else}
           <span class="icon-text">{iconText}</span>
         {/if}
       </div>
     </a>
+    {#if showIconTitle}
+      <a
+        class="bookmark-icon-title"
+        href={bookmark.url}
+        target={openInNewTab ? '_blank' : undefined}
+        rel={openInNewTab ? 'noopener noreferrer' : undefined}
+        on:click={handleLinkClick}
+        on:contextmenu={handleContextMenu}
+      >
+        {bookmark.title}
+      </a>
+    {/if}
   {/if}
 
   {#if contextMenuOpen}
     <div class="bookmark-context-menu">
       <button type="button" on:click={handleEditClick}>编辑</button>
+    </div>
+  {/if}
+
+  {#if modalOpen}
+    <div class="link-modal-backdrop" role="dialog" aria-modal="true" aria-label={bookmark.title}>
+      <div class="link-modal">
+        <div class="link-modal-header">
+          <strong>{bookmark.title}</strong>
+          <div class="link-modal-actions">
+            <a href={bookmark.url} target="_blank" rel="noopener noreferrer">新窗口打开</a>
+            <button type="button" on:click={closeModal}>关闭</button>
+          </div>
+        </div>
+        <iframe src={bookmark.url} title={bookmark.title}></iframe>
+      </div>
     </div>
   {/if}
 </div>
@@ -210,6 +278,7 @@
     font-weight: 600;
     margin: 0;
     line-height: 1.2;
+    color: var(--card-text-color, #0f172a);
     text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -218,7 +287,8 @@
 
   .bookmark-card-info .bookmark-description {
     font-size: 0.75rem;
-    color: rgba(71, 85, 105, 0.92);
+    color: var(--card-text-color, rgba(71, 85, 105, 0.92));
+    opacity: 0.72;
     margin: 0.25rem 0 0 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -278,6 +348,21 @@
     transform: translate(-50%, 0);
   }
 
+  .bookmark-icon-title {
+    display: block;
+    width: 100%;
+    margin-top: 0.45rem;
+    color: var(--card-text-color, #0f172a);
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: center;
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   /* 图标样式 */
   .bookmark-icon {
     flex-shrink: 0;
@@ -320,7 +405,7 @@
   :global([data-theme='dark']) .bookmark-card-info,
   :global([data-theme='dark']) .bookmark-card-icon {
     background: rgb(var(--card-bg-rgb, 255 255 255) / var(--card-bg-opacity, 0.15));
-    color: #e2e8f0;
+    color: var(--card-text-color, #e2e8f0);
   }
 
   :global([data-theme='dark']) .bookmark-card-info:hover,
@@ -329,7 +414,12 @@
   }
 
   :global([data-theme='dark']) .bookmark-card-info .bookmark-description {
-    color: rgba(203, 213, 225, 0.92);
+    color: var(--card-text-color, rgba(203, 213, 225, 0.92));
+  }
+
+  :global([data-theme='dark']) .bookmark-card-info .bookmark-title,
+  :global([data-theme='dark']) .bookmark-icon-title {
+    color: var(--card-text-color, #e2e8f0);
   }
 
   :global([data-theme='dark']) .bookmark-icon {
@@ -369,6 +459,81 @@
   .bookmark-context-menu button:hover {
     background: #eff6ff;
     color: #1d4ed8;
+  }
+
+  .link-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, 0.62);
+    backdrop-filter: blur(4px);
+  }
+
+  .link-modal {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: min(1120px, 100%);
+    height: min(760px, calc(100vh - 36px));
+    overflow: hidden;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 26px 70px rgba(15, 23, 42, 0.32);
+  }
+
+  .link-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #0f172a;
+  }
+
+  .link-modal-header strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .link-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .link-modal-actions a,
+  .link-modal-actions button {
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #0f172a;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    padding: 7px 10px;
+    text-decoration: none;
+  }
+
+  .link-modal iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #ffffff;
+  }
+
+  :global([data-theme='dark']) .link-modal {
+    background: #0f172a;
+  }
+
+  :global([data-theme='dark']) .link-modal-header {
+    border-color: rgba(148, 163, 184, 0.24);
+    color: #e5eefb;
   }
 
   :global([data-theme='dark']) .bookmark-context-menu {

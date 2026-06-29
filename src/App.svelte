@@ -33,8 +33,9 @@
     url: string
     icon: string
     icon_source: string
+    icon_background_color: string
     description: string
-    open_method: 'same_tab' | 'new_tab'
+    open_method: 'same_tab' | 'new_tab' | 'modal'
   }
 
   let booting = true
@@ -91,8 +92,9 @@
     url: string
     icon?: string
     icon_source?: string
+    icon_background_color?: string
     description?: string
-    open_method?: 'same_tab' | 'new_tab'
+    open_method?: 'same_tab' | 'new_tab' | 'modal'
   }> {
     return bookmarks.map((bookmark) => ({
       id: bookmark.id,
@@ -101,14 +103,15 @@
       url: bookmark.url,
       icon: bookmark.icon ?? '',
       icon_source: bookmark.icon_source ?? '',
+      icon_background_color: bookmark.icon_background_color ?? '',
       description: bookmark.description ?? '',
-      open_method: bookmark.open_method === 2 ? 'same_tab' : 'new_tab',
+      open_method: bookmark.open_method === 2 ? 'same_tab' : bookmark.open_method === 3 ? 'modal' : 'new_tab',
     }))
   }
 
   type SettingsSubset = Pick<
     Settings,
-    'site_title' | 'site_title_color' | 'site_title_font_size' | 'public_mode' | 'theme' | 'image_host_url' | 'background' | 'search_engine' | 'card_size' | 'card_style' | 'card_icon_size' | 'card_show_description' | 'card_background_color' | 'card_background_opacity'
+    'site_title' | 'site_title_color' | 'site_title_font_size' | 'public_mode' | 'theme' | 'image_host_url' | 'background' | 'search_engine' | 'card_size' | 'card_style' | 'card_icon_size' | 'card_show_description' | 'card_background_color' | 'card_background_opacity' | 'card_icon_show_title' | 'card_text_color' | 'search_box_show' | 'search_engine_selector_show' | 'content_layout' | 'footer_html'
   >
 
   function toSettingsForm(settings: Settings | null): SettingsSubset | null {
@@ -129,6 +132,12 @@
       card_show_description: settings.card_show_description,
       card_background_color: settings.card_background_color,
       card_background_opacity: settings.card_background_opacity,
+      card_icon_show_title: settings.card_icon_show_title,
+      card_text_color: settings.card_text_color,
+      search_box_show: settings.search_box_show,
+      search_engine_selector_show: settings.search_engine_selector_show,
+      content_layout: settings.content_layout,
+      footer_html: settings.footer_html,
     }
   }
 
@@ -268,8 +277,9 @@
       url: form.url.trim(),
       icon: form.icon.trim() || null,
       icon_source: (form.icon_source as IconSource) || null,
+      icon_background_color: form.icon_background_color.trim() || null,
       description: form.description.trim() || null,
-      open_method: form.open_method === 'same_tab' ? 2 : 1,
+      open_method: form.open_method === 'same_tab' ? 2 : form.open_method === 'modal' ? 3 : 1,
     }
   }
 
@@ -289,8 +299,9 @@
       url: bookmark.url,
       icon: bookmark.icon ?? '',
       icon_source: bookmark.icon_source ?? '',
+      icon_background_color: bookmark.icon_background_color ?? '',
       description: bookmark.description ?? '',
-      open_method: bookmark.open_method === 2 ? 'same_tab' : 'new_tab',
+      open_method: bookmark.open_method === 2 ? 'same_tab' : bookmark.open_method === 3 ? 'modal' : 'new_tab',
     }
   }
 
@@ -418,6 +429,7 @@
       title: '',
       url: '',
       icon: '',
+      icon_background_color: '',
       description: '',
       open_method: 'new_tab',
     }

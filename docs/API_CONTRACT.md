@@ -66,7 +66,8 @@
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
 | GET | `/api/fetch-favicon?url=` | 登录 | 服务端解析目标站 favicon，失败回退 Google s2 |
-| GET | `/api/icon/:id` | 无 | 返回 D1 中缓存的图标 blob；无缓存时返回透明 1x1 PNG |
+| GET | `/api/icon/:id` | 无 | 书签图标代理。优先返回 Cloudflare edge cache 和 D1 中缓存的图标 blob；无缓存时按书签保存的 HTTP(S) 图标地址服务端抓取并写回 D1；外站失败时返回临时 SVG 文字图标，并带 `X-Icon-Fallback: 1` |
+| GET | `/api/category-icon/:id` | 无 | 分类图标代理。优先返回 Cloudflare edge cache；HTTP(S) 分类图标由 Worker 服务端抓取；外站失败时返回临时 SVG 文字图标，并带 `X-Icon-Fallback: 1` |
 
 图标来源包括：
 
@@ -76,7 +77,13 @@
 - `google`：使用 Google s2 favicons 接口。
 - `custom`：手动填写 URL、表情或图床地址。
 
-创建或更新书签时，如果图标是 HTTP(S) 图片，后端会尝试异步缓存到 `bookmarks.icon_blob`。前台加载外部图标失败后回退 `/api/icon/:id`；文字图标优先使用已保存的 SVG data URI。
+创建或更新书签时，如果图标是 HTTP(S) 图片，后端会尝试异步缓存到 `bookmarks.icon_blob`。更新书签但图标地址未改变时不会清空已有 `icon_blob`。前台展示 HTTP(S) 书签图标时默认使用 `/api/icon/:id?v=...`，分类图标默认使用 `/api/category-icon/:id?v=...`，避免页面刷新、搜索筛选或设置保存后直接重复请求外站。
+
+前端不应直接把 `favicon.im` 图标地址渲染到 `<img>`。Favicon.im、Google s2 或自定义外站图标都应通过图标代理展示；第三方服务限流、超时或 4xx/5xx 时，代理返回临时 SVG fallback，不写入长期缓存。Service Worker 对 `/api/icon/*` 和 `/api/category-icon/*` 使用 cache-first 策略，但不会缓存带 `X-Icon-Fallback: 1` 的临时 fallback。
+
+## 首页搜索行为
+
+首页搜索框输入关键词时直接筛选当前首页分类与书签区域，不再弹出本地书签下拉选择。匹配字段包括书签标题、URL、描述和分类标题。按 Enter 仍按当前搜索引擎配置跳转外部搜索。
 
 ## 设置接口
 

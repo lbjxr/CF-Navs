@@ -20,16 +20,28 @@
   export let onOpenLogin: (() => AsyncVoid) | undefined = undefined
 
   let categoryBookmarks = new Map<number, Bookmark[]>()
+  let categoryTitleById = new Map<number, string>()
   let activeId = ''
   let isScrolling = false
+  let searchQuery = ''
 
   $: sortedCategories = [...categories].sort((a, b) => a.sort - b.sort)
   $: sortedBookmarks = [...bookmarks].sort((a, b) => a.sort - b.sort)
+  $: normalizedSearchQuery = normalizeSearchQuery(searchQuery)
+  $: hasSearchQuery = normalizedSearchQuery.length > 0
+  $: categoryTitleById = new Map(sortedCategories.map((category) => [category.id, category.title]))
+  $: visibleBookmarks = hasSearchQuery
+    ? sortedBookmarks.filter((bookmark) => bookmarkMatchesSearch(bookmark, normalizedSearchQuery, categoryTitleById))
+    : sortedBookmarks
+  $: visibleCategoryIds = new Set(visibleBookmarks.map((bookmark) => bookmark.category_id))
+  $: visibleCategories = hasSearchQuery
+    ? sortedCategories.filter((category) => visibleCategoryIds.has(category.id))
+    : sortedCategories
 
   $: {
     const nextCategoryBookmarks = new Map<number, Bookmark[]>()
 
-    for (const bookmark of sortedBookmarks) {
+    for (const bookmark of visibleBookmarks) {
       const list = nextCategoryBookmarks.get(bookmark.category_id) ?? []
       list.push(bookmark)
       nextCategoryBookmarks.set(bookmark.category_id, list)
@@ -38,16 +50,33 @@
     categoryBookmarks = nextCategoryBookmarks
   }
 
-  $: sections = sortedCategories.map((category) => ({
+  $: sections = visibleCategories.map((category) => ({
     id: `category-${category.id}`,
     title: category.title,
     count: categoryBookmarks.get(category.id)?.length ?? 0,
   }))
 
   $: totalBookmarks = sortedBookmarks.length
+  $: visibleBookmarkCount = visibleBookmarks.length
   $: pageTitle = title || settings?.site_title || '导航首页'
   $: siteTitleColor = settings?.site_title_color?.trim() || 'inherit'
   $: siteTitleFontSize = clampTitleFontSize(settings?.site_title_font_size)
+  $: contentLayout = settings?.content_layout ?? {
+    max_width: 1200,
+    max_width_unit: 'px',
+    margin_x: 0,
+    margin_top: 0,
+    margin_bottom: 0,
+  }
+  $: contentMaxWidth = `${contentLayout.max_width}${contentLayout.max_width_unit}`
+  $: cardTextColor = settings?.card_text_color?.trim() ?? ''
+  $: homeShellStyle = [
+    `--content-max-width: ${contentMaxWidth}`,
+    `--content-margin-x: ${contentLayout.margin_x}px`,
+    `--content-margin-top: ${contentLayout.margin_top}%`,
+    `--content-margin-bottom: ${contentLayout.margin_bottom}%`,
+    cardTextColor ? `--card-text-color: ${cardTextColor}` : '',
+  ].filter(Boolean).join('; ')
   $: pageDescription =
     totalBookmarks > 0
       ? `已整理 ${sortedCategories.length} 个分类，收录 ${totalBookmarks} 个站点。`
@@ -60,6 +89,24 @@
   function clampTitleFontSize(value: number | undefined): number {
     if (!Number.isFinite(value)) return 32
     return Math.min(72, Math.max(16, Number(value)))
+  }
+
+  function normalizeSearchQuery(value: string): string {
+    return value.trim().toLowerCase()
+  }
+
+  function bookmarkMatchesSearch(
+    bookmark: Bookmark,
+    keyword: string,
+    categoryTitles: Map<number, string>,
+  ): boolean {
+    const categoryTitle = categoryTitles.get(bookmark.category_id) ?? ''
+    return [
+      bookmark.title,
+      bookmark.url,
+      bookmark.description ?? '',
+      categoryTitle,
+    ].some((value) => value.toLowerCase().includes(keyword))
   }
 
   function handleMainScroll() {
@@ -120,6 +167,7 @@
       isScrolling = false
     }, 600)
   }
+
 </script>
 
 <svelte:head>
@@ -127,7 +175,7 @@
   <meta name="description" content={pageDescription} />
 </svelte:head>
 
-<div class="home-shell">
+<div class="home-shell" style={homeShellStyle}>
   <div class="floating-actions">
     {#if isAuthenticated}
       <button
@@ -164,9 +212,15 @@
 
   <section class="hero-search" aria-label="站点搜索">
     <h1 class="site-title" style="color: {siteTitleColor}; font-size: {siteTitleFontSize}px;">{pageTitle}</h1>
-    <div class="search-card">
-      <SearchBox searchEngine={settings?.search_engine ?? null} />
-    </div>
+    {#if settings?.search_box_show ?? true}
+      <div class="search-card">
+        <SearchBox
+          searchEngine={settings?.search_engine ?? null}
+          bind:query={searchQuery}
+          showEngineSelector={settings?.search_engine_selector_show ?? true}
+        />
+      </div>
+    {/if}
   </section>
 
   <Sidebar items={sections} {activeId} onNavigate={handleNavigate} />
@@ -176,13 +230,19 @@
       <div class="content-summary">
         <div>
           <p class="summary-label">当前内容</p>
-          <h2>共 {sortedCategories.length} 个分类，{totalBookmarks} 个站点</h2>
+          <h2>
+            {#if hasSearchQuery}
+              匹配 {visibleCategories.length} 个分类，{visibleBookmarkCount} 个站点
+            {:else}
+              共 {sortedCategories.length} 个分类，{totalBookmarks} 个站点
+            {/if}
+          </h2>
         </div>
       </div>
 
-      {#if sortedCategories.length > 0}
+      {#if visibleCategories.length > 0}
         <div class="section-list">
-          {#each sortedCategories as category (category.id)}
+          {#each visibleCategories as category (category.id)}
             <div data-section-id={`category-${category.id}`}>
               <CategorySection
                 category={category}
@@ -193,6 +253,7 @@
                 cardStyle={settings?.card_style ?? 'info'}
                 cardIconSize={settings?.card_icon_size ?? 70}
                 cardShowDescription={settings?.card_show_description ?? true}
+                cardIconShowTitle={settings?.card_icon_show_title ?? true}
                 onAddBookmark={onOpenCreateBookmark}
                 onEditBookmark={onEditBookmark}
               />
@@ -201,19 +262,30 @@
         </div>
       {:else}
         <section class="empty-panel">
-          <h2>暂无公开内容</h2>
-          <p>当前还没有可展示的分类或书签，请稍后再来查看。</p>
+          {#if hasSearchQuery}
+            <h2>没有匹配的书签</h2>
+            <p>换个关键词试试，或按 Enter 使用当前搜索引擎搜索。</p>
+          {:else}
+            <h2>暂无公开内容</h2>
+            <p>当前还没有可展示的分类或书签，请稍后再来查看。</p>
+          {/if}
         </section>
       {/if}
     </main>
   </div>
+
+  {#if settings?.footer_html}
+    <footer class="home-footer">
+      {@html settings.footer_html}
+    </footer>
+  {/if}
 </div>
 
 <style>
   .home-shell {
     position: relative;
     min-height: 100vh;
-    padding: 1.5rem;
+    padding: 1.5rem calc(1.5rem + var(--content-margin-x, 0px)) var(--content-margin-bottom, 0%);
     color: #0f172a;
     isolation: isolate;
   }
@@ -259,7 +331,7 @@
     display: grid;
     gap: 0.85rem;
     max-width: 680px;
-    margin: 3rem auto 1.25rem;
+    margin: calc(3rem + var(--content-margin-top, 0%)) auto 1.25rem;
     text-align: center;
   }
 
@@ -341,7 +413,7 @@
 
   .content-layout {
     position: relative;
-    max-width: 1200px;
+    max-width: var(--content-max-width, 1200px);
     margin: 0 auto;
   }
 
@@ -399,9 +471,15 @@
     color: rgba(71, 85, 105, 0.92);
   }
 
+  .home-footer {
+    max-width: var(--content-max-width, 1200px);
+    margin: 2rem auto 0;
+    color: inherit;
+  }
+
   @media (max-width: 720px) {
     .home-shell {
-      padding: 1rem;
+      padding: 1rem max(1rem, var(--content-margin-x, 0px)) var(--content-margin-bottom, 0%);
     }
 
     .floating-actions {

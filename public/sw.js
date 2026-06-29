@@ -1,10 +1,12 @@
 // CF-Navs Service Worker —— 离线 app shell + 静态资源缓存
 // 策略：
+//  - /api/icon/*   缓存优先（图标 blob，带 hash 版本号天然去重）
+//  - /api/category-icon/* 缓存优先（分类图标代理）
 //  - /api/*        永不缓存（始终走网络）
 //  - 导航请求       网络优先，离线回退到缓存的 index.html
 //  - /assets/*等    缓存优先（构建产物带 hash，安全长期缓存）
 
-const CACHE = 'cf-navs-v1'
+const CACHE = 'cf-navs-v2'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg']
 
 self.addEventListener('install', (event) => {
@@ -32,7 +34,27 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
-  if (url.pathname.startsWith('/api/')) return // API 不缓存
+
+  // 图标代理缓存优先；其他 /api/* 不缓存
+  const isIconProxy = url.pathname.startsWith('/api/icon/') || url.pathname.startsWith('/api/category-icon/')
+  if (isIconProxy) {
+    event.respondWith(
+      caches.match(request).then(
+        (cached) =>
+          cached ||
+          fetch(request).then((response) => {
+            if (response.ok && response.headers.get('X-Icon-Fallback') !== '1') {
+              const copy = response.clone()
+              caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => undefined)
+            }
+            return response
+          }),
+      ),
+    )
+    return
+  }
+
+  if (url.pathname.startsWith('/api/')) return // 其他 API 不缓存
 
   // 导航请求：网络优先，离线回退 app shell
   if (request.mode === 'navigate') {

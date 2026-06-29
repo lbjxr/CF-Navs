@@ -25,7 +25,7 @@ database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 ```
 
 - [ ] 已创建 D1 数据库
-- [ ] 已将 `database_id` 填入 `wrangler.toml`
+- [ ] 稍后使用 `npm run setup:wrangler` 写入本地 `wrangler.local.toml`
 
 ### 3. 创建 KV 命名空间
 
@@ -45,9 +45,18 @@ id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
 - [ ] 已创建 KV 命名空间
-- [ ] 已将 `id` 填入 `wrangler.toml`
+- [ ] 稍后使用 `npm run setup:wrangler` 写入本地 `wrangler.local.toml`
 
-### 4. 设置管理员密码
+### 4. 生成本地 Wrangler 配置
+
+```bash
+npm run setup:wrangler
+```
+
+- [ ] 已生成 `wrangler.local.toml`
+- [ ] 确认 `wrangler.local.toml` 未被 Git 跟踪
+
+### 5. 设置管理员密码
 
 ```bash
 npx wrangler secret put INIT_ADMIN_PASSWORD
@@ -56,7 +65,7 @@ npx wrangler secret put INIT_ADMIN_PASSWORD
 - [ ] 已设置管理员密码（建议使用强密码）
 - [ ] 密码已安全保存（不要丢失）
 
-### 5. 初始化数据库
+### 6. 初始化数据库
 
 ```bash
 npm run db:init:remote
@@ -65,7 +74,7 @@ npm run db:init:remote
 - [ ] 数据库表已创建
 - [ ] 无错误信息输出
 
-### 6. 构建前端
+### 7. 构建前端
 
 ```bash
 npm run build
@@ -128,6 +137,11 @@ Published cf-navs (x.xx sec)
 - [ ] 退出登录成功
 - [ ] 登录后可在首页右键书签，编辑按钮浮在当前卡片上且不挤动右侧卡片
 - [ ] 通过右键编辑进入编辑弹窗，删除需二次确认
+- [ ] 部署新版后强制刷新一次页面，确认新版 Service Worker 已激活
+- [ ] 首页搜索框输入关键词时，书签区域直接筛选，不出现本地书签下拉列表
+- [ ] 打开浏览器 Network 面板，上下滚动、搜索筛选、保存设置后，图标请求优先命中 `/api/icon/*` 或 `/api/category-icon/*`
+- [ ] Network 面板中不应出现前台直接请求 `https://favicon.im/*` 或 `https://a.favicon.im/*`
+- [ ] 第三方图标服务失败或限流时，浏览器控制台不应出现 favicon.im 429；失败图标应显示文字 fallback
 
 ### 4. 测试公开模式
 
@@ -185,7 +199,7 @@ npx wrangler login
 ```
 
 **错误：Missing binding**
-- 检查 `wrangler.toml` 中 D1 和 KV 配置
+- 检查是否已运行 `npm run setup:wrangler` 生成 `wrangler.local.toml`
 - 确认资源已创建
 
 **错误：Database not found**
@@ -208,7 +222,7 @@ npm run db:init:remote
 **D1 连接失败**
 - 确认 D1 数据库已创建
 - 确认已执行 `npm run db:init:remote`
-- 检查 `wrangler.toml` 中的 `database_id`
+- 检查 `wrangler.local.toml` 中的 `database_id`
 
 ### 页面无法加载
 

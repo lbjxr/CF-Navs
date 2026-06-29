@@ -2,9 +2,9 @@
   import type { SearchEngineSetting } from '../../shared/types'
 
   export let searchEngine: SearchEngineSetting | null = null
-  export let initialQuery = ''
+  export let query = ''
+  export let showEngineSelector = true
 
-  let query = initialQuery
   let selectedName = ''
 
   $: engines = searchEngine?.engines ?? []
@@ -41,20 +41,22 @@
   />
 
   <label class="sr-only" for="search-engine">搜索引擎</label>
-  <select
-    id="search-engine"
-    bind:value={selectedName}
-    class="search-select"
-    disabled={engines.length === 0}
-  >
-    {#if engines.length === 0}
-      <option value="">未配置</option>
-    {:else}
-      {#each engines as engine}
-        <option value={engine.name}>{engine.name}</option>
-      {/each}
-    {/if}
-  </select>
+  {#if showEngineSelector}
+    <select
+      id="search-engine"
+      bind:value={selectedName}
+      class="search-select"
+      disabled={engines.length === 0}
+    >
+      {#if engines.length === 0}
+        <option value="">未配置</option>
+      {:else}
+        {#each engines as engine}
+          <option value={engine.name}>{engine.name}</option>
+        {/each}
+      {/if}
+    </select>
+  {/if}
 
   <button class="search-button" type="submit" disabled={!currentEngine || !query.trim()}>
     搜索
@@ -63,10 +65,15 @@
 
 <style>
   .search-box {
+    position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 140px 80px;
+    grid-template-columns: minmax(0, 1fr) auto 80px;
     gap: 0.6rem;
     align-items: center;
+  }
+
+  .search-box:has(.search-select) {
+    grid-template-columns: minmax(0, 1fr) 140px 80px;
   }
 
   .search-input,

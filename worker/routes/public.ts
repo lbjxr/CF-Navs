@@ -22,6 +22,12 @@ function toPublicSettings(settings: Settings): PublicSettings {
     card_show_description: settings.card_show_description,
     card_background_color: settings.card_background_color,
     card_background_opacity: settings.card_background_opacity,
+    card_icon_show_title: settings.card_icon_show_title,
+    card_text_color: settings.card_text_color,
+    search_box_show: settings.search_box_show,
+    search_engine_selector_show: settings.search_engine_selector_show,
+    content_layout: settings.content_layout,
+    footer_html: settings.footer_html,
   }
 }
 

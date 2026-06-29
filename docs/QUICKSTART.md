@@ -25,19 +25,12 @@ npx wrangler d1 create cf-navs-db
 npx wrangler kv namespace create SESSION
 ```
 
-### 3. 配置 wrangler.toml
+### 3. 生成本地 Wrangler 配置
 
-将上面命令返回的 ID 填入 `wrangler.toml`：
+不要把真实 Cloudflare 资源 ID 提交到公开的 `wrangler.toml`。运行下面命令生成 Git 忽略的 `wrangler.local.toml`：
 
-```toml
-[[d1_databases]]
-binding = "DB"
-database_name = "cf-navs-db"
-database_id = "你的数据库ID"
-
-[[kv_namespaces]]
-binding = "SESSION"
-id = "你的KV命名空间ID"
+```bash
+npm run setup:wrangler
 ```
 
 ### 4. 设置管理员密码
@@ -60,6 +53,8 @@ npm run deploy
 ```
 
 部署成功后，访问返回的 URL 即可使用！
+
+部署新版后建议强制刷新一次页面，让新版 Service Worker 接管。验证首页搜索时，输入关键词应直接筛选书签区域；打开浏览器 Network 面板时，图标请求应优先显示为 `/api/icon/*` 或 `/api/category-icon/*`，不应由前台直接请求 `favicon.im`。
 
 ## 🔑 首次登录
 

@@ -19,6 +19,8 @@
 - 🔖 **四源图标获取**：自动解析 / Favicon.im / 完整标题文字图标 / Google 四种方式
 - 🎛️ **文字图标配色**：新增/编辑书签时可选择 logo.surf 风格的默认配色方案
 - 💾 **图标本地缓存**：后台自动缓存图标，前台逐层降级保障显示
+- ⚡ **图标缓存代理**：书签和分类图标优先走 Worker + D1 + Cloudflare 边缘缓存，避免页面刷新或筛选时反复请求外站
+- 🔎 **本地书签筛选**：搜索栏输入关键词时直接筛选首页分类区域，匹配标题、描述、URL 和分类
 - 🎨 **卡片背景配置**：卡片背景颜色和透明度后台可调
 - ✏️ **前台快捷编辑**：管理员登录后可在首页右键编辑书签，编辑入口以卡片浮层显示
 - 📲 **PWA 支持**：生产构建注册 Service Worker，提供基础离线 app shell
@@ -48,7 +50,8 @@ CF-Navs/
 ├── public/                 # 静态资源
 ├── docs/                   # 文档和截图
 ├── schema.sql              # 数据库结构
-├── wrangler.toml           # Cloudflare 配置
+├── wrangler.toml           # 公开模板配置（资源 ID 使用占位符）
+├── wrangler.local.toml     # 本地私密配置（Git 忽略，需自行生成）
 └── package.json
 
 ```
@@ -76,14 +79,7 @@ npm install
 npx wrangler d1 create cf-navs-db
 ```
 
-将返回的 `database_id` 填入 `wrangler.toml`：
-
-```toml
-[[d1_databases]]
-binding = "DB"
-database_name = "cf-navs-db"
-database_id = "你的数据库ID"
-```
+创建后无需把真实 ID 提交到 `wrangler.toml`。本项目使用 Git 忽略的 `wrangler.local.toml` 保存本地部署配置。
 
 #### 创建 KV 命名空间
 
@@ -91,13 +87,13 @@ database_id = "你的数据库ID"
 npx wrangler kv namespace create SESSION
 ```
 
-将返回的 `id` 填入 `wrangler.toml`：
+#### 生成本地部署配置
 
-```toml
-[[kv_namespaces]]
-binding = "SESSION"
-id = "你的KV命名空间ID"
+```bash
+npm run setup:wrangler
 ```
+
+该命令会从当前 Cloudflare 账号读取 `cf-navs-db` 和 `SESSION`，生成 `wrangler.local.toml`；这个文件不会被 Git 跟踪。
 
 #### 设置管理员密码
 
@@ -209,6 +205,16 @@ npm run deploy
 
 选择"文字图标"时，系统会用完整书签标题生成本地 SVG 图标。默认配色是黑色背景 `#000000` 与橙色文字 `#FFA31A`，新增/编辑书签弹窗中也可以选择内置的 logo.surf 风格配色。所选配色会随书签图标一起保存，首页渲染时优先使用保存的 SVG。
 
+### 图标缓存与外站降级
+
+HTTP(S) 书签图标不会在首页直接请求原始外站地址，而是优先通过 `/api/icon/:id` 读取 D1 缓存和 Cloudflare 边缘缓存。分类图标通过 `/api/category-icon/:id` 代理加载。Favicon.im 或其他第三方图标服务限流、超时或返回错误时，后端会返回临时 SVG 文字图标，不会把失败结果写入长期缓存。
+
+Service Worker 会对 `/api/icon/*` 和 `/api/category-icon/*` 使用 cache-first 策略；后台修改书签、配置或首页搜索筛选导致组件重新渲染时，仍优先读取本地缓存。部署新版后如浏览器仍使用旧逻辑，请强制刷新一次页面，让新版 Service Worker 激活。
+
+### 首页搜索
+
+搜索框输入关键词时会直接筛选首页书签区域，不再弹出本地书签下拉列表。匹配字段包括书签标题、URL、描述和分类名称；按 Enter 仍会使用当前选中的搜索引擎进行外部搜索。
+
 ### 背景设置
 
 支持三种背景类型：
@@ -279,6 +285,8 @@ npm run deploy           # 构建并部署到 Cloudflare
 - `DELETE /api/bookmarks/:id` - 删除书签
 - `POST /api/bookmarks/sort` - 排序书签
 - `GET /api/fetch-favicon?url=` - 获取网站图标
+- `GET /api/icon/:id` - 读取书签图标代理缓存
+- `GET /api/category-icon/:id` - 读取分类图标代理缓存
 
 ### 设置管理
 
@@ -292,7 +300,7 @@ npm run deploy           # 构建并部署到 Cloudflare
 1. **使用强密码**：设置 `INIT_ADMIN_PASSWORD` 时使用强密码
 2. **保护 Secret**：不要将密码提交到 Git 仓库
 3. **HTTPS**：Cloudflare Workers 默认强制 HTTPS
-4. **会话过期**：默认会话有效期 7 天，可在 `wrangler.toml` 中调整
+4. **会话过期**：默认会话有效期 7 天，可在 `wrangler.local.toml` 中调整
 
 ## 🐛 问题排查
 
@@ -310,7 +318,7 @@ npm run deploy           # 构建并部署到 Cloudflare
 
 ### 部署失败
 
-1. 确认 `wrangler.toml` 配置正确
+1. 确认已运行 `npm run setup:wrangler` 并生成 `wrangler.local.toml`
 2. 确认已登录 Cloudflare：`npx wrangler login`
 3. 检查 D1 和 KV 资源是否已创建
 

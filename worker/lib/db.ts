@@ -33,6 +33,18 @@ const DEFAULT_SETTINGS: Settings = {
   card_show_description: true,
   card_background_color: '#ffffff',
   card_background_opacity: 0.9,
+  card_icon_show_title: true,
+  card_text_color: '',
+  search_box_show: true,
+  search_engine_selector_show: true,
+  content_layout: {
+    max_width: 1200,
+    max_width_unit: 'px',
+    margin_x: 0,
+    margin_top: 0,
+    margin_bottom: 0,
+  },
+  footer_html: '',
 }
 
 // Settings 中属于强类型聚合视图的 key（不含 admin_* 等内部 key）
@@ -104,18 +116,20 @@ export async function sortCategories(db: D1Database, ids: number[]): Promise<voi
 // ========== 书签 ==========
 
 export async function listBookmarks(db: D1Database): Promise<Bookmark[]> {
+  await ensureSchema(db)
   const { results } = await db
     .prepare(
-      'SELECT id, category_id, title, url, icon, icon_source, description, open_method, sort, created_at FROM bookmarks ORDER BY sort ASC, id ASC',
+      'SELECT id, category_id, title, url, icon, icon_source, icon_background_color, description, open_method, sort, created_at FROM bookmarks ORDER BY sort ASC, id ASC',
     )
     .all<Bookmark>()
   return results ?? []
 }
 
 export async function getBookmark(db: D1Database, id: number): Promise<Bookmark | null> {
+  await ensureSchema(db)
   return await db
     .prepare(
-      'SELECT id, category_id, title, url, icon, icon_source, description, open_method, sort, created_at FROM bookmarks WHERE id = ?',
+      'SELECT id, category_id, title, url, icon, icon_source, icon_background_color, description, open_method, sort, created_at FROM bookmarks WHERE id = ?',
     )
     .bind(id)
     .first<Bookmark>()
@@ -123,7 +137,7 @@ export async function getBookmark(db: D1Database, id: number): Promise<Bookmark 
 
 export async function createBookmark(db: D1Database, req: BookmarkUpsertReq): Promise<Bookmark> {
   const now = Date.now()
-  const open_method: 1 | 2 = req.open_method === 2 ? 2 : 1
+  const open_method: 1 | 2 | 3 = req.open_method === 2 ? 2 : req.open_method === 3 ? 3 : 1
   // 新书签排到所属分类末尾
   const maxRow = await db
     .prepare('SELECT COALESCE(MAX(sort), -1) AS m FROM bookmarks WHERE category_id = ?')
@@ -132,7 +146,7 @@ export async function createBookmark(db: D1Database, req: BookmarkUpsertReq): Pr
   const sort = (maxRow?.m ?? -1) + 1
   const res = await db
     .prepare(
-      'INSERT INTO bookmarks (category_id, title, url, icon, icon_source, description, open_method, sort, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO bookmarks (category_id, title, url, icon, icon_source, icon_background_color, description, open_method, sort, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     )
     .bind(
       req.category_id,
@@ -140,6 +154,7 @@ export async function createBookmark(db: D1Database, req: BookmarkUpsertReq): Pr
       req.url,
       req.icon ?? null,
       req.icon_source ?? null,
+      req.icon_background_color ?? null,
       req.description ?? null,
       open_method,
       sort,
@@ -154,6 +169,7 @@ export async function createBookmark(db: D1Database, req: BookmarkUpsertReq): Pr
     url: req.url,
     icon: req.icon ?? null,
     icon_source: req.icon_source ?? null,
+    icon_background_color: req.icon_background_color ?? null,
     description: req.description ?? null,
     open_method,
     sort,
@@ -168,10 +184,12 @@ export async function updateBookmark(
 ): Promise<Bookmark | null> {
   const existing = await getBookmark(db, id)
   if (!existing) return null
-  const open_method: 1 | 2 = req.open_method === 2 ? 2 : req.open_method === 1 ? 1 : existing.open_method
+  const open_method: 1 | 2 | 3 = req.open_method === 2 ? 2 : req.open_method === 3 ? 3 : req.open_method === 1 ? 1 : existing.open_method
+  const iconChanged = (req.icon ?? null) !== existing.icon
+  const iconBlobSql = iconChanged ? ', icon_blob = NULL' : ''
   await db
     .prepare(
-      'UPDATE bookmarks SET category_id = ?, title = ?, url = ?, icon = ?, icon_source = ?, description = ?, open_method = ? WHERE id = ?',
+      `UPDATE bookmarks SET category_id = ?, title = ?, url = ?, icon = ?, icon_source = ?, icon_background_color = ?${iconBlobSql}, description = ?, open_method = ? WHERE id = ?`,
     )
     .bind(
       req.category_id,
@@ -179,6 +197,7 @@ export async function updateBookmark(
       req.url,
       req.icon ?? null,
       req.icon_source ?? null,
+      req.icon_background_color ?? null,
       req.description ?? null,
       open_method,
       id,
@@ -191,6 +210,7 @@ export async function updateBookmark(
     url: req.url,
     icon: req.icon ?? null,
     icon_source: req.icon_source ?? null,
+    icon_background_color: req.icon_background_color ?? null,
     description: req.description ?? null,
     open_method,
   }
@@ -287,6 +307,7 @@ export async function importData(
   db: D1Database,
   data: { categories: Category[]; bookmarks: Bookmark[]; settings?: Partial<Settings> },
 ): Promise<{ categories: number; bookmarks: number }> {
+  await ensureSchema(db)
   const now = Date.now()
   const stmts: D1PreparedStatement[] = []
 
@@ -303,11 +324,11 @@ export async function importData(
   }
 
   for (const b of data.bookmarks) {
-    const openMethod = b.open_method === 2 ? 2 : 1
+    const openMethod = b.open_method === 2 ? 2 : b.open_method === 3 ? 3 : 1
     stmts.push(
       db
         .prepare(
-          'INSERT INTO bookmarks (id, category_id, title, url, icon, icon_source, description, open_method, sort, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO bookmarks (id, category_id, title, url, icon, icon_source, icon_background_color, description, open_method, sort, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         )
         .bind(
           b.id,
@@ -316,6 +337,7 @@ export async function importData(
           b.url,
           b.icon ?? null,
           (b as unknown as Record<string, unknown>).icon_source ?? null,
+          (b as unknown as Record<string, unknown>).icon_background_color ?? null,
           b.description ?? null,
           openMethod,
           Number.isFinite(b.sort) ? b.sort : 0,
@@ -364,6 +386,9 @@ export async function ensureSchema(db: D1Database): Promise<void> {
   }
   if (!colNames.has("icon_blob")) {
     stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN icon_blob TEXT"))
+  }
+  if (!colNames.has("icon_background_color")) {
+    stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN icon_background_color TEXT"))
   }
 
   if (stmts.length > 0) await db.batch(stmts)

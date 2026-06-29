@@ -8,6 +8,7 @@
     type IconCandidate,
     type LogoSurfColorScheme,
   } from '../lib/icons'
+  import ColorAlphaInput from './ColorAlphaInput.svelte'
 
   type BookmarkFormValue = {
     id?: string | number
@@ -16,8 +17,9 @@
     url: string
     icon: string
     icon_source: string
+    icon_background_color: string
     description: string
-    open_method: 'same_tab' | 'new_tab'
+    open_method: 'same_tab' | 'new_tab' | 'modal'
   }
 
   type BookmarkCategoryOption = {
@@ -30,6 +32,7 @@
     url: '',
     icon: '',
     icon_source: '',
+    icon_background_color: '',
     description: '',
     open_method: 'new_tab',
   }
@@ -74,6 +77,7 @@
       url: value?.url ?? '',
       icon: value?.icon ?? '',
       icon_source: (value as Partial<BookmarkFormValue>)?.icon_source ?? '',
+      icon_background_color: value?.icon_background_color ?? '',
       description: value?.description ?? '',
       open_method: value?.open_method ?? 'new_tab',
     }
@@ -146,6 +150,44 @@
 
   function canPreviewIcon(icon: string): boolean {
     return /^https?:\/\//i.test(icon) || /^data:image\//i.test(icon)
+  }
+
+  function createIconVersion(input: string): string {
+    let hash = 0
+    for (let i = 0; i < input.length; i += 1) {
+      hash = Math.imul(31, hash) + input.charCodeAt(i) | 0
+    }
+    return Math.abs(hash).toString(36)
+  }
+
+  function isFaviconImIconUrl(value: string): boolean {
+    try {
+      const hostname = new URL(value).hostname.toLowerCase()
+      return hostname === 'favicon.im' || hostname.endsWith('.favicon.im')
+    } catch {
+      return false
+    }
+  }
+
+  function getCandidatePreviewUrl(candidate: IconCandidate): string {
+    if (candidate.source === 'favicon_im') {
+      return logoSurfIcon(form.title.trim() || candidate.label, form.url.trim())
+    }
+
+    return candidate.url
+  }
+
+  function getFormIconPreviewUrl(): string {
+    if ((form.icon_source === 'favicon_im' || isFaviconImIconUrl(form.icon)) && form.url.trim()) {
+      return logoSurfIcon(form.title.trim(), form.url.trim())
+    }
+
+    if (form.id != null && /^https?:\/\//i.test(form.icon)) {
+      const version = createIconVersion(`${form.id}:${form.icon_source ?? ''}:${form.icon}:${form.title}:${form.url}`)
+      return `/api/icon/${form.id}?v=${version}`
+    }
+
+    return form.icon
   }
 
   function setPageScrollLocked(locked: boolean) {
@@ -224,6 +266,7 @@
       url: form.url.trim(),
       icon: form.icon.trim(),
       icon_source: form.icon.trim() ? form.icon_source : '',
+      icon_background_color: form.icon_background_color.trim(),
       description: form.description.trim(),
     })
   }
@@ -295,7 +338,7 @@
                   title={candidate.label}
                 >
                   <img
-                    src={candidate.url}
+                    src={getCandidatePreviewUrl(candidate)}
                     alt={candidate.label}
                     loading="lazy"
                   />
@@ -367,7 +410,7 @@
           </div>
           {#if form.icon && canPreviewIcon(form.icon)}
             <span class="icon-preview">
-              <img src={form.icon} alt="图标预览" />
+              <img src={getFormIconPreviewUrl()} alt="图标预览" />
               <small>图标预览</small>
             </span>
           {/if}
@@ -375,6 +418,18 @@
             <small class="field-error">{faviconError}</small>
           {/if}
         </label>
+
+        <div class="field-block">
+          <span>图标背景色</span>
+          <ColorAlphaInput
+            bind:value={form.icon_background_color}
+            placeholder="留空则使用默认背景"
+            inputLabel="图标背景颜色值"
+            swatchTitle="选择图标背景色"
+            alphaText="图标背景透明度"
+          />
+          <small>可为单个书签图标设置背景色，留空则使用全局默认。</small>
+        </div>
 
         <label>
           <span>描述</span>
@@ -386,6 +441,7 @@
           <select bind:value={form.open_method}>
             <option value="new_tab">新标签页</option>
             <option value="same_tab">当前标签页</option>
+            <option value="modal">当前页弹层</option>
           </select>
         </label>
 
@@ -486,11 +542,16 @@
     padding: 12px 16px 0;
   }
 
-  label {
+  label,
+  .field-block {
     display: grid;
     gap: 5px;
     color: #334155;
     font-size: 14px;
+  }
+
+  .field-block > span {
+    font-weight: 600;
   }
 
   input,

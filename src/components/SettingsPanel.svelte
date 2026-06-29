@@ -25,6 +25,12 @@
     | 'card_show_description'
     | 'card_background_color'
     | 'card_background_opacity'
+    | 'card_icon_show_title'
+    | 'card_text_color'
+    | 'search_box_show'
+    | 'search_engine_selector_show'
+    | 'content_layout'
+    | 'footer_html'
   >
   type AsyncVoid<T = void> = T | Promise<T>
 
@@ -64,6 +70,12 @@
     card_show_description: true,
     card_background_color: '#ffffff',
     card_background_opacity: 0.9,
+    card_icon_show_title: true,
+    card_text_color: '',
+    search_box_show: true,
+    search_engine_selector_show: true,
+    content_layout: { max_width: 1200, max_width_unit: 'px', margin_x: 0, margin_top: 0, margin_bottom: 0 },
+    footer_html: '',
   }
 
   export let value: Partial<SettingsPanelValue> | null = null
@@ -95,6 +107,12 @@
       card_show_description: source.card_show_description,
       card_background_color: source.card_background_color,
       card_background_opacity: source.card_background_opacity,
+      card_icon_show_title: source.card_icon_show_title,
+      card_text_color: source.card_text_color,
+      search_box_show: source.search_box_show,
+      search_engine_selector_show: source.search_engine_selector_show,
+      content_layout: { ...source.content_layout },
+      footer_html: source.footer_html,
     }
   }
 
@@ -102,6 +120,7 @@
     const background = source?.background
     const searchEngine = source?.search_engine
     const cardSize = source?.card_size
+    const contentLayout = source?.content_layout
     return {
       site_title: source?.site_title ?? '',
       site_title_color: source?.site_title_color ?? '#ffffff',
@@ -136,6 +155,18 @@
       card_show_description: source?.card_show_description ?? true,
       card_background_color: source?.card_background_color ?? '#ffffff',
       card_background_opacity: typeof source?.card_background_opacity === 'number' ? source.card_background_opacity : 0.9,
+      card_icon_show_title: source?.card_icon_show_title ?? true,
+      card_text_color: source?.card_text_color ?? '',
+      search_box_show: source?.search_box_show ?? true,
+      search_engine_selector_show: source?.search_engine_selector_show ?? true,
+      content_layout: {
+        max_width: typeof contentLayout?.max_width === 'number' ? contentLayout.max_width : 1200,
+        max_width_unit: contentLayout?.max_width_unit === '%' ? '%' : 'px',
+        margin_x: typeof contentLayout?.margin_x === 'number' ? contentLayout.margin_x : 0,
+        margin_top: typeof contentLayout?.margin_top === 'number' ? contentLayout.margin_top : 0,
+        margin_bottom: typeof contentLayout?.margin_bottom === 'number' ? contentLayout.margin_bottom : 0,
+      },
+      footer_html: source?.footer_html ?? '',
     }
   }
 
@@ -182,6 +213,18 @@
       card_show_description: source.card_show_description,
       card_background_color: cardBackgroundColor.color,
       card_background_opacity: clampNumber(cardBackgroundColor.alpha, 0, 1),
+      card_icon_show_title: source.card_icon_show_title,
+      card_text_color: source.card_text_color?.trim() ?? '',
+      search_box_show: source.search_box_show,
+      search_engine_selector_show: source.search_engine_selector_show,
+      content_layout: {
+        max_width: clampNumber(source.content_layout.max_width, source.content_layout.max_width_unit === '%' ? 40 : 640, source.content_layout.max_width_unit === '%' ? 100 : 2400),
+        max_width_unit: source.content_layout.max_width_unit === '%' ? '%' : 'px',
+        margin_x: clampNumber(source.content_layout.margin_x, 0, 100),
+        margin_top: clampNumber(source.content_layout.margin_top, 0, 50),
+        margin_bottom: clampNumber(source.content_layout.margin_bottom, 0, 50),
+      },
+      footer_html: source.footer_html.trim(),
     }
   }
 
@@ -214,8 +257,22 @@
     Number.isFinite(normalizedForm.card_size.height) &&
     normalizedForm.card_size.height >= 50 &&
     normalizedForm.card_size.height <= 300
+  $: contentLayoutValid =
+    Number.isFinite(normalizedForm.content_layout.max_width) &&
+    normalizedForm.content_layout.max_width > 0 &&
+    Number.isFinite(normalizedForm.content_layout.margin_x) &&
+    Number.isFinite(normalizedForm.content_layout.margin_top) &&
+    Number.isFinite(normalizedForm.content_layout.margin_bottom)
   $: canSave =
-    Boolean(onSubmit) && !loading && !saving && hasTitle && enginesValid && backgroundValid && cardSizeValid && isDirty
+    Boolean(onSubmit) &&
+    !loading &&
+    !saving &&
+    hasTitle &&
+    enginesValid &&
+    backgroundValid &&
+    cardSizeValid &&
+    contentLayoutValid &&
+    isDirty
   $: currentThemeHint = themeOptions.find((option) => option.value === form.theme)?.hint ?? ''
   $: currentBackgroundHint =
     backgroundTypeOptions.find((option) => option.value === form.background.type)?.hint ?? ''
@@ -332,6 +389,15 @@
             </div>
             <input bind:checked={form.public_mode} type="checkbox" />
           </label>
+
+          <label class="toggle-field full-width">
+            <div class="toggle-copy">
+              <span>显示搜索框</span>
+              <p>控制首页标题下方的搜索区域是否展示。</p>
+            </div>
+            <input bind:checked={form.search_box_show} type="checkbox" />
+          </label>
+
         </div>
       </fieldset>
 
@@ -414,6 +480,42 @@
         </div>
       </fieldset>
 
+      <!-- 内容区 -->
+      <fieldset class="group" disabled={saving}>
+        <legend>内容区</legend>
+        <div class="form-grid">
+          <label class="field">
+            <span>最大宽度</span>
+            <div class="inline-input">
+              <input bind:value={form.content_layout.max_width} type="number" min="40" max="2400" step="10" />
+              <select bind:value={form.content_layout.max_width_unit} class="unit-select" aria-label="最大宽度单位">
+                <option value="px">px</option>
+                <option value="%">%</option>
+              </select>
+            </div>
+            <small>首页内容区最大宽度，Sun-Panel 默认 1200px。</small>
+          </label>
+
+          <label class="field">
+            <span>左右边距 <em>{form.content_layout.margin_x}px</em></span>
+            <input bind:value={form.content_layout.margin_x} type="range" min="0" max="100" step="1" />
+            <small>在内容区两侧追加留白。</small>
+          </label>
+
+          <label class="field">
+            <span>顶部边距 <em>{form.content_layout.margin_top}%</em></span>
+            <input bind:value={form.content_layout.margin_top} type="range" min="0" max="50" step="1" />
+            <small>控制搜索区域到页面顶部的距离。</small>
+          </label>
+
+          <label class="field">
+            <span>底部边距 <em>{form.content_layout.margin_bottom}%</em></span>
+            <input bind:value={form.content_layout.margin_bottom} type="range" min="0" max="50" step="1" />
+            <small>控制内容列表底部留白。</small>
+          </label>
+        </div>
+      </fieldset>
+
       <!-- 卡片背景 -->
       <fieldset class="group" disabled={saving}>
         <legend>卡片背景</legend>
@@ -463,12 +565,26 @@
 
       <!-- 图标尺寸 -->
       <fieldset class="group" disabled={saving}>
-        <legend>图标尺寸</legend>
-        <label class="field">
-          <span>图标大小 (px)</span>
-          <input bind:value={form.card_icon_size} type="number" min="40" max="100" step="5" />
-          <small>推荐：70px（Sun-Panel 默认值）</small>
-        </label>
+        <legend>图标与文字</legend>
+        <div class="form-grid">
+          <label class="field">
+            <span>图标大小 (px)</span>
+            <input bind:value={form.card_icon_size} type="number" min="40" max="100" step="5" />
+            <small>推荐：70px（Sun-Panel 默认值）</small>
+          </label>
+
+          <div class="field">
+            <span>卡片文字颜色</span>
+            <ColorAlphaInput
+              bind:value={form.card_text_color}
+              placeholder="留空则跟随主题"
+              inputLabel="卡片文字颜色值"
+              swatchTitle="选择卡片文字颜色"
+              alphaText="文字透明度"
+            />
+            <small>控制书签标题和描述文字颜色；留空时自动跟随当前主题。</small>
+          </div>
+        </div>
       </fieldset>
 
       <!-- 详情风格选项 -->
@@ -480,6 +596,17 @@
             <span>显示书签描述</span>
           </label>
           <small>关闭后仅显示标题，节省空间</small>
+        </fieldset>
+      {/if}
+
+      {#if form.card_style === 'icon'}
+        <fieldset class="group" disabled={saving}>
+          <legend>极简风格选项</legend>
+          <label class="checkbox-field">
+            <input type="checkbox" bind:checked={form.card_icon_show_title} />
+            <span>显示书签标题</span>
+          </label>
+          <small>开启后，小图标下方会显示标题；关闭时只保留悬停提示。</small>
         </fieldset>
       {/if}
 
@@ -501,6 +628,14 @@
             {/if}
           </select>
           <small>首页搜索框默认选中的引擎。</small>
+        </label>
+
+        <label class="toggle-field full-width">
+          <div class="toggle-copy">
+            <span>显示引擎选择器</span>
+            <p>关闭后首页搜索框只使用默认搜索引擎。</p>
+          </div>
+          <input bind:checked={form.search_engine_selector_show} type="checkbox" />
         </label>
 
         <div class="engine-list">
@@ -542,6 +677,20 @@
         {/if}
       </fieldset>
 
+      <!-- 页脚 -->
+      <fieldset class="group" disabled={saving}>
+        <legend>自定义页脚</legend>
+        <label class="field full-width">
+          <span>页脚 HTML</span>
+          <textarea
+            bind:value={form.footer_html}
+            rows="4"
+            placeholder='<div style="text-align:center;color:#cbd5e1">Powered by CF-Navs</div>'
+          ></textarea>
+          <small>显示在首页底部。请仅填写可信 HTML。</small>
+        </label>
+      </fieldset>
+
       <div class="form-footer">
         <p class="helper-text">
           {#if saving}
@@ -552,6 +701,8 @@
             请完善背景设置。
           {:else if !enginesValid}
             请完善搜索引擎配置。
+          {:else if !contentLayoutValid}
+            请完善内容区布局配置。
           {:else if isDirty}
             检测到未保存的更改。
           {:else}
@@ -712,7 +863,8 @@
   }
 
   input:not([type='radio']):not([type='checkbox']),
-  select {
+  select,
+  textarea {
     width: 100%;
     box-sizing: border-box;
     border: 1px solid #cbd5e1;
@@ -724,13 +876,24 @@
     font-family: inherit;
   }
 
+  textarea {
+    resize: vertical;
+    min-height: 96px;
+    line-height: 1.5;
+  }
+
+  .unit-select {
+    flex: 0 0 84px;
+  }
+
   input[type='range'] {
     padding: 0;
     accent-color: #2563eb;
   }
 
   input:focus,
-  select:focus {
+  select:focus,
+  textarea:focus {
     outline: none;
     border-color: #2563eb;
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);

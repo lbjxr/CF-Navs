@@ -7,10 +7,12 @@
     "dev:web": "vite",
     "build": "vite build",
     "type-check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json",
-    "dev": "wrangler dev",
-    "deploy": "npm run build && wrangler deploy",
-    "db:init": "wrangler d1 execute cf-navs-db --local --file=./schema.sql",
-    "db:init:remote": "wrangler d1 execute cf-navs-db --remote --file=./schema.sql"
+    "setup:wrangler": "node scripts/create-wrangler-local.mjs",
+    "wrangler": "node scripts/wrangler-config.mjs",
+    "dev": "node scripts/wrangler-config.mjs dev",
+    "deploy": "npm run build && node scripts/wrangler-config.mjs deploy",
+    "db:init": "node scripts/wrangler-config.mjs d1 execute cf-navs-db --local --file=./schema.sql",
+    "db:init:remote": "node scripts/wrangler-config.mjs d1 execute cf-navs-db --remote --file=./schema.sql"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240909.0",

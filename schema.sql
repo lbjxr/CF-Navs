@@ -17,9 +17,10 @@ CREATE TABLE IF NOT EXISTS bookmarks (
   url          TEXT NOT NULL,             -- 站点地址
   icon         TEXT,                      -- 图标 URL（cftc 直链 / 自动获取结果）
   icon_source  TEXT,                      -- 图标获取方式：direct/favicon_im/logo_surf/google/custom
+  icon_background_color TEXT,             -- 单个图标背景色
   icon_blob    TEXT,                      -- 图标 base64 缓存（本地回退方案）
   description  TEXT,
-  open_method  INTEGER NOT NULL DEFAULT 1,-- 1=新窗口 2=当前页
+  open_method  INTEGER NOT NULL DEFAULT 1,-- 1=新窗口 2=当前页 3=当前页弹层
   sort         INTEGER NOT NULL DEFAULT 0,
   created_at   INTEGER NOT NULL
 );
@@ -49,4 +50,12 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('card_size', '{"width":200,"height":0}'),
   ('card_style', '"info"'),
   ('card_icon_size', '70'),
-  ('card_show_description', 'true');
+  ('card_show_description', 'true'),
+  ('card_background_color', '"#ffffff"'),
+  ('card_background_opacity', '0.9'),
+  ('card_icon_show_title', 'true'),
+  ('card_text_color', '""'),
+  ('search_box_show', 'true'),
+  ('search_engine_selector_show', 'true'),
+  ('content_layout', '{"max_width":1200,"max_width_unit":"px","margin_x":0,"margin_top":0,"margin_bottom":0}'),
+  ('footer_html', '""');

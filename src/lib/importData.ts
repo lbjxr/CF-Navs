@@ -61,9 +61,16 @@ function normalizeImageIcon(icon: unknown, fallbackUrl: string): string | null {
   return faviconForUrl(fallbackUrl) || null
 }
 
-function sunPanelOpenMethodToCFNavs(value: unknown): 1 | 2 {
+function normalizeIconBackground(icon: unknown): string | null {
+  if (!isRecord(icon)) return null
+  const color = readString(icon.backgroundColor).trim()
+  return color || null
+}
+
+function sunPanelOpenMethodToCFNavs(value: unknown): 1 | 2 | 3 {
   const method = readNumber(value, 2)
   if (method === 1) return 2
+  if (method === 3) return 3
   return 1
 }
 
@@ -133,6 +140,7 @@ function prepareSunPanelImport(parsed: unknown): PreparedImport {
         url,
         icon: normalizeImageIcon(rawBookmark.icon, url),
         icon_source: null,
+        icon_background_color: normalizeIconBackground(rawBookmark.icon),
         description: readString(rawBookmark.description).trim() || null,
         open_method: sunPanelOpenMethodToCFNavs(rawBookmark.openMethod),
         sort: readNumber(rawBookmark.sort, bookmarkIndex),
