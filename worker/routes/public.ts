@@ -1,6 +1,11 @@
 import { Hono } from 'hono'
 import type { PublicData, PublicSettings, Settings, SiteConfig } from '../../shared/types'
-import { cachePublicDataResponse, matchPublicDataCache } from '../lib/cache'
+import {
+  cachePublicDataResponse,
+  cacheSiteConfigResponse,
+  matchPublicDataCache,
+  matchSiteConfigCache,
+} from '../lib/cache'
 import { getSettings, getSiteConfig, listBookmarks, listCategories } from '../lib/db'
 import { ok } from '../lib/response'
 import { publicOrAuth } from '../middleware/publicMode'
@@ -35,10 +40,15 @@ function toPublicSettings(settings: Settings): PublicSettings {
 export const publicRoutes = new Hono<HonoEnv>()
 
 publicRoutes.get('/config', async (c) => {
+  const cached = await matchSiteConfigCache(c.req.url)
+  if (cached) return cached
+
   const data: SiteConfig = await getSiteConfig(c.env.DB)
-  return c.json(ok(data), 200, {
-    'Cache-Control': 'private, max-age=15',
+  const response = c.json(ok(data), 200, {
+    'Cache-Control': 'public, max-age=15, s-maxage=60, stale-while-revalidate=300',
   })
+  cacheSiteConfigResponse(c, c.req.url, response)
+  return response
 })
 
 publicRoutes.get('/public/data', publicOrAuth, async (c) => {

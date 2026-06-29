@@ -175,15 +175,18 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 
 ### 前端
 - Vite 快速构建
-- 代码分割
-- 懒加载
+- 首页主包、后台管理和书签编辑弹窗代码分割，后台功能按需加载
 - CSS 压缩
 - 图标代理响应由 Service Worker cache-first 读取，页面滚动、搜索筛选和设置保存后优先命中本地缓存
+- 首页搜索预计算书签索引，滚动高亮缓存分区 DOM 并用 `requestAnimationFrame` 节流
+- 后台 CRUD、排序和设置保存后使用接口返回值增量更新本地 store，避免额外拉取全量 `/api/public/data`
 
 ### 后端
 - D1 索引优化
 - KV 会话缓存
 - Worker 边缘计算
+- `/api/config` 使用短 TTL Cloudflare edge cache，设置保存和导入后主动失效
+- 匿名 `/api/public/data` 使用 Cloudflare edge cache，写入接口负责失效缓存
 - `/api/icon/:id`、`/api/category-icon/:id` 与 `/api/iconify/:set/:name.svg` 统一代理外站图标，失败时返回临时 SVG fallback，不缓存第三方失败结果
 - 静态资源 CDN
 

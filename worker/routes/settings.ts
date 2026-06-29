@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { ErrCode, type SettingsUpdateReq } from '../../shared/types'
-import { invalidatePublicDataCache } from '../lib/cache'
+import { invalidatePublicDataCache, invalidateSiteConfigCache } from '../lib/cache'
 import { getSettings, updateSettings } from '../lib/db'
 import { fail, ok } from '../lib/response'
 import type { HonoEnv } from '../types'
@@ -133,6 +133,7 @@ settingsRoutes.put('/', async (c) => {
   try {
     const settings = await updateSettings(c.env.DB, body)
     invalidatePublicDataCache(c, c.req.url)
+    invalidateSiteConfigCache(c, c.req.url)
     return c.json(ok(settings))
   } catch {
     return c.json(fail(ErrCode.SERVER_ERROR, 'failed to update settings'))

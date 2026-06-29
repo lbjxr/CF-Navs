@@ -80,11 +80,19 @@
     icon?: string
     bookmarkCount?: number
   }> {
+    const bookmarkCountByCategory = new Map<number, number>()
+    for (const bookmark of bookmarks) {
+      bookmarkCountByCategory.set(
+        bookmark.category_id,
+        (bookmarkCountByCategory.get(bookmark.category_id) ?? 0) + 1,
+      )
+    }
+
     return categories.map((category) => ({
       id: category.id,
       title: category.title,
       icon: category.icon ?? '',
-      bookmarkCount: bookmarks.filter((bookmark) => bookmark.category_id === category.id).length,
+      bookmarkCount: bookmarkCountByCategory.get(category.id) ?? 0,
     }))
   }
 
@@ -129,6 +137,32 @@
       image_host_url: settings.image_host_url,
       background: settings.background,
       search_engine: settings.search_engine,
+      card_size: settings.card_size,
+      card_style: settings.card_style,
+      card_icon_size: settings.card_icon_size,
+      card_show_description: settings.card_show_description,
+      card_background_color: settings.card_background_color,
+      card_background_opacity: settings.card_background_opacity,
+      card_icon_show_title: settings.card_icon_show_title,
+      card_text_color: settings.card_text_color,
+      search_box_show: settings.search_box_show,
+      search_engine_selector_show: settings.search_engine_selector_show,
+      content_layout: settings.content_layout,
+      footer_html: settings.footer_html,
+    }
+  }
+
+  function toPublicSettings(settings: Settings): PublicSettings {
+    return {
+      site_title: settings.site_title,
+      site_title_color: settings.site_title_color,
+      site_title_font_size: settings.site_title_font_size,
+      theme: settings.theme,
+      background: settings.background,
+      custom_css: settings.custom_css,
+      custom_js: settings.custom_js,
+      search_engine: settings.search_engine,
+      image_host_url: settings.image_host_url,
       card_size: settings.card_size,
       card_style: settings.card_style,
       card_icon_size: settings.card_icon_size,
@@ -238,6 +272,115 @@
     if (!data || !isLoggedIn()) return
     adminStore.setCategories(data.categories)
     adminStore.setBookmarks(data.bookmarks)
+  }
+
+  function updatePublicDataLocally(transform: (data: PublicData) => PublicData): boolean {
+    const current = get(publicStore).data
+    if (!current) return false
+
+    const next = transform(current)
+    publicStore.setData(next)
+    syncAdminListsFromPublic(next)
+    return true
+  }
+
+  async function refreshListsWhenLocalDataMissing(): Promise<void> {
+    if (!get(publicStore).data) {
+      syncAdminListsFromPublic(await refreshPublicData())
+    }
+  }
+
+  async function applyLocalCategoryUpsert(category: Category): Promise<void> {
+    const updated = updatePublicDataLocally((data) => {
+      const exists = data.categories.some((item) => item.id === category.id)
+      const categories = exists
+        ? data.categories.map((item) => (item.id === category.id ? category : item))
+        : [...data.categories, category]
+
+      return { ...data, categories }
+    })
+
+    if (!updated) await refreshListsWhenLocalDataMissing()
+  }
+
+  async function applyLocalCategoryDelete(categoryId: number): Promise<void> {
+    const updated = updatePublicDataLocally((data) => ({
+      ...data,
+      categories: data.categories.filter((item) => item.id !== categoryId),
+      bookmarks: data.bookmarks.filter((item) => item.category_id !== categoryId),
+    }))
+
+    if (!updated) await refreshListsWhenLocalDataMissing()
+  }
+
+  async function applyLocalBookmarkUpsert(bookmark: Bookmark): Promise<void> {
+    const updated = updatePublicDataLocally((data) => {
+      const exists = data.bookmarks.some((item) => item.id === bookmark.id)
+      const bookmarks = exists
+        ? data.bookmarks.map((item) => (item.id === bookmark.id ? bookmark : item))
+        : [...data.bookmarks, bookmark]
+
+      return { ...data, bookmarks }
+    })
+
+    if (!updated) await refreshListsWhenLocalDataMissing()
+  }
+
+  async function applyLocalBookmarkDelete(bookmarkId: number): Promise<void> {
+    const updated = updatePublicDataLocally((data) => ({
+      ...data,
+      bookmarks: data.bookmarks.filter((item) => item.id !== bookmarkId),
+    }))
+
+    if (!updated) await refreshListsWhenLocalDataMissing()
+  }
+
+  async function applyLocalCategorySort(ids: number[]): Promise<void> {
+    const sortById = new Map(ids.map((id, index) => [id, index]))
+    const updated = updatePublicDataLocally((data) => ({
+      ...data,
+      categories: data.categories
+        .map((category) => (
+          sortById.has(category.id)
+            ? { ...category, sort: sortById.get(category.id) ?? category.sort }
+            : category
+        ))
+        .sort((a, b) => a.sort - b.sort || a.id - b.id),
+    }))
+
+    if (!updated) await refreshListsWhenLocalDataMissing()
+  }
+
+  async function applyLocalBookmarkSort(ids: number[]): Promise<void> {
+    const sortById = new Map(ids.map((id, index) => [id, index]))
+    const updated = updatePublicDataLocally((data) => ({
+      ...data,
+      bookmarks: data.bookmarks
+        .map((bookmark) => (
+          sortById.has(bookmark.id)
+            ? { ...bookmark, sort: sortById.get(bookmark.id) ?? bookmark.sort }
+            : bookmark
+        ))
+        .sort((a, b) => a.sort - b.sort || a.id - b.id),
+    }))
+
+    if (!updated) await refreshListsWhenLocalDataMissing()
+  }
+
+  function applyLocalSettings(settings: Settings): void {
+    adminStore.setSettings(settings)
+    configStore.setData({
+      site_title: settings.site_title,
+      public_mode: settings.public_mode,
+    })
+
+    const current = get(publicStore).data
+    if (current) {
+      publicStore.setData({
+        ...current,
+        settings: toPublicSettings(settings),
+      })
+    }
   }
 
   async function refreshLoggedInData(): Promise<void> {
@@ -447,14 +590,15 @@
     categoryError = ''
 
     try {
+      let category: Category
       if (categoryModalMode === 'edit' && form.id != null) {
-        await api.categories.update(Number(form.id), toCategoryPayload(form))
+        category = await api.categories.update(Number(form.id), toCategoryPayload(form))
       } else {
-        await api.categories.create(toCategoryPayload(form))
+        category = await api.categories.create(toCategoryPayload(form))
       }
 
       resetCategoryState()
-      syncAdminListsFromPublic(await refreshPublicData())
+      await applyLocalCategoryUpsert(category)
     } catch (error) {
       categoryError = getErrorMessage(error)
     } finally {
@@ -471,8 +615,9 @@
     categoryError = ''
 
     try {
-      await api.categories.remove(Number(category.id))
-      syncAdminListsFromPublic(await refreshPublicData())
+      const categoryId = Number(category.id)
+      await api.categories.remove(categoryId)
+      await applyLocalCategoryDelete(categoryId)
     } catch (error) {
       categoryError = getErrorMessage(error)
     } finally {
@@ -529,14 +674,15 @@
     bookmarkError = ''
 
     try {
+      let bookmark: Bookmark
       if (bookmarkModalMode === 'edit' && form.id != null) {
-        await api.bookmarks.update(Number(form.id), toBookmarkPayload(form))
+        bookmark = await api.bookmarks.update(Number(form.id), toBookmarkPayload(form))
       } else {
-        await api.bookmarks.create(toBookmarkPayload(form))
+        bookmark = await api.bookmarks.create(toBookmarkPayload(form))
       }
 
       resetBookmarkState()
-      syncAdminListsFromPublic(await refreshPublicData())
+      await applyLocalBookmarkUpsert(bookmark)
     } catch (error) {
       bookmarkError = getErrorMessage(error)
     } finally {
@@ -553,9 +699,10 @@
     bookmarkError = ''
 
     try {
-      await api.bookmarks.remove(Number(bookmark.id))
+      const bookmarkId = Number(bookmark.id)
+      await api.bookmarks.remove(bookmarkId)
       resetBookmarkState()
-      syncAdminListsFromPublic(await refreshPublicData())
+      await applyLocalBookmarkDelete(bookmarkId)
     } catch (error) {
       bookmarkError = getErrorMessage(error)
     } finally {
@@ -569,9 +716,7 @@
 
     try {
       const settings = await api.settings.update(payload)
-      adminStore.setSettings(settings)
-      await configStore.refresh()
-      await refreshPublicData()
+      applyLocalSettings(settings)
     } catch (error) {
       settingsError = getErrorMessage(error)
     } finally {
@@ -583,8 +728,9 @@
     categoryError = ''
 
     try {
-      await api.categories.sort(ids.map((id) => Number(id)))
-      syncAdminListsFromPublic(await refreshPublicData())
+      const sortedIds = ids.map((id) => Number(id))
+      await api.categories.sort(sortedIds)
+      await applyLocalCategorySort(sortedIds)
     } catch (error) {
       categoryError = getErrorMessage(error)
     }
@@ -594,8 +740,9 @@
     bookmarkError = ''
 
     try {
-      await api.bookmarks.sort(ids.map((id) => Number(id)))
-      syncAdminListsFromPublic(await refreshPublicData())
+      const sortedIds = ids.map((id) => Number(id))
+      await api.bookmarks.sort(sortedIds)
+      await applyLocalBookmarkSort(sortedIds)
     } catch (error) {
       bookmarkError = getErrorMessage(error)
     }

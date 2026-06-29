@@ -23,7 +23,7 @@
 | GET | `/api/config` | 无 | `SiteConfig` |
 | GET | `/api/public/data` | 公开模式或登录 | `PublicData` |
 
-`/api/public/data` 只返回公开设置子集，不包含 `admin_username`、`admin_password`、`public_mode` 等内部字段。
+`/api/config` 使用短 TTL Cloudflare edge cache，设置保存或数据导入后会主动失效。`/api/public/data` 只返回公开设置子集，不包含 `admin_username`、`admin_password`、`public_mode` 等内部字段；匿名公开访问会使用短 TTL edge cache，带登录态请求绕过该缓存。
 
 ## 认证接口
 

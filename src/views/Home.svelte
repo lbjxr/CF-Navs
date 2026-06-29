@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy, tick } from 'svelte'
   import SearchBox from '../components/SearchBox.svelte'
   import Sidebar from '../components/Sidebar.svelte'
   import CategorySection from '../components/CategorySection.svelte'
@@ -21,17 +21,22 @@
 
   let categoryBookmarks = new Map<number, Bookmark[]>()
   let categoryTitleById = new Map<number, string>()
+  let searchTextByBookmarkId = new Map<number, string>()
+  let sectionElements: HTMLElement[] = []
   let activeId = ''
   let isScrolling = false
   let searchQuery = ''
+  let sectionsKey = ''
+  let scrollFrame = 0
 
   $: sortedCategories = [...categories].sort((a, b) => a.sort - b.sort)
   $: sortedBookmarks = [...bookmarks].sort((a, b) => a.sort - b.sort)
   $: normalizedSearchQuery = normalizeSearchQuery(searchQuery)
   $: hasSearchQuery = normalizedSearchQuery.length > 0
   $: categoryTitleById = new Map(sortedCategories.map((category) => [category.id, category.title]))
+  $: searchTextByBookmarkId = buildSearchIndex(sortedBookmarks, categoryTitleById)
   $: visibleBookmarks = hasSearchQuery
-    ? sortedBookmarks.filter((bookmark) => bookmarkMatchesSearch(bookmark, normalizedSearchQuery, categoryTitleById))
+    ? sortedBookmarks.filter((bookmark) => bookmarkMatchesSearch(bookmark, normalizedSearchQuery, searchTextByBookmarkId))
     : sortedBookmarks
   $: visibleCategoryIds = new Set(visibleBookmarks.map((bookmark) => bookmark.category_id))
   $: visibleCategories = hasSearchQuery
@@ -55,6 +60,11 @@
     title: category.title,
     count: categoryBookmarks.get(category.id)?.length ?? 0,
   }))
+  $: nextSectionsKey = sections.map((section) => section.id).join('|')
+  $: if (nextSectionsKey !== sectionsKey) {
+    sectionsKey = nextSectionsKey
+    void refreshSectionElementsAfterRender()
+  }
 
   $: totalBookmarks = sortedBookmarks.length
   $: visibleBookmarkCount = visibleBookmarks.length
@@ -95,24 +105,46 @@
     return value.trim().toLowerCase()
   }
 
+  function buildSearchIndex(
+    items: Bookmark[],
+    categoryTitles: Map<number, string>,
+  ): Map<number, string> {
+    const nextIndex = new Map<number, string>()
+
+    for (const bookmark of items) {
+      nextIndex.set(
+        bookmark.id,
+        [
+          bookmark.title,
+          bookmark.url,
+          bookmark.description ?? '',
+          categoryTitles.get(bookmark.category_id) ?? '',
+        ].join('\n').toLowerCase(),
+      )
+    }
+
+    return nextIndex
+  }
+
   function bookmarkMatchesSearch(
     bookmark: Bookmark,
     keyword: string,
-    categoryTitles: Map<number, string>,
+    searchIndex: Map<number, string>,
   ): boolean {
-    const categoryTitle = categoryTitles.get(bookmark.category_id) ?? ''
-    return [
-      bookmark.title,
-      bookmark.url,
-      bookmark.description ?? '',
-      categoryTitle,
-    ].some((value) => value.toLowerCase().includes(keyword))
+    return (searchIndex.get(bookmark.id) ?? '').includes(keyword)
   }
 
-  function handleMainScroll() {
-    if (isScrolling) return
+  function refreshSectionElements() {
+    sectionElements = Array.from(document.querySelectorAll<HTMLElement>('[data-section-id]'))
+  }
 
-    const sectionElements = Array.from(document.querySelectorAll<HTMLElement>('[data-section-id]'))
+  async function refreshSectionElementsAfterRender() {
+    if (typeof document === 'undefined') return
+    await tick()
+    refreshSectionElements()
+  }
+
+  function updateActiveSection() {
     const threshold = 140
     let nextActiveId = sectionElements[0]?.dataset.sectionId ?? ''
 
@@ -125,16 +157,32 @@
     activeId = nextActiveId
   }
 
+  function handleMainScroll() {
+    if (isScrolling || scrollFrame) return
+
+    scrollFrame = window.requestAnimationFrame(() => {
+      scrollFrame = 0
+      updateActiveSection()
+    })
+  }
+
   onMount(() => {
+    refreshSectionElements()
     window.addEventListener('scroll', handleMainScroll)
   })
 
   onDestroy(() => {
     window.removeEventListener('scroll', handleMainScroll)
+    if (scrollFrame) {
+      window.cancelAnimationFrame(scrollFrame)
+      scrollFrame = 0
+    }
   })
 
   function handleNavigate(id: string | number) {
-    const targetElement = document.querySelector<HTMLElement>(`[data-section-id="${id}"]`)
+    const targetElement =
+      sectionElements.find((sectionElement) => sectionElement.dataset.sectionId === String(id)) ??
+      document.querySelector<HTMLElement>(`[data-section-id="${id}"]`)
 
     if (!targetElement) {
       activeId = String(id)
