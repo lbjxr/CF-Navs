@@ -128,7 +128,7 @@ Published cf-navs (x.xx sec)
 
 - [ ] 创建分类成功
 - [ ] 创建书签成功
-- [ ] 创建书签时能看到自动获取 / Favicon.im / 完整标题文字图标 / Google 候选，并可手动填写 Iconify 图标名，Iconify 预览请求走 `/api/iconify/*`
+- [ ] 创建书签时能看到自动获取 / Favicon.im / 完整标题文字图标 / Google / Iconify 候选，并可手动填写 Iconify 图标名，Iconify 候选和手动预览请求都走 `/api/iconify/*`
 - [ ] 选择"文字图标"后能看到内置配色方案，并可切换保存 logo.surf 风格 SVG 图标
 - [ ] 新增/编辑书签弹窗内容过高时可在弹窗内滚动，保存按钮始终可见
 - [ ] 选中一种图标后保存，图标显示正常
@@ -140,7 +140,7 @@ Published cf-navs (x.xx sec)
 - [ ] 部署新版后强制刷新一次页面，确认新版 Service Worker 已激活
 - [ ] 首页搜索框输入关键词时，书签区域直接筛选，不出现本地书签下拉列表
 - [ ] 打开浏览器 Network 面板，上下滚动、搜索筛选、保存设置后，首页图标请求优先命中 `/api/icon/*` 或 `/api/category-icon/*`
-- [ ] Network 面板中不应出现前台直接请求 `https://favicon.im/*`、`https://a.favicon.im/*`，首页也不应直连 `https://api.iconify.design/*`
+- [ ] Network 面板中不应出现前台直接请求 `https://favicon.im/*`、`https://a.favicon.im/*`，首页和新增/编辑弹窗也不应直连 `https://api.iconify.design/*`
 - [ ] 第三方图标服务失败或限流时，浏览器控制台不应出现 favicon.im/Iconify 429；失败图标应显示文字 fallback
 
 ### 4. 测试公开模式

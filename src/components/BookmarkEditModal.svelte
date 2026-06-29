@@ -203,6 +203,10 @@
       return logoSurfIcon(form.title.trim() || candidate.label, form.url.trim())
     }
 
+    if (candidate.source === 'iconify') {
+      return iconifyProxyIcon(candidate.url)
+    }
+
     return candidate.url
   }
 

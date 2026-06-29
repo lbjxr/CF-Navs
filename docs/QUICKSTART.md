@@ -54,7 +54,7 @@ npm run deploy
 
 部署成功后，访问返回的 URL 即可使用！
 
-部署新版后建议强制刷新一次页面，让新版 Service Worker 接管。验证首页搜索时，输入关键词应直接筛选书签区域；打开浏览器 Network 面板时，首页图标请求应优先显示为 `/api/icon/*` 或 `/api/category-icon/*`，新增/编辑弹窗中的 Iconify 预览应显示为 `/api/iconify/*`，不应由前台直接请求 `favicon.im`。
+部署新版后建议强制刷新一次页面，让新版 Service Worker 接管。验证首页搜索时，输入关键词应直接筛选书签区域；打开浏览器 Network 面板时，首页图标请求应优先显示为 `/api/icon/*` 或 `/api/category-icon/*`，新增/编辑弹窗中的 Iconify 候选和手动预览应显示为 `/api/iconify/*`，不应由前台直接请求 `favicon.im` 或 `api.iconify.design`。
 
 ## 🔑 首次登录
 

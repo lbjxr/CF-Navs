@@ -297,16 +297,34 @@
     }
 
     try {
-      const data = await publicStore.refresh()
-      if (!isLoggedIn()) applyConfigFromPublicData(data)
+      const data = await publicStore.refresh(false)
+      applyConfigFromPublicData(data)
       return data
     } catch (error) {
       if (isPublicModeForbidden(error)) {
-        publicStore.reset()
-        configStore.setData(siteConfigFromForbiddenError(error) ?? {
+        const forbiddenConfig = siteConfigFromForbiddenError(error) ?? {
           site_title: config?.site_title ?? 'CF-Navs',
           public_mode: false,
-        })
+        }
+
+        if (isLoggedIn()) {
+          try {
+            const data = await publicStore.refresh(true)
+            configStore.setData({
+              site_title: data.settings.site_title || forbiddenConfig.site_title,
+              public_mode: false,
+            })
+            return data
+          } catch (authError) {
+            if (!isPublicModeForbidden(authError)) {
+              rootError = getErrorMessage(authError)
+              return null
+            }
+          }
+        }
+
+        publicStore.reset()
+        configStore.setData(forbiddenConfig)
         return null
       }
 

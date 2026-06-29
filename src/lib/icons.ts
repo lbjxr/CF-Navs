@@ -171,7 +171,8 @@ export function getIconCandidates(url: string, title: string): IconCandidate[] {
   const hostname = getHostname(url)
   if (!hostname) return []
 
-  return [
+  const iconify = defaultIconifyIcon(url)
+  const candidates: IconCandidate[] = [
     {
       source: 'direct',
       label: '\u81ea\u52a8\u83b7\u53d6',
@@ -193,4 +194,14 @@ export function getIconCandidates(url: string, title: string): IconCandidate[] {
       url: googleIcon(url),
     },
   ]
+
+  if (iconify) {
+    candidates.push({
+      source: 'iconify',
+      label: 'Iconify',
+      url: iconify,
+    })
+  }
+
+  return candidates
 }

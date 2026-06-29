@@ -278,7 +278,7 @@ export const configApi = {
 }
 
 export const publicApi = {
-  getData: () => request<PublicData>('/public/data', { auth: true }),
+  getData: (auth = false) => request<PublicData>('/public/data', { auth }),
 }
 
 export const adminApi = {

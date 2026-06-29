@@ -86,11 +86,11 @@ function createConfigStore() {
 function createPublicStore() {
   const { subscribe, set, update } = writable<PublicState>(createLoadableState<PublicData | null>(null))
 
-  async function refresh(): Promise<PublicData> {
+  async function refresh(auth = false): Promise<PublicData> {
     update((state) => ({ ...state, loading: true, error: null }))
 
     try {
-      const data = await api.public.getData()
+      const data = await api.public.getData(auth)
       set({ data, loading: false, loaded: true, error: null })
       return data
     } catch (error) {

@@ -23,7 +23,7 @@
 | GET | `/api/config` | 无 | `SiteConfig` |
 | GET | `/api/public/data` | 公开模式或登录 | `PublicData` |
 
-`/api/config` 使用短 TTL Cloudflare edge cache，设置保存或数据导入后会主动失效，主要作为兼容和兜底轻量配置接口。前端普通启动路径优先使用 `/api/public/data` 或 `/api/admin/data` 派生站点配置；公开模式关闭时，`/api/public/data` 的 1005 响应会在 `data` 中携带 `{ site_title, public_mode: false }`，登录页无需再额外请求 `/api/config`。`/api/public/data` 只查询并返回首页渲染需要的公开设置、分类和书签字段，不包含 `admin_username`、`admin_password`、`public_mode`、`custom_css`、`custom_js` 等内部或未使用设置字段，也不包含分类/书签的 `created_at` 管理字段；匿名公开访问会先查短 TTL edge cache，命中时直接返回而不读取 D1，带登录态请求绕过该缓存。缓存未命中时，公开 settings、分类和书签通过一次 D1 batch 聚合读取。
+`/api/config` 使用短 TTL Cloudflare edge cache，设置保存或数据导入后会主动失效，主要作为兼容和兜底轻量配置接口。前端普通启动路径优先使用 `/api/public/data` 或 `/api/admin/data` 派生站点配置；公开模式关闭时，匿名 `/api/public/data` 的 1005 响应会在 `data` 中携带 `{ site_title, public_mode: false }`，登录页无需再额外请求 `/api/config`。`/api/public/data` 只查询并返回首页渲染需要的公开设置、分类和书签字段，不包含 `admin_username`、`admin_password`、`public_mode`、`custom_css`、`custom_js` 等内部或未使用设置字段，也不包含分类/书签的 `created_at` 管理字段；匿名公开访问会先查短 TTL edge cache，命中时直接返回而不读取 D1。前端首页刷新默认匿名请求以保留 edge cache 命中，只有公开模式关闭且本地已登录时才带 token 重试；服务端收到带登录态请求时仍会绕过匿名缓存。缓存未命中时，公开 settings、分类和书签通过一次 D1 batch 聚合读取。
 
 ## 认证接口
 
@@ -85,7 +85,7 @@
 - `favicon_im`：使用 `https://favicon.im/{hostname}?larger=true`。
 - `logo_surf`：本地生成完整标题文字 SVG data URI，支持新增/编辑书签时选择 logo.surf 风格配色。
 - `google`：使用 Google s2 favicons 接口。
-- `iconify`：使用 Iconify SVG API，保存格式为 `https://api.iconify.design/{set}/{name}.svg`，例如 `mdi:home` 会转换为 `https://api.iconify.design/mdi/home.svg`；新增/编辑弹窗预览通过 `/api/iconify/{set}/{name}.svg` 代理加载。
+- `iconify`：使用 Iconify SVG API，保存格式为 `https://api.iconify.design/{set}/{name}.svg`，例如 `mdi:home` 会转换为 `https://api.iconify.design/mdi/home.svg`；新增/编辑弹窗会展示 Iconify 候选，候选和手动输入预览都通过 `/api/iconify/{set}/{name}.svg` 代理加载。
 - `custom`：手动填写 URL、表情或图床地址。
 
 创建或更新书签时，如果图标是 HTTP(S) 图片，后端会尝试异步缓存到 `bookmarks.icon_blob`。更新书签但图标地址未改变时不会清空已有 `icon_blob`。前台展示 HTTP(S) 书签图标时默认使用 `/api/icon/:id?v=...`，分类图标默认使用 `/api/category-icon/:id?v=...`，避免页面刷新、搜索筛选或设置保存后直接重复请求外站。
