@@ -56,9 +56,24 @@ const JSON_HEADERS = {
 }
 
 let apiBaseUrl = '/api'
+let cachedAuthSession: StoredAuthSession | null | undefined = undefined
+let authStorageListenerAttached = false
 
 function isBrowser() {
   return typeof window !== 'undefined' && typeof localStorage !== 'undefined'
+}
+
+function ensureAuthStorageListener(): void {
+  if (!isBrowser() || authStorageListenerAttached) {
+    return
+  }
+
+  window.addEventListener('storage', (event) => {
+    if (event.key === AUTH_STORAGE_KEY) {
+      cachedAuthSession = undefined
+    }
+  })
+  authStorageListenerAttached = true
 }
 
 function isApiResponse<T>(value: unknown): value is ApiResponse<T> {
@@ -142,8 +157,19 @@ export function getStoredAuthSession(): StoredAuthSession | null {
     return null
   }
 
+  ensureAuthStorageListener()
+
+  if (cachedAuthSession !== undefined) {
+    const session = normalizeStoredAuthSession(cachedAuthSession)
+    if (!session) {
+      clearStoredAuthSession()
+    }
+    return session
+  }
+
   const raw = localStorage.getItem(AUTH_STORAGE_KEY)
   if (!raw) {
+    cachedAuthSession = null
     return null
   }
 
@@ -152,7 +178,9 @@ export function getStoredAuthSession(): StoredAuthSession | null {
     const session = normalizeStoredAuthSession(parsed)
     if (!session) {
       clearStoredAuthSession()
+      return null
     }
+    cachedAuthSession = session
     return session
   } catch {
     clearStoredAuthSession()
@@ -161,18 +189,22 @@ export function getStoredAuthSession(): StoredAuthSession | null {
 }
 
 export function setStoredAuthSession(session: StoredAuthSession): void {
+  cachedAuthSession = session
   if (!isBrowser()) {
     return
   }
 
+  ensureAuthStorageListener()
   localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session))
 }
 
 export function clearStoredAuthSession(): void {
+  cachedAuthSession = null
   if (!isBrowser()) {
     return
   }
 
+  ensureAuthStorageListener()
   localStorage.removeItem(AUTH_STORAGE_KEY)
 }
 
