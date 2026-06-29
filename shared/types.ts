@@ -25,6 +25,9 @@ export interface Bookmark {
   created_at: number
 }
 
+export type PublicCategory = Omit<Category, 'created_at'>
+export type PublicBookmark = Omit<Bookmark, 'created_at'>
+
 // 图标获取方式
 //  direct     = 直接抓取站点 favicon（服务端解析）
 //  favicon_im = 通过 favicon.im 获取
@@ -134,8 +137,8 @@ export interface LoginResp {
 
 // GET /api/public/data  （公开只读聚合）
 export interface PublicData {
-  categories: Category[]
-  bookmarks: Bookmark[]
+  categories: PublicCategory[]
+  bookmarks: PublicBookmark[]
   settings: PublicSettings
 }
 

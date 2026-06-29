@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { Bookmark, Category, CardStyle } from '../../shared/types'
+  import type { CardStyle, PublicBookmark, PublicCategory } from '../../shared/types'
   import BookmarkCard from './BookmarkCard.svelte'
 
   type AsyncVoid<T = void> = T | Promise<T>
 
-  export let category: Category
-  export let bookmarks: Bookmark[] = []
+  export let category: PublicCategory
+  export let bookmarks: PublicBookmark[] = []
   export let canAddBookmark = false
   export let cardWidth = 200 // 改为 200，Sun-Panel 标准
   export let cardHeight = 0
@@ -14,7 +14,7 @@
   export let cardShowDescription = true
   export let cardIconShowTitle = true
   export let onAddBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
-  export let onEditBookmark: ((bookmark: Bookmark) => AsyncVoid) | undefined = undefined
+  export let onEditBookmark: ((bookmark: PublicBookmark) => AsyncVoid) | undefined = undefined
 
   let categoryIconFailed = false
   let categoryIconStateKey = ''
@@ -40,7 +40,7 @@
     return Math.abs(hash).toString(36)
   }
 
-  function getCategoryIconUrl(value: Category): string {
+  function getCategoryIconUrl(value: PublicCategory): string {
     const icon = value.icon ?? ''
     if (/^data:image\//i.test(icon)) return icon
     if (/^https?:\/\//i.test(icon)) {

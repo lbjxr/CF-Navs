@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { Bookmark, CardStyle } from '../../shared/types'
+  import type { CardStyle, PublicBookmark } from '../../shared/types'
   import { isIconifyIconUrl, logoSurfIcon } from '../lib/icons'
 
   type AsyncVoid<T = void> = T | Promise<T>
 
-  export let bookmark: Bookmark
+  export let bookmark: PublicBookmark
   export let style: CardStyle = 'info'
   export let iconSize: number = 100
   export let showDescription: boolean = true
@@ -12,7 +12,7 @@
   export let width: number = 200
   export let height: number = 0
   export let canEdit = false
-  export let onEdit: ((bookmark: Bookmark) => AsyncVoid) | undefined = undefined
+  export let onEdit: ((bookmark: PublicBookmark) => AsyncVoid) | undefined = undefined
 
   let useExternalIcon = false
   let fallbackFailed = false

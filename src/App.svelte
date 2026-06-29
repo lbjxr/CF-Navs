@@ -8,6 +8,7 @@
     type Category,
     type CategoryUpsertReq,
     type IconSource,
+    type PublicBookmark,
     type PublicData,
     type PublicSettings,
     type Settings,
@@ -314,29 +315,43 @@
     }
   }
 
-  function syncAdminListsFromPublic(data: PublicData | null): void {
-    if (!data || !isLoggedIn()) return
-    adminStore.setCategories(data.categories)
-    adminStore.setBookmarks(data.bookmarks)
-  }
-
   function updatePublicDataLocally(transform: (data: PublicData) => PublicData): boolean {
     const current = get(publicStore).data
     if (!current) return false
 
     const next = transform(current)
     publicStore.setData(next)
-    syncAdminListsFromPublic(next)
     return true
+  }
+
+  function updateAdminCategoriesLocally(transform: (categories: Category[]) => Category[]): void {
+    if (!isLoggedIn()) return
+    adminStore.setCategories(transform(get(adminStore).data.categories))
+  }
+
+  function updateAdminBookmarksLocally(transform: (bookmarks: Bookmark[]) => Bookmark[]): void {
+    if (!isLoggedIn()) return
+    adminStore.setBookmarks(transform(get(adminStore).data.bookmarks))
   }
 
   async function refreshListsWhenLocalDataMissing(): Promise<void> {
     if (!get(publicStore).data) {
-      syncAdminListsFromPublic(await refreshPublicData())
+      if (isLoggedIn()) {
+        await refreshLoggedInData()
+      } else {
+        await refreshPublicData()
+      }
     }
   }
 
   async function applyLocalCategoryUpsert(category: Category): Promise<void> {
+    updateAdminCategoriesLocally((categories) => {
+      const exists = categories.some((item) => item.id === category.id)
+      return exists
+        ? categories.map((item) => (item.id === category.id ? category : item))
+        : [...categories, category]
+    })
+
     const updated = updatePublicDataLocally((data) => {
       const exists = data.categories.some((item) => item.id === category.id)
       const categories = exists
@@ -350,6 +365,9 @@
   }
 
   async function applyLocalCategoryDelete(categoryId: number): Promise<void> {
+    updateAdminCategoriesLocally((categories) => categories.filter((item) => item.id !== categoryId))
+    updateAdminBookmarksLocally((bookmarks) => bookmarks.filter((item) => item.category_id !== categoryId))
+
     const updated = updatePublicDataLocally((data) => ({
       ...data,
       categories: data.categories.filter((item) => item.id !== categoryId),
@@ -360,6 +378,13 @@
   }
 
   async function applyLocalBookmarkUpsert(bookmark: Bookmark): Promise<void> {
+    updateAdminBookmarksLocally((bookmarks) => {
+      const exists = bookmarks.some((item) => item.id === bookmark.id)
+      return exists
+        ? bookmarks.map((item) => (item.id === bookmark.id ? bookmark : item))
+        : [...bookmarks, bookmark]
+    })
+
     const updated = updatePublicDataLocally((data) => {
       const exists = data.bookmarks.some((item) => item.id === bookmark.id)
       const bookmarks = exists
@@ -373,6 +398,8 @@
   }
 
   async function applyLocalBookmarkDelete(bookmarkId: number): Promise<void> {
+    updateAdminBookmarksLocally((bookmarks) => bookmarks.filter((item) => item.id !== bookmarkId))
+
     const updated = updatePublicDataLocally((data) => ({
       ...data,
       bookmarks: data.bookmarks.filter((item) => item.id !== bookmarkId),
@@ -383,6 +410,14 @@
 
   async function applyLocalCategorySort(ids: number[]): Promise<void> {
     const sortById = new Map(ids.map((id, index) => [id, index]))
+    updateAdminCategoriesLocally((categories) => categories
+      .map((category) => (
+        sortById.has(category.id)
+          ? { ...category, sort: sortById.get(category.id) ?? category.sort }
+          : category
+      ))
+      .sort((a, b) => a.sort - b.sort || a.id - b.id))
+
     const updated = updatePublicDataLocally((data) => ({
       ...data,
       categories: data.categories
@@ -399,6 +434,14 @@
 
   async function applyLocalBookmarkSort(ids: number[]): Promise<void> {
     const sortById = new Map(ids.map((id, index) => [id, index]))
+    updateAdminBookmarksLocally((bookmarks) => bookmarks
+      .map((bookmark) => (
+        sortById.has(bookmark.id)
+          ? { ...bookmark, sort: sortById.get(bookmark.id) ?? bookmark.sort }
+          : bookmark
+      ))
+      .sort((a, b) => a.sort - b.sort || a.id - b.id))
+
     const updated = updatePublicDataLocally((data) => ({
       ...data,
       bookmarks: data.bookmarks
@@ -525,7 +568,7 @@
     }
   }
 
-  function toBookmarkForm(bookmark: Bookmark): BookmarkFormValue {
+  function toBookmarkForm(bookmark: PublicBookmark): BookmarkFormValue {
     return {
       id: bookmark.id,
       category_id: bookmark.category_id,

@@ -3,23 +3,23 @@
   import SearchBox from '../components/SearchBox.svelte'
   import Sidebar from '../components/Sidebar.svelte'
   import CategorySection from '../components/CategorySection.svelte'
-  import type { Bookmark, PublicSettings, Category } from '../../shared/types'
+  import type { PublicBookmark, PublicCategory, PublicSettings } from '../../shared/types'
 
   type AsyncVoid<T = void> = T | Promise<T>
 
-  export let categories: Category[] = []
-  export let bookmarks: Bookmark[] = []
+  export let categories: PublicCategory[] = []
+  export let bookmarks: PublicBookmark[] = []
   export let settings: PublicSettings | null = null
   export let title = ''
   export let isAuthenticated = false
   export let authLoading = false
   export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
-  export let onEditBookmark: ((bookmark: Bookmark) => AsyncVoid) | undefined = undefined
+  export let onEditBookmark: ((bookmark: PublicBookmark) => AsyncVoid) | undefined = undefined
   export let onSwitchToAdmin: (() => AsyncVoid) | undefined = undefined
   export let onLogout: (() => AsyncVoid) | undefined = undefined
   export let onOpenLogin: (() => AsyncVoid) | undefined = undefined
 
-  let categoryBookmarks = new Map<number, Bookmark[]>()
+  let categoryBookmarks = new Map<number, PublicBookmark[]>()
   let categoryTitleById = new Map<number, string>()
   let searchTextByBookmarkId = new Map<number, string>()
   let sectionElements: HTMLElement[] = []
@@ -44,7 +44,7 @@
     : sortedCategories
 
   $: {
-    const nextCategoryBookmarks = new Map<number, Bookmark[]>()
+    const nextCategoryBookmarks = new Map<number, PublicBookmark[]>()
 
     for (const bookmark of visibleBookmarks) {
       const list = nextCategoryBookmarks.get(bookmark.category_id) ?? []
@@ -106,7 +106,7 @@
   }
 
   function buildSearchIndex(
-    items: Bookmark[],
+    items: PublicBookmark[],
     categoryTitles: Map<number, string>,
   ): Map<number, string> {
     const nextIndex = new Map<number, string>()
@@ -127,7 +127,7 @@
   }
 
   function bookmarkMatchesSearch(
-    bookmark: Bookmark,
+    bookmark: PublicBookmark,
     keyword: string,
     searchIndex: Map<number, string>,
   ): boolean {

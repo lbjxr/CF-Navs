@@ -5,6 +5,8 @@ import type {
   Category,
   LoginResp,
   PublicData,
+  PublicBookmark,
+  PublicCategory,
   PublicSettings,
   Settings,
   SiteConfig,
@@ -331,8 +333,8 @@ export const adminStore = createAdminStore()
 
 export const isAuthenticated: Readable<boolean> = derived(authStore, ($authStore) => Boolean($authStore.session))
 export const authToken: Readable<string | null> = derived(authStore, ($authStore) => $authStore.session?.token ?? null)
-export const publicCategories: Readable<Category[]> = derived(publicStore, ($publicStore) => $publicStore.data?.categories ?? [])
-export const publicBookmarks: Readable<Bookmark[]> = derived(publicStore, ($publicStore) => $publicStore.data?.bookmarks ?? [])
+export const publicCategories: Readable<PublicCategory[]> = derived(publicStore, ($publicStore) => $publicStore.data?.categories ?? [])
+export const publicBookmarks: Readable<PublicBookmark[]> = derived(publicStore, ($publicStore) => $publicStore.data?.bookmarks ?? [])
 export const publicSettingsStore: Readable<PublicSettings | null> = derived(
   publicStore,
   ($publicStore) => $publicStore.data?.settings ?? null,

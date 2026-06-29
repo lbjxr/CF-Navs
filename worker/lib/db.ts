@@ -6,6 +6,8 @@ import type {
   Category,
   BookmarkUpsertReq,
   CategoryUpsertReq,
+  PublicBookmark,
+  PublicCategory,
   SiteConfig,
   Settings,
 } from '../../shared/types'
@@ -77,6 +79,9 @@ const PUBLIC_DATA_SETTINGS_KEYS: (keyof Settings)[] = [
 const CATEGORY_LIST_SQL = 'SELECT id, title, icon, sort, created_at FROM categories ORDER BY sort ASC, id ASC'
 const BOOKMARK_LIST_SQL =
   'SELECT id, category_id, title, url, icon, icon_source, icon_background_color, description, open_method, sort, created_at FROM bookmarks ORDER BY sort ASC, id ASC'
+const PUBLIC_CATEGORY_LIST_SQL = 'SELECT id, title, icon, sort FROM categories ORDER BY sort ASC, id ASC'
+const PUBLIC_BOOKMARK_LIST_SQL =
+  'SELECT id, category_id, title, url, icon, icon_source, icon_background_color, description, open_method, sort FROM bookmarks ORDER BY sort ASC, id ASC'
 const SETTINGS_LIST_SQL = 'SELECT key, value FROM settings'
 const PUBLIC_DATA_SETTINGS_LIST_SQL = `SELECT key, value FROM settings WHERE key IN (${PUBLIC_DATA_SETTINGS_KEYS
   .map((key) => `'${key}'`)
@@ -176,20 +181,20 @@ export async function listBookmarks(db: D1Database): Promise<Bookmark[]> {
 }
 
 export async function getPublicDataSource(db: D1Database): Promise<{
-  categories: Category[]
-  bookmarks: Bookmark[]
+  categories: PublicCategory[]
+  bookmarks: PublicBookmark[]
   settings: Settings
 }> {
   return await withSchemaRetry(db, async () => {
     const [settingsResult, categoriesResult, bookmarksResult] = await db.batch([
       db.prepare(PUBLIC_DATA_SETTINGS_LIST_SQL),
-      db.prepare(CATEGORY_LIST_SQL),
-      db.prepare(BOOKMARK_LIST_SQL),
+      db.prepare(PUBLIC_CATEGORY_LIST_SQL),
+      db.prepare(PUBLIC_BOOKMARK_LIST_SQL),
     ])
 
     return {
-      categories: (categoriesResult.results ?? []) as Category[],
-      bookmarks: (bookmarksResult.results ?? []) as Bookmark[],
+      categories: (categoriesResult.results ?? []) as PublicCategory[],
+      bookmarks: (bookmarksResult.results ?? []) as PublicBookmark[],
       settings: settingsFromRows((settingsResult.results ?? []) as Array<{ key: string; value: string | null }>),
     }
   })
