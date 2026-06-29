@@ -153,8 +153,6 @@ export interface PublicSettings {
   site_title_font_size: number
   theme: ThemeMode
   background: BackgroundSetting
-  custom_css: string
-  custom_js: string
   search_engine: SearchEngineSetting
   image_host_url: string
   card_size: CardSizeSetting // 添加卡片尺寸

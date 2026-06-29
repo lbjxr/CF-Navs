@@ -159,8 +159,6 @@
       site_title_font_size: settings.site_title_font_size,
       theme: settings.theme,
       background: settings.background,
-      custom_css: settings.custom_css,
-      custom_js: settings.custom_js,
       search_engine: settings.search_engine,
       image_host_url: settings.image_host_url,
       card_size: settings.card_size,
