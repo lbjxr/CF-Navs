@@ -156,14 +156,12 @@ export async function updateCategory(
 }
 
 export async function deleteCategory(db: D1Database, id: number): Promise<boolean> {
-  const existing = await getCategory(db, id)
-  if (!existing) return false
   // 显式级联删书签（不依赖 PRAGMA foreign_keys，D1 默认未必开启外键）
-  await db.batch([
+  const [, categoryDelete] = await db.batch([
     db.prepare('DELETE FROM bookmarks WHERE category_id = ?').bind(id),
     db.prepare('DELETE FROM categories WHERE id = ?').bind(id),
   ])
-  return true
+  return (categoryDelete.meta.changes ?? 0) > 0
 }
 
 // 批量排序：按 ids 下标写 sort，单次 batch 提交
