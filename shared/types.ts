@@ -17,7 +17,7 @@ export interface Bookmark {
   title: string
   url: string
   icon: string | null
-  icon_source: IconSource | null // 图标获取方式（direct/favicon_im/logo_surf/google/custom）
+  icon_source: IconSource | null // 图标获取方式（direct/favicon_im/logo_surf/google/iconify/custom）
   icon_background_color: string | null
   description: string | null
   open_method: 1 | 2 | 3 // 1=新窗口 2=当前页 3=当前页弹层
@@ -30,8 +30,9 @@ export interface Bookmark {
 //  favicon_im = 通过 favicon.im 获取
 //  logo_surf  = 由名称生成的文字图标（仿 logo.surf，本地 SVG）
 //  google     = Google s2 favicons 接口
+//  iconify    = Iconify SVG 图标
 //  custom     = 手动填写 / 图床上传等
-export type IconSource = 'direct' | 'favicon_im' | 'logo_surf' | 'google' | 'custom'
+export type IconSource = 'direct' | 'favicon_im' | 'logo_surf' | 'google' | 'iconify' | 'custom'
 
 // ========== 设置 ==========
 

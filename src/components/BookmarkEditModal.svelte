@@ -4,7 +4,10 @@
     DEFAULT_LOGO_SURF_SCHEME,
     LOGO_SURF_COLOR_SCHEMES,
     getIconCandidates,
+    iconifyIcon,
+    iconifyNameFromUrl,
     logoSurfIcon,
+    normalizeIconifyName,
     type IconCandidate,
     type LogoSurfColorScheme,
   } from '../lib/icons'
@@ -55,6 +58,7 @@
   let fetchingFavicon = false
   let faviconError = ''
   let selectedLogoSchemeName = DEFAULT_LOGO_SURF_SCHEME.name
+  let iconifyName = ''
   let previousBodyOverflow: string | null = null
   let previousDocumentOverflow: string | null = null
 
@@ -82,6 +86,7 @@
       open_method: value?.open_method ?? 'new_tab',
     }
     selectedLogoSchemeName = findLogoSchemeName(form.icon) ?? DEFAULT_LOGO_SURF_SCHEME.name
+    iconifyName = form.icon_source === 'iconify' ? iconifyNameFromUrl(form.icon) ?? '' : ''
     // 编辑模式也重新生成候选
     if (form.url.trim()) {
       candidates = getIconCandidates(form.url.trim(), form.title.trim())
@@ -97,6 +102,8 @@
   }
 
   $: currentLogoScheme = getLogoSchemeByName(selectedLogoSchemeName)
+  $: normalizedIconifyName = normalizeIconifyName(iconifyName)
+  $: iconifyPreviewUrl = iconifyIcon(iconifyName)
   $: logoPreviewText = (form.title.trim() || 'NAV').slice(0, 4)
   $: canShowLogoSchemes = Boolean(
     form.url.trim() &&
@@ -107,6 +114,9 @@
     if (form.icon !== nextLogoIcon) {
       form.icon = nextLogoIcon
     }
+  }
+  $: if (form.icon_source === 'iconify' && normalizedIconifyName && form.icon !== iconifyPreviewUrl) {
+    form.icon = iconifyPreviewUrl
   }
 
   function getLogoSchemeByName(name: string): LogoSurfColorScheme {
@@ -138,6 +148,23 @@
     form.icon_source = 'logo_surf'
     candidateError = ''
     faviconError = ''
+  }
+
+  function selectIconifyIcon() {
+    if (!iconifyPreviewUrl) {
+      candidateError = '请输入有效的 Iconify 图标名，例如 mdi:home 或 simple-icons:github'
+      return
+    }
+
+    form.icon = iconifyPreviewUrl
+    form.icon_source = 'iconify'
+    iconifyName = normalizedIconifyName
+    candidateError = ''
+    faviconError = ''
+  }
+
+  function openIconifyLibrary() {
+    window.open('https://icon-sets.iconify.design/', '_blank', 'noopener,noreferrer')
   }
 
   function isCandidateSelected(candidate: IconCandidate): boolean {
@@ -217,6 +244,9 @@
 
     form.icon = candidate.url
     form.icon_source = candidate.source
+    if (candidate.source === 'iconify') {
+      iconifyName = iconifyNameFromUrl(candidate.url) ?? iconifyName
+    }
     candidateError = ''
     faviconError = ''
   }
@@ -224,6 +254,7 @@
   function clearIconSelection() {
     form.icon = ''
     form.icon_source = ''
+    iconifyName = ''
   }
 
   async function handleFetchFavicon() {
@@ -350,6 +381,40 @@
             <p class="hint-text">请输入有效链接以生成图标候选</p>
           {:else}
             <p class="hint-text">填写链接地址后将自动生成图标选项</p>
+          {/if}
+        </div>
+
+        <div class="iconify-section">
+          <div class="scheme-header">
+            <span class="field-label">Iconify 图标</span>
+            <button type="button" class="text-link-button" on:click={openIconifyLibrary}>
+              打开 Iconify 图标库
+            </button>
+          </div>
+          <div class="iconify-row">
+            <input
+              bind:value={iconifyName}
+              type="text"
+              placeholder="例如 mdi:home、simple-icons:github"
+              aria-label="Iconify 图标名"
+            />
+            {#if iconifyPreviewUrl}
+              <span class="iconify-preview">
+                <img src={iconifyPreviewUrl} alt="Iconify 图标预览" />
+              </span>
+            {/if}
+            <button
+              type="button"
+              class="ghost-button fetch-button"
+              on:click={selectIconifyIcon}
+              disabled={loading || !iconifyPreviewUrl}
+            >
+              使用 Iconify
+            </button>
+          </div>
+          <small class="hint-text">从 icon-sets.iconify.design 复制图标名，保存后会通过本地图标代理和浏览器缓存加载。</small>
+          {#if candidateError}
+            <small class="field-error">{candidateError}</small>
           {/if}
         </div>
 
@@ -605,6 +670,47 @@
     gap: 5px;
   }
 
+  .iconify-section {
+    display: grid;
+    gap: 6px;
+  }
+
+  .iconify-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 34px auto;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .iconify-preview {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8fafc;
+  }
+
+  .iconify-preview img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+  }
+
+  .text-link-button {
+    border: 0;
+    background: transparent;
+    color: #2563eb;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
   .icon-candidates {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -848,6 +954,14 @@
     .icon-row {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    .iconify-row {
+      grid-template-columns: 1fr;
+    }
+
+    .iconify-preview {
+      width: 100%;
     }
 
     .modal-actions {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Bookmark, CardStyle } from '../../shared/types'
-  import { logoSurfIcon } from '../lib/icons'
+  import { isIconifyIconUrl, logoSurfIcon } from '../lib/icons'
 
   type AsyncVoid<T = void> = T | Promise<T>
 
@@ -33,7 +33,9 @@
       ? `min-width: ${width}px; ${height > 0 ? `height: ${height}px;` : ''}`
       : `width: ${compactIconSize}px; height: ${compactIconSize}px;`
   $: cardLinkStyle = height > 0 ? `height: ${height}px;` : ''
-  $: canUseExternalIconFallback = bookmark.icon_source === 'custom' && !isFaviconImIconUrl(bookmark.icon ?? '')
+  $: canUseExternalIconFallback =
+    (bookmark.icon_source === 'custom' && !isFaviconImIconUrl(bookmark.icon ?? '')) ||
+    (bookmark.icon_source === 'iconify' && isIconifyIconUrl(bookmark.icon ?? ''))
   $: if (nextIconStateKey !== iconStateKey) {
     iconStateKey = nextIconStateKey
     useExternalIcon = false

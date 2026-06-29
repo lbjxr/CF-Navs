@@ -16,7 +16,7 @@
 - 🔍 **多搜索引擎**：内置多个搜索引擎快速切换
 - 📦 **卡片样式**：支持详情风格和极简风格两种展示
 - 🎨 **自定义背景**：支持纯色、渐变、图片背景
-- 🔖 **四源图标获取**：自动解析 / Favicon.im / 完整标题文字图标 / Google 四种方式
+- 🔖 **五源图标获取**：自动解析 / Favicon.im / 完整标题文字图标 / Google / Iconify 五种方式
 - 🎛️ **文字图标配色**：新增/编辑书签时可选择 logo.surf 风格的默认配色方案
 - 💾 **图标本地缓存**：后台自动缓存图标，前台逐层降级保障显示
 - ⚡ **图标缓存代理**：书签和分类图标优先走 Worker + D1 + Cloudflare 边缘缓存，避免页面刷新或筛选时反复请求外站
@@ -209,7 +209,7 @@ npm run deploy
 
 HTTP(S) 书签图标不会在首页直接请求原始外站地址，而是优先通过 `/api/icon/:id` 读取 D1 缓存和 Cloudflare 边缘缓存。分类图标通过 `/api/category-icon/:id` 代理加载。Favicon.im 或其他第三方图标服务限流、超时或返回错误时，后端会返回临时 SVG 文字图标，不会把失败结果写入长期缓存。
 
-Service Worker 会对 `/api/icon/*` 和 `/api/category-icon/*` 使用 cache-first 策略；后台修改书签、配置或首页搜索筛选导致组件重新渲染时，仍优先读取本地缓存。部署新版后如浏览器仍使用旧逻辑，请强制刷新一次页面，让新版 Service Worker 激活。
+Iconify 图标使用 `https://api.iconify.design/{set}/{name}.svg`，可在新增/编辑书签时填写 `mdi:home`、`simple-icons:github` 这类图标名。Service Worker 会对 `/api/icon/*`、`/api/category-icon/*` 和 Iconify SVG 使用 cache-first 策略；后台修改书签、配置或首页搜索筛选导致组件重新渲染时，仍优先读取本地缓存。部署新版后如浏览器仍使用旧逻辑，请强制刷新一次页面，让新版 Service Worker 激活。
 
 ### 首页搜索
 

@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS bookmarks (
   title        TEXT NOT NULL,
   url          TEXT NOT NULL,             -- 站点地址
   icon         TEXT,                      -- 图标 URL（cftc 直链 / 自动获取结果）
-  icon_source  TEXT,                      -- 图标获取方式：direct/favicon_im/logo_surf/google/custom
+  icon_source  TEXT,                      -- 图标获取方式：direct/favicon_im/logo_surf/google/iconify/custom
   icon_background_color TEXT,             -- 单个图标背景色
   icon_blob    TEXT,                      -- 图标 base64 缓存（本地回退方案）
   description  TEXT,

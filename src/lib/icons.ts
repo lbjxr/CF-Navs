@@ -54,6 +54,48 @@ export function faviconImIcon(url: string): string {
   return hostname ? `https://favicon.im/${hostname}?larger=true` : ''
 }
 
+export function normalizeIconifyName(value: string): string {
+  const trimmed = value.trim().toLowerCase()
+  const withoutUrl = iconifyNameFromUrl(trimmed) ?? trimmed
+  const normalized = withoutUrl.replace(/\s+/g, '').replace(/\//g, ':')
+  return /^[a-z0-9-]+:[a-z0-9-]+$/.test(normalized) ? normalized : ''
+}
+
+export function iconifyIcon(value: string): string {
+  const normalized = normalizeIconifyName(value)
+  if (!normalized) return ''
+
+  const [prefix, name] = normalized.split(':')
+  return `https://api.iconify.design/${encodeURIComponent(prefix)}/${encodeURIComponent(name)}.svg`
+}
+
+export function iconifyNameFromUrl(value: string): string | null {
+  try {
+    const url = new URL(value)
+    if (url.hostname !== 'api.iconify.design') return null
+
+    const parts = url.pathname.split('/').filter(Boolean)
+    if (parts.length < 2) return null
+
+    const prefix = decodeURIComponent(parts[0]).toLowerCase()
+    const name = decodeURIComponent(parts[1]).replace(/\.svg$/i, '').toLowerCase()
+    const normalized = `${prefix}:${name}`
+    return /^[a-z0-9-]+:[a-z0-9-]+$/.test(normalized) ? normalized : null
+  } catch {
+    return null
+  }
+}
+
+export function isIconifyIconUrl(value: string): boolean {
+  return iconifyNameFromUrl(value) !== null
+}
+
+export function defaultIconifyIcon(url: string): string {
+  const hostname = getHostname(url)
+  const brand = hostname.split('.')[0]?.replace(/[^a-z0-9-]/gi, '').toLowerCase()
+  return brand ? iconifyIcon(`simple-icons:${brand}`) : ''
+}
+
 function escapeSvgText(value: string): string {
   return value
     .replace(/&/g, '&amp;')

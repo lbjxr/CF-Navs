@@ -74,7 +74,7 @@ bookmarksRoutes.post('/', async (c) => {
     !isOptionalString(body.icon) ||
     !isOptionalString(body.icon_background_color) ||
     !isOptionalString(body.description) ||
-    (body.icon_source !== undefined && body.icon_source !== null && !['direct','favicon_im','logo_surf','google','custom'].includes(body.icon_source)) ||
+    (body.icon_source !== undefined && body.icon_source !== null && !['direct','favicon_im','logo_surf','google','iconify','custom'].includes(body.icon_source)) ||
     (body.open_method !== undefined && body.open_method !== 1 && body.open_method !== 2 && body.open_method !== 3)
   ) {
     return badRequest(c, 'invalid bookmark payload')
@@ -121,7 +121,7 @@ bookmarksRoutes.put('/:id', async (c) => {
     !isOptionalString(body.icon) ||
     !isOptionalString(body.icon_background_color) ||
     !isOptionalString(body.description) ||
-    (body.icon_source !== undefined && body.icon_source !== null && !['direct','favicon_im','logo_surf','google','custom'].includes(body.icon_source)) ||
+    (body.icon_source !== undefined && body.icon_source !== null && !['direct','favicon_im','logo_surf','google','iconify','custom'].includes(body.icon_source)) ||
     (body.open_method !== undefined && body.open_method !== 1 && body.open_method !== 2 && body.open_method !== 3)
   ) {
     return badRequest(c, 'invalid bookmark payload')

@@ -32,7 +32,7 @@
 - ✅ 前台右键编辑书签，编辑入口以卡片浮层显示
 - ✅ 新增/编辑书签弹窗内部滚动，保存按钮保持可见
 - ✅ 拖拽排序（分类和书签）
-- ✅ 四种方式获取图标（自动解析 / Favicon.im / 完整标题文字图标 / Google）
+- ✅ 五种方式获取图标（自动解析 / Favicon.im / 完整标题文字图标 / Google / Iconify）
 - ✅ 文字图标读取完整标题，并支持新增/编辑书签时选择 logo.surf 风格配色
 - ✅ 图标代理缓存回退（Worker + D1 + Cloudflare edge cache + Service Worker）
 - ✅ 书签列表搜索筛选
@@ -58,7 +58,7 @@ src/
 ├── lib/
 │   ├── api.ts          # API 客户端
 │   ├── stores.ts       # Svelte stores
-│   ├── icons.ts        # 图标获取辅助（四种方式 + 文字图标配色）
+│   ├── icons.ts        # 图标获取辅助（五种方式 + 文字图标配色）
 │   └── importData.ts   # CF-Navs / SunPanel 导入转换
 └── App.svelte          # 主应用
 ```

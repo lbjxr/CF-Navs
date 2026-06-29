@@ -2,11 +2,12 @@
 // 策略：
 //  - /api/icon/*   缓存优先（图标 blob，带 hash 版本号天然去重）
 //  - /api/category-icon/* 缓存优先（分类图标代理）
+//  - https://api.iconify.design/* 缓存优先（Iconify SVG，新增/编辑预览和兜底直连）
 //  - /api/*        永不缓存（始终走网络）
 //  - 导航请求       网络优先，离线回退到缓存的 index.html
 //  - /assets/*等    缓存优先（构建产物带 hash，安全长期缓存）
 
-const CACHE = 'cf-navs-v2'
+const CACHE = 'cf-navs-v3'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg']
 
 self.addEventListener('install', (event) => {
@@ -33,6 +34,28 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return
 
   const url = new URL(request.url)
+
+  const isIconifyAsset =
+    url.protocol === 'https:' &&
+    url.hostname === 'api.iconify.design' &&
+    url.pathname.endsWith('.svg')
+  if (isIconifyAsset) {
+    event.respondWith(
+      caches.match(request).then(
+        (cached) =>
+          cached ||
+          fetch(request).then((response) => {
+            if (response.ok || response.type === 'opaque') {
+              const copy = response.clone()
+              caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => undefined)
+            }
+            return response
+          }),
+      ),
+    )
+    return
+  }
+
   if (url.origin !== self.location.origin) return
 
   // 图标代理缓存优先；其他 /api/* 不缓存
