@@ -35,6 +35,14 @@
 
 管理员首次初始化使用 `INIT_ADMIN_USER` 和 `INIT_ADMIN_PASSWORD`。密码通过 WebCrypto PBKDF2 哈希后以 `salt:hash` 形式存入 `settings.admin_password`。
 
+## 后台聚合接口
+
+全部需要登录。
+
+| 方法 | 路径 | 返回 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/admin/data` | `AdminData` | 后台初始化聚合数据，一次返回分类、书签和完整 `Settings`，用于替代进入后台时分别请求公开数据和设置 |
+
 ## 分类接口
 
 全部需要登录。

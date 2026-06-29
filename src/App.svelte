@@ -384,25 +384,17 @@
   }
 
   async function refreshLoggedInData(): Promise<void> {
-    const [publicResult, settingsResult] = await Promise.allSettled([
-      publicStore.refresh(),
-      api.settings.get(),
-    ])
-
-    if (publicResult.status === 'fulfilled' && settingsResult.status === 'fulfilled') {
-      adminStore.replaceData({
-        categories: publicResult.value.categories,
-        bookmarks: publicResult.value.bookmarks,
-        settings: settingsResult.value,
-      })
-      return
+    const data = await api.admin.getData()
+    if (!data.settings) {
+      throw new Error('failed to load admin settings')
     }
 
-    throw publicResult.status === 'rejected'
-      ? publicResult.reason
-      : settingsResult.status === 'rejected'
-        ? settingsResult.reason
-        : new Error('failed to load admin data')
+    adminStore.replaceData(data)
+    publicStore.setData({
+      categories: data.categories,
+      bookmarks: data.bookmarks,
+      settings: toPublicSettings(data.settings),
+    })
   }
 
   async function initializeApp(): Promise<void> {

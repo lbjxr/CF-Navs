@@ -1,5 +1,6 @@
 import { derived, writable, type Readable } from 'svelte/store'
 import type {
+  AdminData,
   Bookmark,
   Category,
   LoginResp,
@@ -31,12 +32,6 @@ export interface AuthState {
   initialized: boolean
   loading: boolean
   error: string | null
-}
-
-export interface AdminData {
-  categories: Category[]
-  bookmarks: Bookmark[]
-  settings: Settings | null
 }
 
 export interface PublicState extends LoadableState<PublicData | null> {}
@@ -273,13 +268,7 @@ function createAdminStore() {
     update((state) => ({ ...state, loading: true, error: null }))
 
     try {
-      const [categories, bookmarks, settings] = await Promise.all([
-        api.categories.list(),
-        api.bookmarks.list(),
-        api.settings.get(),
-      ])
-
-      const data = { categories, bookmarks, settings }
+      const data = await api.admin.getData()
       set({ data, loading: false, loaded: true, error: null })
       return data
     } catch (error) {

@@ -137,6 +137,14 @@ export interface PublicData {
   bookmarks: Bookmark[]
   settings: PublicSettings
 }
+
+// GET /api/admin/data  登录态后台聚合数据
+export interface AdminData {
+  categories: Category[]
+  bookmarks: Bookmark[]
+  settings: Settings | null
+}
+
 // 公开输出的设置子集（不含密码等敏感项）
 export interface PublicSettings {
   site_title: string

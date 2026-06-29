@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { ErrCode } from '../shared/types'
 import { fail, ok } from './lib/response'
 import { authRequired } from './middleware/auth'
+import adminRoutes from './routes/admin'
 import authRoutes from './routes/auth'
 import bookmarksRoutes from './routes/bookmarks'
 import categoriesRoutes from './routes/categories'
@@ -18,6 +19,10 @@ app.get('/api/health', (c) => c.json(ok({ status: 'ok' })))
 
 app.route('/api', authRoutes)
 app.route('/api', publicRoutes)
+
+app.use('/api/admin', authRequired)
+app.use('/api/admin/*', authRequired)
+app.route('/api/admin', adminRoutes)
 
 app.use('/api/categories', authRequired)
 app.use('/api/categories/*', authRequired)

@@ -1,5 +1,6 @@
 import {
   ErrCode,
+  type AdminData,
   type ApiResponse,
   type Bookmark,
   type BookmarkUpsertReq,
@@ -279,6 +280,10 @@ export const publicApi = {
   getData: () => request<PublicData>('/public/data', { auth: true }),
 }
 
+export const adminApi = {
+  getData: () => request<AdminData>('/admin/data', { auth: true }),
+}
+
 export const authApi = {
   login: (payload: LoginReq) => jsonRequest<LoginResp>('/login', 'POST', payload),
   logout: () => jsonRequest<null>('/logout', 'POST', undefined, true),
@@ -314,6 +319,7 @@ export const dataApi = {
 export const api = {
   config: configApi,
   public: publicApi,
+  admin: adminApi,
   auth: authApi,
   categories: categoriesApi,
   bookmarks: bookmarksApi,

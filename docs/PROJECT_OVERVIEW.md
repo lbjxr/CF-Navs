@@ -68,6 +68,7 @@ src/
 worker/
 ├── routes/             # API 路由
 │   ├── auth.ts         # 认证相关
+│   ├── admin.ts        # 后台初始化聚合数据
 │   ├── categories.ts   # 分类管理
 │   ├── bookmarks.ts    # 书签管理
 │   ├── icon.ts         # 缓存图标服务（公开）
@@ -179,6 +180,7 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 - CSS 压缩
 - 图标代理响应由 Service Worker cache-first 读取，页面滚动、搜索筛选和设置保存后优先命中本地缓存
 - 首页搜索预计算书签索引，滚动高亮缓存分区 DOM 并用 `requestAnimationFrame` 节流
+- 后台初始化使用 `/api/admin/data` 一次拉取分类、书签和完整设置
 - 后台 CRUD、排序和设置保存后使用接口返回值增量更新本地 store，避免额外拉取全量 `/api/public/data`
 
 ### 后端
@@ -187,6 +189,7 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 - Worker 边缘计算
 - `/api/config` 使用短 TTL Cloudflare edge cache，设置保存和导入后主动失效
 - 匿名 `/api/public/data` 使用 Cloudflare edge cache，写入接口负责失效缓存
+- `/api/admin/data` 合并后台进入时的数据读取，减少 Worker 请求数和 settings 重复 D1 查询
 - `/api/icon/:id`、`/api/category-icon/:id` 与 `/api/iconify/:set/:name.svg` 统一代理外站图标，失败时返回临时 SVG fallback，不缓存第三方失败结果
 - 静态资源 CDN
 
