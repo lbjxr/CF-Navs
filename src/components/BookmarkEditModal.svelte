@@ -112,9 +112,7 @@
   $: showIconifyOptions = form.icon_source === 'iconify'
   $: iconifySelected =
     iconifyUseConfirmed &&
-    form.icon_source === 'iconify' &&
-    Boolean(iconifySourceUrl) &&
-    form.icon === iconifySourceUrl &&
+    Boolean(normalizedIconifyName) &&
     confirmedIconifyName === normalizedIconifyName
   $: logoPreviewText = (form.title.trim() || 'NAV').slice(0, 4)
   $: if (iconifyUseConfirmed && normalizedIconifyName !== confirmedIconifyName) {
@@ -415,6 +413,7 @@
               class="ghost-button fetch-button iconify-use-button"
               class:selected={iconifySelected}
               on:click={selectIconifyIcon}
+              aria-pressed={iconifySelected}
               disabled={loading || !iconifyPreviewUrl}
             >
               使用 Iconify
@@ -699,11 +698,24 @@
     object-fit: contain;
   }
 
+  .iconify-use-button {
+    border-color: #cbd5e1;
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: none;
+  }
+
   .iconify-use-button.selected {
     border-color: #2563eb;
     background: #2563eb;
     color: #ffffff;
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+  }
+
+  .iconify-use-button.selected:hover:not(:disabled) {
+    border-color: #1d4ed8;
+    background: #1d4ed8;
+    color: #ffffff;
   }
 
   .text-link-button {
