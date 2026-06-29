@@ -14,6 +14,7 @@ export interface Env {
 // Hono context.set/get 的类型
 export interface Variables {
   username: string
+  loginRateLimitState: LoginRateLimitState | null
 }
 
 // Hono 泛型环境别名
@@ -26,4 +27,9 @@ export interface HonoEnv {
 export interface SessionValue {
   username: string
   exp: number // 毫秒时间戳
+}
+
+export interface LoginRateLimitState {
+  count: number
+  resetAt: number
 }

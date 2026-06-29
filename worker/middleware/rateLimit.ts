@@ -1,12 +1,7 @@
 import type { MiddlewareHandler } from 'hono'
 import { ErrCode } from '../../shared/types'
 import { fail } from '../lib/response'
-import type { Env, HonoEnv } from '../types'
-
-interface LoginRateLimitState {
-  count: number
-  resetAt: number
-}
+import type { Env, HonoEnv, LoginRateLimitState } from '../types'
 
 const LOGIN_RATE_LIMIT_PREFIX = 'rl:login:'
 const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5
@@ -34,9 +29,13 @@ async function readRateLimitState(env: Env, ip: string): Promise<LoginRateLimitS
   }
 }
 
-export async function recordLoginFailure(env: Env, ip: string): Promise<void> {
+export async function recordLoginFailure(
+  env: Env,
+  ip: string,
+  currentState?: LoginRateLimitState | null,
+): Promise<void> {
   const now = Date.now()
-  const current = await readRateLimitState(env, ip)
+  const current = currentState === undefined ? await readRateLimitState(env, ip) : currentState
 
   const nextState: LoginRateLimitState =
     current && current.resetAt > now
@@ -54,6 +53,7 @@ export async function clearLoginFailures(env: Env, ip: string): Promise<void> {
 export const loginRateLimit: MiddlewareHandler<HonoEnv> = async (c, next) => {
   const ip = getClientIp(c)
   const state = await readRateLimitState(c.env, ip)
+  c.set('loginRateLimitState', state)
 
   if (state && state.resetAt > Date.now() && state.count >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS) {
     return c.json(fail(ErrCode.RATE_LIMITED, 'too many login attempts'))

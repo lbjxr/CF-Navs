@@ -41,7 +41,7 @@ authRoutes.post('/login', loginRateLimit, async (c) => {
   const ip = getClientIp(c)
   const passwordOk = username === credentials.username && (await verifyPassword(password, credentials.passwordHash))
   if (!passwordOk) {
-    await recordLoginFailure(c.env, ip)
+    await recordLoginFailure(c.env, ip, c.get('loginRateLimitState'))
     return c.json(fail(ErrCode.UNAUTHORIZED, 'invalid credentials'))
   }
 
