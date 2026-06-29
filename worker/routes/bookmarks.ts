@@ -112,7 +112,7 @@ bookmarksRoutes.post('/', async (c) => {
     })
     if (!bookmark) return c.json(fail(ErrCode.NOT_FOUND, 'category not found'))
 
-    // 异步缓存图标 blob（不阻塞响应）
+    // Warm the icon blob after create without blocking the API response.
     if (bookmark.icon && shouldCacheIconBlob(bookmark.icon, bookmark.icon_source)) {
       waitUntil(c, cacheIconBlob(c, bookmark.id, bookmark.icon))
     }
@@ -156,11 +156,6 @@ bookmarksRoutes.put('/:id', async (c) => {
       open_method: body.open_method,
     })
     if (!bookmark) return c.json(fail(ErrCode.NOT_FOUND, 'bookmark or category not found'))
-
-    // 异步缓存图标 blob（不阻塞响应）
-    if (bookmark.icon && shouldCacheIconBlob(bookmark.icon, bookmark.icon_source)) {
-      waitUntil(c, cacheIconBlob(c, bookmark.id, bookmark.icon))
-    }
 
     invalidatePublicDataCache(c, c.req.url)
     return c.json(ok(bookmark))
