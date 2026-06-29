@@ -71,6 +71,15 @@ function cacheSiteConfigData(c: Parameters<typeof cacheSiteConfigResponse>[0], r
   cacheSiteConfigResponse(c, requestUrl, response)
 }
 
+function unauthorizedResponse() {
+  return Response.json(fail(ErrCode.UNAUTHORIZED, 'unauthorized'), {
+    status: 401,
+    headers: {
+      'Cache-Control': 'no-store',
+    },
+  })
+}
+
 export const publicRoutes = new Hono<HonoEnv>()
 
 publicRoutes.get('/config', async (c) => {
@@ -107,7 +116,7 @@ publicRoutes.get('/public/data', async (c) => {
           public_mode: false,
         },
       }, 200, {
-        'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=120',
+        'Cache-Control': 'no-store',
       })
       cachePrivatePublicDataResponse(c, c.req.url, response)
       return response
@@ -115,7 +124,7 @@ publicRoutes.get('/public/data', async (c) => {
 
     const session = await validateSession(c.env, token)
     if (!session) {
-      return c.json(fail(ErrCode.FORBIDDEN, 'forbidden'))
+      return unauthorizedResponse()
     }
 
     c.set('username', session.username)
@@ -133,7 +142,7 @@ publicRoutes.get('/public/data', async (c) => {
           public_mode: false,
         },
       }, 200, {
-        'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=120',
+        'Cache-Control': 'no-store',
       })
       cachePrivatePublicDataResponse(c, c.req.url, response)
       return response
@@ -141,7 +150,7 @@ publicRoutes.get('/public/data', async (c) => {
 
     const session = await validateSession(c.env, token)
     if (!session) {
-      return c.json(fail(ErrCode.FORBIDDEN, 'forbidden'))
+      return unauthorizedResponse()
     }
 
     c.set('username', session.username)

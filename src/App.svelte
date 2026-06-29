@@ -354,13 +354,18 @@
             })
             return data
           } catch (authError) {
+            if (isUnauthorizedError(authError)) {
+              authStore.setSession(null)
+              adminStore.reset()
+              publicStore.reset()
+              configStore.setData(forbiddenConfig)
+              return null
+            }
+
             if (!isPublicModeForbidden(authError)) {
               rootError = getErrorMessage(authError)
               return null
             }
-
-            authStore.setSession(null)
-            adminStore.reset()
           }
         }
 
