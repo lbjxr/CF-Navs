@@ -23,7 +23,7 @@
 | GET | `/api/config` | 无 | `SiteConfig` |
 | GET | `/api/public/data` | 公开模式或登录 | `PublicData` |
 
-`/api/config` 使用短 TTL Cloudflare edge cache，设置保存或数据导入后会主动失效，主要作为兼容和兜底轻量配置接口。前端普通启动路径优先使用 `/api/public/data` 或 `/api/admin/data` 派生站点配置；公开模式关闭时，`/api/public/data` 的 1005 响应会在 `data` 中携带 `{ site_title, public_mode: false }`，登录页无需再额外请求 `/api/config`。`/api/public/data` 只查询并返回首页渲染需要的公开设置子集，不包含 `admin_username`、`admin_password`、`public_mode`、`custom_css`、`custom_js` 等内部或未使用字段；匿名公开访问会先查短 TTL edge cache，命中时直接返回而不读取 D1，带登录态请求绕过该缓存。
+`/api/config` 使用短 TTL Cloudflare edge cache，设置保存或数据导入后会主动失效，主要作为兼容和兜底轻量配置接口。前端普通启动路径优先使用 `/api/public/data` 或 `/api/admin/data` 派生站点配置；公开模式关闭时，`/api/public/data` 的 1005 响应会在 `data` 中携带 `{ site_title, public_mode: false }`，登录页无需再额外请求 `/api/config`。`/api/public/data` 只查询并返回首页渲染需要的公开设置子集，不包含 `admin_username`、`admin_password`、`public_mode`、`custom_css`、`custom_js` 等内部或未使用字段；匿名公开访问会先查短 TTL edge cache，命中时直接返回而不读取 D1，带登录态请求绕过该缓存。缓存未命中时，公开 settings、分类和书签通过一次 D1 batch 聚合读取。
 
 ## 认证接口
 

@@ -192,7 +192,7 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 - `/api/config` 使用短 TTL Cloudflare edge cache，设置保存和导入后主动失效
 - 匿名 `/api/public/data` 使用 Cloudflare edge cache，命中时不读取 D1；写入接口负责失效缓存
 - `/api/admin/data` 合并后台进入时的数据读取，分类、书签和 settings 使用 D1 batch 读取
-- `/api/public/data` 缓存未命中时用 D1 batch 合并分类和书签读取，并只读取首页公开 settings 字段
+- `/api/public/data` 缓存未命中时用一次 D1 batch 合并公开 settings、分类和书签读取，并只读取首页公开 settings 字段
 - 公开聚合、后台聚合、书签列表和图标详情等读取路径跳过预检查式 schema 迁移，仅在旧库缺列错误时迁移并重试一次
 - `/api/icon/:id`、`/api/category-icon/:id` 与 `/api/iconify/:set/:name.svg` 统一代理外站图标，书签图标 cache miss 时一次 D1 查询同时读取地址和 `icon_blob`，外站抓取成功后直接返回图片字节，失败时返回临时 SVG fallback，不缓存第三方失败结果
 - 静态资源 CDN

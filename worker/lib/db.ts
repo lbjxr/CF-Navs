@@ -175,12 +175,14 @@ export async function listBookmarks(db: D1Database): Promise<Bookmark[]> {
   })
 }
 
-export async function listCategoriesAndBookmarks(db: D1Database): Promise<{
+export async function getPublicDataSource(db: D1Database): Promise<{
   categories: Category[]
   bookmarks: Bookmark[]
+  settings: Settings
 }> {
   return await withSchemaRetry(db, async () => {
-    const [categoriesResult, bookmarksResult] = await db.batch([
+    const [settingsResult, categoriesResult, bookmarksResult] = await db.batch([
+      db.prepare(PUBLIC_DATA_SETTINGS_LIST_SQL),
       db.prepare(CATEGORY_LIST_SQL),
       db.prepare(BOOKMARK_LIST_SQL),
     ])
@@ -188,6 +190,7 @@ export async function listCategoriesAndBookmarks(db: D1Database): Promise<{
     return {
       categories: (categoriesResult.results ?? []) as Category[],
       bookmarks: (bookmarksResult.results ?? []) as Bookmark[],
+      settings: settingsFromRows((settingsResult.results ?? []) as Array<{ key: string; value: string | null }>),
     }
   })
 }
@@ -370,13 +373,6 @@ async function readRawSettings(db: D1Database): Promise<Map<string, unknown>> {
 // 聚合成强类型 Settings（缺失字段回退默认值）
 export async function getSettings(db: D1Database): Promise<Settings> {
   return settingsFromRawMap(await readRawSettings(db))
-}
-
-export async function getPublicDataSettings(db: D1Database): Promise<Settings> {
-  const { results } = await db
-    .prepare(PUBLIC_DATA_SETTINGS_LIST_SQL)
-    .all<{ key: string; value: string | null }>()
-  return settingsFromRows(results ?? [])
 }
 
 export async function getSiteConfig(db: D1Database): Promise<SiteConfig> {
