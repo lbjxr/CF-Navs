@@ -14,6 +14,8 @@ const COMPLETE_PUBLIC_SETTINGS_KEYS: Array<keyof Settings> = [
   'site_title_font_size',
   'public_mode',
   'theme',
+  'custom_css',
+  'custom_js',
   'image_host_url',
   'background',
   'search_engine',

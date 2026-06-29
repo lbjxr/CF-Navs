@@ -197,7 +197,7 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 - 匿名 `/api/public/data` 使用 Cloudflare edge cache，命中时不读取 D1；cache miss 时优先复用 `/api/config` edge cache，没有命中才轻量读取 `site_title/public_mode` 并预热配置缓存，私有模式下的匿名 1005 响应也短时缓存到 edge，写入接口负责失效缓存
 - `/api/admin/data` 合并后台进入时的数据读取，分类、书签和 settings 使用 D1 batch 读取
 - `/api/public/data` 确认公开后用一次 D1 batch 合并公开 settings、分类和书签读取，并只读取首页公开字段，不返回 `created_at` 等管理字段
-- 后台设置面板提交完整公开设置时，`PUT /api/settings` 写入 D1 后直接由提交 payload 合成响应；只有兼容性部分更新请求才写后回读完整 settings
+- 后台设置面板提交完整 `Settings` 字段时，`PUT /api/settings` 写入 D1 后直接由提交 payload 合成响应；只有兼容性部分更新请求才写后回读完整 settings
 - 公开聚合、后台聚合、书签列表和图标详情等读取路径跳过预检查式 schema 迁移，仅在旧库缺列错误时迁移并重试一次
 - `/api/icon/:id`、`/api/category-icon/:id` 与 `/api/iconify/:set/:name.svg` 统一代理外站图标，普通书签图标 cache miss 时一次 D1 查询同时读取地址和 `icon_blob`，外站抓取成功后直接返回图片字节；Iconify 图标不写 `icon_blob`，通过稳定 `/api/iconify/*` 代理共享 edge cache 与浏览器本地缓存；失败、图标缺失或缓存损坏时返回 `no-store` 临时 SVG fallback，不缓存第三方失败结果，也避免前台 `<img>` 404
 - 静态资源 CDN

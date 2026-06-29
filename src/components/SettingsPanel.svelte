@@ -16,6 +16,8 @@
     | 'site_title_font_size'
     | 'public_mode'
     | 'theme'
+    | 'custom_css'
+    | 'custom_js'
     | 'image_host_url'
     | 'background'
     | 'search_engine'
@@ -61,6 +63,8 @@
     site_title_font_size: 32,
     public_mode: true,
     theme: 'auto',
+    custom_css: '',
+    custom_js: '',
     image_host_url: '',
     background: { ...defaultBackground },
     search_engine: { current: defaultSearchEngine.current, engines: defaultSearchEngine.engines.map((e) => ({ ...e })) },
@@ -95,6 +99,8 @@
       site_title_font_size: source.site_title_font_size,
       public_mode: source.public_mode,
       theme: source.theme,
+      custom_css: source.custom_css,
+      custom_js: source.custom_js,
       image_host_url: source.image_host_url,
       background: { ...source.background },
       search_engine: {
@@ -127,6 +133,8 @@
       site_title_font_size: typeof source?.site_title_font_size === 'number' ? source.site_title_font_size : 32,
       public_mode: source?.public_mode ?? true,
       theme: source?.theme ?? 'auto',
+      custom_css: source?.custom_css ?? '',
+      custom_js: source?.custom_js ?? '',
       image_host_url: source?.image_host_url ?? '',
       background: {
         type: background?.type ?? defaultBackground.type,
@@ -195,6 +203,8 @@
       site_title_font_size: clampNumber(source.site_title_font_size, 16, 72),
       public_mode: source.public_mode,
       theme: source.theme,
+      custom_css: source.custom_css?.trim() ?? '',
+      custom_js: source.custom_js?.trim() ?? '',
       image_host_url: source.image_host_url.trim(),
       background: {
         type: source.background.type,

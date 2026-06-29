@@ -109,7 +109,7 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 | GET | `/api/settings` | 无 | `Settings` |
 | PUT | `/api/settings` | `SettingsUpdateReq` | 更新后的 `Settings` |
 
-设置存储在 D1 `settings` 表中，`value` 为 JSON 字符串。后端读取时聚合为完整 `Settings` 对象，并对缺失字段使用默认值。后台设置面板提交完整公开设置字段时，`PUT /api/settings` 写入 D1 后直接用本次提交的 payload 和默认值合成响应，避免额外回读 settings 全表；只提交部分字段的兼容请求仍会写入后读取完整 `Settings` 返回。
+设置存储在 D1 `settings` 表中，`value` 为 JSON 字符串。后端读取时聚合为完整 `Settings` 对象，并对缺失字段使用默认值。后台设置面板提交完整 `Settings` 字段时，`PUT /api/settings` 写入 D1 后直接用本次提交的 payload 和默认值合成响应，避免额外回读 settings 全表；只提交部分字段的兼容请求仍会写入后读取完整 `Settings` 返回。
 
 ## 导入接口
 
