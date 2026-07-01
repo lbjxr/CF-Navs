@@ -523,6 +523,10 @@
     return result.icon_blob
   }
 
+  function refreshBookmarkIconCacheInBackground(bookmarkId: number): void {
+    void refreshBookmarkIconCache(bookmarkId).catch(() => undefined)
+  }
+
   async function applyLocalCategorySort(ids: number[], refreshMissing = true): Promise<void> {
     const sortById = new Map(ids.map((id, index) => [id, index]))
     updateAdminCategoriesLocally((categories) => categories
@@ -933,7 +937,6 @@
     if (!await ensureLoggedInDataLoaded()) {
       return
     }
-    await refreshBookmarkIconCache(Number(bookmark.id)).catch(() => undefined)
     await ensureBookmarkEditModalComponent()
     bookmarkModalMode = 'edit'
     const refreshed =
@@ -942,6 +945,7 @@
       current
     activeBookmark = toBookmarkForm(refreshed)
     bookmarkModalOpen = true
+    refreshBookmarkIconCacheInBackground(Number(bookmark.id))
   }
 
   async function handleCloseBookmarkModal(): Promise<void> {
@@ -960,10 +964,9 @@
         bookmark = await api.bookmarks.create(toBookmarkPayload(form))
       }
 
-      const iconBlob = await refreshBookmarkIconCache(bookmark.id).catch(() => bookmark.icon_blob)
-      bookmark = { ...bookmark, icon_blob: iconBlob ?? null }
       resetBookmarkState()
       await applyLocalBookmarkUpsert(bookmark)
+      refreshBookmarkIconCacheInBackground(bookmark.id)
     } catch (error) {
       bookmarkError = getErrorMessage(error)
     } finally {

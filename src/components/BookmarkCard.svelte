@@ -16,6 +16,8 @@
     customBackground?: string
   }
 
+  const CONTEXT_MENU_OPEN_EVENT = 'cf-navs-bookmark-context-menu-open'
+
   export let bookmark: PublicBookmark
   export let style: CardStyle = 'info'
   export let iconSize: number = 100
@@ -37,6 +39,7 @@
   let modalOpen = false
   let iconStateKey = ''
   let windowListenersAttached = false
+  let contextMenuInstanceId = Math.random().toString(36).slice(2)
 
   $: openInNewTab = bookmark.open_method === 1
   $: openInModal = bookmark.open_method === 3
@@ -212,6 +215,19 @@
     contextMenuOpen = false
   }
 
+  function notifyContextMenuOpen() {
+    window.dispatchEvent(new CustomEvent(CONTEXT_MENU_OPEN_EVENT, {
+      detail: contextMenuInstanceId,
+    }))
+  }
+
+  function handleContextMenuOpenEvent(event: Event) {
+    const sourceId = (event as CustomEvent<string>).detail
+    if (sourceId !== contextMenuInstanceId) {
+      closeContextMenu()
+    }
+  }
+
   function handleContextMenu(event: MouseEvent) {
     if (sortMode) {
       event.preventDefault()
@@ -220,6 +236,7 @@
     if (!canEdit || !onEdit) return
     event.preventDefault()
     event.stopPropagation()
+    notifyContextMenuOpen()
     contextMenuOpen = true
   }
 
@@ -258,6 +275,7 @@
     if (active && !windowListenersAttached) {
       window.addEventListener('click', handleWindowClick)
       window.addEventListener('keydown', handleDocumentKeydown)
+      window.addEventListener(CONTEXT_MENU_OPEN_EVENT, handleContextMenuOpenEvent)
       windowListenersAttached = true
       return
     }
@@ -265,6 +283,7 @@
     if (!active && windowListenersAttached) {
       window.removeEventListener('click', handleWindowClick)
       window.removeEventListener('keydown', handleDocumentKeydown)
+      window.removeEventListener(CONTEXT_MENU_OPEN_EVENT, handleContextMenuOpenEvent)
       windowListenersAttached = false
     }
   }

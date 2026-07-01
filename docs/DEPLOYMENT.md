@@ -156,12 +156,12 @@ Published cf-navs (x.xx sec)
 - [ ] 拖拽排序成功；进入排序模式后显示全量列表，保存/取消后恢复分页
 - [ ] 刷新后数据保持
 - [ ] 退出登录成功
-- [ ] 登录后可在首页右键书签，编辑按钮浮在当前卡片上且不挤动右侧卡片
+- [ ] 登录后可在首页右键书签，编辑按钮浮在当前卡片上且不挤动右侧卡片；右键另一个书签时，前一个书签的右键菜单会自动关闭
 - [ ] 通过右键编辑进入编辑弹窗，删除需二次确认
 - [ ] 部署新版后强制刷新一次页面，确认新版 Service Worker 已激活
 - [ ] 首页搜索框输入关键词时，书签区域直接筛选，不出现本地书签下拉列表
 - [ ] 打开浏览器 Network 面板，刷新首页、上下滚动、搜索筛选、后台切回首页时，已缓存的普通书签图标不重复请求 `/api/icon/*`；分类图标和 Iconify 图标可分别命中 `/api/category-icon/*`、`/api/iconify/*`
-- [ ] 编辑打开或保存书签时才调用 `/api/bookmarks/:id/icon-cache/refresh` 刷新普通书签图标缓存；该请求遇到慢速 favicon 服务时应快速返回，不应长时间卡住保存流程；新增/编辑弹窗和首页都不应直连 `https://api.iconify.design/*` 或 `https://icon-sets.iconify.design/*`
+- [ ] 编辑弹窗应立即打开；随后可在后台调用 `/api/bookmarks/:id/icon-cache/refresh` 刷新普通书签图标缓存。保存书签后也会显式刷新；该请求遇到慢速 favicon 服务时不应长时间卡住保存流程；新增/编辑弹窗和首页都不应直连 `https://api.iconify.design/*` 或 `https://icon-sets.iconify.design/*`
 - [ ] 登录后首次进入后台可请求 `/api/admin/data`；之后刷新页面、前后台切换优先读取浏览器本地快照，除新增、后台修改、导入、排序保存失败回滚或认证失败外不重复拉取
 - [ ] Iconify 失败时显示文字 fallback；普通 HTTP(S) 书签图标代理失败时可回退原始 URL，若原始 URL 也失败则显示书签文字 fallback
 
