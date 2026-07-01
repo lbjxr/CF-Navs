@@ -16,6 +16,7 @@ import { invalidateRuntimeDataCache } from '../lib/runtimeCache'
 import type { HonoEnv } from '../types'
 
 type AppContext = Context<HonoEnv>
+const ICON_CACHE_REFRESH_TIMEOUT_MS = 1500
 
 function badRequest(c: AppContext, msg: string) {
   return c.json(fail(ErrCode.BAD_REQUEST, msg))
@@ -171,7 +172,13 @@ bookmarksRoutes.post('/:id/icon-cache/refresh', async (c) => {
     const bookmark = await getBookmarkIconData(c.env.DB, id)
     if (!bookmark) return c.json(fail(ErrCode.NOT_FOUND, 'bookmark not found'))
 
-    const iconCache = await cacheBookmarkIconBlob(c.env.DB, id, bookmark.icon, bookmark.icon_source)
+    const iconCache = await cacheBookmarkIconBlob(
+      c.env.DB,
+      id,
+      bookmark.icon,
+      bookmark.icon_source,
+      ICON_CACHE_REFRESH_TIMEOUT_MS,
+    )
 
     if (iconCache.wrote) {
       invalidateRuntimeDataCache()

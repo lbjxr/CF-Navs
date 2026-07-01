@@ -59,7 +59,7 @@ npm run deploy
 
 部署成功后，访问返回的 URL 即可使用！
 
-部署新版后建议强制刷新一次页面，让新版 Service Worker 接管。验证首页搜索时，输入关键词应直接筛选书签区域；打开浏览器 Network 面板时，刷新首页、上下滚动、搜索筛选和后台切回首页不应让已缓存的普通书签图标重复请求 `/api/icon/*`，分类图标和 Iconify 图标可分别显示为 `/api/category-icon/*`、`/api/iconify/*`。编辑打开或保存书签时才会调用 `/api/bookmarks/:id/icon-cache/refresh` 刷新普通书签图标缓存。新增/编辑弹窗中的 Iconify 候选、手动预览和从 `icon-sets.iconify.design` 粘贴的页面链接应显示为 `/api/iconify/*`，不应由前台直接请求 `api.iconify.design` 或 `icon-sets.iconify.design`。
+部署新版后建议强制刷新一次页面，让新版 Service Worker 接管。验证首页搜索时，输入关键词应直接筛选书签区域；打开浏览器 Network 面板时，刷新首页、上下滚动、搜索筛选和后台切回首页不应让已缓存的普通书签图标重复请求 `/api/icon/*`，分类图标和 Iconify 图标可分别显示为 `/api/category-icon/*`、`/api/iconify/*`。编辑打开或保存书签时才会调用 `/api/bookmarks/:id/icon-cache/refresh` 刷新普通书签图标缓存，该请求遇到慢速外站图标时应快速结束；如果缓存失败但保存的是 `https://favicon.im/...`、Google favicon 或自定义 HTTP(S) 图标，首页仍应使用已保存 URL 显示图标，而不是退成标题首字。新增/编辑弹窗中的 Iconify 候选、手动预览和从 `icon-sets.iconify.design` 粘贴的页面链接应显示为 `/api/iconify/*`，不应由前台直接请求 `api.iconify.design` 或 `icon-sets.iconify.design`。
 
 ## 方式二：Cloudflare 控制台在线部署
 

@@ -13,6 +13,7 @@ export async function cacheBookmarkIconBlob(
   bookmarkId: number,
   iconUrl: string | null | undefined,
   iconSource: IconSource | string | null | undefined,
+  timeoutMs?: number,
 ): Promise<BookmarkIconCacheResult> {
   if (!iconUrl) {
     await setIconBlob(db, bookmarkId, null)
@@ -29,7 +30,7 @@ export async function cacheBookmarkIconBlob(
     return { iconBlob: null, reuseExisting: false, wrote: true }
   }
 
-  const icon = await fetchCacheableIcon(iconUrl)
+  const icon = await fetchCacheableIcon(iconUrl, timeoutMs)
   if (!icon) return { iconBlob: null, reuseExisting: true, wrote: false }
 
   const blob = iconBytesToDataUri(icon)

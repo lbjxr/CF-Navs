@@ -73,7 +73,7 @@
 | POST | `/api/bookmarks/sort` | `SortReq` | `null` |
 | POST | `/api/bookmarks/:id/icon-cache/refresh` | 无 | `{ icon_blob: string \| null }` |
 
-`POST /api/bookmarks/:id/icon-cache/refresh` 会按当前书签图标和 `icon_source` 刷新可持久化图标缓存：普通 HTTP(S) 图标写入 `bookmarks.icon_blob` 并返回 data URI，data URI 图标原样写入；Iconify、logo_surf 或非持久化来源会清空或跳过 `icon_blob`。前端只在编辑、保存等显式刷新动作调用该接口，并把返回的 `icon_blob` 同步写入浏览器本地缓存。
+`POST /api/bookmarks/:id/icon-cache/refresh` 会按当前书签图标和 `icon_source` 刷新可持久化图标缓存：普通 HTTP(S) 图标在短超时时间内尝试写入 `bookmarks.icon_blob` 并返回 data URI，data URI 图标原样写入；Iconify、logo_surf 或非持久化来源会清空或跳过 `icon_blob`。前端只在编辑、保存等显式刷新动作调用该接口，并把返回的 `icon_blob` 同步写入浏览器本地缓存。普通 HTTP(S) 图标抓取超时或失败时接口会尽快返回已有 `icon_blob` 或 `null`，前端可继续使用已保存的原始图标 URL 作为显示兜底。
 
 ## 图标接口
 
@@ -93,9 +93,9 @@
 - `iconify`：使用 Iconify SVG API，保存格式为 `https://api.iconify.design/{set}/{name}.svg`，例如 `mdi:home` 或 `https://icon-sets.iconify.design/mdi/home/` 会转换为 `https://api.iconify.design/mdi/home.svg`；新增/编辑弹窗会展示 Iconify 候选，候选、手动输入预览和 icon-sets 页面链接都通过 `/api/iconify/{set}/{name}.svg` 代理加载。
 - `custom`：手动填写 URL、表情、纯文字或图床地址。非 URL / 非 data URI 的值会在首页按文本图标直接渲染。
 
-创建或更新书签时，如果图标是普通 HTTP(S) 图片，后端会尝试异步缓存到 `bookmarks.icon_blob`；Iconify 图标和 icon-sets 页面链接不写入 `icon_blob`，由 `/api/iconify/:set/:name.svg`、Cloudflare edge cache 和浏览器 Service Worker 缓存复用。更新书签但图标地址或图标来源未改变时不会清空已有 `icon_blob`。首页卡片和后台书签列表普通渲染时优先读取浏览器本地缓存、`icon_blob`、data URI 或 Iconify 代理，不主动把 `/api/icon/:id` 挂载到 `<img>` 上；只有编辑/保存等显式刷新动作会调用刷新接口。分类图标默认使用 `/api/category-icon/:id?v=...`，已保存的 Iconify 书签图标使用稳定的 `/api/iconify/:set/:name.svg`。
+创建或更新书签后，前端会对普通 HTTP(S) 图标显式调用刷新接口，尽量缓存到 `bookmarks.icon_blob`；Iconify 图标和 icon-sets 页面链接不写入 `icon_blob`，由 `/api/iconify/:set/:name.svg`、Cloudflare edge cache 和浏览器 Service Worker 缓存复用。更新书签但图标地址或图标来源未改变时不会清空已有 `icon_blob`。首页卡片和后台书签列表普通渲染时优先读取浏览器本地缓存、`icon_blob`、data URI 或 Iconify 代理；首页卡片在本地缓存和 `icon_blob` 都缺失时，可回退使用已保存的普通 HTTP(S) 图标 URL，避免 favicon.im 等可浏览器直连的图标保存后退成文字。普通渲染不主动把 `/api/icon/:id` 挂载到首页 `<img>` 上；只有编辑/保存等显式刷新动作会调用刷新接口。分类图标默认使用 `/api/category-icon/:id?v=...`，已保存的 Iconify 书签图标使用稳定的 `/api/iconify/:set/:name.svg`。
 
-前端普通渲染普通 HTTP(S) 书签图标时应先读取浏览器本地缓存或聚合数据中的 `icon_blob`，不要直接把 `/api/icon/:id` 挂载到首页或后台列表 `<img>`；`/api/icon/:id` 仅作为兼容兜底代理和旧缓存入口保留。持久化的 Iconify 图标地址不直接渲染到首页 `<img>`，应规范化为 `/api/iconify/*`。图标缺失、非 HTTP(S) 值或缓存损坏时，代理返回 `no-store` 临时 SVG fallback，不写入长期缓存。Service Worker 对 `/api/icon/*`、`/api/category-icon/*`、`/api/iconify/*` 和兼容旧版本的 `https://api.iconify.design/*.svg` 使用 cache-first 策略，但不会缓存带 `X-Icon-Fallback: 1` 的临时 fallback；同一个 Iconify 图标应共享同一个 `/api/iconify/*` 本地缓存键，不按书签 ID 重复缓存。
+前端普通渲染普通 HTTP(S) 书签图标时应先读取浏览器本地缓存或聚合数据中的 `icon_blob`，缓存缺失时可使用保存的原始 HTTP(S) 图标 URL 兜底；不要直接把 `/api/icon/:id` 挂载到首页 `<img>`，后台列表仍可把 `/api/icon/:id` 作为兼容预览入口。`/api/icon/:id` 主要作为兼容兜底代理和旧缓存入口保留。持久化的 Iconify 图标地址不直接渲染到首页 `<img>`，应规范化为 `/api/iconify/*`。图标缺失、非 HTTP(S) 值或缓存损坏时，代理返回 `no-store` 临时 SVG fallback，不写入长期缓存。Service Worker 对 `/api/icon/*`、`/api/category-icon/*`、`/api/iconify/*` 和兼容旧版本的 `https://api.iconify.design/*.svg` 使用 cache-first 策略，但不会缓存带 `X-Icon-Fallback: 1` 的临时 fallback；同一个 Iconify 图标应共享同一个 `/api/iconify/*` 本地缓存键，不按书签 ID 重复缓存。
 
 HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloudflare edge cache；只有书签图标需要写入 `bookmarks.icon_blob` 时才生成 base64 data URI，避免 Iconify 预览和分类图标在 Worker 内部做不必要的 base64 编解码。
 

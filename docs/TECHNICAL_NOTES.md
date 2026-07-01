@@ -13,7 +13,7 @@ CF-Navs 支持多种图标来源：
 - 自定义文字或表情
 - 基于完整书签标题生成的本地 SVG 文字图标
 
-新增或编辑书签时，普通 HTTP(S) 图标会通过刷新接口写入书签图标缓存。首页和后台列表的普通渲染优先读取浏览器本地缓存、聚合接口返回的 `icon_blob`、data URI 或 Iconify 代理结果，避免页面刷新、筛选或前后台切换时反复请求外站图标。
+新增或编辑书签时，普通 HTTP(S) 图标会通过刷新接口写入书签图标缓存。刷新接口使用短超时抓取外站图标，避免保存流程被慢速 favicon 服务长时间阻塞；抓取失败时保留已有 `icon_blob`，没有缓存则返回 `null`。首页和后台列表的普通渲染优先读取浏览器本地缓存、聚合接口返回的 `icon_blob`、data URI 或 Iconify 代理结果，首页在这些缓存都缺失时会回退到已保存的普通 HTTP(S) 图标 URL，避免可直连的 favicon 保存后变成文字图标。
 
 相关接口：
 
@@ -22,7 +22,7 @@ CF-Navs 支持多种图标来源：
 - `GET /api/category-icon/:id`
 - `GET /api/iconify/:set/:name.svg`
 
-`/api/icon/:id` 主要保留为兼容和兜底代理。它会优先读取 Cloudflare edge cache 和 D1 中的 `icon_blob`，cache miss 时再尝试抓取外站图标。普通 HTTP(S) 图标代理失败时返回错误，由前端降级为文字 fallback；分类图标和 Iconify 图标失败时会返回短 TTL 的临时 SVG fallback。
+`/api/icon/:id` 主要保留为兼容和兜底代理。它会优先读取 Cloudflare edge cache 和 D1 中的 `icon_blob`，cache miss 时再尝试抓取外站图标。普通 HTTP(S) 图标代理失败时返回错误；首页卡片优先走本地缓存和 `icon_blob`，缺失时直接回退已保存的 HTTP(S) 图标 URL，原始 URL 也加载失败后才显示文字 fallback。分类图标和 Iconify 图标失败时会返回短 TTL 的临时 SVG fallback。
 
 ## Iconify 规范化
 

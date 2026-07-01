@@ -62,7 +62,7 @@ node scripts/convert-sunpanel.cjs SunPanel-Data.json cf-navs-import.json
    - Iconify 图标：识别 `mdi:home`、`simple-icons:github`、`iconify:`、`@iconify-json/*`、`@iconify-icons/*` 和 `icon-sets.iconify.design/...`，保存为标准 Iconify URL，并通过 `/api/iconify/*` 代理缓存加载
    - 非图片图标：无法识别为 Iconify 时，导入后按现有图标候选逻辑处理
 
-   运行时普通书签图标会优先读取浏览器本地缓存和聚合数据中的 `icon_blob`；编辑打开或保存书签时才会调用刷新接口更新本地图标缓存。分类图标会通过 `/api/category-icon/:id` 代理读取，Iconify 图标始终通过 `/api/iconify/*` 代理缓存加载，非 URL 的自定义文字或表情图标会直接按文本渲染。
+   运行时普通书签图标会优先读取浏览器本地缓存和聚合数据中的 `icon_blob`；缓存缺失时首页会回退使用已保存的普通 HTTP(S) 图标 URL。编辑打开或保存书签时才会调用短超时刷新接口更新本地图标缓存。分类图标会通过 `/api/category-icon/:id` 代理读取，Iconify 图标始终通过 `/api/iconify/*` 代理缓存加载，非 URL 的自定义文字或表情图标会直接按文本渲染。
 
 2. **打开方式**：
    - Sun-Panel 的 `2`（新窗口）→ CF-Navs 的 `1`

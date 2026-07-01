@@ -88,7 +88,7 @@ npm run deploy
 
 ### 普通网站图标为空
 
-部分网站 favicon 不允许跨站抓取或返回异常内容。可以编辑书签后选择：
+部分网站 favicon 不允许 Worker 跨站抓取或返回异常内容。保存普通 HTTP(S) 图标时，刷新接口会短超时尝试生成 `icon_blob`；如果失败，首页会继续尝试使用已保存的图标 URL。可以编辑书签后选择：
 
 - Favicon.im 候选
 - Google favicon 候选
@@ -96,6 +96,8 @@ npm run deploy
 - Iconify 图标
 - 自定义图片 URL
 - 表情或短文字
+
+如果预览正常但保存后仍显示标题首字，请先强制刷新页面让新版 Service Worker 接管，再检查书签保存的 `icon` 是否仍是可访问的 HTTP(S) 图片地址。
 
 ### Iconify 图标不显示
 

@@ -188,7 +188,7 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 - 加载提示使用轻量 CSS 动画和进度条，不依赖重型脚本或图片资源
 - Worker 为非 HTML 的 `/assets/*` hash 构建产物设置一年 immutable 缓存，为 HTML 和 `sw.js` 设置 no-cache 重验证；Service Worker 预缓存 `/index.html` 做离线回退，避免安装阶段重复预缓存根路径，并且运行时只缓存成功静态资源和成功 HTML 导航响应，避免失败响应污染本地缓存
 - CSS 压缩
-- 首页和后台书签图标普通渲染优先读取浏览器本地缓存、聚合数据 `icon_blob`、data URI 或 `/api/iconify/*`，不主动挂载 `/api/icon/:id`；编辑打开和保存书签时才调用刷新接口更新本地图标缓存；首页书签和分类图标使用原生懒加载与异步解码，降低首屏图标并发请求
+- 首页和后台书签图标普通渲染优先读取浏览器本地缓存、聚合数据 `icon_blob`、data URI 或 `/api/iconify/*`；首页在缓存缺失时可回退到已保存的普通 HTTP(S) 图标 URL，不主动挂载 `/api/icon/:id`；编辑打开和保存书签时才调用短超时刷新接口更新本地图标缓存；首页书签和分类图标使用原生懒加载与异步解码，降低首屏图标并发请求
 - 前台右上角主题按钮使用浏览器本地偏好快速切换亮暗模式，不触发 Worker 请求；新增/编辑书签弹窗默认收起文字图标配色和 Iconify 输入区，选中对应图标类型后才展开
 - SunPanel 导入会识别 Iconify 图标名和 icon-sets 页面链接，导入后保存为标准 Iconify URL 并标记 `icon_source: iconify`，首页走 `/api/iconify/*` 代理与本地缓存
 - 首页搜索预计算书签索引，滚动高亮缓存分区 DOM 并用 `requestAnimationFrame` 节流
@@ -201,7 +201,7 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 - 登录成功时只有当前 IP 确实存在失败状态才删除限流 key，正常首次登录不再产生多余 KV delete
 - 导入恢复接口直接返回导入后的后台聚合数据，前端无需导入后再请求 `/api/admin/data`；Worker 复用本次导入时已经规范化的分类和书签结果，只额外读取完整 settings，避免写入后再从 D1 重读刚导入的两张表
 - 后台 CRUD、排序和设置保存后使用接口返回值增量更新本地 store，避免额外拉取全量 `/api/public/data`
-- 书签新增、编辑打开和保存后通过显式刷新接口更新普通外站图标 blob；普通渲染、搜索筛选和前后台切换不再重复请求外站图标并写 D1
+- 书签新增、编辑打开和保存后通过显式刷新接口更新普通外站图标 blob；刷新接口使用短超时，失败时保留已有 blob，首页可用保存的 HTTP(S) 图标 URL 兜底；普通渲染、搜索筛选和前后台切换不再重复请求外站图标并写 D1
 - 后台保存设置和导入恢复的 settings 写入合并为单条多 VALUES upsert，减少完整配置保存时的 D1 statement 数
 - 分类和书签排序使用分块 `UPDATE ... CASE id ... WHERE id IN (...)`，大列表拖拽排序时不再为每个 id 生成一条 D1 statement
 
@@ -217,7 +217,7 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 - 分类和书签新增用单条 `INSERT ... SELECT ... RETURNING` 合并末尾排序计算和返回值，书签新增还会在同一语句中判断分类是否存在；分类和书签更新使用 `UPDATE ... RETURNING` 直接返回更新后的完整行，避免更新前额外读取旧记录；书签更新在 SQL 内只于图标变化时清空 `icon_blob`
 - 分类删除使用删除语句 `changes` 判断是否存在，避免删除前额外读取分类
 - 公开聚合、后台聚合、书签列表和图标详情等读取路径跳过预检查式 schema 迁移，仅在旧库缺列错误时迁移并重试一次
-- `/api/icon/:id`、`/api/category-icon/:id` 与 `/api/iconify/:set/:name.svg` 统一代理外站图标，普通书签图标 cache miss 时一次 D1 查询同时读取地址和 `icon_blob`，外站抓取成功后直接返回图片字节；普通书签卡片和后台列表优先读取浏览器本地缓存或聚合数据中的 `icon_blob`，不会在普通渲染时主动挂载 `/api/icon/:id`；Iconify 图标和 icon-sets 页面链接不写 `icon_blob`，通过稳定 `/api/iconify/*` 代理共享 edge cache 与浏览器本地缓存；普通 HTTP(S) 书签图标代理抓取失败时返回错误，图标缺失、非 HTTP(S) 值、分类图标或 Iconify 失败时仍使用短 TTL 临时 SVG fallback
+- `/api/icon/:id`、`/api/category-icon/:id` 与 `/api/iconify/:set/:name.svg` 统一代理外站图标，普通书签图标 cache miss 时一次 D1 查询同时读取地址和 `icon_blob`，外站抓取成功后直接返回图片字节；普通书签卡片和后台列表优先读取浏览器本地缓存或聚合数据中的 `icon_blob`，首页缓存缺失时回退保存的 HTTP(S) 图标 URL，避免 favicon.im 等浏览器可直连图标保存后显示文字；Iconify 图标和 icon-sets 页面链接不写 `icon_blob`，通过稳定 `/api/iconify/*` 代理共享 edge cache 与浏览器本地缓存；普通 HTTP(S) 书签图标代理抓取失败时返回错误，图标缺失、非 HTTP(S) 值、分类图标或 Iconify 失败时仍使用短 TTL 临时 SVG fallback
 - 静态资源 CDN
 
 ### 网络

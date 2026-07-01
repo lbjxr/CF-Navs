@@ -151,7 +151,7 @@ Published cf-navs (x.xx sec)
 - [ ] 选择"文字图标"后能看到内置配色方案，并可切换保存 logo.surf 风格 SVG 图标
 - [ ] 手动输入纯文字或表情图标后保存，首页显示该自定义图标，而不是回退为书签标题首字
 - [ ] 新增/编辑书签弹窗内容过高时可在弹窗内滚动，保存按钮始终可见
-- [ ] 选中一种图标后保存，图标显示正常
+- [ ] 选中一种图标后保存，图标显示正常；选择 Favicon.im、Google favicon 或自定义 HTTP(S) 图标时，即使 `/api/bookmarks/:id/icon-cache/refresh` 没有生成 `icon_blob`，首页也会回退到已保存图标 URL，而不是显示标题首字
 - [ ] 分类和书签列表每页显示 10 条，列表内容在面板内滚动，顶部操作区、书签搜索栏和底部分页不随整个网页滚动
 - [ ] 拖拽排序成功；进入排序模式后显示全量列表，保存/取消后恢复分页
 - [ ] 刷新后数据保持
@@ -161,7 +161,7 @@ Published cf-navs (x.xx sec)
 - [ ] 部署新版后强制刷新一次页面，确认新版 Service Worker 已激活
 - [ ] 首页搜索框输入关键词时，书签区域直接筛选，不出现本地书签下拉列表
 - [ ] 打开浏览器 Network 面板，刷新首页、上下滚动、搜索筛选、后台切回首页时，已缓存的普通书签图标不重复请求 `/api/icon/*`；分类图标和 Iconify 图标可分别命中 `/api/category-icon/*`、`/api/iconify/*`
-- [ ] 编辑打开或保存书签时才调用 `/api/bookmarks/:id/icon-cache/refresh` 刷新普通书签图标缓存；新增/编辑弹窗和首页都不应直连 `https://api.iconify.design/*` 或 `https://icon-sets.iconify.design/*`
+- [ ] 编辑打开或保存书签时才调用 `/api/bookmarks/:id/icon-cache/refresh` 刷新普通书签图标缓存；该请求遇到慢速 favicon 服务时应快速返回，不应长时间卡住保存流程；新增/编辑弹窗和首页都不应直连 `https://api.iconify.design/*` 或 `https://icon-sets.iconify.design/*`
 - [ ] 登录后首次进入后台可请求 `/api/admin/data`；之后刷新页面、前后台切换优先读取浏览器本地快照，除新增、后台修改、导入、排序保存失败回滚或认证失败外不重复拉取
 - [ ] Iconify 失败时显示文字 fallback；普通 HTTP(S) 书签图标代理失败时可回退原始 URL，若原始 URL 也失败则显示书签文字 fallback
 

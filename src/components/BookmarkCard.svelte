@@ -79,11 +79,13 @@
     bookmark.icon_source === 'iconify' || isIconifyIconUrl(rawIcon)
       ? iconifyProxyIcon(rawIcon)
       : ''
-  $: shouldWaitForLocalIconCache =
+  $: canUseRawHttpIconFallback =
     /^https?:\/\//i.test(rawIcon) &&
     !iconifyProxyUrl &&
     bookmark.icon_source !== 'logo_surf' &&
-    !customTextIcon &&
+    !customTextIcon
+  $: shouldWaitForLocalIconCache =
+    canUseRawHttpIconFallback &&
     !/^data:image\//i.test(cachedIcon)
   $: if (nextIconStateKey !== iconStateKey) {
     iconStateKey = nextIconStateKey
@@ -104,6 +106,7 @@
     if (!rawIcon || customTextIcon) return ''
     if (iconifyProxyUrl) return iconifyProxyUrl
     if (/^data:image\//i.test(rawIcon)) return rawIcon
+    if (canUseRawHttpIconFallback) return rawIcon
     return ''
   })()
   $: hasRenderableIcon = Boolean(iconUrl) && !fallbackFailed
