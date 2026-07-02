@@ -41,6 +41,7 @@ export type IconSource = 'direct' | 'favicon_im' | 'logo_surf' | 'google' | 'ico
 // ========== 设置 ==========
 
 export type ThemeMode = 'light' | 'dark' | 'auto'
+export type BackgroundPresetId = 'clear-teal' | 'mist-slate' | 'custom'
 
 export interface BackgroundSetting {
   type: 'image' | 'color' | 'gradient'
@@ -89,6 +90,7 @@ export interface Settings {
   site_title_font_size: number
   public_mode: boolean
   theme: ThemeMode
+  background_preset_id: BackgroundPresetId
   background: BackgroundSetting // 兼容旧版本：新逻辑优先使用 backgrounds
   backgrounds: ThemeBackgroundSettings
   custom_css: string
@@ -162,6 +164,7 @@ export interface PublicSettings {
   site_title_color: string
   site_title_font_size: number
   theme: ThemeMode
+  background_preset_id: BackgroundPresetId
   background: BackgroundSetting // 兼容旧版本：新逻辑优先使用 backgrounds
   backgrounds: ThemeBackgroundSettings
   search_engine: SearchEngineSetting

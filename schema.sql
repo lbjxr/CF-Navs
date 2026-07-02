@@ -44,6 +44,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('site_title_font_size', '32'),
   ('public_mode', 'true'),
   ('theme', '"auto"'),
+  ('background_preset_id', '"custom"'),
   ('background', '{"type":"color","value":"#0f172a","blur":0,"mask":0.3,"maskColor":"#000000"}'),
   ('backgrounds', '{"light":{"type":"color","value":"#f8fafc","blur":0,"mask":0.18,"maskColor":"#ffffff"},"dark":{"type":"color","value":"#0f172a","blur":0,"mask":0.3,"maskColor":"#000000"}}'),
   ('custom_css', '""'),

@@ -1,6 +1,6 @@
-import type { BackgroundSetting } from '../../shared/types'
+import type { BackgroundPresetId, BackgroundSetting } from '../../shared/types'
 
-export type GradientPresetId = 'clear-teal' | 'mist-slate'
+export type GradientPresetId = Exclude<BackgroundPresetId, 'custom'>
 
 export type ThemeGradientPreset = {
   id: GradientPresetId
@@ -50,7 +50,7 @@ export const gradientPresets: ThemeGradientPreset[] = [
     light: { type: 'gradient', value: clearTealLightGradient, blur: 0, mask: 0.12, maskColor: '#ffffff' },
     dark: { type: 'gradient', value: clearTealDarkGradient, blur: 0, mask: 0.28, maskColor: '#000000' },
     cardBackgroundColor: '#ffffff',
-    cardBackgroundOpacity: 0.64,
+    cardBackgroundOpacity: 0.4,
     cardTextColor: '',
     siteTitleColor: '',
   },
@@ -61,7 +61,7 @@ export const gradientPresets: ThemeGradientPreset[] = [
     light: { type: 'gradient', value: mistSlateLightGradient, blur: 0, mask: 0.14, maskColor: '#ffffff' },
     dark: { type: 'gradient', value: mistSlateDarkGradient, blur: 0, mask: 0.3, maskColor: '#000000' },
     cardBackgroundColor: '#ffffff',
-    cardBackgroundOpacity: 0.68,
+    cardBackgroundOpacity: 0.4,
     cardTextColor: '',
     siteTitleColor: '',
   },

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type {
+    BackgroundPresetId,
     BackgroundSetting,
     SearchEngine,
     SearchEngineSetting,
@@ -18,6 +19,7 @@
     | 'site_title_font_size'
     | 'public_mode'
     | 'theme'
+    | 'background_preset_id'
     | 'custom_css'
     | 'custom_js'
     | 'image_host_url'
@@ -69,6 +71,7 @@
     site_title_font_size: 32,
     public_mode: true,
     theme: 'auto',
+    background_preset_id: 'custom',
     custom_css: '',
     custom_js: '',
     image_host_url: '',
@@ -109,6 +112,7 @@
       site_title_font_size: source.site_title_font_size,
       public_mode: source.public_mode,
       theme: source.theme,
+      background_preset_id: source.background_preset_id,
       custom_css: source.custom_css,
       custom_js: source.custom_js,
       image_host_url: source.image_host_url,
@@ -136,6 +140,32 @@
     }
   }
 
+  function normalizeBackgroundPresetId(input: unknown): BackgroundPresetId {
+    return input === 'clear-teal' || input === 'mist-slate' || input === 'custom' ? input : 'custom'
+  }
+
+  function resolveBackgroundPresetId(
+    source: Partial<SettingsPanelValue> | null | undefined,
+    lightBackground: BackgroundSetting | undefined,
+    darkBackground: BackgroundSetting | undefined,
+  ): BackgroundPresetId {
+    if (source?.background_preset_id === 'clear-teal' || source?.background_preset_id === 'mist-slate') {
+      return source.background_preset_id
+    }
+
+    if (lightBackground && darkBackground) {
+      const normalizedLight = normalizeBackground(lightBackground, defaultLightBackground)
+      const normalizedDark = normalizeBackground(darkBackground, defaultDarkBackground)
+      const matched = gradientPresets.find((preset) => (
+        backgroundPresetValueEquals(normalizedLight, preset.light) &&
+        backgroundPresetValueEquals(normalizedDark, preset.dark)
+      ))
+      if (matched) return matched.id
+    }
+
+    return 'custom'
+  }
+
   function createFormState(source: Partial<SettingsPanelValue> | null | undefined): SettingsPanelValue {
     const background = source?.background
     const lightBackground = source?.backgrounds?.light ?? background
@@ -149,6 +179,7 @@
       site_title_font_size: typeof source?.site_title_font_size === 'number' ? source.site_title_font_size : 32,
       public_mode: source?.public_mode ?? true,
       theme: source?.theme ?? 'auto',
+      background_preset_id: resolveBackgroundPresetId(source, lightBackground, darkBackground),
       custom_css: source?.custom_css ?? '',
       custom_js: source?.custom_js ?? '',
       image_host_url: source?.image_host_url ?? '',
@@ -247,6 +278,7 @@
       site_title_font_size: clampNumber(source.site_title_font_size, 16, 72),
       public_mode: source.public_mode,
       theme: source.theme,
+      background_preset_id: source.background_preset_id,
       custom_css: source.custom_css?.trim() ?? '',
       custom_js: source.custom_js?.trim() ?? '',
       image_host_url: source.image_host_url.trim(),
@@ -258,7 +290,7 @@
       search_engine: { current, engines },
       card_size: {
         width: clampNumber(source.card_size.width, 80, 400),
-        height: clampNumber(source.card_size.height, 50, 300),
+        height: clampNumber(source.card_size.height, 0, 300),
       },
       card_style: source.card_style === 'icon' ? 'icon' : 'info',
       card_icon_size: clampNumber(source.card_icon_size, 40, 100),
@@ -314,6 +346,7 @@
   }
 
   function updateBackgroundType(theme: 'light' | 'dark', nextType: BackgroundSetting['type']): void {
+    markCustomGradientPreset()
     const background = form.backgrounds[theme]
     const defaults = theme === 'light'
       ? {
@@ -338,30 +371,35 @@
     return { ...source }
   }
 
-  function backgroundSettingEquals(current: BackgroundSetting, target: BackgroundSetting): boolean {
-    return (
-      current.type === target.type &&
-      current.value.trim() === target.value.trim() &&
-      Number(current.blur) === target.blur &&
-      Number(current.mask) === target.mask &&
-      current.maskColor.trim() === target.maskColor
-    )
+  function markCustomGradientPreset(): void {
+    form.background_preset_id = 'custom'
   }
 
-  function getActiveGradientPresetId(): GradientPresetId | 'custom' {
-    const preset = gradientPresets.find((item) => (
-      backgroundSettingEquals(form.backgrounds.light, item.light) &&
-      backgroundSettingEquals(form.backgrounds.dark, item.dark) &&
-      form.card_background_color.trim() === item.cardBackgroundColor &&
-      Number(form.card_background_opacity) === item.cardBackgroundOpacity &&
-      form.card_text_color.trim() === item.cardTextColor &&
-      form.site_title_color.trim() === item.siteTitleColor
-    ))
+  function comparableText(value: string): string {
+    return value.trim().replace(/\s+/g, ' ')
+  }
 
-    return preset?.id ?? 'custom'
+  function backgroundPresetValueEquals(current: BackgroundSetting, target: BackgroundSetting): boolean {
+    return current.type === target.type && comparableText(current.value) === comparableText(target.value)
+  }
+
+  function findGradientPresetByBackgroundValues(source: SettingsPanelValue): ThemeGradientPreset | undefined {
+    return gradientPresets.find((item) => (
+      backgroundPresetValueEquals(source.backgrounds.light, item.light) &&
+      backgroundPresetValueEquals(source.backgrounds.dark, item.dark)
+    ))
+  }
+
+  function getActiveGradientPresetId(source: SettingsPanelValue): GradientPresetId | 'custom' {
+    const presetId = normalizeBackgroundPresetId(source.background_preset_id)
+    if (presetId !== 'custom' && gradientPresets.some((item) => item.id === presetId)) {
+      return presetId
+    }
+    return findGradientPresetByBackgroundValues(source)?.id ?? 'custom'
   }
 
   function applyGradientPreset(preset: ThemeGradientPreset): void {
+    form.background_preset_id = preset.id
     form.backgrounds = {
       light: cloneBackgroundSetting(preset.light),
       dark: cloneBackgroundSetting(preset.dark),
@@ -405,7 +443,7 @@
     normalizedForm.card_size.width >= 80 &&
     normalizedForm.card_size.width <= 400 &&
     Number.isFinite(normalizedForm.card_size.height) &&
-    normalizedForm.card_size.height >= 50 &&
+    normalizedForm.card_size.height >= 0 &&
     normalizedForm.card_size.height <= 300
   $: contentLayoutValid =
     Number.isFinite(normalizedForm.content_layout.max_width) &&
@@ -428,7 +466,7 @@
     backgroundTypeOptions.find((option) => option.value === form.backgrounds.light.type)?.hint ?? ''
   $: darkBackgroundHint =
     backgroundTypeOptions.find((option) => option.value === form.backgrounds.dark.type)?.hint ?? ''
-  $: activeGradientPresetId = getActiveGradientPresetId()
+  $: activeGradientPresetId = getActiveGradientPresetId(form)
   $: uploadHost = form.image_host_url.trim()
 
   function addEngine() {
@@ -486,10 +524,10 @@
   {:else}
     <form class="settings-form" on:submit|preventDefault={handleSubmit}>
       <!-- 基础 -->
-      <fieldset class="group" disabled={saving}>
+      <fieldset class="group group-wide group-base" disabled={saving}>
         <legend>基础</legend>
-        <div class="form-grid">
-          <label class="field full-width">
+        <div class="form-grid base-grid">
+          <label class="field field-title">
             <span>站点标题</span>
             <input
               bind:value={form.site_title}
@@ -501,7 +539,7 @@
             <small>将显示在页面标题与管理界面中。</small>
           </label>
 
-          <div class="field">
+          <div class="field field-color">
             <span>标题颜色</span>
             <ColorAlphaInput
               bind:value={form.site_title_color}
@@ -513,13 +551,13 @@
             <small>首页搜索栏上方标题的文字颜色；留空时自动跟随当前主题。</small>
           </div>
 
-          <label class="field">
+          <label class="field field-range">
             <span>标题文字大小 <em>{form.site_title_font_size}px</em></span>
             <input bind:value={form.site_title_font_size} type="range" min="16" max="72" step="1" />
             <small>控制首页标题字号，建议 28-44px。</small>
           </label>
 
-          <label class="field">
+          <label class="field field-select">
             <span>主题模式</span>
             <select bind:value={form.theme}>
               {#each themeOptions as option}
@@ -529,13 +567,13 @@
             <small>{currentThemeHint}</small>
           </label>
 
-          <label class="field">
+          <label class="field field-url">
             <span>图床地址</span>
             <input bind:value={form.image_host_url} type="url" placeholder="https://img.example.com" />
             <small>可留空。用于背景/图标的“打开图床上传”跳转。</small>
           </label>
 
-          <label class="toggle-field full-width">
+          <label class="toggle-field field-toggle">
             <div class="toggle-copy">
               <span>公开模式</span>
               <p>开启后，未登录用户也可以访问首页内容。</p>
@@ -543,19 +581,11 @@
             <input bind:checked={form.public_mode} type="checkbox" />
           </label>
 
-          <label class="toggle-field full-width">
-            <div class="toggle-copy">
-              <span>显示搜索框</span>
-              <p>控制首页标题下方的搜索区域是否展示。</p>
-            </div>
-            <input bind:checked={form.search_box_show} type="checkbox" />
-          </label>
-
         </div>
       </fieldset>
 
       <!-- 背景 -->
-      <fieldset class="group" disabled={saving}>
+      <fieldset class="group group-wide group-background" disabled={saving}>
         <legend>背景</legend>
         <div class="gradient-preset-panel">
           <div class="gradient-preset-header">
@@ -599,7 +629,7 @@
                 type="radio"
                 name="gradient-preset"
                 checked={activeGradientPresetId === 'custom'}
-                on:change={() => undefined}
+                on:change={markCustomGradientPreset}
               />
               <span class="preset-preview custom-preview" aria-hidden="true">
                 <span></span>
@@ -638,6 +668,7 @@
                   {#if form.backgrounds.light.type === 'color'}
                     <ColorAlphaInput
                       bind:value={form.backgrounds.light.value}
+                      on:change={markCustomGradientPreset}
                       placeholder="#f8fafc"
                       inputLabel="浅色背景颜色值"
                       swatchTitle="选择浅色背景颜色"
@@ -646,6 +677,7 @@
                   {:else if form.backgrounds.light.type === 'gradient'}
                     <GradientBackgroundInput
                       bind:value={form.backgrounds.light.value}
+                      on:change={markCustomGradientPreset}
                       defaultStart={defaultLightGradient.start}
                       defaultEnd={defaultLightGradient.end}
                       startLabel="浅色起始颜色"
@@ -658,6 +690,7 @@
                       <input
                         bind:value={form.backgrounds.light.value}
                         type="text"
+                        on:input={markCustomGradientPreset}
                         placeholder="https://img.example.com/light-bg.png"
                         aria-label="浅色背景图片地址"
                       />
@@ -688,13 +721,13 @@
               <div class="background-range-grid">
                 <label class="field">
                   <span>模糊度 <em>{form.backgrounds.light.blur}px</em></span>
-                  <input bind:value={form.backgrounds.light.blur} type="range" min="0" max="40" step="1" />
+                  <input bind:value={form.backgrounds.light.blur} type="range" min="0" max="40" step="1" on:input={markCustomGradientPreset} />
                   <small>对图片/渐变背景应用模糊，0 表示不模糊。</small>
                 </label>
 
                 <label class="field">
                   <span>遮罩透明度 <em>{form.backgrounds.light.mask.toFixed(2)}</em></span>
-                  <input bind:value={form.backgrounds.light.mask} type="range" min="0" max="1" step="0.05" />
+                  <input bind:value={form.backgrounds.light.mask} type="range" min="0" max="1" step="0.05" on:input={markCustomGradientPreset} />
                   <small>叠加在背景上的遮罩，数值越大背景越淡。</small>
                 </label>
               </div>
@@ -704,6 +737,7 @@
                 <ColorAlphaInput
                   bind:value={form.backgrounds.light.maskColor}
                   bind:alpha={form.backgrounds.light.mask}
+                  on:change={markCustomGradientPreset}
                   placeholder="#ffffff"
                   inputLabel="浅色遮罩颜色值"
                   swatchTitle="选择浅色遮罩颜色"
@@ -738,6 +772,7 @@
                   {#if form.backgrounds.dark.type === 'color'}
                     <ColorAlphaInput
                       bind:value={form.backgrounds.dark.value}
+                      on:change={markCustomGradientPreset}
                       placeholder="#0f172a"
                       inputLabel="深色背景颜色值"
                       swatchTitle="选择深色背景颜色"
@@ -746,6 +781,7 @@
                   {:else if form.backgrounds.dark.type === 'gradient'}
                     <GradientBackgroundInput
                       bind:value={form.backgrounds.dark.value}
+                      on:change={markCustomGradientPreset}
                       defaultStart={defaultDarkGradient.start}
                       defaultEnd={defaultDarkGradient.end}
                       startLabel="深色起始颜色"
@@ -758,6 +794,7 @@
                       <input
                         bind:value={form.backgrounds.dark.value}
                         type="text"
+                        on:input={markCustomGradientPreset}
                         placeholder="https://img.example.com/dark-bg.png"
                         aria-label="深色背景图片地址"
                       />
@@ -788,13 +825,13 @@
               <div class="background-range-grid">
                 <label class="field">
                   <span>模糊度 <em>{form.backgrounds.dark.blur}px</em></span>
-                  <input bind:value={form.backgrounds.dark.blur} type="range" min="0" max="40" step="1" />
+                  <input bind:value={form.backgrounds.dark.blur} type="range" min="0" max="40" step="1" on:input={markCustomGradientPreset} />
                   <small>对图片/渐变背景应用模糊，0 表示不模糊。</small>
                 </label>
 
                 <label class="field">
                   <span>遮罩透明度 <em>{form.backgrounds.dark.mask.toFixed(2)}</em></span>
-                  <input bind:value={form.backgrounds.dark.mask} type="range" min="0" max="1" step="0.05" />
+                  <input bind:value={form.backgrounds.dark.mask} type="range" min="0" max="1" step="0.05" on:input={markCustomGradientPreset} />
                   <small>叠加在背景上的遮罩，数值越大背景越淡。</small>
                 </label>
               </div>
@@ -804,6 +841,7 @@
                 <ColorAlphaInput
                   bind:value={form.backgrounds.dark.maskColor}
                   bind:alpha={form.backgrounds.dark.mask}
+                  on:change={markCustomGradientPreset}
                   placeholder="#000000"
                   inputLabel="深色遮罩颜色值"
                   swatchTitle="选择深色遮罩颜色"
@@ -816,180 +854,171 @@
         </div>
       </fieldset>
 
-      <!-- 卡片尺寸 -->
-      <fieldset class="group" disabled={saving}>
-        <legend>卡片尺寸</legend>
-        <div class="form-grid">
-          <label class="field">
-            <span>最小宽度 (px)</span>
-            <input bind:value={form.card_size.width} type="number" min="80" max="400" step="10" />
-            <small>书签卡片最小宽度，建议 180-280。</small>
-          </label>
-          <label class="field">
-            <span>最小高度 (px)</span>
-            <input bind:value={form.card_size.height} type="number" min="50" max="300" step="10" />
-            <small>书签卡片最小高度，建议 100-150。</small>
-          </label>
-        </div>
-      </fieldset>
+      <!-- 卡片及图标 -->
+      <fieldset class="group group-wide group-card" disabled={saving}>
+        <legend>卡片及图标</legend>
 
-      <!-- 内容区 -->
-      <fieldset class="group" disabled={saving}>
-        <legend>内容区</legend>
-        <div class="form-grid">
-          <label class="field">
-            <span>最大宽度</span>
-            <div class="inline-input">
-              <input bind:value={form.content_layout.max_width} type="number" min="40" max="2400" step="10" />
-              <select bind:value={form.content_layout.max_width_unit} class="unit-select" aria-label="最大宽度单位">
-                <option value="px">px</option>
-                <option value="%">%</option>
-              </select>
-            </div>
-            <small>首页内容区最大宽度，Sun-Panel 默认 1200px。</small>
-          </label>
-
-          <label class="field">
-            <span>左右边距 <em>{form.content_layout.margin_x}px</em></span>
-            <input bind:value={form.content_layout.margin_x} type="range" min="0" max="100" step="1" />
-            <small>在内容区两侧追加留白。</small>
-          </label>
-
-          <label class="field">
-            <span>顶部边距 <em>{form.content_layout.margin_top}%</em></span>
-            <input bind:value={form.content_layout.margin_top} type="range" min="0" max="50" step="1" />
-            <small>控制搜索区域到页面顶部的距离。</small>
-          </label>
-
-          <label class="field">
-            <span>底部边距 <em>{form.content_layout.margin_bottom}%</em></span>
-            <input bind:value={form.content_layout.margin_bottom} type="range" min="0" max="50" step="1" />
-            <small>控制内容列表底部留白。</small>
-          </label>
-        </div>
-      </fieldset>
-
-      <!-- 卡片背景 -->
-      <fieldset class="group" disabled={saving}>
-        <legend>卡片背景</legend>
-        <div class="form-grid">
-          <div class="field">
-            <span>卡片颜色</span>
-            <ColorAlphaInput
-              bind:value={form.card_background_color}
-              bind:alpha={form.card_background_opacity}
-              placeholder="#ffffff"
-              inputLabel="卡片颜色值"
-              swatchTitle="选择卡片颜色"
-              alphaText="卡片透明度"
-            />
-            <small>书签卡片背景色，例如 <code>#ffffff</code>（白色默认）。</small>
-          </div>
-
-          <label class="field">
-            <span>卡片透明度 <em>{form.card_background_opacity.toFixed(2)}</em></span>
-            <input bind:value={form.card_background_opacity} type="range" min="0" max="1" step="0.05" />
-            <small>数值越大越不透明，1 为完全不透明。</small>
-          </label>
-        </div>
-      </fieldset>
-
-      <!-- 卡片风格 -->
-      <fieldset class="group" disabled={saving}>
-        <legend>卡片风格</legend>
-        <div class="radio-group">
-          <label class="radio-option">
-            <input type="radio" bind:group={form.card_style} value="info" />
-            <div class="radio-content">
-              <strong>详情风格</strong>
-              <p>显示图标、标题和描述，适合信息丰富的书签</p>
-            </div>
-          </label>
-
-          <label class="radio-option">
-            <input type="radio" bind:group={form.card_style} value="icon" />
-            <div class="radio-content">
-              <strong>极简风格</strong>
-              <p>仅显示图标和标题，紧凑布局节省空间</p>
-            </div>
-          </label>
-        </div>
-      </fieldset>
-
-      <!-- 图标尺寸 -->
-      <fieldset class="group" disabled={saving}>
-        <legend>图标与文字</legend>
-        <div class="form-grid">
-          <label class="field">
-            <span>图标大小 (px)</span>
-            <input bind:value={form.card_icon_size} type="number" min="40" max="100" step="5" />
-            <small>推荐：70px（Sun-Panel 默认值）</small>
-          </label>
-
-          <div class="field">
-            <span>卡片文字颜色</span>
-            <ColorAlphaInput
-              bind:value={form.card_text_color}
-              placeholder="留空则跟随主题"
-              inputLabel="卡片文字颜色值"
-              swatchTitle="选择卡片文字颜色"
-              alphaText="文字透明度"
-            />
-            <small>控制书签标题和描述文字颜色；留空时自动跟随当前主题。</small>
+        <div class="settings-subsection">
+          <h3>展示密度</h3>
+          <div class="settings-grid card-size-grid">
+            <label class="field field-number">
+              <span>最小宽度 (px)</span>
+              <input bind:value={form.card_size.width} type="number" min="80" max="400" step="10" />
+              <small>建议 180-280。</small>
+            </label>
+            <label class="field field-number">
+              <span>最小高度 (px)</span>
+              <input bind:value={form.card_size.height} type="number" min="0" max="300" step="10" />
+              <small>0 表示自动高度。</small>
+            </label>
+            <label class="field field-number">
+              <span>图标大小 (px)</span>
+              <input bind:value={form.card_icon_size} type="number" min="40" max="100" step="5" />
+              <small>推荐 70。</small>
+            </label>
           </div>
         </div>
+
+        <div class="settings-subsection">
+          <h3>内容区域</h3>
+          <div class="settings-grid content-layout-grid">
+            <label class="field field-size">
+              <span>最大宽度</span>
+              <div class="inline-input">
+                <input bind:value={form.content_layout.max_width} type="number" min="40" max="2400" step="10" />
+                <select bind:value={form.content_layout.max_width_unit} class="unit-select" aria-label="最大宽度单位">
+                  <option value="px">px</option>
+                  <option value="%">%</option>
+                </select>
+              </div>
+              <small>首页内容区最大宽度。</small>
+            </label>
+
+            <label class="field field-range">
+              <span>左右边距 <em>{form.content_layout.margin_x}px</em></span>
+              <input bind:value={form.content_layout.margin_x} type="range" min="0" max="100" step="1" />
+            </label>
+
+            <label class="field field-range">
+              <span>顶部边距 <em>{form.content_layout.margin_top}%</em></span>
+              <input bind:value={form.content_layout.margin_top} type="range" min="0" max="50" step="1" />
+            </label>
+
+            <label class="field field-range">
+              <span>底部边距 <em>{form.content_layout.margin_bottom}%</em></span>
+              <input bind:value={form.content_layout.margin_bottom} type="range" min="0" max="50" step="1" />
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-subsection">
+          <h3>卡片外观</h3>
+          <div class="settings-grid card-appearance-grid">
+            <div class="field field-color">
+              <span>卡片颜色</span>
+              <ColorAlphaInput
+                bind:value={form.card_background_color}
+                bind:alpha={form.card_background_opacity}
+                placeholder="#ffffff"
+                inputLabel="卡片颜色值"
+                swatchTitle="选择卡片颜色"
+                alphaText="卡片透明度"
+              />
+              <small>书签卡片背景色。</small>
+            </div>
+
+            <label class="field field-range">
+              <span>卡片透明度 <em>{form.card_background_opacity.toFixed(2)}</em></span>
+              <input bind:value={form.card_background_opacity} type="range" min="0" max="1" step="0.05" />
+            </label>
+
+            <div class="field field-color">
+              <span>卡片文字颜色</span>
+              <ColorAlphaInput
+                bind:value={form.card_text_color}
+                placeholder="留空则跟随主题"
+                inputLabel="卡片文字颜色值"
+                swatchTitle="选择卡片文字颜色"
+                alphaText="文字透明度"
+              />
+              <small>留空时自动跟随当前主题。</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-subsection">
+          <h3>卡片风格</h3>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" bind:group={form.card_style} value="info" />
+              <div class="radio-content">
+                <strong>详情风格</strong>
+                <p>显示图标、标题和描述，适合信息丰富的书签</p>
+              </div>
+            </label>
+
+            <label class="radio-option">
+              <input type="radio" bind:group={form.card_style} value="icon" />
+              <div class="radio-content">
+                <strong>极简风格</strong>
+                <p>仅显示图标和标题，紧凑布局节省空间</p>
+              </div>
+            </label>
+          </div>
+
+          {#if form.card_style === 'info'}
+            <label class="checkbox-field style-option">
+              <input type="checkbox" bind:checked={form.card_show_description} />
+              <span>显示书签描述</span>
+            </label>
+          {/if}
+
+          {#if form.card_style === 'icon'}
+            <label class="checkbox-field style-option">
+              <input type="checkbox" bind:checked={form.card_icon_show_title} />
+              <span>显示书签标题</span>
+            </label>
+          {/if}
+        </div>
       </fieldset>
-
-      <!-- 详情风格选项 -->
-      {#if form.card_style === 'info'}
-        <fieldset class="group" disabled={saving}>
-          <legend>详情风格选项</legend>
-          <label class="checkbox-field">
-            <input type="checkbox" bind:checked={form.card_show_description} />
-            <span>显示书签描述</span>
-          </label>
-          <small>关闭后仅显示标题，节省空间</small>
-        </fieldset>
-      {/if}
-
-      {#if form.card_style === 'icon'}
-        <fieldset class="group" disabled={saving}>
-          <legend>极简风格选项</legend>
-          <label class="checkbox-field">
-            <input type="checkbox" bind:checked={form.card_icon_show_title} />
-            <span>显示书签标题</span>
-          </label>
-          <small>开启后，小图标下方会显示标题；关闭时只保留悬停提示。</small>
-        </fieldset>
-      {/if}
 
       <!-- 搜索引擎 -->
-      <fieldset class="group" disabled={saving}>
+      <fieldset class="group group-wide group-search" disabled={saving}>
         <legend>搜索引擎</legend>
 
-        <label class="field">
-          <span>默认引擎</span>
-          <select bind:value={form.search_engine.current} disabled={form.search_engine.engines.length === 0}>
-            {#if form.search_engine.engines.length === 0}
-              <option value="">无可用引擎</option>
-            {:else}
-              {#each form.search_engine.engines as engine (engine)}
-                {#if engine.name.trim()}
-                  <option value={engine.name}>{engine.name}</option>
-                {/if}
-              {/each}
-            {/if}
-          </select>
-          <small>首页搜索框默认选中的引擎。</small>
-        </label>
+        <div class="settings-grid search-controls-grid">
+          <label class="field field-select">
+            <span>默认引擎</span>
+            <select bind:value={form.search_engine.current} disabled={form.search_engine.engines.length === 0}>
+              {#if form.search_engine.engines.length === 0}
+                <option value="">无可用引擎</option>
+              {:else}
+                {#each form.search_engine.engines as engine (engine)}
+                  {#if engine.name.trim()}
+                    <option value={engine.name}>{engine.name}</option>
+                  {/if}
+                {/each}
+              {/if}
+            </select>
+            <small>首页搜索框默认选中的引擎。</small>
+          </label>
 
-        <label class="toggle-field full-width">
-          <div class="toggle-copy">
-            <span>显示引擎选择器</span>
-            <p>关闭后首页搜索框只使用默认搜索引擎。</p>
-          </div>
-          <input bind:checked={form.search_engine_selector_show} type="checkbox" />
-        </label>
+          <label class="toggle-field">
+            <div class="toggle-copy">
+              <span>显示搜索框</span>
+              <p>控制首页标题下方的搜索区域是否展示。</p>
+            </div>
+            <input bind:checked={form.search_box_show} type="checkbox" />
+          </label>
+
+          <label class="toggle-field">
+            <div class="toggle-copy">
+              <span>显示引擎选择器</span>
+              <p>关闭后首页搜索框只使用默认搜索引擎。</p>
+            </div>
+            <input bind:checked={form.search_engine_selector_show} type="checkbox" />
+          </label>
+        </div>
 
         <div class="engine-list">
           {#each form.search_engine.engines as engine, index (index)}
@@ -1031,7 +1060,7 @@
       </fieldset>
 
       <!-- 页脚 -->
-      <fieldset class="group" disabled={saving}>
+      <fieldset class="group group-wide" disabled={saving}>
         <legend>自定义页脚</legend>
         <label class="field full-width">
           <span>页脚 HTML</span>
@@ -1062,15 +1091,14 @@
             当前配置已是最新状态。
           {/if}
         </p>
+        <button type="submit" class="floating-save-btn" disabled={!canSave}>
+          {#if saving}
+            保存中...
+          {:else}
+            保存设置
+          {/if}
+        </button>
       </div>
-
-      <button type="submit" class="floating-save-btn" disabled={!canSave}>
-        {#if saving}
-          保存中...
-        {:else}
-          保存设置
-        {/if}
-      </button>
     </form>
   {/if}
 </section>
@@ -1078,19 +1106,31 @@
 <style>
   .settings-panel {
     display: grid;
-    gap: 20px;
+    gap: 0;
+    position: relative;
     border: 1px solid rgba(148, 163, 184, 0.22);
-    border-radius: 24px;
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
-    padding: 24px;
+    border-radius: 22px;
+    background:
+      linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.92)),
+      #f8fafc;
+    box-shadow:
+      0 24px 54px rgba(30, 41, 59, 0.08),
+      0 1px 0 rgba(255, 255, 255, 0.72) inset;
+    overflow: visible;
   }
 
   .panel-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     gap: 16px;
+    border-bottom: 1px solid rgba(203, 213, 225, 0.78);
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(16px);
+    padding: 22px 24px 18px;
   }
 
   .panel-eyebrow {
@@ -1107,8 +1147,10 @@
   }
 
   h2 {
-    font-size: 22px;
+    font-size: 24px;
+    line-height: 1.2;
     color: #0f172a;
+    text-wrap: balance;
   }
 
   .panel-desc,
@@ -1121,7 +1163,9 @@
   }
 
   .panel-desc {
-    margin-top: 10px;
+    margin-top: 8px;
+    max-width: 64ch;
+    text-wrap: pretty;
   }
 
   small.warn {
@@ -1129,13 +1173,18 @@
   }
 
   .error-banner,
-  .status-card,
-  .toggle-field {
+  .status-card {
     border-radius: 18px;
     padding: 16px;
   }
 
+  .toggle-field {
+    border-radius: 14px;
+    padding: 14px;
+  }
+
   .error-banner {
+    margin: 20px 24px 0;
     border: 1px solid #fecaca;
     background: #fef2f2;
     display: grid;
@@ -1148,6 +1197,7 @@
   }
 
   .status-card {
+    margin: 20px 24px 24px;
     border: 1px solid #dbeafe;
     background: #f8fbff;
     display: grid;
@@ -1162,42 +1212,142 @@
 
   .settings-form {
     display: grid;
-    gap: 20px;
-    padding-bottom: 88px; /* 给浮动保存按钮留空间 */
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 16px;
+    padding: 20px 24px 24px;
   }
 
   .group {
-    border: 1px solid #e2e8f0;
-    border-radius: 18px;
+    grid-column: span 6;
+    align-content: start;
+    border: 1px solid rgba(203, 213, 225, 0.82);
+    border-radius: 16px;
     padding: 18px;
     display: grid;
     gap: 16px;
     margin: 0;
     min-width: 0;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.04),
+      0 1px 0 rgba(255, 255, 255, 0.72) inset;
+  }
+
+  .group-wide {
+    grid-column: 1 / -1;
+  }
+
+  .group-background,
+  .group-card,
+  .group-search {
+    background: rgba(255, 255, 255, 0.95);
   }
 
   .group legend {
-    padding: 0 8px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #334155;
+    padding: 0 6px;
+    margin-left: -6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
   }
 
   .form-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 16px 18px;
+  }
+
+  .settings-grid,
+  .base-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 14px 16px;
+    align-items: start;
+  }
+
+  .settings-subsection {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .settings-subsection + .settings-subsection {
+    border-top: 1px solid rgba(226, 232, 240, 0.92);
+    padding-top: 16px;
+  }
+
+  .settings-subsection h3 {
+    margin: 0;
+    color: #1e293b;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .field-title {
+    grid-column: span 5;
+  }
+
+  .field-url {
+    grid-column: span 4;
+  }
+
+  .field-color {
+    grid-column: span 4;
+  }
+
+  .field-range {
+    grid-column: span 3;
+  }
+
+  .field-select,
+  .field-number,
+  .field-size {
+    grid-column: span 3;
+  }
+
+  .field-toggle {
+    grid-column: span 4;
+  }
+
+  .card-size-grid .field-number {
+    grid-column: span 3;
+  }
+
+  .content-layout-grid .field-size {
+    grid-column: span 4;
+  }
+
+  .content-layout-grid .field-range {
+    grid-column: span 2;
+  }
+
+  .card-appearance-grid .field-color {
+    grid-column: span 4;
+  }
+
+  .card-appearance-grid .field-range {
+    grid-column: span 3;
+  }
+
+  .search-controls-grid .field-select {
+    grid-column: span 3;
+  }
+
+  .search-controls-grid .toggle-field {
+    grid-column: span 4;
   }
 
   .gradient-preset-panel {
     display: grid;
     gap: 12px;
     min-width: 0;
-    border: 1px solid #dbeafe;
+    border: 1px solid rgba(191, 219, 254, 0.86);
     border-radius: 16px;
     padding: 14px;
     background:
-      linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(240, 253, 250, 0.72)),
+      radial-gradient(circle at 18% 0%, rgba(219, 234, 254, 0.62), transparent 32%),
+      linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(240, 253, 250, 0.7)),
       #ffffff;
   }
 
@@ -1233,21 +1383,21 @@
 
   .gradient-preset-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     gap: 10px;
   }
 
   .gradient-preset-option {
     position: relative;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
     min-width: 0;
-    min-height: 112px;
-    border: 1px solid #dbe4ef;
-    border-radius: 14px;
-    padding: 10px;
-    background: rgba(255, 255, 255, 0.82);
+    min-height: 84px;
+    border: 1px solid rgba(203, 213, 225, 0.9);
+    border-radius: 12px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.88);
     cursor: pointer;
     transition:
       border-color 0.18s ease,
@@ -1258,7 +1408,7 @@
 
   .gradient-preset-option:hover {
     border-color: rgba(37, 99, 235, 0.42);
-    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+    box-shadow: 0 12px 26px rgba(30, 64, 175, 0.1);
     transform: translateY(-1px);
   }
 
@@ -1270,17 +1420,45 @@
       0 14px 28px rgba(15, 23, 42, 0.1);
   }
 
-  .gradient-preset-option input {
-    margin-top: 4px;
-    accent-color: #2563eb;
+  .gradient-preset-option.active::after {
+    content: '';
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+  }
+
+  .gradient-preset-option:focus-within {
+    border-color: rgba(37, 99, 235, 0.72);
+    box-shadow:
+      0 0 0 3px rgba(37, 99, 235, 0.13),
+      0 10px 22px rgba(15, 23, 42, 0.08);
+  }
+
+  .gradient-preset-option:active {
+    transform: translateY(0);
+  }
+
+  .gradient-preset-option input[type='radio'] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .preset-preview {
-    grid-column: 1 / -1;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 6px;
-    height: 38px;
+    height: 28px;
   }
 
   .preset-swatch,
@@ -1322,25 +1500,30 @@
 
   .preset-copy {
     display: grid;
-    gap: 4px;
+    gap: 2px;
     min-width: 0;
   }
 
   .preset-copy strong {
     color: #0f172a;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.25;
   }
 
   .preset-copy small {
     color: #64748b;
     font-size: 12px;
-    line-height: 1.45;
+    line-height: 1.35;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
   }
 
   .theme-background-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 16px;
   }
 
@@ -1348,10 +1531,12 @@
     display: grid;
     gap: 14px;
     min-width: 0;
-    border: 1px solid #e2e8f0;
+    border: 1px solid rgba(226, 232, 240, 0.94);
     border-radius: 14px;
-    padding: 14px;
-    background: #fbfdff;
+    padding: 16px;
+    background:
+      linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.96)),
+      #ffffff;
   }
 
   .theme-background-header {
@@ -1390,7 +1575,7 @@
 
   .background-range-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
     gap: 14px;
   }
 
@@ -1431,8 +1616,7 @@
     gap: 8px;
   }
 
-  .field.full-width,
-  .toggle-field.full-width {
+  .field.full-width {
     grid-column: 1 / -1;
   }
 
@@ -1456,12 +1640,16 @@
     width: 100%;
     box-sizing: border-box;
     border: 1px solid #cbd5e1;
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 10px 12px;
     font-size: 14px;
     color: #0f172a;
     background: #ffffff;
     font-family: inherit;
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease,
+      background 0.18s ease;
   }
 
   textarea {
@@ -1503,7 +1691,16 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 16px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    background: rgba(248, 250, 252, 0.78);
+    transition:
+      border-color 0.18s ease,
+      background 0.18s ease,
+      transform 0.18s ease;
+  }
+
+  .toggle-field:hover {
+    border-color: rgba(37, 99, 235, 0.28);
     background: #ffffff;
   }
 
@@ -1521,18 +1718,18 @@
 
   .engine-list {
     display: grid;
-    gap: 12px;
+    gap: 10px;
   }
 
   .engine-row {
     display: grid;
-    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
-    gap: 10px;
+    grid-template-columns: minmax(140px, 0.75fr) minmax(160px, 0.9fr) minmax(240px, 1.5fr) auto;
+    gap: 12px;
     align-items: end;
-    border: 1px solid #eef2f7;
-    border-radius: 14px;
+    border: 1px solid rgba(226, 232, 240, 0.94);
+    border-radius: 12px;
     padding: 12px;
-    background: #f9fafb;
+    background: rgba(248, 250, 252, 0.78);
   }
 
   .engine-cell.grow {
@@ -1544,38 +1741,58 @@
   }
 
   .form-footer {
+    grid-column: 1 / -1;
+    position: sticky;
+    bottom: 14px;
+    z-index: 24;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 16px;
-    padding-top: 4px;
+    margin-top: 2px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(16px);
+    box-shadow:
+      0 18px 38px rgba(15, 23, 42, 0.16),
+      0 1px 0 rgba(255, 255, 255, 0.76) inset;
+    padding: 12px 12px 12px 16px;
   }
 
   .helper-text {
     font-size: 13px;
+    min-width: 0;
   }
 
-  /* 浮动保存按钮 */
   .floating-save-btn {
-    position: fixed;
-    bottom: 32px;
-    right: 32px;
-    z-index: 100;
+    flex: 0 0 auto;
     border: none;
     background: #2563eb;
     color: #ffffff;
-    border-radius: 14px;
-    padding: 14px 28px;
+    border-radius: 12px;
+    min-height: 42px;
+    padding: 0 22px;
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 4px 20px rgba(37, 99, 235, 0.35);
-    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.15s ease,
+      opacity 0.15s ease,
+      background 0.15s ease;
     white-space: nowrap;
   }
 
   .floating-save-btn:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 6px 28px rgba(37, 99, 235, 0.45);
+    background: #1d4ed8;
+    box-shadow: 0 14px 30px rgba(37, 99, 235, 0.34);
+  }
+
+  .floating-save-btn:active:not(:disabled) {
+    transform: translateY(0);
   }
 
   .floating-save-btn:disabled {
@@ -1585,11 +1802,15 @@
 
   .ghost-button,
   .danger-button {
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 10px 16px;
     font-size: 14px;
     cursor: pointer;
-    transition: 0.18s ease;
+    transition:
+      border-color 0.18s ease,
+      background 0.18s ease,
+      color 0.18s ease,
+      transform 0.18s ease;
     white-space: nowrap;
   }
 
@@ -1605,6 +1826,21 @@
     color: #dc2626;
   }
 
+  .ghost-button:hover:not(:disabled) {
+    border-color: #94a3b8;
+    background: #f8fafc;
+  }
+
+  .danger-button:hover:not(:disabled) {
+    border-color: #fca5a5;
+    background: #fee2e2;
+  }
+
+  .ghost-button:active:not(:disabled),
+  .danger-button:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
   .ghost-button:disabled,
   .danger-button:disabled,
   input:disabled,
@@ -1618,13 +1854,83 @@
     opacity: 1;
   }
 
-  @media (max-width: 720px) {
-    .settings-panel {
-      padding: 20px;
+  @media (max-width: 960px) {
+    .settings-form {
+      padding: 18px;
     }
 
-    .form-grid {
+    .group {
+      grid-column: 1 / -1;
+    }
+
+    .settings-grid,
+    .base-grid {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .field-title,
+    .field-url,
+    .field-color,
+    .field-range,
+    .field-select,
+    .field-number,
+    .field-size,
+    .field-toggle,
+    .card-size-grid .field-number,
+    .content-layout-grid .field-size,
+    .content-layout-grid .field-range,
+    .card-appearance-grid .field-color,
+    .card-appearance-grid .field-range,
+    .search-controls-grid .field-select,
+    .search-controls-grid .toggle-field {
+      grid-column: span 3;
+    }
+
+    .engine-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .engine-cell.grow,
+    .engine-row .danger-button {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .settings-panel {
+      border-radius: 18px;
+    }
+
+    .panel-header {
+      padding: 18px;
+    }
+
+    .settings-form {
+      padding: 16px;
+    }
+
+    .form-grid,
+    .settings-grid,
+    .base-grid {
       grid-template-columns: 1fr;
+    }
+
+    .field-title,
+    .field-url,
+    .field-color,
+    .field-range,
+    .field-select,
+    .field-number,
+    .field-size,
+    .field-toggle,
+    .card-size-grid .field-number,
+    .content-layout-grid .field-size,
+    .content-layout-grid .field-range,
+    .card-appearance-grid .field-color,
+    .card-appearance-grid .field-range,
+    .search-controls-grid .field-select,
+    .search-controls-grid .toggle-field {
+      grid-column: 1 / -1;
     }
 
     .theme-background-grid {
@@ -1667,14 +1973,21 @@
       align-items: flex-start;
     }
 
-    .settings-form {
-      padding-bottom: 78px;
+    .form-footer {
+      bottom: 10px;
+      align-items: stretch;
+      flex-direction: column;
+      padding: 12px;
+    }
+
+    .helper-text {
+      line-height: 1.45;
     }
 
     .floating-save-btn {
-      bottom: 20px;
-      right: 20px;
-      padding: 12px 20px;
+      width: 100%;
+      min-height: 40px;
+      padding: 0 18px;
       font-size: 14px;
     }
   }

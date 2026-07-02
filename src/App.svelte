@@ -140,7 +140,7 @@
 
   type SettingsSubset = Pick<
     Settings,
-    'site_title' | 'site_title_color' | 'site_title_font_size' | 'public_mode' | 'theme' | 'custom_css' | 'custom_js' | 'image_host_url' | 'background' | 'backgrounds' | 'search_engine' | 'card_size' | 'card_style' | 'card_icon_size' | 'card_show_description' | 'card_background_color' | 'card_background_opacity' | 'card_icon_show_title' | 'card_text_color' | 'search_box_show' | 'search_engine_selector_show' | 'content_layout' | 'footer_html'
+    'site_title' | 'site_title_color' | 'site_title_font_size' | 'public_mode' | 'theme' | 'background_preset_id' | 'custom_css' | 'custom_js' | 'image_host_url' | 'background' | 'backgrounds' | 'search_engine' | 'card_size' | 'card_style' | 'card_icon_size' | 'card_show_description' | 'card_background_color' | 'card_background_opacity' | 'card_icon_show_title' | 'card_text_color' | 'search_box_show' | 'search_engine_selector_show' | 'content_layout' | 'footer_html'
   >
 
   function toSettingsForm(settings: Settings | null): SettingsSubset | null {
@@ -152,6 +152,7 @@
       site_title_font_size: settings.site_title_font_size,
       public_mode: settings.public_mode,
       theme: settings.theme,
+      background_preset_id: settings.background_preset_id,
       custom_css: settings.custom_css,
       custom_js: settings.custom_js,
       image_host_url: settings.image_host_url,
@@ -179,6 +180,7 @@
       site_title_color: settings.site_title_color,
       site_title_font_size: settings.site_title_font_size,
       theme: settings.theme,
+      background_preset_id: settings.background_preset_id,
       background: settings.background,
       backgrounds: settings.backgrounds,
       search_engine: settings.search_engine,

@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS: Settings = {
   site_title_font_size: 32,
   public_mode: true,
   theme: 'auto',
+  background_preset_id: 'custom',
   background: { type: 'color', value: '#0f172a', blur: 0, mask: 0.3, maskColor: '#000000' },
   backgrounds: {
     light: { type: 'color', value: '#f8fafc', blur: 0, mask: 0.18, maskColor: '#ffffff' },
@@ -82,6 +83,10 @@ function normalizeThemeBackgroundSettings(value: unknown, fallbackBackground: Se
   }
 }
 
+function normalizeBackgroundPresetId(value: unknown): Settings['background_preset_id'] {
+  return value === 'clear-teal' || value === 'mist-slate' || value === 'custom' ? value : 'custom'
+}
+
 // Settings 中属于强类型聚合视图的 key（不含 admin_* 等内部 key）
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]
 const PUBLIC_DATA_SETTINGS_KEYS: (keyof Settings)[] = [
@@ -90,6 +95,7 @@ const PUBLIC_DATA_SETTINGS_KEYS: (keyof Settings)[] = [
   'site_title_font_size',
   'public_mode',
   'theme',
+  'background_preset_id',
   'background',
   'backgrounds',
   'image_host_url',
@@ -418,6 +424,7 @@ function settingsFromRawMap(raw: Map<string, unknown>): Settings {
     }
   }
   for (const key of SETTINGS_KEYS) assignSetting(key)
+  out.background_preset_id = normalizeBackgroundPresetId(out.background_preset_id)
   out.background = normalizeBackgroundSetting(out.background, DEFAULT_SETTINGS.background)
   out.backgrounds = normalizeThemeBackgroundSettings(raw.get('backgrounds'), out.background)
   return out

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte'
   import ColorAlphaInput from './ColorAlphaInput.svelte'
   import { parseCssColor } from '../lib/color'
 
@@ -13,6 +14,7 @@
   let startColor = defaultStart
   let endColor = defaultEnd
   let lastValue = ''
+  const dispatch = createEventDispatcher<{ change: string }>()
 
   $: if (value !== lastValue) {
     syncStopsFromValue(value)
@@ -31,6 +33,7 @@
     const nextValue = (event.currentTarget as HTMLInputElement).value
     value = nextValue
     syncStopsFromValue(nextValue)
+    dispatch('change', value)
   }
 
   function handleStartChange(event: CustomEvent<string>) {
@@ -47,6 +50,7 @@
     const nextValue = `linear-gradient(135deg, ${startColor.trim() || defaultStart}, ${endColor.trim() || defaultEnd})`
     value = nextValue
     lastValue = nextValue
+    dispatch('change', value)
   }
 
   function parseGradientStops(input: string): [string, string] | null {

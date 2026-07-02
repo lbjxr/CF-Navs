@@ -52,7 +52,8 @@ function isAdminData(value: unknown): value is AdminData {
   return (
     Array.isArray(value.categories) &&
     Array.isArray(value.bookmarks) &&
-    isRecord(value.settings)
+    isRecord(value.settings) &&
+    typeof value.settings.background_preset_id === 'string'
   )
 }
 

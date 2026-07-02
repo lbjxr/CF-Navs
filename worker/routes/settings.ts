@@ -15,6 +15,7 @@ const COMPLETE_PUBLIC_SETTINGS_KEYS: Array<keyof Settings> = [
   'site_title_font_size',
   'public_mode',
   'theme',
+  'background_preset_id',
   'custom_css',
   'custom_js',
   'image_host_url',
@@ -84,6 +85,12 @@ settingsRoutes.put('/', async (c) => {
 
   if (body.theme !== undefined && !['light', 'dark', 'auto'].includes(body.theme)) {
     return badRequest(c, 'invalid theme')
+  }
+  if (
+    body.background_preset_id !== undefined &&
+    !['clear-teal', 'mist-slate', 'custom'].includes(body.background_preset_id)
+  ) {
+    return badRequest(c, 'invalid background_preset_id')
   }
   if (body.public_mode !== undefined && typeof body.public_mode !== 'boolean') {
     return badRequest(c, 'invalid public_mode')

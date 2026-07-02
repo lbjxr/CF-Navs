@@ -77,6 +77,7 @@
       | 'site_title_font_size'
       | 'public_mode'
       | 'theme'
+      | 'background_preset_id'
       | 'custom_css'
       | 'custom_js'
       | 'image_host_url'
@@ -128,6 +129,7 @@
           | 'site_title_font_size'
           | 'public_mode'
           | 'theme'
+          | 'background_preset_id'
           | 'custom_css'
           | 'custom_js'
           | 'image_host_url'
@@ -857,8 +859,8 @@
 
   .admin-page {
     position: relative;
-    min-height: 100vh;
-    height: 100vh;
+    min-height: 100dvh;
+    height: 100dvh;
     box-sizing: border-box;
     padding: 32px;
     display: grid;
@@ -1466,6 +1468,8 @@
 
   .settings-panel-wrap {
     min-width: 0;
+    width: min(100%, 1320px);
+    margin: 0 auto 24px;
   }
 
   .backup-desc {

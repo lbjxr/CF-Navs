@@ -26,6 +26,7 @@ function toPublicSettings(settings: Settings): PublicSettings {
     site_title_color: settings.site_title_color,
     site_title_font_size: settings.site_title_font_size,
     theme: settings.theme,
+    background_preset_id: settings.background_preset_id,
     background: settings.background,
     backgrounds: settings.backgrounds,
     search_engine: settings.search_engine,
