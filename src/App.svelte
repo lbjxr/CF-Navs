@@ -16,6 +16,7 @@
     type SiteConfig,
     type ThemeMode,
   } from '../shared/types'
+  import ConfirmDialog from './components/ConfirmDialog.svelte'
   import Home from './views/Home.svelte'
   import { api, getErrorMessage, isApiError, isUnauthorizedError } from './lib/api'
   import { clearCachedAdminData, readCachedAdminDataEntry, writeCachedAdminData } from './lib/adminDataCache'
@@ -46,6 +47,15 @@
     open_method: 'same_tab' | 'new_tab' | 'modal'
   }
 
+  type ConfirmDialogState = {
+    title: string
+    message: string
+    itemTitle: string
+    confirmLabel: string
+    cancelLabel: string
+    variant: 'default' | 'danger'
+  }
+
   let booting = true
   let rootError = ''
   let currentView: AppView = 'home'
@@ -55,6 +65,8 @@
   let adminComponentPromise: Promise<void> | null = null
   let loginModalPromise: Promise<void> | null = null
   let bookmarkEditModalPromise: Promise<void> | null = null
+  let confirmDialog: ConfirmDialogState | null = null
+  let confirmDialogResolver: ((confirmed: boolean) => void) | null = null
 
   let loginModalOpen = false
   let categoryModalOpen = false
@@ -338,6 +350,44 @@
       })
     }
     return bookmarkEditModalPromise
+  }
+
+  function requestConfirmation(options: {
+    title: string
+    message: string
+    itemTitle?: string
+    confirmLabel?: string
+    cancelLabel?: string
+    variant?: 'default' | 'danger'
+  }): Promise<boolean> {
+    confirmDialogResolver?.(false)
+
+    return new Promise((resolve) => {
+      confirmDialogResolver = resolve
+      confirmDialog = {
+        title: options.title,
+        message: options.message,
+        itemTitle: options.itemTitle ?? '',
+        confirmLabel: options.confirmLabel ?? '确认',
+        cancelLabel: options.cancelLabel ?? '取消',
+        variant: options.variant ?? 'default',
+      }
+    })
+  }
+
+  function closeConfirmDialog(confirmed: boolean): void {
+    const resolver = confirmDialogResolver
+    confirmDialogResolver = null
+    confirmDialog = null
+    resolver?.(confirmed)
+  }
+
+  function handleConfirmDialogConfirm(): void {
+    closeConfirmDialog(true)
+  }
+
+  function handleConfirmDialogCancel(): void {
+    closeConfirmDialog(false)
   }
 
   function getDataVersion(data: { version?: string } | null | undefined): string | null {
@@ -1123,9 +1173,14 @@
   }
 
   async function handleDeleteBookmark(bookmark: { id: string | number; title: string }): Promise<void> {
-    if (!window.confirm(`确认删除书签「${bookmark.title}」吗？`)) {
-      return
-    }
+    const confirmed = await requestConfirmation({
+      title: '删除书签',
+      message: '删除后该书签会从首页和后台列表中移除，此操作不可撤销。',
+      itemTitle: bookmark.title,
+      confirmLabel: '确认删除',
+      variant: 'danger',
+    })
+    if (!confirmed) return
 
     deletingBookmarkId = Number(bookmark.id)
     bookmarkError = ''
@@ -1465,5 +1520,17 @@
         imageHostUrl={adminData.settings?.image_host_url ?? ''}
       />
     {/if}
+
+    <ConfirmDialog
+      open={Boolean(confirmDialog)}
+      title={confirmDialog?.title ?? ''}
+      message={confirmDialog?.message ?? ''}
+      itemTitle={confirmDialog?.itemTitle ?? ''}
+      confirmLabel={confirmDialog?.confirmLabel ?? '确认'}
+      cancelLabel={confirmDialog?.cancelLabel ?? '取消'}
+      variant={confirmDialog?.variant ?? 'default'}
+      onConfirm={handleConfirmDialogConfirm}
+      onCancel={handleConfirmDialogCancel}
+    />
   </div>
 {/if}
