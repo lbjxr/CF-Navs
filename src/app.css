@@ -83,7 +83,6 @@ select {
     );
   opacity: 0.58;
   transform: translate3d(0, 0, 0);
-  animation: splash-orbit 18s linear infinite;
 }
 
 .app-splash-card {
@@ -109,8 +108,8 @@ select {
   pointer-events: none;
   background: linear-gradient(115deg, transparent 16%, rgba(125, 211, 252, 0.12) 44%, transparent 70%);
   opacity: 0.86;
-  transform: translateX(-120%);
-  animation: splash-sweep 4.8s ease-in-out infinite;
+  transform: translate3d(-120%, 0, 0);
+  animation: splash-sweep 6s ease-in-out infinite;
 }
 
 .app-splash-card > * {
@@ -221,49 +220,64 @@ h1 {
   box-shadow:
     inset 0 1px 2px rgba(2, 8, 23, 0.5),
     0 0 0 1px rgba(255, 255, 255, 0.02);
+  contain: paint;
+}
+
+.app-splash-track::before,
+.app-splash-track::after {
+  position: absolute;
+  content: "";
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 42%;
+  border-radius: inherit;
+  will-change: transform;
+  transform: translate3d(-120%, 0, 0);
+  animation: splash-progress 1.65s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.app-splash-track::before {
+  opacity: 0.44;
+  background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.72), transparent);
+  animation-delay: 0.72s;
 }
 
 .app-splash-track::after {
-  position: absolute;
-  inset: 0;
-  content: "";
-  opacity: 0.36;
+  opacity: 0.3;
+  width: 100%;
   background-image: linear-gradient(90deg, transparent 0 13px, rgba(255, 255, 255, 0.28) 13px 14px);
   background-size: 28px 100%;
+  will-change: auto;
+  transform: none;
+  animation: none;
 }
 
 .app-splash-bar {
   display: block;
-  width: 100%;
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 42%;
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #38bdf8, #2dd4bf 52%, #bef264);
   box-shadow:
     0 0 18px rgba(45, 212, 191, 0.58),
     0 0 34px rgba(56, 189, 248, 0.26);
-  transform-origin: left center;
-  animation: splash-progress 2.8s cubic-bezier(0.66, 0, 0.34, 1) infinite;
-}
-
-@keyframes splash-orbit {
-  from {
-    transform: rotate(0deg) scale(1);
-  }
-
-  to {
-    transform: rotate(360deg) scale(1);
-  }
+  will-change: transform;
+  transform: translate3d(-120%, 0, 0);
+  animation: splash-progress 1.65s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 @keyframes splash-sweep {
   0%,
   28% {
-    transform: translateX(-120%);
+    transform: translate3d(-120%, 0, 0);
   }
 
   68%,
   100% {
-    transform: translateX(120%);
+    transform: translate3d(120%, 0, 0);
   }
 }
 
@@ -282,18 +296,15 @@ h1 {
 
 @keyframes splash-progress {
   0% {
-    opacity: 0.52;
-    transform: translateX(-68%) scaleX(0.24);
+    transform: translate3d(-120%, 0, 0) scaleX(0.78);
   }
 
-  46% {
-    opacity: 1;
-    transform: translateX(-8%) scaleX(0.72);
+  45% {
+    transform: translate3d(72%, 0, 0) scaleX(1);
   }
 
   100% {
-    opacity: 0.68;
-    transform: translateX(104%) scaleX(0.28);
+    transform: translate3d(245%, 0, 0) scaleX(0.78);
   }
 }
 
@@ -370,11 +381,16 @@ h1 {
   .app-splash::after,
   .app-splash-card--loading::before,
   .app-splash-mark span,
+  .app-splash-track::before,
   .app-splash-bar {
     animation: none;
   }
 
+  .app-splash-track::before {
+    transform: translate3d(64%, 0, 0);
+  }
+
   .app-splash-bar {
-    transform: scaleX(0.72);
+    transform: translate3d(0, 0, 0);
   }
 }

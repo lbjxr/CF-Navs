@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import { get } from 'svelte/store'
+  import { fade } from 'svelte/transition'
   import {
     ErrCode,
     type AdminData,
@@ -92,6 +93,7 @@
   let backupError = ''
   let backupMessage = ''
   let preferredThemeMode: ThemeMode | null = null
+  let prefersReducedMotion = false
   let categorySortSavePromise: Promise<void> = Promise.resolve()
   let bookmarkSortSavePromise: Promise<void> = Promise.resolve()
   let categorySortRequestSeq = 0
@@ -1355,6 +1357,7 @@
     preferredThemeMode = readPreferredThemeMode()
 
     if (typeof window !== 'undefined' && window.matchMedia) {
+      prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
       systemPrefersDark = mediaQuery.matches
       handleSystemThemeChange = (event: MediaQueryListEvent) => {
@@ -1374,7 +1377,7 @@
 </script>
 
 {#if booting}
-  <div class="app-splash">
+  <div class="app-splash" out:fade={{ duration: prefersReducedMotion ? 0 : 220 }}>
     <div class="app-splash-card app-splash-card--loading" role="status" aria-live="polite" aria-busy="true">
       <div class="app-splash-mark" aria-hidden="true">
         <span></span>
@@ -1396,7 +1399,7 @@
     </div>
   </div>
 {:else}
-  <div class="app-shell">
+  <div class="app-shell" in:fade={{ duration: prefersReducedMotion ? 0 : 260, delay: prefersReducedMotion ? 0 : 60 }}>
     {#if rootError}
       <div class="app-alert">{rootError}</div>
     {/if}
