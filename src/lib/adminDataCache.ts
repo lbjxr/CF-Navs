@@ -3,6 +3,7 @@ import { getStoredAuthSession } from './api'
 
 const CACHE_NAME = 'cf-navs-admin-data-v1'
 const CACHE_ORIGIN = 'https://cf-navs.local'
+const CACHE_PATH_PREFIX = '/admin-data/'
 const STORAGE_PREFIX = 'cf-navs.admin-data.'
 const MAX_LOCAL_STORAGE_BYTES = 3_500_000
 
@@ -44,9 +45,50 @@ function sessionCacheKey(): string | null {
 }
 
 function cacheRequest(cacheKey: string): Request {
-  return new Request(`${CACHE_ORIGIN}/admin-data/${encodeURIComponent(cacheKey)}`, {
+  return new Request(`${CACHE_ORIGIN}${CACHE_PATH_PREFIX}${encodeURIComponent(cacheKey)}`, {
     method: 'GET',
   })
+}
+
+function localStorageKey(cacheKey: string): string {
+  return `${STORAGE_PREFIX}${cacheKey}`
+}
+
+function isAdminDataCacheRequest(request: Request): boolean {
+  try {
+    const url = new URL(request.url)
+    return url.origin === CACHE_ORIGIN && url.pathname.startsWith(CACHE_PATH_PREFIX)
+  } catch {
+    return false
+  }
+}
+
+async function deleteStaleCacheStorageEntries(cache: Cache, cacheKey: string): Promise<void> {
+  const currentUrl = cacheRequest(cacheKey).url
+  const requests = await cache.keys()
+  await Promise.all(
+    requests.map((request) => (
+      request.url !== currentUrl && isAdminDataCacheRequest(request)
+        ? cache.delete(request)
+        : Promise.resolve(false)
+    )),
+  )
+}
+
+function deleteStaleLocalStorageEntries(cacheKey: string): void {
+  if (!canUseLocalStorage()) return
+
+  const currentKey = localStorageKey(cacheKey)
+  try {
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const key = localStorage.key(index)
+      if (key?.startsWith(STORAGE_PREFIX) && key !== currentKey) {
+        localStorage.removeItem(key)
+      }
+    }
+  } catch {
+    // Best-effort cleanup.
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -88,7 +130,7 @@ function readLocalStorage(cacheKey: string): CachedAdminDataEntry | null {
   if (!canUseLocalStorage()) return null
 
   try {
-    const raw = localStorage.getItem(`${STORAGE_PREFIX}${cacheKey}`)
+    const raw = localStorage.getItem(localStorageKey(cacheKey))
     if (!raw) return null
     return parsePayload(JSON.parse(raw))
   } catch {
@@ -103,6 +145,16 @@ export async function readCachedAdminData(): Promise<AdminData | null> {
 export async function readCachedAdminDataEntry(): Promise<CachedAdminDataEntry | null> {
   const cacheKey = sessionCacheKey()
   if (!cacheKey) return null
+
+  deleteStaleLocalStorageEntries(cacheKey)
+  if (canUseCacheStorage()) {
+    try {
+      const cache = await caches.open(CACHE_NAME)
+      await deleteStaleCacheStorageEntries(cache, cacheKey)
+    } catch {
+      // Best-effort cleanup.
+    }
+  }
 
   return readLocalStorage(cacheKey) ?? await readCacheStorage(cacheKey)
 }
@@ -121,6 +173,7 @@ export async function writeCachedAdminData(data: AdminData, version: string | nu
   if (canUseCacheStorage()) {
     try {
       const cache = await caches.open(CACHE_NAME)
+      await deleteStaleCacheStorageEntries(cache, cacheKey)
       await cache.put(
         cacheRequest(cacheKey),
         new Response(serialized, {
@@ -135,9 +188,14 @@ export async function writeCachedAdminData(data: AdminData, version: string | nu
     }
   }
 
-  if (canUseLocalStorage() && serialized.length <= MAX_LOCAL_STORAGE_BYTES) {
+  if (canUseLocalStorage()) {
     try {
-      localStorage.setItem(`${STORAGE_PREFIX}${cacheKey}`, serialized)
+      deleteStaleLocalStorageEntries(cacheKey)
+      if (serialized.length <= MAX_LOCAL_STORAGE_BYTES) {
+        localStorage.setItem(localStorageKey(cacheKey), serialized)
+      } else {
+        localStorage.removeItem(localStorageKey(cacheKey))
+      }
     } catch {
       // Quota/private mode failures should not block the app.
     }

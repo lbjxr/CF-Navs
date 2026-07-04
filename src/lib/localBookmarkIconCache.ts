@@ -1,5 +1,6 @@
 const CACHE_NAME = 'cf-navs-bookmark-icons-v1'
 const CACHE_ORIGIN = 'https://cf-navs.local'
+const CACHE_PATH_PREFIX = '/bookmark-icon/'
 const STORAGE_PREFIX = 'cf-navs.bookmark-icon.'
 
 export type BookmarkIconCacheInput = {
@@ -25,9 +26,66 @@ function createHash(input: string): string {
 }
 
 function cacheRequest(cacheKey: string): Request {
-  return new Request(`${CACHE_ORIGIN}/bookmark-icon/${encodeURIComponent(cacheKey)}`, {
+  return new Request(`${CACHE_ORIGIN}${CACHE_PATH_PREFIX}${encodeURIComponent(cacheKey)}`, {
     method: 'GET',
   })
+}
+
+function localStorageKey(cacheKey: string): string {
+  return `${STORAGE_PREFIX}${cacheKey}`
+}
+
+function bookmarkCacheKeyPrefix(cacheKey: string): string | null {
+  const separatorIndex = cacheKey.indexOf('-')
+  if (separatorIndex <= 0) return null
+  return cacheKey.slice(0, separatorIndex + 1)
+}
+
+function isBookmarkIconCacheRequest(request: Request, cacheKeyPrefix: string): boolean {
+  try {
+    const url = new URL(request.url)
+    return (
+      url.origin === CACHE_ORIGIN &&
+      url.pathname.startsWith(`${CACHE_PATH_PREFIX}${encodeURIComponent(cacheKeyPrefix)}`)
+    )
+  } catch {
+    return false
+  }
+}
+
+async function deleteStaleCacheStorageEntries(cache: Cache, cacheKey: string): Promise<void> {
+  const cacheKeyPrefix = bookmarkCacheKeyPrefix(cacheKey)
+  if (!cacheKeyPrefix) return
+
+  const currentUrl = cacheRequest(cacheKey).url
+  const requests = await cache.keys()
+  await Promise.all(
+    requests.map((request) => (
+      request.url !== currentUrl && isBookmarkIconCacheRequest(request, cacheKeyPrefix)
+        ? cache.delete(request)
+        : Promise.resolve(false)
+    )),
+  )
+}
+
+function deleteStaleLocalStorageEntries(cacheKey: string): void {
+  if (!canUseLocalStorage()) return
+
+  const cacheKeyPrefix = bookmarkCacheKeyPrefix(cacheKey)
+  if (!cacheKeyPrefix) return
+
+  const currentKey = localStorageKey(cacheKey)
+  const staleKeyPrefix = `${STORAGE_PREFIX}${cacheKeyPrefix}`
+  try {
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const key = localStorage.key(index)
+      if (key?.startsWith(staleKeyPrefix) && key !== currentKey) {
+        localStorage.removeItem(key)
+      }
+    }
+  } catch {
+    // Best-effort cleanup.
+  }
 }
 
 function responseToObjectUrl(response: Response): Promise<string | null> {
@@ -60,7 +118,7 @@ export function readCachedBookmarkIconDataUri(cacheKey: string): string | null {
   if (!canUseLocalStorage()) return null
 
   try {
-    const value = localStorage.getItem(`${STORAGE_PREFIX}${cacheKey}`)
+    const value = localStorage.getItem(localStorageKey(cacheKey))
     return value && isDataImage(value) ? value : null
   } catch {
     return null
@@ -87,7 +145,8 @@ export async function writeBookmarkIconDataUri(cacheKey: string, dataUri: string
 
   if (canUseLocalStorage()) {
     try {
-      localStorage.setItem(`${STORAGE_PREFIX}${cacheKey}`, dataUri)
+      deleteStaleLocalStorageEntries(cacheKey)
+      localStorage.setItem(localStorageKey(cacheKey), dataUri)
     } catch {
       // Browser storage can be disabled or full; Cache Storage remains a fallback.
     }
@@ -98,6 +157,7 @@ export async function writeBookmarkIconDataUri(cacheKey: string, dataUri: string
   try {
     const response = await fetch(dataUri)
     const cache = await caches.open(CACHE_NAME)
+    await deleteStaleCacheStorageEntries(cache, cacheKey)
     await cache.put(cacheRequest(cacheKey), response)
   } catch {
     // Local cache is an optimization; rendering should not depend on it.
@@ -119,6 +179,7 @@ export async function fetchAndCacheBookmarkIconUrl(cacheKey: string, url: string
 
     if (canUseCacheStorage()) {
       const cache = await caches.open(CACHE_NAME)
+      await deleteStaleCacheStorageEntries(cache, cacheKey)
       await cache.put(cacheRequest(cacheKey), response.clone())
     }
 
