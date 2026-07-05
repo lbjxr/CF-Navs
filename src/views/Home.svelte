@@ -60,9 +60,9 @@
   $: visibleBookmarks = hasSearchQuery
     ? sortedBookmarks.filter((bookmark) => bookmarkMatchesSearch(bookmark, normalizedSearchQuery, searchTextByBookmarkId))
     : sortedBookmarks
-  $: visibleCategoryIds = getVisibleCategoryIds(visibleBookmarks)
+  $: visibleCategoryIds = hasSearchQuery ? getVisibleCategoryIds(visibleBookmarks) : null
   $: visibleCategories = hasSearchQuery
-    ? sortedCategories.filter((category) => visibleCategoryIds.has(category.id))
+    ? sortedCategories.filter((category) => visibleCategoryIds?.has(category.id))
     : sortedCategories
 
   $: {

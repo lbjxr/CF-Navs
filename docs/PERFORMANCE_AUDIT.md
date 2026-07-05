@@ -176,3 +176,18 @@ Fix:
 - Production build split `importData` into an about 2 KB chunk and reduced the main `index` JS by about 2 KB.
 - `npm run perf:audit` now emits a `checks` array and exits non-zero when key thresholds fail. Thresholds cover failed requests, bookmark count, broken images, splash removal, search debounce behavior, admin search, `/api/admin/data` transfer size, icon request count, and Cache Storage bytes.
 - Retest after deployment showed every audit check passed, with zero failed requests, 337 home bookmark cards, 228 `/api/icon/*` requests, `/api/admin/data` about 38 KB transferred, and Cache Storage bytes under the configured 5 MB ceiling.
+
+## 2026-07-05 Round 11
+
+Stress path: authenticated home reload, full 337-bookmark list render, rapid home search, admin entry, and admin bookmark search.
+
+Observed:
+
+- The home page still built a visible-category ID `Set` for all 337 visible bookmarks even when no search query was active.
+- That work was unnecessary because the non-search state already displays the complete sorted category list.
+
+Fix:
+
+- Visible category IDs are now computed only while a search query is active.
+- The change is client-side only and does not alter admin/public data loading, Cloudflare request counts, update writes, or multi-device freshness/version checks.
+- Retest after deployment showed all fixed audit checks passed: zero failed requests, 337 home bookmark cards, zero broken images, zero pre-settle rapid-search DOM mutations, 5 admin-search rows, `/api/admin/data` transfer at 38,638 bytes, 228 bookmark icon requests, and Cache Storage bytes at 2,026,779.
