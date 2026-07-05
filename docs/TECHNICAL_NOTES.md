@@ -121,6 +121,18 @@ Worker 和前端共同承担缓存：
 - Worker 认证中间件会在单个 isolate 内短时复用已验证 session，减少后台连续操作时的 KV 读取。
 - 前端 API 客户端会在内存中复用已解析的有效登录态，并监听跨标签页 storage 变更。
 
+## 安全响应头与自定义 HTML
+
+Worker 对 HTML 响应设置基础安全头：
+
+- `Content-Security-Policy`：脚本仅允许同源构建产物，禁止内联脚本、事件处理器、插件对象和被第三方页面嵌入。
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy` 关闭摄像头、麦克风和地理位置权限。
+
+后台的自定义页脚通过 `footer_html` 渲染到首页底部。该字段用于可信管理员自定义少量展示 HTML；CSP 会保留必要的内联样式能力，但不会允许 `<script>` 或 `onerror` / `onclick` 等内联事件处理器执行。不要把不可信用户提交的内容写入 `footer_html`。
+
 ## 前端性能策略
 
 - 首页主包、登录弹窗、后台管理和书签编辑弹窗按需分包。

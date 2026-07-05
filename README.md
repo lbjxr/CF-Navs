@@ -206,6 +206,7 @@ CF-Navs/
 - 不要提交 `.dev.vars`、`wrangler.local.toml` 或任何真实 Secret。
 - 在线部署时，通过 Worker Settings 绑定 D1/KV，把管理员密码放在 Runtime Secret。
 - 首次初始化后，管理员密码会以哈希形式存入 D1；后续请在后台 **站点设置 → 账号安全** 修改密码，单独修改 `INIT_ADMIN_PASSWORD` 不会覆盖已有密码。
+- 自定义页脚 HTML 仅面向可信管理员编辑；生产 HTML 响应会设置 CSP，允许必要内联样式但不允许内联脚本和事件处理器执行。
 - 生产环境建议定期导出备份 JSON。
 - 如需额外访问控制，可以叠加 Cloudflare Access。
 

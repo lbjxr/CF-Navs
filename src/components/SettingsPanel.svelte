@@ -1182,6 +1182,7 @@
             placeholder='<div style="text-align:center;color:#cbd5e1">Powered by CF-Navs</div>'
           ></textarea>
           <small>显示在首页底部。请仅填写可信 HTML。</small>
+          <small>页面安全策略会阻止脚本和内联事件处理器执行。</small>
         </label>
       </fieldset>
 
