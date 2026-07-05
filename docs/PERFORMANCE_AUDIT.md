@@ -144,3 +144,19 @@ Fix:
 
 - Visible category IDs are now built in a single loop without the intermediate array allocation.
 - Retest showed rapid `n` -> `np` -> `npm` input caused 0 DOM mutations before the debounce settled, the settled query rendered 5 cards in 1 section, clearing restored 337 cards across 11 sections, no images were broken, zero failed requests were observed, and `/api/admin/data` stayed about 38 KB transferred.
+
+## 2026-07-05 Round 9
+
+Stress path: authenticated home reload, admin entry, admin bookmark search, and settings-tab navigation.
+
+Observed:
+
+- `SortableJS` was already dynamically imported only when sort mode is enabled.
+- `SettingsPanel` and `CategoryEditModal` were still statically included in the Admin bundle even though they are not needed for the default admin category/bookmark workflow.
+
+Fix:
+
+- `SettingsPanel` now loads only when the settings tab is opened.
+- `CategoryEditModal` now loads only when the category modal is opened.
+- Production build split Admin from about 113 KB to about 41 KB, with SettingsPanel in its own about 70 KB chunk and CategoryEditModal in its own about 5 KB chunk.
+- Retest showed the fixed real-browser audit still had zero failed requests, `/api/admin/data` stayed about 38 KB transferred, settings tab loaded and rendered its dynamic chunk, and CategoryEditModal assets were not requested during settings navigation.

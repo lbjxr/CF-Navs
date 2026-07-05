@@ -45,8 +45,6 @@
   import { iconifyProxyIcon, isIconifyIconUrl } from '../lib/icons'
   import { sortableList, type SortHandler } from '../lib/sortableList'
   import CachedBookmarkIcon from '../components/CachedBookmarkIcon.svelte'
-  import CategoryEditModal from '../components/CategoryEditModal.svelte'
-  import SettingsPanel from '../components/SettingsPanel.svelte'
 
   type BookmarkCategoryOption = {
     id: string | number
@@ -107,6 +105,34 @@
   let activeTab: 'categories' | 'bookmarks' | 'settings' | 'backup' = 'categories'
 
   $: imageHostUrl = settingsValue?.image_host_url ?? ''
+  let CategoryEditModalComponent: typeof import('../components/CategoryEditModal.svelte').default | null = null
+  let SettingsPanelComponent: typeof import('../components/SettingsPanel.svelte').default | null = null
+  let categoryEditModalPromise: Promise<void> | null = null
+  let settingsPanelPromise: Promise<void> | null = null
+  $: if (categoryModalOpen) {
+    void ensureCategoryEditModal()
+  }
+  $: if (activeTab === 'settings') {
+    void ensureSettingsPanel()
+  }
+
+  function ensureCategoryEditModal(): Promise<void> {
+    if (!categoryEditModalPromise) {
+      categoryEditModalPromise = import('../components/CategoryEditModal.svelte').then((module) => {
+        CategoryEditModalComponent = module.default
+      })
+    }
+    return categoryEditModalPromise
+  }
+
+  function ensureSettingsPanel(): Promise<void> {
+    if (!settingsPanelPromise) {
+      settingsPanelPromise = import('../components/SettingsPanel.svelte').then((module) => {
+        SettingsPanelComponent = module.default
+      })
+    }
+    return settingsPanelPromise
+  }
 
   export let onOpenLogin: (() => AsyncVoid) | undefined = undefined
   export let onLogout: (() => AsyncVoid) | undefined = undefined
@@ -764,13 +790,20 @@
       {:else if activeTab === 'settings'}
         <!-- 站点设置 -->
   <section class="settings-panel-wrap">
-    <SettingsPanel
-      value={settingsValue}
-      loading={settingsLoading}
-      saving={settingsSaving}
-      error={settingsError}
-      onSubmit={onSubmitSettings}
-    />
+    {#if SettingsPanelComponent}
+      <svelte:component
+        this={SettingsPanelComponent}
+        value={settingsValue}
+        loading={settingsLoading}
+        saving={settingsSaving}
+        error={settingsError}
+        onSubmit={onSubmitSettings}
+      />
+    {:else}
+      <section class="panel">
+        <p class="empty-text" style="padding: 24px 0; text-align: center;">Loading settings...</p>
+      </section>
+    {/if}
   </section>
       {:else if activeTab === 'backup'}
         <!-- 数据备份 -->
@@ -844,16 +877,19 @@
   {/if}
 </div>
 
-<CategoryEditModal
-  open={categoryModalOpen}
-  loading={savingCategory}
-  error={categoryError}
-  mode={categoryModalMode}
-  value={activeCategory}
-  onSubmit={onSubmitCategory}
-  onCancel={onCloseCategoryModal}
-  imageHostUrl={imageHostUrl}
-/>
+{#if CategoryEditModalComponent}
+  <svelte:component
+    this={CategoryEditModalComponent}
+    open={categoryModalOpen}
+    loading={savingCategory}
+    error={categoryError}
+    mode={categoryModalMode}
+    value={activeCategory}
+    onSubmit={onSubmitCategory}
+    onCancel={onCloseCategoryModal}
+    imageHostUrl={imageHostUrl}
+  />
+{/if}
 
 <style>
   :global(body) {
