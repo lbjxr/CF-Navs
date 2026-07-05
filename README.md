@@ -9,7 +9,7 @@
 
 ## 📚 导航
 
-[⚡ 快速开始](docs/QUICKSTART.md) · [🚢 部署指南](docs/DEPLOYMENT.md) · [🧩 技术细节](docs/TECHNICAL_NOTES.md) · [🔌 API 契约](docs/API_CONTRACT.md) · [🛠️ 问题排查](docs/TROUBLESHOOTING.md) 
+[⚡ 快速开始](docs/QUICKSTART.md) · [🚢 部署指南](docs/DEPLOYMENT.md) · [🧩 技术细节](docs/TECHNICAL_NOTES.md) · [🧱 重构记录](docs/MAINTENANCE_REFACTOR_LOG.md) · [🔌 API 契约](docs/API_CONTRACT.md) · [🛠️ 问题排查](docs/TROUBLESHOOTING.md)
 
 ## ✨ 项目定位
 
@@ -196,6 +196,7 @@ CF-Navs/
 - [🚢 部署检查清单](docs/DEPLOYMENT.md)：Cloudflare Workers 部署前后验证。
 - [🧭 项目概览](docs/PROJECT_OVERVIEW.md)：模块结构、功能边界和架构说明。
 - [🧩 技术细节](docs/TECHNICAL_NOTES.md)：图标缓存、边缘缓存、数据读取和性能策略。
+- [🧱 维护性重构记录](docs/MAINTENANCE_REFACTOR_LOG.md)：近期拆分内容、验证方式和后续拆分建议。
 - [🔌 API 契约](docs/API_CONTRACT.md)：前后端接口约定。
 - [📦 Sun-Panel 导入](docs/SUNPANEL_IMPORT.md)：Sun-Panel 数据迁移指南。
 - [🛠️ 问题排查](docs/TROUBLESHOOTING.md)：登录、部署、数据保存和图标显示等常见问题。

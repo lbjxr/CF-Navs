@@ -48,14 +48,22 @@
 ```
 src/
 ├── views/              # 页面视图
-│   ├── Home.svelte     # 首页
-│   └── Admin.svelte    # 管理界面
+│   ├── Home.svelte     # 首页数据过滤、滚动定位和分类渲染编排
+│   └── Admin.svelte    # 管理界面 tab、弹窗和设置/备份编排
 ├── components/         # 可复用组件
 │   ├── Sidebar.svelte  # 侧边栏
-│   ├── BookmarkCard.svelte  # 书签卡片
+│   ├── BookmarkCard.svelte  # 书签卡片状态编排
+│   ├── BookmarkIcon.svelte  # 书签图标展示
+│   ├── BookmarkContextMenu.svelte # 前台右键编辑菜单
+│   ├── BookmarkLinkModal.svelte # 当前页弹层打开链接
 │   ├── BookmarkEditModal.svelte # 书签编辑弹窗
+│   ├── BookmarkIconCandidatePicker.svelte # 书签图标候选列表
+│   ├── BookmarkCustomIconField.svelte # 自定义图标输入和预览
 │   ├── CategorySection.svelte   # 分类区块
+│   ├── HomeFloatingActions.svelte # 首页右上角浮动操作
+│   ├── HomeHeroSearch.svelte # 首页标题和搜索框
 │   ├── SettingsPanel.svelte # 设置面板
+│   ├── admin/          # 后台列表面板与样式
 │   ├── ...
 ├── lib/
 │   ├── api.ts          # API 客户端
@@ -84,6 +92,10 @@ worker/
 │   └── auth.ts         # 认证中间件
 ├── lib/
 │   ├── db.ts           # 数据库操作（含幂等迁移）
+│   ├── settingsData.ts # settings 默认值、旧数据兼容和归一化
+│   ├── iconResponses.ts # 图标响应、fallback 与 edge cache 写入
+│   ├── iconifySearch.ts # Iconify 搜索、候选排序和代理缓存预热
+│   ├── svgColor.ts     # SVG 色彩识别
 │   ├── bookmarkIconCache.ts # 书签图标 blob 缓存刷新
 │   └── ...
 └── index.ts            # Worker 入口
@@ -254,10 +266,12 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 - 清晰的提交信息
 - Pull Request 审查
 
-### 测试（待完善）
-- 单元测试（推荐 Vitest）
-- 集成测试
-- E2E 测试（推荐 Playwright）
+### 测试
+- `npm run type-check`：TypeScript 与 Svelte 诊断，要求 0 error / 0 warning
+- `npm test`：Vitest 单元测试，覆盖前端 helper、worker 图标逻辑和 settings 数据归一化
+- `npm run build`：生产构建验证
+- `git diff --check`：提交前空白检查
+- 部署后使用 Chrome 在 `https://navs.bjlius.com` 验证首页、后台、图标、编辑弹窗和 settings API
 
 ## 🚀 部署流程
 
@@ -283,6 +297,7 @@ docs/
 ├── API_CONTRACT.md     # API 契约
 ├── PROJECT_OVERVIEW.md # 项目概览
 ├── TECHNICAL_NOTES.md  # 图标、缓存、性能和会话细节
+├── MAINTENANCE_REFACTOR_LOG.md # 维护性重构记录和验证方式
 ├── TROUBLESHOOTING.md  # 常见问题排查
 └── SUNPANEL_IMPORT.md  # Sun-Panel 数据导入说明
 ```

@@ -2,6 +2,56 @@
 
 This note documents the working path for controlling Chrome through `chrome-devtools-mcp` from Codex on this Windows workspace. It is intended for future frontend debugging tasks where Codex needs to open Chrome, inspect pages, read console/network state, and verify UI behavior.
 
+## Production Verification Used During Refactors
+
+During the 2026-07 maintenance refactor rounds, the Chrome plugin's required Node REPL tool was not exposed in the Codex tool list. The reliable fallback was to start an isolated local Chrome with a DevTools Protocol port and drive it directly over CDP.
+
+Use this when the browser-client / Node REPL surface is unavailable and the task still requires real Chrome verification.
+
+```powershell
+Start-Process -FilePath 'C:\Program Files\Google\Chrome\Application\chrome.exe' -ArgumentList '--headless=new','--disable-gpu','--remote-debugging-port=9228','--remote-allow-origins=*','--user-data-dir=D:\tmp\cf-navs-chrome-profile-9228','about:blank' -WindowStyle Hidden
+```
+
+Chrome 150 requires `PUT` for opening a new CDP target:
+
+```text
+PUT http://127.0.0.1:9228/json/new?https%3A%2F%2Fnavs.bjlius.com
+```
+
+`GET /json/new?...` returns an unsafe HTTP verb error.
+
+Use the target's `webSocketDebuggerUrl` and connect with the `ws` package from the project dependency tree. Node's built-in WebSocket was unreliable in this workspace.
+
+Safe production verification pattern:
+
+1. Open `https://navs.bjlius.com`.
+2. Capture console, page exception, network failure, and HTTP 4xx/5xx events.
+3. Log in through `/api/login` with credentials supplied by the operator for the current session. Do not write credentials to documentation, source, screenshots, or commits.
+4. Verify the page and APIs from the browser context.
+5. Close the isolated Chrome profile after verification.
+
+Endpoints and UI paths verified in the refactor rounds:
+
+- `/api/config`
+- `/api/settings`
+- `/api/admin/data`
+- `/api/data/version`
+- `/api/iconify-search?query=github`
+- `/api/iconify/logos/github-icon.svg`
+- 首页搜索、书签卡片、书签右键菜单、编辑弹窗、后台分类/书签列表
+
+Expected verification result is zero console errors, zero page exceptions, zero failed requests, and no unexpected HTTP 4xx/5xx responses.
+
+When simulating right-click behavior, prefer CDP input events over `element.dispatchEvent`:
+
+```js
+await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
+await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'right', buttons: 2, clickCount: 1 });
+await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'right', buttons: 0, clickCount: 1 });
+```
+
+Synthetic `contextmenu` events can miss behavior that only appears with real browser input.
+
 ## What Worked
 
 Use `chrome-devtools-mcp --autoConnect` and speak MCP over stdio with JSON lines. In this environment, that successfully connected to the existing Chrome instance and reused its network/profile configuration.

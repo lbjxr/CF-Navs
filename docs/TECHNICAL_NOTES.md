@@ -24,6 +24,13 @@ CF-Navs 支持多种图标来源：
 
 `/api/icon/:id` 主要保留为后台预览、兼容和兜底代理。它会优先读取 Cloudflare edge cache 和 D1 中的 `icon_blob`，cache miss 时再尝试抓取外站图标。首页普通书签卡片不会把 `/api/icon/:id` 按书签数量挂到 `<img>` 上；它优先使用聚合 `icon_blob`，再读本地图标缓存，缺失时直接回退已保存的 HTTP(S) 图标 URL，原始 URL 也加载失败后才显示文字 fallback。分类图标和 Iconify 图标失败时会返回短 TTL 的临时 SVG fallback。
 
+图标相关 worker 逻辑按职责拆分：
+
+- `worker/routes/icon.ts`：Hono 路由和请求编排。
+- `worker/lib/iconResponses.ts`：通用图标响应、fallback SVG 和 edge cache 写入。
+- `worker/lib/iconifySearch.ts`：Iconify 查询归一化、搜索 API、候选检查、排序和代理缓存预热。
+- `worker/lib/svgColor.ts`：SVG 文本提取和颜色识别。
+
 ## Iconify 规范化
 
 Iconify 图标会统一保存为：
@@ -78,6 +85,19 @@ GET /api/admin/data
 完整数据返回后，前端会按 `id` 对分类和书签做引用级合并：字段未变化的对象继续复用原引用，只替换新增、删除、排序变化或字段变化的项。settings 内容相同也复用原引用，避免完整拉取后造成无意义的页面抖动。
 
 ## 设置与数据写入
+
+### settings 数据归一化
+
+`worker/lib/settingsData.ts` 集中维护 settings 默认值、旧数据兼容和 JSON 行解析。`worker/lib/db.ts` 继续作为路由层使用的数据库入口，避免所有 route 直接依赖 settings 内部细节。
+
+该模块负责：
+
+- 补齐缺失 settings 字段，保证 API 返回完整 `Settings`。
+- 规范化 `background_preset_id`，非法值回退到 `custom`。
+- 兼容旧版单一 `background` 字段，并生成浅色/深色 `backgrounds`。
+- 容错处理无法 JSON.parse 的旧 settings 值。
+
+对应测试：`tests/unit/settingsData.test.ts`。
 
 ### 站点外观与主题
 
@@ -136,6 +156,10 @@ Worker 对 HTML 响应设置基础安全头：
 ## 前端性能策略
 
 - 首页主包、登录弹窗、后台管理和书签编辑弹窗按需分包。
+- 首页展示层进一步拆为 `HomeFloatingActions.svelte` 与 `HomeHeroSearch.svelte`，Home 视图只保留搜索过滤、滚动高亮和分类渲染编排。
+- 后台分类/书签列表拆为独立面板组件，Admin 视图只保留 tab、弹窗和设置/备份编排。
+- 书签卡片的图标、右键菜单和当前页弹层拆为独立组件，父组件集中维护图标状态和打开方式。
+- 书签编辑弹窗的图标候选区、自定义图标输入和预览拆为独立组件，父组件集中维护表单和 Iconify 搜索状态。
 - 未登录用户点击管理入口时只加载轻量登录弹窗。
 - 首页搜索会预计算书签索引，数据变化时才重建。
 - 滚动高亮使用缓存的分区 DOM 和 `IntersectionObserver`，不支持时才回退到节流后的布局读取。

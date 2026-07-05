@@ -162,3 +162,23 @@ npx wrangler d1 execute cf-navs-db --remote --command "SELECT key, value FROM se
 ```
 
 涉及线上数据的命令请先确认当前 Cloudflare 账号和 Wrangler 配置指向正确项目。
+
+## 线上 Chrome 验证异常
+
+如果 Codex/自动化环境中没有暴露 Chrome 插件要求的 Node REPL 工具，可以启动独立 Chrome 调试端口后直接使用 CDP 验证线上站点。
+
+关键注意点：
+
+- `Chrome /json/new` 在新版本中使用 `PUT`，不要用 `GET`。
+- `curl` 在 PowerShell 中拼 JSON 登录体容易引号转义失败，建议用 Node `fetch` 或页面上下文 `fetch`。
+- 右键菜单验证使用 CDP `Input.dispatchMouseEvent` 的 right button 事件，比直接 `dispatchEvent` 更接近真实操作。
+- 验证完成后关闭带 `--user-data-dir=D:\tmp\cf-navs-chrome-profile-*` 的 Chrome 进程，避免残留测试 profile。
+
+常规验收项：
+
+- 首页标题、搜索框、书签卡片正常。
+- 输入搜索词后摘要和卡片数量变化符合预期。
+- 登录后管理入口、退出按钮、主题按钮可见。
+- 后台分类/书签列表、编辑弹窗可打开。
+- `/api/config`、`/api/settings`、`/api/admin/data`、`/api/data/version` 返回 `code: 0`。
+- 控制台错误、页面异常、失败请求和非预期 HTTP 4xx/5xx 都为 0。
