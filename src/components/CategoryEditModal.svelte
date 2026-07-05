@@ -1,9 +1,5 @@
 <script lang="ts">
-  type CategoryFormValue = {
-    id?: string | number
-    title: string
-    icon: string
-  }
+  import type { CategoryFormValue } from '../lib/adminTypes'
 
   const emptyForm: CategoryFormValue = {
     title: '',

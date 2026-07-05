@@ -5,42 +5,16 @@
     ChangePasswordReq,
     SearchEngine,
     SearchEngineSetting,
-    Settings,
     ThemeMode,
   } from '../../shared/types'
+  import type { SettingsFormValue } from '../lib/appData'
   import { parseCssColor, splitCssColorAlpha } from '../lib/color'
   import { gradientPresets, type GradientPresetId, type ThemeGradientPreset } from '../lib/themePresets'
   import ColorAlphaInput from './ColorAlphaInput.svelte'
   import GradientBackgroundInput from './GradientBackgroundInput.svelte'
   import PasswordChangePanel from './PasswordChangePanel.svelte'
 
-  type SettingsPanelValue = Pick<
-    Settings,
-    | 'site_title'
-    | 'site_title_color'
-    | 'site_title_font_size'
-    | 'public_mode'
-    | 'theme'
-    | 'background_preset_id'
-    | 'custom_css'
-    | 'custom_js'
-    | 'image_host_url'
-    | 'background'
-    | 'backgrounds'
-    | 'search_engine'
-    | 'card_size'
-    | 'card_style'
-    | 'card_icon_size'
-    | 'card_show_description'
-    | 'card_background_color'
-    | 'card_background_opacity'
-    | 'card_icon_show_title'
-    | 'card_text_color'
-    | 'search_box_show'
-    | 'search_engine_selector_show'
-    | 'content_layout'
-    | 'footer_html'
-  >
+  type SettingsPanelValue = SettingsFormValue
   type AsyncVoid<T = void> = T | Promise<T>
 
   const themeOptions: Array<{ value: ThemeMode; label: string; hint: string }> = [

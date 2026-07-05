@@ -1,47 +1,23 @@
 <script context="module" lang="ts">
-  export type AdminCategory = {
-    id: string | number
-    title: string
-    icon?: string
-    bookmarkCount?: number
-  }
+  import type { AdminBookmarkSummary, AdminCategorySummary } from '../lib/appData'
+  import type {
+    BookmarkFormValue as BookmarkFormValueType,
+    CategoryFormValue as CategoryFormValueType,
+  } from '../lib/adminTypes'
 
-  export type AdminBookmark = {
-    id: string | number
-    category_id: string | number
-    title: string
-    url: string
-    icon?: string
-    icon_source?: string
-    icon_background_color?: string
-    icon_blob?: string
-    icon_cached?: boolean | number | null
-    description?: string
-    open_method?: 'same_tab' | 'new_tab' | 'modal'
-  }
-
-  export type CategoryFormValue = {
-    id?: string | number
-    title: string
-    icon: string
-  }
-
-  export type BookmarkFormValue = {
-    id?: string | number
-    category_id?: string | number
-    title: string
-    url: string
-    icon: string
-    icon_source: string
-    icon_background_color: string
-    description: string
-    open_method: 'same_tab' | 'new_tab' | 'modal'
-  }
+  export type AdminCategory = AdminCategorySummary
+  export type AdminBookmark = AdminBookmarkSummary
+  export type CategoryFormValue = CategoryFormValueType
+  export type BookmarkFormValue = BookmarkFormValueType
 </script>
 
 <script lang="ts">
-  import type { ChangePasswordReq, Settings } from '../../shared/types'
+  import type { ChangePasswordReq } from '../../shared/types'
+  import AdminSidebar from '../components/AdminSidebar.svelte'
+  import BackupPanel from '../components/BackupPanel.svelte'
   import type { ImportSource } from '../lib/importData'
+  import type { SettingsFormValue } from '../lib/appData'
+  import type { AdminTab } from '../lib/adminTypes'
   import { iconifyProxyIcon, isIconifyIconUrl } from '../lib/icons'
   import { sortableList, type SortHandler } from '../lib/sortableList'
   import CachedBookmarkIcon from '../components/CachedBookmarkIcon.svelte'
@@ -68,41 +44,12 @@
   export let settingsLoading = false
   export let settingsSaving = false
   export let settingsError = ''
-  export let settingsValue: Partial<
-    Pick<
-      Settings,
-      | 'site_title'
-      | 'site_title_color'
-      | 'site_title_font_size'
-      | 'public_mode'
-      | 'theme'
-      | 'background_preset_id'
-      | 'custom_css'
-      | 'custom_js'
-      | 'image_host_url'
-      | 'background'
-      | 'backgrounds'
-      | 'search_engine'
-      | 'card_size'
-      | 'card_style'
-      | 'card_icon_size'
-      | 'card_show_description'
-      | 'card_background_color'
-      | 'card_background_opacity'
-      | 'card_icon_show_title'
-      | 'card_text_color'
-      | 'search_box_show'
-      | 'search_engine_selector_show'
-      | 'content_layout'
-      | 'footer_html'
-    >
-  > | null = null
+  export let settingsValue: Partial<SettingsFormValue> | null = null
   export let categoryModalMode: 'create' | 'edit' = 'create'
   export let activeCategory: Partial<CategoryFormValue> | null = null
   export let canSeeHome = false
 
-  // 左侧菜单导航状态
-  let activeTab: 'categories' | 'bookmarks' | 'settings' | 'backup' = 'categories'
+  let activeTab: AdminTab = 'categories'
 
   $: imageHostUrl = settingsValue?.image_host_url ?? ''
   let CategoryEditModalComponent: typeof import('../components/CategoryEditModal.svelte').default | null = null
@@ -147,37 +94,7 @@
   export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
   export let onEditBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
   export let onDeleteBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
-  export let onSubmitSettings:
-    | ((
-        payload: Pick<
-          Settings,
-          | 'site_title'
-          | 'site_title_color'
-          | 'site_title_font_size'
-          | 'public_mode'
-          | 'theme'
-          | 'background_preset_id'
-          | 'custom_css'
-          | 'custom_js'
-          | 'image_host_url'
-          | 'background'
-          | 'backgrounds'
-          | 'search_engine'
-          | 'card_size'
-          | 'card_style'
-          | 'card_icon_size'
-          | 'card_show_description'
-          | 'card_background_color'
-          | 'card_background_opacity'
-          | 'card_icon_show_title'
-          | 'card_text_color'
-          | 'search_box_show'
-          | 'search_engine_selector_show'
-          | 'content_layout'
-          | 'footer_html'
-        >,
-      ) => AsyncVoid)
-    | undefined = undefined
+  export let onSubmitSettings: ((payload: SettingsFormValue) => AsyncVoid) | undefined = undefined
   export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
   export let onSortCategories: SortHandler | undefined = undefined
   export let onSortBookmarks: SortHandler | undefined = undefined
@@ -188,20 +105,10 @@
   export let onExportData: (() => AsyncVoid) | undefined = undefined
   export let onImportData: ((file: File, source: ImportSource) => AsyncVoid) | undefined = undefined
 
-  let importInput: HTMLInputElement | null = null
   let importSource: ImportSource = 'cf-navs'
 
-  function triggerImport() {
-    importInput?.click()
-  }
-
-  async function handleImportChange(event: Event) {
-    const input = event.currentTarget as HTMLInputElement
-    const file = input.files?.[0]
-    if (file && onImportData) {
-      await onImportData(file, importSource)
-    }
-    input.value = ''
+  function handleSelectTab(tab: AdminTab): void {
+    activeTab = tab
   }
 
   const bookmarkCategoryOptions = (): BookmarkCategoryOption[] =>
@@ -468,50 +375,12 @@
 
   <!-- 左侧菜单 + 右侧内容布局 -->
   <div class="admin-layout">
-    <!-- 左侧菜单 -->
-    <nav class="admin-sidebar">
-      <button
-        type="button"
-        class="nav-item"
-        class:active={activeTab === 'categories'}
-        on:click={() => activeTab = 'categories'}
-      >
-        <span class="nav-icon">📁</span>
-        <span class="nav-label">分类管理</span>
-        <span class="nav-badge">{categories.length}</span>
-      </button>
-
-      <button
-        type="button"
-        class="nav-item"
-        class:active={activeTab === 'bookmarks'}
-        on:click={() => activeTab = 'bookmarks'}
-      >
-        <span class="nav-icon">🔖</span>
-        <span class="nav-label">书签管理</span>
-        <span class="nav-badge">{bookmarks.length}</span>
-      </button>
-
-      <button
-        type="button"
-        class="nav-item"
-        class:active={activeTab === 'settings'}
-        on:click={() => activeTab = 'settings'}
-      >
-        <span class="nav-icon">⚙️</span>
-        <span class="nav-label">站点设置</span>
-      </button>
-
-      <button
-        type="button"
-        class="nav-item"
-        class:active={activeTab === 'backup'}
-        on:click={() => activeTab = 'backup'}
-      >
-        <span class="nav-icon">💾</span>
-        <span class="nav-label">数据备份</span>
-      </button>
-    </nav>
+    <AdminSidebar
+      {activeTab}
+      categoriesCount={categories.length}
+      bookmarksCount={bookmarks.length}
+      onSelect={handleSelectTab}
+    />
 
     <!-- 右侧内容区 -->
     <div class="admin-content">
@@ -808,48 +677,15 @@
     {/if}
   </section>
       {:else if activeTab === 'backup'}
-        <!-- 数据备份 -->
-  <section class="panel backup-panel">
-    <div class="panel-header">
-      <div>
-        <p class="panel-eyebrow">数据备份</p>
-        <h2>导入 / 导出</h2>
-      </div>
-    </div>
-    <p class="backup-desc">
-      导出会把当前全部分类、书签与站点设置保存为一个 JSON 文件；导入会用所选文件
-      <strong>覆盖</strong>现有的分类与书签（管理员账号不受影响）。
-    </p>
-
-    {#if backupError}
-      <p class="backup-alert error">{backupError}</p>
-    {:else if backupMessage}
-      <p class="backup-alert ok">{backupMessage}</p>
-    {/if}
-
-    <div class="backup-actions">
-      <label class="import-source-field" for="import-source">
-        <span>导入来源</span>
-        <select id="import-source" bind:value={importSource} disabled={!isAuthenticated || importing}>
-          <option value="cf-navs">CF-Navs 备份</option>
-          <option value="sunpanel">SunPanel 导出</option>
-        </select>
-      </label>
-      <button type="button" class="primary-button" on:click={() => onExportData?.()} disabled={!isAuthenticated}>
-        导出备份
-      </button>
-      <button type="button" class="ghost-button" on:click={triggerImport} disabled={!isAuthenticated || importing}>
-        {#if importing}导入中...{:else}导入备份{/if}
-      </button>
-      <input
-        bind:this={importInput}
-        class="import-input"
-        type="file"
-        accept="application/json,.json,.sun-panel.json,.sunpanel.json"
-        on:change={handleImportChange}
-      />
-    </div>
-  </section>
+        <BackupPanel
+          {isAuthenticated}
+          {importing}
+          {backupError}
+          {backupMessage}
+          bind:importSource
+          onExportData={onExportData}
+          onImportData={onImportData}
+        />
       {/if}
     </div>
   </div>
@@ -1079,95 +915,6 @@
     align-items: flex-start;
     min-height: 0;
     overflow: hidden;
-  }
-
-  .admin-sidebar {
-    flex-shrink: 0;
-    width: 198px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    position: sticky;
-    top: 24px;
-    padding: 8px;
-    border: 1px solid var(--admin-sidebar-border);
-    border-radius: 16px;
-    background: var(--admin-sidebar-bg);
-    box-shadow: var(--admin-sidebar-shadow);
-    backdrop-filter: blur(18px) saturate(1.08);
-    -webkit-backdrop-filter: blur(18px) saturate(1.08);
-  }
-
-  .nav-item {
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    border: 1px solid var(--admin-border);
-    border-radius: 10px;
-    background: var(--admin-nav-bg);
-    color: var(--admin-muted);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-align: left;
-  }
-
-  .nav-item:hover {
-    background: var(--admin-nav-hover-bg);
-    border-color: color-mix(in srgb, var(--admin-accent) 44%, var(--admin-border));
-    color: var(--admin-text);
-  }
-
-  .nav-item.active {
-    background: var(--admin-nav-active-bg);
-    border-color: color-mix(in srgb, var(--admin-accent) 56%, var(--admin-border));
-    color: var(--admin-accent-strong);
-  }
-
-  .nav-item.active::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 9px;
-    bottom: 9px;
-    width: 3px;
-    border-radius: 999px;
-    background: var(--admin-accent);
-  }
-
-  .nav-icon {
-    width: 28px;
-    height: 28px;
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--admin-card-border);
-    border-radius: 8px;
-    background: var(--admin-icon-badge-bg);
-    font-size: 15px;
-  }
-
-  .nav-label {
-    flex: 1;
-  }
-
-  .nav-badge {
-    padding: 2px 8px;
-    border-radius: 10px;
-    background: var(--admin-nav-badge-bg);
-    color: var(--admin-subtle);
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .nav-item.active .nav-badge {
-    background: var(--admin-nav-active-badge-bg);
-    color: var(--admin-accent-strong);
   }
 
   .admin-content {
@@ -1651,64 +1398,6 @@
     margin: 0 auto 24px;
   }
 
-  .backup-desc {
-    color: var(--admin-muted);
-    line-height: 1.6;
-    margin-bottom: 16px;
-  }
-
-  .backup-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: center;
-  }
-
-
-  .import-source-field {
-    display: inline-grid;
-    gap: 6px;
-    min-width: 180px;
-  }
-
-  .import-source-field span {
-    color: var(--admin-muted);
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .import-source-field select {
-    min-height: 39px;
-    border: 1px solid var(--admin-input-border);
-    border-radius: 12px;
-    background: var(--admin-input-bg);
-    color: var(--admin-text);
-    font: inherit;
-    padding: 8px 12px;
-  }
-  .import-input {
-    display: none;
-  }
-
-  .backup-alert {
-    margin: 0 0 14px;
-    padding: 10px 14px;
-    border-radius: 12px;
-    font-size: 14px;
-  }
-
-  .backup-alert.error {
-    border: 1px solid var(--admin-danger-border);
-    background: var(--admin-danger-bg);
-    color: var(--admin-danger);
-  }
-
-  .backup-alert.ok {
-    border: 1px solid var(--admin-ok-border);
-    background: var(--admin-ok-bg);
-    color: var(--admin-ok);
-  }
-
   .primary-button,
   .ghost-button,
   .danger-button {
@@ -1768,11 +1457,6 @@
 
     .admin-layout {
       gap: 16px;
-    }
-
-    .admin-sidebar {
-      width: 178px;
-      padding: 8px;
     }
 
     .admin-content {
