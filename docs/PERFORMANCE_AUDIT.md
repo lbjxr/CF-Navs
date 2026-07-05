@@ -191,3 +191,19 @@ Fix:
 - Visible category IDs are now computed only while a search query is active.
 - The change is client-side only and does not alter admin/public data loading, Cloudflare request counts, update writes, or multi-device freshness/version checks.
 - Retest after deployment showed all fixed audit checks passed: zero failed requests, 337 home bookmark cards, zero broken images, zero pre-settle rapid-search DOM mutations, 5 admin-search rows, `/api/admin/data` transfer at 38,638 bytes, 228 bookmark icon requests, and Cache Storage bytes at 2,026,779.
+
+## 2026-07-05 Round 12
+
+Stress path: authenticated home reload, local bookmark icon cache maintenance, rapid home search, admin entry, and admin bookmark search.
+
+Observed:
+
+- Locally cached data-URI bookmark icons could be written to both `localStorage` and the browser Cache Storage fallback.
+- When `localStorage` succeeds, keeping the same data URI in Cache Storage is duplicate client-side storage.
+
+Fix:
+
+- Data-URI bookmark icons now keep Cache Storage only as a fallback when `localStorage` is unavailable or the write fails.
+- App startup schedules an idle-time prune that removes Cache Storage icon entries already backed by valid `localStorage` data URIs.
+- The change is local-browser storage maintenance only; it does not alter Cloudflare request paths, data update writes, or version freshness checks.
+- Retest after deployment showed all audit checks still passed with no request increase: zero failed requests, 337 home bookmark cards, zero broken images, zero pre-settle rapid-search DOM mutations, `/api/admin/data` transfer at 38,629 bytes, 228 bookmark icon requests, and Cache Storage bytes at 2,182,910. Existing cache did not drop immediately, which indicates the current entries are mostly not duplicate localStorage-backed data URIs, but future duplicate writes are avoided.

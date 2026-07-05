@@ -24,7 +24,11 @@
   import { colorToRgbString } from './lib/color'
   import type { ImportSource } from './lib/importData'
   import { clearCachedPublicData, readCachedPublicDataEntry, writeCachedPublicData } from './lib/publicDataCache'
-  import { createBookmarkIconCacheKey, writeBookmarkIconDataUri } from './lib/localBookmarkIconCache'
+  import {
+    createBookmarkIconCacheKey,
+    pruneBookmarkIconCacheStorageBackedByLocalStorage,
+    writeBookmarkIconDataUri,
+  } from './lib/localBookmarkIconCache'
   import { adminStore, authStore, configStore, isAuthenticated, publicStore } from './lib/stores'
 
   type AppView = 'home' | 'admin' | 'login'
@@ -345,6 +349,24 @@
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(THEME_STORAGE_KEY, mode)
     }
+  }
+
+  function scheduleBookmarkIconCachePrune(): void {
+    if (typeof window === 'undefined') return
+
+    const prune = () => {
+      void pruneBookmarkIconCacheStorageBackedByLocalStorage().catch(() => undefined)
+    }
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
+    }
+
+    if (idleWindow.requestIdleCallback) {
+      idleWindow.requestIdleCallback(prune, { timeout: 5000 })
+      return
+    }
+
+    window.setTimeout(prune, 1500)
   }
 
   function handleToggleTheme(): void {
@@ -1396,6 +1418,7 @@
     }
 
     void initializeApp()
+    scheduleBookmarkIconCachePrune()
   })
 
   onDestroy(() => {

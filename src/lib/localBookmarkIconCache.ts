@@ -53,6 +53,20 @@ function isBookmarkIconCacheRequest(request: Request, cacheKeyPrefix: string): b
   }
 }
 
+function cacheKeyFromRequest(request: Request): string | null {
+  try {
+    const url = new URL(request.url)
+    if (url.origin !== CACHE_ORIGIN || !url.pathname.startsWith(CACHE_PATH_PREFIX)) {
+      return null
+    }
+
+    const encodedKey = url.pathname.slice(CACHE_PATH_PREFIX.length)
+    return encodedKey ? decodeURIComponent(encodedKey) : null
+  } catch {
+    return null
+  }
+}
+
 async function deleteStaleCacheStorageEntries(cache: Cache, cacheKey: string): Promise<void> {
   const cacheKeyPrefix = bookmarkCacheKeyPrefix(cacheKey)
   if (!cacheKeyPrefix) return
@@ -162,10 +176,13 @@ export async function deleteCachedBookmarkIcon(cacheKey: string): Promise<void> 
 export async function writeBookmarkIconDataUri(cacheKey: string, dataUri: string): Promise<void> {
   if (!isDataImage(dataUri)) return
 
+  let storedInLocalStorage = false
+
   if (canUseLocalStorage()) {
     try {
       deleteStaleLocalStorageEntries(cacheKey)
       localStorage.setItem(localStorageKey(cacheKey), dataUri)
+      storedInLocalStorage = true
     } catch {
       // Browser storage can be disabled or full; Cache Storage remains a fallback.
     }
@@ -174,12 +191,46 @@ export async function writeBookmarkIconDataUri(cacheKey: string, dataUri: string
   if (!canUseCacheStorage()) return
 
   try {
-    const response = await fetch(dataUri)
     const cache = await caches.open(CACHE_NAME)
     await deleteStaleCacheStorageEntries(cache, cacheKey)
+
+    if (storedInLocalStorage) {
+      await cache.delete(cacheRequest(cacheKey))
+      return
+    }
+
+    const response = await fetch(dataUri)
     await cache.put(cacheRequest(cacheKey), response)
   } catch {
     // Local cache is an optimization; rendering should not depend on it.
+  }
+}
+
+export async function pruneBookmarkIconCacheStorageBackedByLocalStorage(): Promise<number> {
+  if (!canUseCacheStorage() || !canUseLocalStorage()) return 0
+
+  try {
+    const cache = await caches.open(CACHE_NAME)
+    const requests = await cache.keys()
+    let deleted = 0
+
+    await Promise.all(
+      requests.map(async (request) => {
+        const cacheKey = cacheKeyFromRequest(request)
+        if (!cacheKey) return
+
+        const dataUri = localStorage.getItem(localStorageKey(cacheKey))
+        if (!dataUri || !isDataImage(dataUri)) return
+
+        if (await cache.delete(request)) {
+          deleted += 1
+        }
+      }),
+    )
+
+    return deleted
+  } catch {
+    return 0
   }
 }
 
