@@ -27,11 +27,22 @@
     stripPublicDataVersion,
     toAdminBookmarks,
     toAdminCategories,
-    toPublicBookmark,
     toPublicSettings,
     toSettingsForm,
     type SettingsFormValue,
   } from './lib/appData'
+  import {
+    applySortOrder,
+    buildOrderedBookmarkIdsForCategory,
+    buildPublicDataAfterCategoryDelete,
+    removeById,
+    removeBookmarksByCategory,
+    updateBookmarkIconBlob,
+    upsertBookmark,
+    upsertCategory,
+    upsertPublicBookmark,
+    upsertPublicCategory,
+  } from './lib/appLocalData'
   import type { ImportSource } from './lib/importData'
   import { clearCachedPublicData, readCachedPublicDataEntry, writeCachedPublicData } from './lib/publicDataCache'
   import { isPublicModeForbidden, siteConfigFromForbiddenError } from './lib/publicMode'
@@ -363,20 +374,10 @@
   }
 
   async function applyLocalCategoryUpsert(category: Category): Promise<void> {
-    updateAdminCategoriesLocally((categories) => {
-      const exists = categories.some((item) => item.id === category.id)
-      return exists
-        ? categories.map((item) => (item.id === category.id ? category : item))
-        : [...categories, category]
-    })
+    updateAdminCategoriesLocally((categories) => upsertCategory(categories, category))
 
     const updated = updatePublicDataLocally((data) => {
-      const exists = data.categories.some((item) => item.id === category.id)
-      const categories = exists
-        ? data.categories.map((item) => (item.id === category.id ? category : item))
-        : [...data.categories, category]
-
-      return { ...data, categories }
+      return { ...data, categories: upsertPublicCategory(data.categories, category) }
     })
 
     if (!updated) await refreshListsWhenLocalDataMissing()
@@ -384,13 +385,12 @@
   }
 
   async function applyLocalCategoryDelete(categoryId: number): Promise<void> {
-    updateAdminCategoriesLocally((categories) => categories.filter((item) => item.id !== categoryId))
-    updateAdminBookmarksLocally((bookmarks) => bookmarks.filter((item) => item.category_id !== categoryId))
+    updateAdminCategoriesLocally((categories) => removeById(categories, categoryId))
+    updateAdminBookmarksLocally((bookmarks) => removeBookmarksByCategory(bookmarks, categoryId))
 
     const updated = updatePublicDataLocally((data) => ({
       ...data,
-      categories: data.categories.filter((item) => item.id !== categoryId),
-      bookmarks: data.bookmarks.filter((item) => item.category_id !== categoryId),
+      ...buildPublicDataAfterCategoryDelete(data.categories, data.bookmarks, categoryId),
     }))
 
     if (!updated) await refreshListsWhenLocalDataMissing()
@@ -398,21 +398,10 @@
   }
 
   async function applyLocalBookmarkUpsert(bookmark: Bookmark): Promise<void> {
-    updateAdminBookmarksLocally((bookmarks) => {
-      const exists = bookmarks.some((item) => item.id === bookmark.id)
-      return exists
-        ? bookmarks.map((item) => (item.id === bookmark.id ? bookmark : item))
-        : [...bookmarks, bookmark]
-    })
+    updateAdminBookmarksLocally((bookmarks) => upsertBookmark(bookmarks, bookmark))
 
     const updated = updatePublicDataLocally((data) => {
-      const publicBookmark = toPublicBookmark(bookmark)
-      const exists = data.bookmarks.some((item) => item.id === bookmark.id)
-      const bookmarks = exists
-        ? data.bookmarks.map((item) => (item.id === bookmark.id ? publicBookmark : item))
-        : [...data.bookmarks, publicBookmark]
-
-      return { ...data, bookmarks }
+      return { ...data, bookmarks: upsertPublicBookmark(data.bookmarks, bookmark) }
     })
 
     if (!updated) await refreshListsWhenLocalDataMissing()
@@ -420,11 +409,11 @@
   }
 
   async function applyLocalBookmarkDelete(bookmarkId: number): Promise<void> {
-    updateAdminBookmarksLocally((bookmarks) => bookmarks.filter((item) => item.id !== bookmarkId))
+    updateAdminBookmarksLocally((bookmarks) => removeById(bookmarks, bookmarkId))
 
     const updated = updatePublicDataLocally((data) => ({
       ...data,
-      bookmarks: data.bookmarks.filter((item) => item.id !== bookmarkId),
+      bookmarks: removeById(data.bookmarks, bookmarkId),
     }))
 
     if (!updated) await refreshListsWhenLocalDataMissing()
@@ -432,15 +421,11 @@
   }
 
   async function applyLocalBookmarkIconBlob(bookmarkId: number, iconBlob: string | null): Promise<void> {
-    updateAdminBookmarksLocally((bookmarks) => bookmarks.map((bookmark) => (
-      bookmark.id === bookmarkId ? { ...bookmark, icon_blob: iconBlob } : bookmark
-    )))
+    updateAdminBookmarksLocally((bookmarks) => updateBookmarkIconBlob(bookmarks, bookmarkId, iconBlob))
 
     updatePublicDataLocally((data) => ({
       ...data,
-      bookmarks: data.bookmarks.map((bookmark) => (
-        bookmark.id === bookmarkId ? { ...bookmark, icon_blob: iconBlob } : bookmark
-      )),
+      bookmarks: updateBookmarkIconBlob(data.bookmarks, bookmarkId, iconBlob),
     }))
 
     if (iconBlob?.startsWith('data:image/')) {
@@ -473,24 +458,11 @@
   }
 
   async function applyLocalCategorySort(ids: number[], refreshMissing = true): Promise<void> {
-    const sortById = new Map(ids.map((id, index) => [id, index]))
-    updateAdminCategoriesLocally((categories) => categories
-      .map((category) => (
-        sortById.has(category.id)
-          ? { ...category, sort: sortById.get(category.id) ?? category.sort }
-          : category
-      ))
-      .sort((a, b) => a.sort - b.sort || a.id - b.id))
+    updateAdminCategoriesLocally((categories) => applySortOrder(categories, ids))
 
     const updated = updatePublicDataLocally((data) => ({
       ...data,
-      categories: data.categories
-        .map((category) => (
-          sortById.has(category.id)
-            ? { ...category, sort: sortById.get(category.id) ?? category.sort }
-            : category
-        ))
-        .sort((a, b) => a.sort - b.sort || a.id - b.id),
+      categories: applySortOrder(data.categories, ids),
     }))
 
     if (!updated && refreshMissing) await refreshListsWhenLocalDataMissing()
@@ -498,24 +470,11 @@
   }
 
   async function applyLocalBookmarkSort(ids: number[], refreshMissing = true): Promise<void> {
-    const sortById = new Map(ids.map((id, index) => [id, index]))
-    updateAdminBookmarksLocally((bookmarks) => bookmarks
-      .map((bookmark) => (
-        sortById.has(bookmark.id)
-          ? { ...bookmark, sort: sortById.get(bookmark.id) ?? bookmark.sort }
-          : bookmark
-      ))
-      .sort((a, b) => a.sort - b.sort || a.id - b.id))
+    updateAdminBookmarksLocally((bookmarks) => applySortOrder(bookmarks, ids))
 
     const updated = updatePublicDataLocally((data) => ({
       ...data,
-      bookmarks: data.bookmarks
-        .map((bookmark) => (
-          sortById.has(bookmark.id)
-            ? { ...bookmark, sort: sortById.get(bookmark.id) ?? bookmark.sort }
-            : bookmark
-        ))
-        .sort((a, b) => a.sort - b.sort || a.id - b.id),
+      bookmarks: applySortOrder(data.bookmarks, ids),
     }))
 
     if (!updated && refreshMissing) await refreshListsWhenLocalDataMissing()
@@ -1014,20 +973,7 @@
     orderedIdsInCategory: number[],
   ): Promise<void> {
     const current = get(publicStore).data?.bookmarks ?? get(adminStore).data.bookmarks
-    const flatOrdered = [...current].sort((a, b) => a.sort - b.sort || a.id - b.id)
-
-    const newOrderQueue = orderedIdsInCategory.map((id) => Number(id))
-    let queueIndex = 0
-    const fullOrderedIds = flatOrdered.map((bookmark) => {
-      if (bookmark.category_id === categoryId) {
-        const replacement = newOrderQueue[queueIndex] ?? bookmark.id
-        queueIndex += 1
-        return replacement
-      }
-      return bookmark.id
-    })
-
-    await handleSortBookmarks(fullOrderedIds)
+    await handleSortBookmarks(buildOrderedBookmarkIdsForCategory(current, categoryId, orderedIdsInCategory))
   }
 
   function handleExportData(): void {

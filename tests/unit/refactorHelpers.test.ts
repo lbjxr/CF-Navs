@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { ErrCode, type PublicBookmark, type PublicCategory } from '../../shared/types'
 import { ApiError } from '../../src/lib/api'
 import { toBookmarkPayload, toCategoryPayload } from '../../src/lib/adminFormAdapters'
+import {
+  applySortOrder,
+  buildOrderedBookmarkIdsForCategory,
+  buildPublicDataAfterCategoryDelete,
+  removeById,
+  updateBookmarkIconBlob,
+  upsertById,
+  upsertPublicBookmark,
+} from '../../src/lib/appLocalData'
 import { buildBookmarkSubmitPayload, createBookmarkFormValue, getIconifySearchQuery } from '../../src/lib/bookmarkFormIcons'
 import { createIconVersion, getBookmarkFallbackIcon, getBookmarkIconUrl } from '../../src/lib/bookmarkIconDisplay'
 import {
@@ -68,6 +77,42 @@ describe('refactored helper modules', () => {
     expect(pageStart(2, 5, 2)).toBe(3)
     expect(pageEnd(2, 5, 2)).toBe(4)
     expect(reorderByIds([{ id: 1 }, { id: 2 }, { id: 3 }], [3, 1])).toEqual([{ id: 3 }, { id: 1 }])
+  })
+
+  it('keeps optimistic app data updates in pure helpers', () => {
+    expect(upsertById([categoryA], { ...categoryA, title: 'Updated' })).toEqual([
+      { ...categoryA, title: 'Updated' },
+    ])
+    expect(upsertById([categoryA], categoryB).map((category) => category.id)).toEqual([1, 2])
+    expect(removeById([categoryA, categoryB], 1)).toEqual([categoryB])
+    expect(updateBookmarkIconBlob([bookmarkA], 10, 'data:image/svg+xml,test')[0].icon_blob).toBe('data:image/svg+xml,test')
+
+    expect(upsertPublicBookmark([bookmarkA], {
+      ...bookmarkA,
+      title: 'Updated GitHub',
+      open_method: 2,
+    }).map((bookmark) => bookmark.title)).toEqual(['Updated GitHub'])
+
+    expect(buildPublicDataAfterCategoryDelete([categoryA, categoryB], [bookmarkA, bookmarkB], 1)).toEqual({
+      categories: [categoryB],
+      bookmarks: [bookmarkB],
+    })
+  })
+
+  it('derives global sort order from category-local bookmark sorting', () => {
+    expect(applySortOrder([categoryA, categoryB], [1, 2]).map((category) => ({
+      id: category.id,
+      sort: category.sort,
+    }))).toEqual([
+      { id: 1, sort: 0 },
+      { id: 2, sort: 1 },
+    ])
+
+    expect(buildOrderedBookmarkIdsForCategory([
+      { ...bookmarkA, id: 10, category_id: 1, sort: 0 },
+      { ...bookmarkB, id: 11, category_id: 2, sort: 1 },
+      { ...bookmarkA, id: 12, category_id: 1, sort: 2 },
+    ], 1, [12, 10])).toEqual([12, 11, 10])
   })
 
   it('builds home sorting, grouping, and search indexes outside the view', () => {
