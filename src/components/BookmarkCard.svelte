@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import type { CardStyle, PublicBookmark } from '../../shared/types'
+  import BookmarkContextMenu from './BookmarkContextMenu.svelte'
+  import BookmarkIcon from './BookmarkIcon.svelte'
+  import BookmarkLinkModal from './BookmarkLinkModal.svelte'
   import { buildIconStyle, createIconVersion } from '../lib/bookmarkIconDisplay'
   import { iconifyProxyIcon, isIconifyIconUrl, logoSurfIcon } from '../lib/icons'
   import { observeIconVisibility } from '../lib/iconVisibility'
@@ -307,27 +310,17 @@
       on:click={handleLinkClick}
       on:contextmenu={handleContextMenu}
     >
-      <div
-        class="bookmark-icon"
-        class:has-custom-background={hasCustomIconBackground}
-        style={infoIconStyle}
-      >
-        {#if hasRenderableIcon}
-          <img
-            src={iconUrl}
-            alt={bookmark.title}
-            width={infoIconSize}
-            height={infoIconSize}
-            loading="lazy"
-            decoding="async"
-            fetchpriority="low"
-            on:error={handleIconError}
-            on:load={handleIconLoad}
-          />
-        {:else}
-          <span class="icon-text">{iconText}</span>
-        {/if}
-      </div>
+      <BookmarkIcon
+        title={bookmark.title}
+        iconUrl={hasRenderableIcon ? iconUrl : ''}
+        {iconText}
+        size={infoIconSize}
+        iconStyle={infoIconStyle}
+        hasCustomBackground={hasCustomIconBackground}
+        variant="info"
+        onError={handleIconError}
+        onLoad={handleIconLoad}
+      />
 
       <div class="bookmark-text">
         <h3 class="bookmark-title">{bookmark.title}</h3>
@@ -350,27 +343,17 @@
       on:click={handleLinkClick}
       on:contextmenu={handleContextMenu}
     >
-      <div
-        class="bookmark-icon"
-        class:has-custom-background={hasCustomIconBackground}
-        style={compactIconStyle}
-      >
-        {#if hasRenderableIcon}
-          <img
-            src={iconUrl}
-            alt={bookmark.title}
-            width={compactIconSize}
-            height={compactIconSize}
-            loading="lazy"
-            decoding="async"
-            fetchpriority="low"
-            on:error={handleIconError}
-            on:load={handleIconLoad}
-          />
-        {:else}
-          <span class="icon-text">{iconText}</span>
-        {/if}
-      </div>
+      <BookmarkIcon
+        title={bookmark.title}
+        iconUrl={hasRenderableIcon ? iconUrl : ''}
+        {iconText}
+        size={compactIconSize}
+        iconStyle={compactIconStyle}
+        hasCustomBackground={hasCustomIconBackground}
+        variant="compact"
+        onError={handleIconError}
+        onLoad={handleIconLoad}
+      />
     </a>
     {#if showIconTitle}
       <a
@@ -387,24 +370,11 @@
   {/if}
 
   {#if contextMenuOpen}
-    <div class="bookmark-context-menu">
-      <button type="button" on:click={handleEditClick}>编辑</button>
-    </div>
+    <BookmarkContextMenu onEdit={handleEditClick} />
   {/if}
 
   {#if modalOpen}
-    <div class="link-modal-backdrop" role="dialog" aria-modal="true" aria-label={bookmark.title}>
-      <div class="link-modal">
-        <div class="link-modal-header">
-          <strong>{bookmark.title}</strong>
-          <div class="link-modal-actions">
-            <a href={bookmark.url} target="_blank" rel="noopener noreferrer">新窗口打开</a>
-            <button type="button" on:click={closeModal}>关闭</button>
-          </div>
-        </div>
-        <iframe src={bookmark.url} title={bookmark.title}></iframe>
-      </div>
-    </div>
+    <BookmarkLinkModal title={bookmark.title} url={bookmark.url} onClose={closeModal} />
   {/if}
 </div>
 
@@ -534,11 +504,6 @@
     transform: translateY(-1px);
   }
 
-  .bookmark-card-icon .bookmark-icon {
-    width: 100%;
-    height: 100%;
-  }
-
   .bookmark-card-icon::after {
     content: attr(data-tooltip);
     position: absolute;
@@ -583,55 +548,6 @@
     white-space: nowrap;
   }
 
-  /* 图标样式 */
-  .bookmark-icon {
-    box-sizing: border-box;
-    flex-shrink: 0;
-    min-width: 0;
-    max-width: 100%;
-    aspect-ratio: 1 / 1;
-    border: 1px solid rgba(148, 163, 184, 0.18);
-    border-radius: var(--bookmark-icon-radius, 12px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(248, 250, 252, 0.62)),
-      rgba(255, 255, 255, 0.52);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.5),
-      0 1px 4px rgba(15, 23, 42, 0.06);
-  }
-
-  .bookmark-icon.has-custom-background {
-    border-color: rgba(15, 23, 42, 0.08);
-  }
-
-  /* 详情风格的图标采用内嵌方形底座，避免只在左侧裁切圆角 */
-  .bookmark-card-info .bookmark-icon {
-    align-self: center;
-  }
-
-  .bookmark-icon img {
-    display: block;
-    width: calc(100% - (var(--bookmark-icon-padding, 8px) * 2));
-    height: calc(100% - (var(--bookmark-icon-padding, 8px) * 2));
-    border-radius: var(--bookmark-icon-image-radius, 8px);
-    object-fit: contain;
-  }
-
-  .bookmark-icon .icon-text {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    overflow-wrap: anywhere;
-    font-size: var(--bookmark-icon-font-size, 1.75rem);
-    font-weight: 600;
-    color: #475569;
-  }
-
   /* 暗色主题适配 */
   :global([data-theme='dark']) .bookmark-card-info,
   :global([data-theme='dark']) .bookmark-card-icon {
@@ -662,138 +578,4 @@
     color: var(--card-text-color, #e2e8f0);
   }
 
-  :global([data-theme='dark']) .bookmark-icon {
-    border-color: rgba(148, 163, 184, 0.16);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(15, 23, 42, 0.2)),
-      rgba(255, 255, 255, 0.08);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 2px 8px rgba(0, 0, 0, 0.14);
-  }
-
-  :global([data-theme='dark']) .bookmark-icon .icon-text {
-    color: #cbd5e1;
-  }
-
-  .bookmark-context-menu {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 80;
-    min-width: 88px;
-    padding: 6px;
-    border: 1px solid rgba(148, 163, 184, 0.32);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
-    backdrop-filter: blur(10px);
-  }
-
-  .bookmark-context-menu button {
-    width: 100%;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    color: #0f172a;
-    cursor: pointer;
-    font-size: 13px;
-    padding: 7px 12px;
-    text-align: left;
-  }
-
-  .bookmark-context-menu button:hover {
-    background: #eff6ff;
-    color: #1d4ed8;
-  }
-
-  .link-modal-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 120;
-    display: grid;
-    place-items: center;
-    padding: 18px;
-    background: rgba(15, 23, 42, 0.62);
-    backdrop-filter: blur(4px);
-  }
-
-  .link-modal {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    width: min(1120px, 100%);
-    height: min(760px, calc(100vh - 36px));
-    overflow: hidden;
-    border-radius: 18px;
-    background: #ffffff;
-    box-shadow: 0 26px 70px rgba(15, 23, 42, 0.32);
-  }
-
-  .link-modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    border-bottom: 1px solid #e2e8f0;
-    color: #0f172a;
-  }
-
-  .link-modal-header strong {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .link-modal-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 auto;
-  }
-
-  .link-modal-actions a,
-  .link-modal-actions button {
-    border: 1px solid #cbd5e1;
-    border-radius: 10px;
-    background: #ffffff;
-    color: #0f172a;
-    cursor: pointer;
-    font: inherit;
-    font-size: 13px;
-    padding: 7px 10px;
-    text-decoration: none;
-  }
-
-  .link-modal iframe {
-    width: 100%;
-    height: 100%;
-    border: 0;
-    background: #ffffff;
-  }
-
-  :global([data-theme='dark']) .link-modal {
-    background: #0f172a;
-  }
-
-  :global([data-theme='dark']) .link-modal-header {
-    border-color: rgba(148, 163, 184, 0.24);
-    color: #e5eefb;
-  }
-
-  :global([data-theme='dark']) .bookmark-context-menu {
-    border-color: rgba(148, 163, 184, 0.28);
-    background: rgba(15, 23, 42, 0.94);
-    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.32);
-  }
-
-  :global([data-theme='dark']) .bookmark-context-menu button {
-    color: #e5eefb;
-  }
-
-  :global([data-theme='dark']) .bookmark-context-menu button:hover {
-    background: rgba(59, 130, 246, 0.18);
-    color: #93c5fd;
-  }
 </style>
