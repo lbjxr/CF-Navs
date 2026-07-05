@@ -199,6 +199,7 @@
   $: bookmarkPage = clampPage(bookmarkPage, bookmarkTotalPages)
   $: pagedCategories = slicePage(categories, categoryPage)
   $: pagedBookmarks = slicePage(filteredBookmarks, bookmarkPage)
+  $: categoryTitleById = new Map(categories.map((category) => [category.id, category.title]))
   // 排序模式下渲染本地快照全量列表，避免跨页排序造成全局顺序不完整。
   $: displayCategories = categorySortMode ? localCategories : pagedCategories
   $: displayBookmarks = bookmarkSortMode ? localBookmarks : pagedBookmarks
@@ -359,14 +360,14 @@
     bookmarkPage = 1
   }
 
-  $: filteredBookmarks = bookmarkSearch.trim()
+  $: normalizedBookmarkSearch = bookmarkSearch.trim().toLowerCase()
+  $: filteredBookmarks = normalizedBookmarkSearch
     ? bookmarks.filter((b) => {
-        const q = bookmarkSearch.trim().toLowerCase()
-        const catTitle = getCategoryTitle(b.category_id).toLowerCase()
+        const catTitle = (categoryTitleById.get(b.category_id) ?? '').toLowerCase()
         return (
-          b.title.toLowerCase().includes(q) ||
-          b.url.toLowerCase().includes(q) ||
-          catTitle.includes(q)
+          b.title.toLowerCase().includes(normalizedBookmarkSearch) ||
+          b.url.toLowerCase().includes(normalizedBookmarkSearch) ||
+          catTitle.includes(normalizedBookmarkSearch)
         )
       })
     : bookmarks

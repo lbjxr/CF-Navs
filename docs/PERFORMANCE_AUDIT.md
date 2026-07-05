@@ -103,3 +103,17 @@ Fix:
 
 - Bookmark card shells now use CSS `contain: layout style` to isolate per-card layout and style recalculation.
 - Retest showed all 337 card shells had containment applied, zero broken images, zero failed requests, `/api/admin/data` stayed about 38 KB transferred, and icon request counts did not increase.
+
+## 2026-07-05 Round 6
+
+Stress path: admin bookmark filtering across the full bookmark list.
+
+Observed:
+
+- Admin bookmark filtering normalized the search query inside the per-bookmark filter loop.
+- Category-title matching used repeated linear category lookups while filtering bookmarks.
+
+Fix:
+
+- Admin bookmark search now normalizes the query once per input state and uses a reactive category-title map for category matching.
+- Local type-check and production build passed; the deployed home regression pass still showed zero failed requests, `/api/admin/data` around 38 KB transferred, and unchanged icon request volume.
