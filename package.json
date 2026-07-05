@@ -7,6 +7,7 @@
     "dev:web": "vite",
     "build": "vite build",
     "type-check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
     "perf:audit": "node scripts/perf-audit.mjs",
     "setup:wrangler": "node scripts/create-wrangler-local.mjs",
     "wrangler": "node scripts/wrangler-config.mjs",
@@ -24,6 +25,7 @@
     "tslib": "^2.7.0",
     "typescript": "^5.5.4",
     "vite": "^5.4.6",
+    "vitest": "^3.2.6",
     "wrangler": "^4.103.0"
   },
   "dependencies": {
