@@ -55,6 +55,7 @@ vi.mock('../../src/lib/localBookmarkIconCache', () => ({
 import {
   applyLocalBookmarkUpsert,
   applyLocalCategoryDelete,
+  applyLocalCategoryUpsert,
   applyPublicData,
   configureDataService,
   getCurrentDataVersion,
@@ -245,6 +246,22 @@ describe('dataService local mutations', () => {
     expect(get(adminStore).data.bookmarks.map((b) => b.id)).toContain(11)
     expect(get(publicStore).data?.bookmarks.map((b) => b.id)).toContain(11)
     expect(adminCache.writeCachedAdminData).toHaveBeenCalled()
+  })
+
+  it('upserts a public category without leaking admin-only fields', async () => {
+    const nextCategory: Category = { ...category, id: 2, title: 'Private admin category field', created_at: 999 }
+
+    await applyLocalCategoryUpsert(nextCategory)
+
+    const publicCategory = get(publicStore).data?.categories.find((item) => item.id === nextCategory.id)
+    expect(publicCategory).toEqual({
+      id: nextCategory.id,
+      title: nextCategory.title,
+      icon: nextCategory.icon,
+      sort: nextCategory.sort,
+    })
+    expect(publicCategory).not.toHaveProperty('created_at')
+    expect(get(adminStore).data.categories.find((item) => item.id === nextCategory.id)).toHaveProperty('created_at', 999)
   })
 
   it('removes a category and its bookmarks from both stores', async () => {
