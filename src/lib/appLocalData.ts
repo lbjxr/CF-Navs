@@ -87,5 +87,10 @@ export function upsertBookmark(bookmarks: Bookmark[], bookmark: Bookmark): Bookm
 }
 
 export function upsertPublicCategory(categories: PublicCategory[], category: Category): PublicCategory[] {
-  return upsertById(categories, category)
+  return upsertById(categories, {
+    id: category.id,
+    title: category.title,
+    icon: category.icon,
+    sort: category.sort,
+  })
 }
