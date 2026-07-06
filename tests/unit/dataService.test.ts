@@ -9,6 +9,8 @@ import type {
   Settings,
 } from '../../shared/types'
 import { toPublicSettings } from '../../shared/settings'
+import { ApiError } from '../../src/lib/api'
+import { ErrCode } from '../../shared/types'
 
 // api 与三个持久化缓存是纯 IO 边界，全部 mock；stores 使用真实内存实现，
 // 以便真实验证编排逻辑对 store 的写入与版本确认分支。
@@ -29,6 +31,7 @@ const { api, publicCache, adminCache } = vi.hoisted(() => ({
   adminCache: {
     readCachedAdminDataEntry: vi.fn(),
     writeCachedAdminData: vi.fn(),
+    clearCachedAdminData: vi.fn(),
   },
 }))
 
@@ -181,6 +184,27 @@ describe('dataService.refreshPublicData', () => {
     expect(api.public.getData).toHaveBeenCalledWith(false)
     expect(publicCache.writeCachedPublicData).toHaveBeenCalledOnce()
     expect(getCurrentDataVersion()).toBe('new')
+  })
+
+  it('clears admin snapshot when private-mode authenticated public fetch returns unauthorized', async () => {
+    authStore.setSession(session)
+    adminStore.replaceData(makeAdminData())
+    const forbidden = new ApiError('private mode', {
+      code: ErrCode.FORBIDDEN,
+      data: { site_title: 'Private CF-Navs', public_mode: false },
+    })
+    const unauthorized = new ApiError('unauthorized', { status: 401, code: ErrCode.UNAUTHORIZED })
+    api.public.getData
+      .mockRejectedValueOnce(forbidden)
+      .mockRejectedValueOnce(unauthorized)
+
+    const result = await refreshPublicData()
+
+    expect(result).toBeNull()
+    expect(adminCache.clearCachedAdminData).toHaveBeenCalledOnce()
+    expect(get(authStore).session).toBeNull()
+    expect(get(adminStore).data.settings).toBeNull()
+    expect(get(configStore).data).toEqual({ site_title: 'Private CF-Navs', public_mode: false })
   })
 
   it('resets public store without fetching when private mode and logged out', async () => {

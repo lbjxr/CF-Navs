@@ -11,7 +11,7 @@ import {
   type Settings,
 } from '../../shared/types'
 import { api, getErrorMessage, isUnauthorizedError } from './api'
-import { readCachedAdminDataEntry, writeCachedAdminData } from './adminDataCache'
+import { clearCachedAdminData, readCachedAdminDataEntry, writeCachedAdminData } from './adminDataCache'
 import {
   adminDataToPublicData,
   getDataVersion,
@@ -136,6 +136,7 @@ export async function refreshPublicData(): Promise<PublicData | null> {
           if (isUnauthorizedError(authError)) {
             authStore.setSession(null)
             adminStore.reset()
+            await clearCachedAdminData()
             publicStore.reset()
             configStore.setData(forbiddenConfig)
             return null
