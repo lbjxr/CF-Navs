@@ -38,6 +38,7 @@
   } from './lib/appData'
   import { buildOrderedBookmarkIdsForCategory } from './lib/appLocalData'
   import { createBookmarkDraft, createCategoryDraft, findBookmarkForEdit } from './lib/appModalState'
+  import { isLatestSortRequest, normalizeSortIds, queueSortSave } from './lib/appSortQueue'
   import type { ImportSource } from './lib/importData'
   import { pruneBookmarkIconCacheStorageBackedByLocalStorage } from './lib/localBookmarkIconCache'
   import { adminStore, authStore, configStore, isAuthenticated, publicStore } from './lib/stores'
@@ -571,24 +572,22 @@
   async function handleSortCategories(ids: Array<string | number>): Promise<void> {
     categoryError = ''
 
-    const sortedIds = ids.map((id) => Number(id))
+    const sortedIds = normalizeSortIds(ids)
     const requestSeq = ++categorySortRequestSeq
     await applyLocalCategorySort(sortedIds, false)
 
-    const savePromise = categorySortSavePromise
-      .catch(() => undefined)
-      .then(async () => {
-        await api.categories.sort(sortedIds)
-      })
+    const savePromise = queueSortSave(categorySortSavePromise, async () => {
+      await api.categories.sort(sortedIds)
+    })
     categorySortSavePromise = savePromise
 
     try {
       await savePromise
-      if (requestSeq === categorySortRequestSeq) {
+      if (isLatestSortRequest(requestSeq, categorySortRequestSeq)) {
         await persistCurrentAdminData()
       }
     } catch (error) {
-      if (requestSeq === categorySortRequestSeq) {
+      if (isLatestSortRequest(requestSeq, categorySortRequestSeq)) {
         categoryError = getErrorMessage(error)
         await refreshLoggedInData(true).catch(() => undefined)
       }
@@ -598,24 +597,22 @@
   async function handleSortBookmarks(ids: Array<string | number>): Promise<void> {
     bookmarkError = ''
 
-    const sortedIds = ids.map((id) => Number(id))
+    const sortedIds = normalizeSortIds(ids)
     const requestSeq = ++bookmarkSortRequestSeq
     await applyLocalBookmarkSort(sortedIds, false)
 
-    const savePromise = bookmarkSortSavePromise
-      .catch(() => undefined)
-      .then(async () => {
-        await api.bookmarks.sort(sortedIds)
-      })
+    const savePromise = queueSortSave(bookmarkSortSavePromise, async () => {
+      await api.bookmarks.sort(sortedIds)
+    })
     bookmarkSortSavePromise = savePromise
 
     try {
       await savePromise
-      if (requestSeq === bookmarkSortRequestSeq) {
+      if (isLatestSortRequest(requestSeq, bookmarkSortRequestSeq)) {
         await persistCurrentAdminData()
       }
     } catch (error) {
-      if (requestSeq === bookmarkSortRequestSeq) {
+      if (isLatestSortRequest(requestSeq, bookmarkSortRequestSeq)) {
         bookmarkError = getErrorMessage(error)
         await refreshLoggedInData(true).catch(() => undefined)
       }
