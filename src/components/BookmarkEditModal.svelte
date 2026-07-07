@@ -3,11 +3,8 @@
   import {
     DEFAULT_LOGO_SURF_SCHEME,
     getIconCandidates,
-    iconifyIcon,
     iconifyNameFromUrl,
-    iconifyProxyIcon,
     logoSurfIcon,
-    normalizeIconifyName,
     type IconCandidate,
     type LogoSurfColorScheme,
   } from '../lib/icons'
@@ -18,9 +15,21 @@
     createBookmarkFormValue,
     emptyBookmarkForm,
     findLogoSchemeName,
-    getIconifySearchQuery,
     getLogoSchemeByName,
   } from '../lib/bookmarkFormIcons'
+  import {
+    createBookmarkIconifySearchState,
+    deriveBookmarkIconifyInput,
+    initializeBookmarkIconifySelection,
+    isBookmarkIconifySelected,
+    resolveBookmarkIconifySearchError,
+    resolveBookmarkIconifySearchSuccess,
+    scheduleBookmarkIconifyCandidateSearch,
+    selectBookmarkIconifyIcon,
+    selectBookmarkIconifySearchCandidate,
+    shouldResetBookmarkIconifyConfirmation,
+    type BookmarkIconifySearchState,
+  } from '../lib/bookmarkIconifyController'
   import BookmarkCustomIconField from './BookmarkCustomIconField.svelte'
   import BookmarkIconCandidatePicker from './BookmarkIconCandidatePicker.svelte'
   import BookmarkModalActions from './BookmarkModalActions.svelte'
@@ -54,12 +63,8 @@
   let iconifyName = ''
   let iconifyUseConfirmed = false
   let confirmedIconifyName = ''
-  let iconifySearchCandidates: IconifySearchCandidate[] = []
-  let iconifySearchLoading = false
-  let iconifySearchError = ''
+  let iconifySearchState: BookmarkIconifySearchState = createBookmarkIconifySearchState()
   let iconifySearchTimer: ReturnType<typeof setTimeout> | null = null
-  let iconifySearchRequestId = 0
-  let lastIconifySearchQuery = ''
   let previousBodyOverflow: string | null = null
   let previousDocumentOverflow: string | null = null
 
@@ -76,13 +81,15 @@
     const fallbackCategoryId = categories[0]?.id
     form = createBookmarkFormValue(value, fallbackCategoryId)
     selectedLogoSchemeName = findLogoSchemeName(form.icon) ?? DEFAULT_LOGO_SURF_SCHEME.name
-    iconifyName = form.icon_source === 'iconify' ? iconifyNameFromUrl(form.icon) ?? '' : ''
-    iconifyUseConfirmed = mode === 'edit' && form.icon_source === 'iconify' && Boolean(iconifyName)
-    confirmedIconifyName = iconifyUseConfirmed ? iconifyName : ''
-    iconifySearchCandidates = []
-    iconifySearchError = ''
-    iconifySearchLoading = false
-    lastIconifySearchQuery = ''
+    const iconifySelection = initializeBookmarkIconifySelection({
+      mode,
+      iconSource: form.icon_source,
+      icon: form.icon,
+    })
+    iconifyName = iconifySelection.iconifyName
+    iconifyUseConfirmed = iconifySelection.iconifyUseConfirmed
+    confirmedIconifyName = iconifySelection.confirmedIconifyName
+    iconifySearchState = createBookmarkIconifySearchState()
     // 编辑模式也重新生成候选
     if (form.url.trim()) {
       candidates = getIconCandidates(form.url.trim(), form.title.trim())
@@ -98,18 +105,24 @@
   }
 
   $: currentLogoScheme = getLogoSchemeByName(selectedLogoSchemeName)
-  $: normalizedIconifyName = normalizeIconifyName(iconifyName)
-  $: iconifySourceUrl = iconifyIcon(iconifyName)
-  $: iconifyPreviewUrl = iconifyProxyIcon(iconifyName)
+  $: iconifyInput = deriveBookmarkIconifyInput(iconifyName)
+  $: normalizedIconifyName = iconifyInput.normalizedIconifyName
+  $: iconifySourceUrl = iconifyInput.iconifySourceUrl
+  $: iconifyPreviewUrl = iconifyInput.iconifyPreviewUrl
   $: showLogoSchemes = form.icon_source === 'logo_surf' && Boolean(form.url.trim())
   $: showIconifyOptions = form.icon_source === 'iconify'
-  $: iconifySelected =
-    iconifyUseConfirmed &&
-    Boolean(normalizedIconifyName) &&
-    confirmedIconifyName === normalizedIconifyName
+  $: iconifySelected = isBookmarkIconifySelected({
+    iconifyUseConfirmed,
+    normalizedIconifyName,
+    confirmedIconifyName,
+  })
   $: scheduleIconifyCandidateSearch(showIconifyOptions, iconifyName)
   $: logoPreviewText = (form.title.trim() || 'NAV').slice(0, 4)
-  $: if (iconifyUseConfirmed && normalizedIconifyName !== confirmedIconifyName) {
+  $: if (shouldResetBookmarkIconifyConfirmation({
+    iconifyUseConfirmed,
+    normalizedIconifyName,
+    confirmedIconifyName,
+  })) {
     iconifyUseConfirmed = false
   }
   $: if (form.icon_source === 'logo_surf' && form.url.trim()) {
@@ -130,43 +143,31 @@
   }
 
   function scheduleIconifyCandidateSearch(enabled: boolean, value: string) {
-    const query = enabled ? getIconifySearchQuery(value) : ''
-    if (query === lastIconifySearchQuery) return
+    const result = scheduleBookmarkIconifyCandidateSearch(iconifySearchState, { enabled, value })
+    if (!result.changed) return
 
-    lastIconifySearchQuery = query
     clearIconifySearchTimer()
-    iconifySearchRequestId += 1
-    iconifySearchError = ''
+    iconifySearchState = result.state
+    if (!result.task) return
 
-    if (!query) {
-      iconifySearchCandidates = []
-      iconifySearchLoading = false
-      return
-    }
-
-    const requestId = iconifySearchRequestId
-    iconifySearchLoading = true
+    const { query, requestId, delayMs } = result.task
     iconifySearchTimer = setTimeout(() => {
       void loadIconifyCandidates(query, requestId)
-    }, 280)
+    }, delayMs)
   }
 
   async function loadIconifyCandidates(query: string, requestId: number) {
     try {
       const result = await iconifyApi.search(query)
-      if (requestId !== iconifySearchRequestId) return
-
-      iconifySearchCandidates = result.candidates
-      iconifySearchError = ''
+      iconifySearchState = resolveBookmarkIconifySearchSuccess(iconifySearchState, {
+        requestId,
+        candidates: result.candidates,
+      })
     } catch (searchError) {
-      if (requestId !== iconifySearchRequestId) return
-
-      iconifySearchCandidates = []
-      iconifySearchError = getErrorMessage(searchError)
-    } finally {
-      if (requestId === iconifySearchRequestId) {
-        iconifySearchLoading = false
-      }
+      iconifySearchState = resolveBookmarkIconifySearchError(iconifySearchState, {
+        requestId,
+        error: getErrorMessage(searchError),
+      })
     }
   }
 
@@ -180,26 +181,28 @@
   }
 
   function selectIconifyIcon() {
-    if (!iconifySourceUrl) {
-      candidateError = '请输入有效的 Iconify 图标名或 icon-sets 链接，例如 mdi:home 或 https://icon-sets.iconify.design/mdi/home/'
+    const result = selectBookmarkIconifyIcon(iconifyName)
+    if (!result.ok) {
+      candidateError = result.error
       return
     }
 
-    form.icon = iconifySourceUrl
-    form.icon_source = 'iconify'
-    iconifyName = normalizedIconifyName
-    iconifyUseConfirmed = true
-    confirmedIconifyName = normalizedIconifyName
+    form.icon = result.icon
+    form.icon_source = result.iconSource
+    iconifyName = result.iconifyName
+    iconifyUseConfirmed = result.iconifyUseConfirmed
+    confirmedIconifyName = result.confirmedIconifyName
     candidateError = ''
     faviconError = ''
   }
 
   function selectIconifySearchCandidate(candidate: IconifySearchCandidate) {
-    iconifyName = candidate.name
-    form.icon = candidate.url
-    form.icon_source = 'iconify'
-    iconifyUseConfirmed = true
-    confirmedIconifyName = candidate.name
+    const result = selectBookmarkIconifySearchCandidate(candidate)
+    iconifyName = result.iconifyName
+    form.icon = result.icon
+    form.icon_source = result.iconSource
+    iconifyUseConfirmed = result.iconifyUseConfirmed
+    confirmedIconifyName = result.confirmedIconifyName
     candidateError = ''
     faviconError = ''
   }
@@ -348,9 +351,9 @@
             {iconifySelected}
             {iconifyUseConfirmed}
             {confirmedIconifyName}
-            {iconifySearchCandidates}
-            {iconifySearchLoading}
-            {iconifySearchError}
+            iconifySearchCandidates={iconifySearchState.candidates}
+            iconifySearchLoading={iconifySearchState.loading}
+            iconifySearchError={iconifySearchState.error}
             {candidateError}
             {loading}
             onOpenLibrary={openIconifyLibrary}
