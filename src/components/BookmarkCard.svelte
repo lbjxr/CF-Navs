@@ -5,11 +5,13 @@
   import BookmarkCardInfo from './BookmarkCardInfo.svelte'
   import BookmarkContextMenu from './BookmarkContextMenu.svelte'
   import BookmarkLinkModal from './BookmarkLinkModal.svelte'
-  import { buildIconStyle, createIconVersion } from '../lib/bookmarkIconDisplay'
-  import { iconifyProxyIcon, isIconifyIconUrl, logoSurfIcon } from '../lib/icons'
+  import { buildIconStyle } from '../lib/bookmarkIconDisplay'
+  import {
+    deriveBookmarkCardIconBase,
+    deriveBookmarkCardIconUrl,
+  } from '../lib/bookmarkCardIconState'
   import { observeIconVisibility } from '../lib/iconVisibility'
   import {
-    createBookmarkIconCacheKey,
     readCachedBookmarkIconDataUri,
     readCachedBookmarkIconUrl,
     revokeLocalIconUrl,
@@ -47,18 +49,30 @@
 
   $: openInNewTab = bookmark.open_method === 1
   $: openInModal = bookmark.open_method === 3
-  $: rawIcon = bookmark.icon?.trim() ?? ''
-  $: cachedIcon = bookmark.icon_blob?.trim() ?? ''
-  $: customTextIcon =
-    rawIcon &&
-    bookmark.icon_source !== 'logo_surf' &&
-    bookmark.icon_source !== 'iconify' &&
-    !isIconifyIconUrl(rawIcon) &&
-    !/^data:image\//i.test(rawIcon) &&
-    !/^https?:\/\//i.test(rawIcon)
-      ? rawIcon
-      : ''
-  $: iconText = customTextIcon || bookmark.title.trim().slice(0, 1) || '书'
+  $: iconBaseState = deriveBookmarkCardIconBase({
+    bookmark,
+    iconInView,
+  })
+  $: cachedIcon = iconBaseState.cachedIcon
+  $: iconText = iconBaseState.iconText
+  $: nextIconStateKey = iconBaseState.nextIconStateKey
+  $: localCacheKey = iconBaseState.localCacheKey
+  $: shouldReadLocalIconCache = iconBaseState.shouldReadLocalIconCache
+  $: shouldWaitForLocalIconCache = iconBaseState.shouldWaitForLocalIconCache
+  $: syncLocalCachedIconUrl = iconInView && !iconBaseState.hasEmbeddedIcon
+    ? readCachedBookmarkIconDataUri(localCacheKey) ?? ''
+    : ''
+  $: iconUrlState = deriveBookmarkCardIconUrl({
+    bookmark,
+    baseState: iconBaseState,
+    cachedIconFailed,
+    fallbackFailed,
+    syncLocalCachedIconUrl,
+    localCachedIconUrl,
+    localCachePending,
+  })
+  $: iconUrl = iconUrlState.iconUrl
+  $: hasRenderableIcon = iconUrlState.hasRenderableIcon
   $: infoCardHeight = height > 0 ? height : 70
   $: infoIconInset = infoCardHeight <= 56 ? 6 : 8
   $: infoIconSize = Math.max(32, Math.min(infoCardHeight - infoIconInset * 2, width - infoIconInset * 2))
@@ -71,43 +85,11 @@
     customBackground: iconBackgroundColor,
   })
   $: tooltipText = bookmark.description ? `${bookmark.title}\n${bookmark.description}` : bookmark.title
-  $: nextIconStateKey = `${bookmark.id}:${bookmark.icon_source ?? ''}:${bookmark.icon ?? ''}:${bookmark.icon_blob ?? ''}:${bookmark.title}:${bookmark.url}:${iconInView}`
-  $: localCacheKey = createBookmarkIconCacheKey({
-    id: bookmark.id,
-    icon: rawIcon,
-    iconSource: bookmark.icon_source,
-  })
-  $: hasEmbeddedIcon = /^data:image\//i.test(cachedIcon)
-  $: hasCachedRemoteIcon = Boolean(bookmark.icon_cached) && !hasEmbeddedIcon
-  $: syncLocalCachedIconUrl = iconInView && !hasEmbeddedIcon
-    ? readCachedBookmarkIconDataUri(localCacheKey) ?? ''
-    : ''
   $: cardShellStyle =
     style === 'info'
       ? `min-width: ${width}px; ${height > 0 ? `height: ${height}px;` : ''}`
       : `width: ${compactIconSize}px; height: ${compactIconSize}px;`
   $: cardLinkStyle = height > 0 ? `height: ${height}px;` : ''
-  $: iconifyRemoteUrl =
-    bookmark.icon_source === 'iconify' || isIconifyIconUrl(rawIcon)
-      ? iconifyProxyIcon(rawIcon)
-      : ''
-  $: canUseRawHttpIconFallback =
-    /^https?:\/\//i.test(rawIcon) &&
-    !iconifyRemoteUrl &&
-    bookmark.icon_source !== 'logo_surf' &&
-    !customTextIcon
-  $: shouldReadLocalIconCache =
-    iconInView &&
-    Boolean(rawIcon) &&
-    !iconifyRemoteUrl &&
-    !hasEmbeddedIcon &&
-    bookmark.icon_source !== 'logo_surf' &&
-    !customTextIcon
-  $: shouldUseIconProxy = canUseRawHttpIconFallback || hasCachedRemoteIcon
-  $: shouldWaitForLocalIconCache = false
-  $: proxiedHttpIconUrl = shouldUseIconProxy
-    ? `/api/icon/${encodeURIComponent(String(bookmark.id))}?v=${createIconVersion(`${bookmark.id}:${rawIcon}:${bookmark.title}:${bookmark.url}`)}`
-    : ''
   $: if (nextIconStateKey !== iconStateKey) {
     iconStateKey = nextIconStateKey
     cachedIconFailed = false
@@ -120,21 +102,6 @@
     }
   }
   $: syncWindowListeners(contextMenuOpen || modalOpen)
-
-  $: iconUrl = (() => {
-    if (!iconInView) return ''
-    if (bookmark.icon_source === 'logo_surf') return bookmark.icon || logoSurfIcon(bookmark.title, bookmark.url)
-    if (!cachedIconFailed && hasEmbeddedIcon) return cachedIcon
-    if (syncLocalCachedIconUrl) return syncLocalCachedIconUrl
-    if (localCachedIconUrl) return localCachedIconUrl
-    if (localCachePending && shouldWaitForLocalIconCache) return ''
-    if ((!rawIcon && !hasCachedRemoteIcon) || customTextIcon) return ''
-    if (iconifyRemoteUrl) return iconifyRemoteUrl
-    if (/^data:image\//i.test(rawIcon)) return rawIcon
-    if (shouldUseIconProxy) return proxiedHttpIconUrl
-    return ''
-  })()
-  $: hasRenderableIcon = Boolean(iconUrl) && !fallbackFailed
 
   function resetLocalCachedIconUrl() {
     if (localCachedIconUrl) {
