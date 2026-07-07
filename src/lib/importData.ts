@@ -196,3 +196,15 @@ function prepareSunPanelImport(parsed: unknown): PreparedImport {
 export function prepareImportPayload(parsed: unknown, source: ImportSource): PreparedImport {
   return source === 'sunpanel' ? prepareSunPanelImport(parsed) : prepareCFNavsImport(parsed)
 }
+
+export function parseImportJsonText(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error('文件不是有效的 JSON')
+  }
+}
+
+export function prepareImportText(text: string, source: ImportSource): PreparedImport {
+  return prepareImportPayload(parseImportJsonText(text), source)
+}

@@ -92,6 +92,10 @@
   - `src/lib/appSortQueue.ts`
   - `tests/unit/appSortQueue.test.ts`
 - 当前只下沉排序 id 规范化、上一轮保存失败后继续串行排队、最新请求判断；分类/书签排序 API 调用、本地乐观更新、缓存持久化和失败刷新仍留在 `App.svelte`。
+- 将导入 JSON 文本解析和 source 准备入口收敛到 `src/lib/importData.ts`：
+  - `parseImportJsonText`
+  - `prepareImportText`
+- `App.svelte` 继续动态加载 `importData` 分包，只保留文件读取、覆盖确认、API 导入、store 更新和缓存持久化。
 - `App.svelte` 仍保留 API 调用、store 更新、懒加载组件、弹窗开关、确认框 resolver、错误状态和排序副作用编排。
 
 ## 当前大文件分布
@@ -99,7 +103,7 @@
 截至本轮完成后，主要业务文件行数约为：
 
 ```text
-871   src/App.svelte
+864   src/App.svelte
 555   src/views/Home.svelte
 538   src/components/admin/adminListPanels.css
 527   src/views/Admin.svelte
@@ -164,7 +168,7 @@ https://navs.bjlius.com
 
 1. `src/App.svelte`
    - 建议按 use-case 拆分：bootstrap/refresh、local mutations、modal handlers、import/export、sort handlers。
-   - 已开始先抽无副作用的弹窗草稿/查找 helper、确认框状态/文案 helper、备份导出 payload/文件名/成功文案 helper，以及排序保存队列 helper。继续拆分前应补更多针对导入解析和本地增量更新的单元测试。
+   - 已开始先抽无副作用的弹窗草稿/查找 helper、确认框状态/文案 helper、备份导出 payload/文件名/成功文案 helper、排序保存队列 helper，以及导入 JSON 文本解析 helper。继续拆分前应补更多针对本地增量更新的单元测试。
 
 2. `worker/lib/db.ts`
    - 可以继续按数据域拆：category repository、bookmark repository、settings repository、import repository。

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BackupData } from '../../shared/types'
-import { prepareImportPayload } from '../../src/lib/importData'
+import { parseImportJsonText, prepareImportPayload, prepareImportText } from '../../src/lib/importData'
 
 describe('prepareImportPayload', () => {
   it('passes through CF-Navs backups with counts and optional settings', () => {
@@ -97,5 +97,22 @@ describe('prepareImportPayload', () => {
     expect(() => prepareImportPayload({}, 'cf-navs')).toThrow('Backup file is missing categories / bookmarks')
     expect(() => prepareImportPayload({}, 'sunpanel')).toThrow('SunPanel file is missing icons')
     expect(() => prepareImportPayload({ icons: [] }, 'sunpanel')).toThrow('SunPanel file does not contain importable categories')
+  })
+
+  it('parses JSON text before preparing import payloads', () => {
+    const prepared = prepareImportText(JSON.stringify({
+      version: 1,
+      categories: [{ id: 1, title: 'Tools', icon: null, sort: 0, created_at: 100 }],
+      bookmarks: [],
+    }), 'cf-navs')
+
+    expect(prepared.categories).toBe(1)
+    expect(prepared.bookmarks).toBe(0)
+    expect(prepared.sourceLabel).toBe('CF-Navs backup')
+  })
+
+  it('rejects invalid JSON text with the UI-facing error message', () => {
+    expect(() => parseImportJsonText('{bad json')).toThrow('文件不是有效的 JSON')
+    expect(() => prepareImportText('{bad json', 'cf-navs')).toThrow('文件不是有效的 JSON')
   })
 })

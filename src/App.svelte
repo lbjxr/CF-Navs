@@ -656,15 +656,8 @@
 
     try {
       const text = await file.text()
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(text)
-      } catch {
-        throw new Error('文件不是有效的 JSON')
-      }
-
-      const { prepareImportPayload } = await import('./lib/importData')
-      const prepared = prepareImportPayload(parsed, source)
+      const { prepareImportText } = await import('./lib/importData')
+      const prepared = prepareImportText(text, source)
 
       const confirmed = await requestConfirmation(createImportOverwriteConfirmation(prepared))
       if (!confirmed) {
