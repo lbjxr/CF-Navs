@@ -23,6 +23,7 @@
     type SettingsFormValue,
   } from './lib/appData'
   import { buildOrderedBookmarkIdsForCategory } from './lib/appLocalData'
+  import { createBookmarkDraft, createCategoryDraft, findBookmarkForEdit } from './lib/appModalState'
   import type { ImportSource } from './lib/importData'
   import { pruneBookmarkIconCacheStorageBackedByLocalStorage } from './lib/localBookmarkIconCache'
   import { adminStore, authStore, configStore, isAuthenticated, publicStore } from './lib/stores'
@@ -401,7 +402,7 @@
     }
     await ensureAdminComponent()
     categoryModalMode = 'create'
-    activeCategory = { title: '', icon: '' }
+    activeCategory = createCategoryDraft()
     categoryModalOpen = true
     currentView = 'admin'
   }
@@ -478,15 +479,7 @@
     const fallbackCategoryId = categoryId ?? get(adminStore).data.categories[0]?.id
     await ensureBookmarkEditModalComponent()
     bookmarkModalMode = 'create'
-    activeBookmark = {
-      category_id: fallbackCategoryId,
-      title: '',
-      url: '',
-      icon: '',
-      icon_background_color: '',
-      description: '',
-      open_method: 'new_tab',
-    }
+    activeBookmark = createBookmarkDraft(fallbackCategoryId)
     bookmarkModalOpen = true
   }
 
@@ -496,9 +489,7 @@
       return
     }
 
-    const current =
-      adminData.bookmarks.find((item) => item.id === Number(bookmark.id)) ??
-      publicData?.bookmarks.find((item) => item.id === Number(bookmark.id))
+    const current = findBookmarkForEdit(bookmark.id, adminData.bookmarks, publicData?.bookmarks ?? [])
     if (!current) return
 
     bookmarkError = ''
@@ -507,10 +498,11 @@
     }
     await ensureBookmarkEditModalComponent()
     bookmarkModalMode = 'edit'
-    const refreshed =
-      get(adminStore).data.bookmarks.find((item) => item.id === Number(bookmark.id)) ??
-      get(publicStore).data?.bookmarks.find((item) => item.id === Number(bookmark.id)) ??
-      current
+    const refreshed = findBookmarkForEdit(
+      bookmark.id,
+      get(adminStore).data.bookmarks,
+      get(publicStore).data?.bookmarks ?? [],
+    ) ?? current
     activeBookmark = toBookmarkForm(refreshed)
     bookmarkModalOpen = true
     refreshBookmarkIconCacheInBackground(Number(bookmark.id))
