@@ -126,6 +126,14 @@
 - `Home.svelte` 继续保留搜索 debounce、分类/书签派生、section observer、滚动定位、侧边栏导航和分类列表渲染编排。
 - 本轮只迁移无状态展示模板及其 scoped CSS，不改变搜索、排序、滚动或生命周期逻辑。
 
+### Round 12: Admin 页眉与认证操作拆分
+
+- 从 `src/views/Admin.svelte` 中拆出后台页眉、返回首页、登录和退出按钮：
+  - `src/components/admin/AdminPageHeader.svelte`
+- `Admin.svelte` 继续保留 active tab、SettingsPanel/CategoryEditModal 懒加载、分类/书签/设置/备份内容分发和所有业务回调。
+- 顺手清理 `Admin.svelte` 中不再使用的本地类型/函数，并整理 settings 分支缩进与重复 `.panel` 样式。
+- 本轮只迁移无状态页眉展示和认证操作按钮，不改变后台 tab、列表面板、设置面板、备份面板或 modal 生命周期。
+
 ## 当前大文件分布
 
 截至本轮完成后，主要业务文件行数约为：
@@ -133,19 +141,19 @@
 ```text
 869   src/App.svelte
 538   src/components/admin/adminListPanels.css
-527   src/views/Admin.svelte
 501   src/components/BookmarkEditModal.svelte
 459   src/components/SettingsPanel.svelte
 457   src/views/Home.svelte
 416   src/components/Sidebar.svelte
 396   src/app.css
 389   src/components/CategorySection.svelte
+388   src/views/Admin.svelte
 388   src/lib/api.ts
 387   src/components/settings/CardSettingsSection.svelte
 385   src/lib/dataService.ts
 ```
 
-`App.svelte` 仍是最大文件。它承担全局状态编排，包括登录、缓存、导入导出、CRUD 后本地增量更新、弹窗协调和排序回写。后续如果继续拆分，应按应用 use-case 或 controller 边界单独规划，不建议零散移动函数。`Home.svelte` 已降到约 457 行，继续拆分应优先考虑 section tracking/search controller 或分类列表展示边界。`BookmarkCard.svelte` 已降到约 333 行，`BookmarkEditModal.svelte` 已降到约 501 行；二者后续更适合做运行时验证驱动的小步清理，而不是继续无边界拆分。
+`App.svelte` 仍是最大文件。它承担全局状态编排，包括登录、缓存、导入导出、CRUD 后本地增量更新、弹窗协调和排序回写。后续如果继续拆分，应按应用 use-case 或 controller 边界单独规划，不建议零散移动函数。`Home.svelte` 已降到约 457 行，继续拆分应优先考虑 section tracking/search controller 或分类列表展示边界。`Admin.svelte` 已降到约 388 行，下一步适合拆后台 tab 内容外壳或继续梳理列表面板 CSS。`BookmarkCard.svelte` 已降到约 333 行，`BookmarkEditModal.svelte` 已降到约 501 行；二者后续更适合做运行时验证驱动的小步清理，而不是继续无边界拆分。
 
 ## 最近部署与生产验证
 
@@ -217,7 +225,8 @@ https://navs.bjlius.com
 ## 后续拆分建议
 
 1. `src/views/Admin.svelte` / `src/components/admin/adminListPanels.css`
-   - 建议先拆后台页眉与认证操作按钮，再拆 tab 内容外壳，最后处理列表面板共享样式。
+   - 已拆出后台页眉与认证操作按钮。
+   - 下一步建议拆 tab 内容外壳，最后处理列表面板共享样式。
    - `adminListPanels.css` 已较大，应优先移动只属于分类面板或书签面板的私有样式；共享分页、toolbar、status card 样式可以保留在公共 CSS，避免一次性全局化。
 
 2. `src/views/Home.svelte`
