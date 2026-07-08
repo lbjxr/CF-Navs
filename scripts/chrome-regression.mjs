@@ -16,6 +16,7 @@
 
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { rm } from 'node:fs/promises'
 import WebSocket from 'ws'
 
@@ -40,6 +41,11 @@ let nextId = 0
 let ws = null
 let chromeProcess = null
 let startedChrome = false
+let browserSessionMode = false
+let browserSessionId = null
+let browserTargetId = null
+let chromeConnectionMode = 'debug-port'
+let chromeConnectedPort = CHROME_DEBUG_PORT
 const pending = new Map()
 const events = []
 const network = new Map()
@@ -85,6 +91,9 @@ async function isChromeDebugPortReady() {
 async function ensureChrome() {
   if (await isChromeDebugPortReady()) return
 
+  const active = await readDevToolsActivePort()
+  if (active) return
+
   if (!existsSync(CHROME_EXE)) {
     throw new Error(`Chrome debug port is unavailable and CHROME_EXE was not found: ${CHROME_EXE}`)
   }
@@ -110,6 +119,31 @@ async function ensureChrome() {
   }
 
   throw new Error(`Chrome did not expose CDP on ${DEBUG_ENDPOINT}`)
+}
+
+async function readDevToolsActivePort() {
+  const candidates = [
+    process.env.CHROME_DEVTOOLS_ACTIVE_PORT_FILE,
+    process.env.LOCALAPPDATA
+      ? `${process.env.LOCALAPPDATA}\\Google\\Chrome\\User Data\\DevToolsActivePort`
+      : '',
+  ].filter(Boolean)
+
+  for (const filePath of candidates) {
+    try {
+      const [port, browserPath] = (await readFile(filePath, 'utf8')).trim().split(/\r?\n/)
+      if (!port || !browserPath) continue
+      return {
+        port,
+        browserPath,
+        webSocketDebuggerUrl: `ws://127.0.0.1:${port}${browserPath}`,
+      }
+    } catch {
+      // Try the next possible profile path.
+    }
+  }
+
+  return null
 }
 
 async function getPageTarget() {
@@ -158,6 +192,22 @@ function connect(target) {
   })
 }
 
+async function connectBrowserSession(target) {
+  await connect(target)
+  browserSessionMode = true
+  chromeConnectionMode = 'devtools-active-port'
+  chromeConnectedPort = target.port
+
+  const created = await sendBrowserCommand('Target.createTarget', { url: TARGET_URL })
+  browserTargetId = created.targetId
+
+  const attached = await sendBrowserCommand('Target.attachToTarget', {
+    targetId: browserTargetId,
+    flatten: true,
+  })
+  browserSessionId = attached.sessionId
+}
+
 function captureRuntimeEvent(message) {
   if (message.method === 'Runtime.consoleAPICalled') {
     const params = message.params || {}
@@ -186,7 +236,12 @@ function send(method, params = {}, timeoutMs = 30000) {
   if (!ws) throw new Error('CDP WebSocket is not connected.')
 
   const id = ++nextId
-  ws.send(JSON.stringify({ id, method, params }))
+  ws.send(JSON.stringify({
+    id,
+    method,
+    params,
+    ...(browserSessionMode && browserSessionId ? { sessionId: browserSessionId } : {}),
+  }))
 
   return new Promise((resolveSend, rejectSend) => {
     const timer = setTimeout(() => {
@@ -206,6 +261,16 @@ function send(method, params = {}, timeoutMs = 30000) {
       },
     })
   })
+}
+
+function sendBrowserCommand(method, params = {}, timeoutMs = 30000) {
+  const previousSession = browserSessionId
+  browserSessionId = null
+  try {
+    return send(method, params, timeoutMs)
+  } finally {
+    browserSessionId = previousSession
+  }
 }
 
 async function fulfillBlockedWriteRequest(params) {
@@ -753,6 +818,14 @@ async function cleanup() {
     // Best effort.
   }
 
+  if (browserSessionMode && browserTargetId) {
+    try {
+      await sendBrowserCommand('Target.closeTarget', { targetId: browserTargetId }, 3000)
+    } catch {
+      // Best effort cleanup.
+    }
+  }
+
   try {
     ws?.close()
   } catch {
@@ -776,8 +849,13 @@ async function cleanup() {
 async function main() {
   const startedAt = new Date().toISOString()
   await ensureChrome()
-  const target = await getPageTarget()
-  await connect(target)
+  const activeTarget = await readDevToolsActivePort()
+  if (activeTarget && !(await isChromeDebugPortReady())) {
+    await connectBrowserSession(activeTarget)
+  } else {
+    const target = await getPageTarget()
+    await connect(target)
+  }
 
   await send('Page.enable')
   await send('Runtime.enable')
@@ -810,6 +888,8 @@ async function main() {
       startedAt,
       target: TARGET_URL,
       chromeDebugPort: CHROME_DEBUG_PORT,
+      chromeConnectionMode,
+      chromeConnectedPort,
       startedChrome,
       api,
       home,

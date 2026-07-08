@@ -41,6 +41,8 @@ npm run regression:chrome
 
 If no Chrome is already exposing the configured DevTools port, `regression:chrome` starts a temporary headless Chrome profile under `D:\tmp\cf-navs-chrome-profile-<port>` and removes it after the run.
 
+When Chrome is already running with a dynamic DevTools port, the script can also read Chrome's `DevToolsActivePort` file from the default profile and connect through the browser websocket directly. This handles Chrome instances where `/json/version` is not exposed on `9222` but the profile contains the active port and `/devtools/browser/...` websocket path. In that mode the JSON output reports `chromeConnectionMode: "devtools-active-port"` and does not start a temporary Chrome process.
+
 Optional:
 
 ```powershell
