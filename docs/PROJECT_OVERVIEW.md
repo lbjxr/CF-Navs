@@ -71,6 +71,10 @@ src/
 │   ├── icons.ts        # 图标候选辅助（多源候选 + 文字图标配色）
 │   ├── adminDataCache.ts # 登录态后台聚合数据浏览器本地快照
 │   ├── localBookmarkIconCache.ts # 书签图标浏览器本地缓存
+│   ├── appNavigation.ts # 首页访问/启动落点判定
+│   ├── appImportExport.ts # 备份导出/导入 controller
+│   ├── appSortQueue.ts # 排序保存队列 + 乐观排序编排
+│   ├── errorMonitor.ts # 生产错误分类、全局捕获和批量上报
 │   ├── sortableList.ts  # 通用拖拽排序 action
 │   ├── themePresets.ts  # 站点背景渐变与外观预设
 │   └── importData.ts   # CF-Navs / SunPanel 导入转换
@@ -87,6 +91,7 @@ worker/
 │   ├── bookmarks.ts    # 书签管理
 │   ├── icon.ts         # 缓存图标服务（公开）
 │   ├── settings.ts     # 设置管理
+│   ├── errorReport.ts  # 前端运行时错误上报
 │   └── favicon.ts      # 图标自动获取（服务端解析）
 ├── middleware/
 │   └── auth.ts         # 认证中间件
@@ -268,10 +273,10 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 
 ### 测试
 - `npm run type-check`：TypeScript 与 Svelte 诊断，要求 0 error / 0 warning
-- `npm test`：Vitest 单元测试，覆盖前端 helper、worker 图标逻辑和 settings 数据归一化
+- `npm test`：Vitest 单元测试，当前 39 套 / 221 tests，覆盖前端 helper、worker 图标逻辑、settings 数据归一化、安全权限、错误监控和排序编排
 - `npm run build`：生产构建验证
 - `git diff --check`：提交前空白检查
-- 部署后使用 Chrome 在 `https://navs.bjlius.com` 验证首页、后台、图标、编辑弹窗和 settings API
+- `npm run regression:chrome`：生产 Chrome 回归，当前 25 项严格检查，覆盖 API smoke、首页、后台、设置/备份、右键编辑、登录退出和安全权限；安全测试中预期的 401 会归入 `network.expectedFailed`
 
 ## 🚀 部署流程
 
@@ -305,15 +310,17 @@ docs/
 ## 🎯 未来规划
 
 ### 短期计划
-- [ ] 完善单元测试
-- [ ] 添加 E2E 测试
-- [ ] 性能监控
-- [ ] 错误日志收集
+- [x] 完善单元测试（39 套 / 221 tests）
+- [x] Chrome 回归测试（25 项严格检查 + 独立 headless profile）
+- [x] 性能审计脚本（`npm run perf:audit`）
+- [x] 生产错误收集（`errorMonitor.ts` + `/api/error-report`）
+- [ ] 继续按 use-case 收敛 `App.svelte`（auth / CRUD / modal controller）
+- [ ] 后台设置组件继续瘦身，优先抽纯数据转换或重复状态逻辑
 
 ### 中期计划
-- [ ] 浏览器插件
 - [ ] API 文档自动生成
 - [ ] 多语言支持（i18n）
+- [ ] 长列表规模继续扩大时评估虚拟化
 
 ### 长期计划
 - [ ] 多用户支持（可选）

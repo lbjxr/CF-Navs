@@ -201,17 +201,17 @@
 截至本轮完成后，主要业务文件行数约为：
 
 ```text
-864   src/App.svelte
+816   src/App.svelte
 501   src/components/BookmarkEditModal.svelte
 459   src/components/SettingsPanel.svelte
 444   src/views/Home.svelte
 416   src/components/Sidebar.svelte
 396   src/app.css
 389   src/components/CategorySection.svelte
+389   src/lib/dataService.ts
 388   src/lib/api.ts
 387   src/components/settings/CardSettingsSection.svelte
-386   src/components/admin/BookmarkListPanel.svelte
-385   src/lib/dataService.ts
+387   src/components/admin/BookmarkListPanel.svelte
 322   src/views/Admin.svelte
 310   src/components/admin/adminListPanels.css
 302   src/components/admin/CategoryListPanel.svelte
@@ -222,29 +222,36 @@
 33    src/lib/appLazyComponent.ts
 ```
 
-`App.svelte` 仍是最大文件。它承担全局状态编排，包括登录、缓存、导入导出、CRUD 后本地增量更新、弹窗协调和排序回写。后续如果继续拆分，应按应用 use-case 或 controller 边界单独规划，不建议零散移动函数；当前主题状态推导已有 `appThemeState` 单元测试覆盖，动态组件懒加载缓存已有 `appLazyComponent` 单元测试覆盖。`Home.svelte` 已降到约 444 行，section key、active fallback、intersection 最近项和滚动目标计算已有 `homeData` 单元测试覆盖；继续拆分应避免在缺少浏览器验证时大改 observer 生命周期。`Admin.svelte` 已降到约 322 行，页眉和 tab 内容外壳已拆出；`adminListPanels.css` 已从约 538 行降到约 310 行，剩余内容以共享列表壳、分页、状态卡片和排序样式为主；后台列表搜索、分页、排序 id 推导已有 `adminListState` 单元测试覆盖。`BookmarkCard.svelte` 已降到约 333 行，`BookmarkEditModal.svelte` 已降到约 501 行；二者后续更适合做运行时验证驱动的小步清理，而不是继续无边界拆分。
+`App.svelte` 仍是最大文件，但导入/导出 controller 和乐观排序编排已经下沉到 `appImportExport` 与 `appSortQueue`，当前主要承担登录、缓存、CRUD 后本地增量更新、弹窗协调和视图切换。后续如果继续拆分，应按 auth flow、CRUD/local mutation 或 modal controller 边界单独规划，不建议零散移动函数；当前主题状态推导已有 `appThemeState` 单元测试覆盖，动态组件懒加载缓存已有 `appLazyComponent` 单元测试覆盖。`Home.svelte` 已降到约 444 行，section key、active fallback、intersection 最近项和滚动目标计算已有 `homeData` 单元测试覆盖；继续拆分应避免在缺少浏览器验证时大改 observer 生命周期。`Admin.svelte` 已降到约 322 行，页眉和 tab 内容外壳已拆出；`adminListPanels.css` 已从约 538 行降到约 310 行，剩余内容以共享列表壳、分页、状态卡片和排序样式为主；后台列表搜索、分页、排序 id 推导已有 `adminListState` 单元测试覆盖。`BookmarkCard.svelte` 已降到约 333 行，`BookmarkEditModal.svelte` 已降到约 501 行；二者后续更适合做运行时验证驱动的小步清理，而不是继续无边界拆分。
 
 ## 最近部署与生产验证
 
-2026-07-07 已执行 `npm run deploy`，部署到 Cloudflare Worker：
+2026-07-09 已执行 `npm run deploy`，部署到 Cloudflare Worker：
 
 ```text
-Version ID: 842237e7-8b83-4e0b-828a-df8284c06c1b
+Version ID: 816a7053-f3b1-405a-b928-32e0c995468d
 Production domain: https://navs.bjlius.com
 ```
 
-生产 Chrome/CDP 验证结果：
+生产 Chrome/CDP 严格回归验证结果：
 
-- 首页加载正常，标题为 `不要摸鱼`。
-- 首页统计条正常：`共 11 个分类，341 个站点`。
-- 搜索无结果状态正常：显示 `没有匹配的书签`。
-- 首页渲染 11 个分类、341 个书签卡片，破损图片数为 0。
+- 使用独立 headless Chrome 临时 profile，验证后已清理。
+- 首页加载正常，标题为 `CF-Navs`。
+- 首页渲染 11 个分类、345 个书签卡片，破损图片数为 0。
+- 搜索过滤与清空恢复正常，主题切换正常。
 - 登录成功后，管理入口、退出按钮和主题按钮可见。
+- 后台分类/书签列表、搜索、设置面板和备份面板均加载正常。
 - 书签卡片右键菜单可打开，编辑弹窗可打开并可取消关闭。
-- 后台页面正常显示 `导航内容管理`、分类统计和书签统计。
-- `/api/config`、`/api/settings`、`/api/admin/data`、`/api/data/version` 均返回 200 且包含数据。
-- Chrome console error、page exception、failed request、非预期 HTTP 4xx/5xx 均为 0。
-- 验证使用的临时 headless Chrome 进程已清理。
+- `/api/health`、`/api/config`、`/api/admin/data`、`/api/data/version`、Iconify 搜索均返回 200 且结构完整。
+- Chrome console error、page exception、unexpected failed request 均为 0。
+- 安全回归中预期的 4 个 401 已归入 `network.expectedFailed`，不再误报为失败网络请求。
+
+近期追加维护轮次：
+
+- `src/lib/appImportExport.ts`：导出下载、导入确认、API 导入和状态反馈从 `App.svelte` 下沉。
+- `src/lib/appSortQueue.ts`：新增 `runOptimisticSort`，统一本地乐观排序、远端保存队列、最新请求判定和失败回滚。
+- `src/lib/errorMonitor.ts` + `/api/error-report`：前端运行时错误批量上报到 Worker。
+- `scripts/chrome-regression.mjs`：区分真正失败请求与安全回归中预期的 401，当前严格回归 25 项 checks 全部通过。
 
 ## 每轮验证标准
 
@@ -306,9 +313,9 @@ https://navs.bjlius.com
    - 后续如果继续 Home，应优先做浏览器验证；缺少验证时不建议继续大改滚动 observer 行为。
 
 3. `src/App.svelte`
-   - 建议按 use-case 拆分：bootstrap/refresh、local mutations、modal handlers、import/export、sort handlers。
-   - 已开始先抽无副作用的弹窗草稿/查找 helper、确认框状态/文案 helper、备份导出 payload/文件名/成功文案 helper、排序保存队列 helper、导入 JSON 文本解析 helper、首页访问判定 helper、主题状态 helper和动态组件懒加载 helper；dataService 本地增量更新编排也已收敛。
-   - 继续拆 App 前应单独规划 modal handler/controller 边界，不建议零散移动事件处理函数。
+   - 建议按 use-case 拆分：bootstrap/refresh、auth flow、CRUD/local mutations、modal handlers。
+   - 已抽出弹窗草稿/查找 helper、确认框状态/文案 helper、备份导出 payload/文件名/成功文案 helper、导入/导出 controller、排序保存队列与乐观排序编排、首页访问判定、主题状态 helper 和动态组件懒加载 helper；dataService 本地增量更新编排也已收敛。
+   - 继续拆 App 前应单独规划 modal handler/controller 边界，不建议零散移动事件处理函数；短期更适合继续收敛 auth flow 或 CRUD/local mutation controller。
 
 4. `worker/lib/db.ts`
    - `db.ts` 已是重导出入口，category/bookmark/settings/import 等数据域已拆到 `worker/lib/db/*`。
