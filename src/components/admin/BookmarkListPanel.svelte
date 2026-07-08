@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import type { AdminBookmarkSummary, AdminCategorySummary } from '../../lib/appData'
   import {
     clampAdminListPage,
@@ -126,9 +126,9 @@
 
     <div class="admin-panel-scroll-body admin-table-scroll-body">
       {#if bookmarksLoading}
-        <p class="admin-empty-text">书签加载中...</p>
+        <div class="admin-empty-state">`n        <span class="admin-empty-state-icon">📑</span>`n        <h3>正在加载书签…</h3>`n      </div>
       {:else if bookmarks.length === 0}
-        <p class="admin-empty-text">暂无书签数据</p>
+        <div class="admin-empty-state">`n        <span class="admin-empty-state-icon">📑</span>`n        <h3>暂无书签</h3>`n        {#if categories.length === 0}`n          <p>请先在分类面板中创建至少一个分类，再添加书签。</p>`n        {:else}`n          <p>点击右上角「新增书签」开始添加第一个书签。</p>`n          <div class="admin-empty-action">`n            <button type="button" class="admin-primary-button" on:click={() => onOpenCreateBookmark?.()} disabled={!isAuthenticated}>`n              新增书签`n            </button>`n          </div>`n        {/if}`n      </div>
       {:else}
         <div class="admin-table-wrap">
           <table class="admin-bookmark-table" class:is-sorting={sortMode}>
@@ -226,7 +226,7 @@
             </tbody>
           </table>
           {#if !sortMode && filteredBookmarks.length === 0}
-            <p class="admin-empty-text" style="padding: 24px 0; text-align: center;">未找到匹配的书签。</p>
+            <div class="admin-empty-state" style="min-height: 120px;">`n          <span class="admin-empty-state-icon">🔍</span>`n          <h3>未找到匹配的书签</h3>`n          <p>换个关键词试试，或检查分类、链接是否匹配。</p>`n        </div>
           {/if}
         </div>
       {/if}

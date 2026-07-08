@@ -1,4 +1,4 @@
-.admin-list-view {
+﻿.admin-list-view {
   display: grid;
   grid-template-rows: auto auto;
   gap: 16px;
@@ -258,6 +258,44 @@
 .admin-empty-text {
   color: var(--admin-subtle);
   line-height: 1.5;
+}
+
+/* --- Admin empty state panel --- */
+.admin-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  text-align: center;
+  gap: 10px;
+  min-height: 180px;
+}
+
+.admin-empty-state-icon {
+  font-size: 44px;
+  line-height: 1;
+  opacity: 0.45;
+  margin-bottom: 4px;
+}
+
+.admin-empty-state h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--admin-text);
+}
+
+.admin-empty-state p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--admin-subtle);
+  max-width: 300px;
+  line-height: 1.55;
+}
+
+.admin-empty-state .admin-empty-action {
+  margin-top: 8px;
 }
 
 .sortable-ghost {
