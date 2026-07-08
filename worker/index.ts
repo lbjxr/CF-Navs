@@ -8,6 +8,7 @@ import authRoutes from './routes/auth'
 import bookmarksRoutes from './routes/bookmarks'
 import categoriesRoutes from './routes/categories'
 import dataRoutes from './routes/data'
+import errorReportRoutes from './routes/errorReport'
 import faviconRoutes from './routes/favicon'
 import { iconRoutes } from './routes/icon'
 import publicRoutes from './routes/public'
@@ -20,6 +21,7 @@ app.get('/api/health', (c) => c.json(ok({ status: 'ok' })))
 
 app.route('/api', authRoutes)
 app.route('/api', publicRoutes)
+app.route('/api', errorReportRoutes) // 公开错误上报，无需认证
 
 app.use('/api/admin', authRequired)
 app.use('/api/admin/*', authRequired)

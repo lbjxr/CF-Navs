@@ -141,6 +141,20 @@ export const ErrCode = {
   SERVER_ERROR: 1500,
 } as const
 
+
+// ========== 错误报告 ==========
+
+// POST /api/error-report 的 payload（前端上报到服务端）
+export interface ErrorReportEntry {
+  category: 'network' | 'auth' | 'data' | 'scripting' | 'unknown'
+  message: string
+  stack?: string
+  timestamp: number
+  url?: string
+  line?: number
+  col?: number
+}
+
 // ========== 各接口的请求/响应数据形状 ==========
 
 // POST /api/login

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../src/lib/api'
-import { classifyError, formatLoggableError } from '../../src/lib/errorMonitor'
+import { classifyError, formatLoggableError, queueErrorForReport, initErrorReporting } from '../../src/lib/errorMonitor'
 
 describe('error monitor classification', () => {
   it('classifies ApiErrors by code', () => {
@@ -62,4 +62,29 @@ describe('error monitor classification', () => {
 
     expect(formatLoggableError(entry)).toBe('[SCRIPTING] runtime error')
   })
+  it('formats entries with url but without line/col', () => {
+    const entry = {
+      category: 'auth' as const,
+      message: 'token invalid',
+      timestamp: 12345,
+      url: '/api/admin/data',
+    }
+    expect(formatLoggableError(entry)).toBe('[AUTH] token invalid url=/api/admin/data')
+  })
+
+  it('exposes queueErrorForReport without throwing', () => {
+    // queueErrorForReport is stateful and interacts with timers/network
+    // in a real browser; in Node it should at least be callable without
+    // crashing.
+    const entry = classifyError(new Error('test error'))
+    expect(() => queueErrorForReport(entry)).not.toThrow()
+  })
+
+  it('initErrorReporting is callable in Node (skips DOM-dependent handlers)', () => {
+    // In Node there is no window; registerGlobalErrorHandlers is a no-op
+    // without window.addEventListener.  The function must still return
+    // without error.
+    expect(() => initErrorReporting()).not.toThrow()
+  })
+
 })

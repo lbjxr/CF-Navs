@@ -1,7 +1,6 @@
 // Lightweight production error monitoring.
-// Classifies runtime errors, attaches structured metadata, and patches
-// console.error so the Chrome regression suite can still assert on zero
-// console errors in the app-specific category.
+// Classifies runtime errors, attaches structured metadata, patches
+// console.error, and reports batches to /api/error-report via sendBeacon.
 
 import { isApiError, isUnauthorizedError, type ApiError } from './api'
 
@@ -78,6 +77,72 @@ export function formatLoggableError(entry: ClassifiedError): string {
   return parts.join(' ')
 }
 
+// --- Server reporting via /api/error-report ---
+
+const REPORT_ENDPOINT = '/api/error-report'
+const MAX_BATCH_SIZE = 10
+const FLUSH_INTERVAL_MS = 10000
+const MAX_REPORTS_PER_MINUTE = 60
+
+let _batch: ClassifiedError[] = []
+let _flushTimer: ReturnType<typeof setTimeout> | null = null
+let _reportCount = 0
+let _reportWindowStart = 0
+
+function resetRateWindow(): void {
+  const now = Date.now()
+  if (now - _reportWindowStart > 60_000) {
+    _reportCount = 0
+    _reportWindowStart = now
+  }
+}
+
+function rateLimitAllows(): boolean {
+  resetRateWindow()
+  return _reportCount < MAX_REPORTS_PER_MINUTE
+}
+
+function flushBatch(): void {
+  if (_flushTimer !== null) { clearTimeout(_flushTimer); _flushTimer = null }
+  if (_batch.length === 0) return
+  const batch = _batch.splice(0)
+  sendBatch(batch)
+}
+
+function sendBatch(errors: ClassifiedError[]): void {
+  _reportCount += 1
+  const payload = JSON.stringify({ errors })
+  try {
+    if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+      navigator.sendBeacon(REPORT_ENDPOINT, new Blob([payload], { type: 'application/json' }))
+    } else {
+      fetch(REPORT_ENDPOINT, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: payload,
+        keepalive: true,
+      }).catch(() => {
+        // Transport failures must never cascade.
+      })
+    }
+  } catch {
+    // Silently ignore transport failures — error reporting must never
+    // cause additional errors.
+  }
+}
+
+export function queueErrorForReport(entry: ClassifiedError): void {
+  if (!rateLimitAllows()) return
+  _batch.push(entry)
+  if (_batch.length >= MAX_BATCH_SIZE) {
+    flushBatch()
+  } else if (_flushTimer === null) {
+    _flushTimer = setTimeout(flushBatch, FLUSH_INTERVAL_MS)
+  }
+}
+
+// --- Global runtime handlers ---
+
 let _originalConsoleError: typeof console.error | null = null
 let _globalHandlersRegistered = false
 
@@ -116,8 +181,27 @@ export function captureConsoleErrors(): void {
   _originalConsoleError = console.error
 
   console.error = (...args: unknown[]) => {
-    // Always forward to the original console.error so browser DevTools
-    // and the regression suite still see the output.
+    // Forward to original console.error so browser DevTools and the
+    // regression suite still see the output.
     _originalConsoleError?.(...args)
   }
+}
+
+// --- One-shot initialization ---
+
+let _reportingInitialized = false
+
+/**
+ * Wires global error handlers, console-error capture, and batched server
+ * reporting in a single call. Safe to call multiple times — subsequent
+ * calls are no-ops.
+ */
+export function initErrorReporting(): void {
+  if (_reportingInitialized) return
+  _reportingInitialized = true
+
+  registerGlobalErrorHandlers((entry) => {
+    queueErrorForReport(entry)
+  })
+  captureConsoleErrors()
 }
