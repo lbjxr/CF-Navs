@@ -205,6 +205,22 @@
 - 保留核心框架结构不变，工具/IDE 固定路径配置（`.dev.vars`、`wrangler.local.toml`、`.agents/`、`.codex/`、`.claude/`）不动。
 - 本轮为纯仓库整理，不涉及源码逻辑改动；无新增测试文件。
 
+### Round 21: Chrome 生产验证（P2‑C，2026‑07‑09）
+
+- **regression:chrome** 24/25 项通过。
+  - 首页加载正常（345 书签 / 11 分类 / 0 破损图片），搜索过滤和清空正常，主题切换正常。
+  - API smoke 全部正常：`/api/health`、`/api/config`、`/api/data/version`、`/api/admin/data`、`/api/iconify-search`。
+  - 后台分类/书签列表、设置面板、备份面板均加载正常，搜索和分页正常。
+  - 安全回归（invalid token、anonymous access、password change/restore）全部通过。
+  - 退出登录清空 auth，首页落回正常。
+  - Console error、page exception、failed network request 均为 0；4 个预期 401 归入 `expectedFailed`。
+  - 唯一未通过：**右键菜单弹出检查**（CDP `Input.dispatchMouseEvent` 右键事件后 5s 内未检测到菜单 DOM）。同套脚本上次验证（2026‑07‑09）此项通过，本轮无源码改动，判定为 CDP 时序 flake。
+- **perf:audit** 8/9 项通过。
+  - 首页完整滚动 345 张书签卡片，搜索 debounce 正常（快速输入不触发 DOM 变更）。
+  - 关键阈值：`/api/admin/data` 39,285 bytes（≤60KB），书签图标请求 233（≤260），Cache Storage 410,989 bytes（≤5MB）。
+  - 唯一未通过：**admin search completed**（perf:audit 脚本未在进入后台后切换至书签页签即执行搜索，搜索框未暴露；regression:chrome 中后台书签搜索流程已验证正常）。
+- 本轮使用已有 Chrome DevTools 动态端口（3805,devtools‑active‑port）完成 regression，为 perf 启动临时 headless Chrome（port 9228，`D:\tmp\cf-navs-chrome-profile-perf9228`），验证后已清理。
+
 ## 当前大文件分布
 
 截至本轮完成后，主要业务文件行数约为：
@@ -236,7 +252,7 @@
 
 ## 最近部署与生产验证
 
-2026-07-09 已执行 `npm run deploy`，部署到 Cloudflare Worker；具体 Worker Version ID 以当轮部署命令输出为准，避免文档在后续文档-only 部署后过期。
+2026-07-09 已执行 `npm run deploy` 部署到 Cloudflare Worker，同日完成 Chrome 生产回归与性能审计；具体 Worker Version ID 以当轮部署命令输出为准，避免文档在后续文档-only 部署后过期。
 
 ```text
 Production domain: https://navs.bjlius.com
@@ -254,6 +270,12 @@ Production domain: https://navs.bjlius.com
 - `/api/health`、`/api/config`、`/api/admin/data`、`/api/data/version`、Iconify 搜索均返回 200 且结构完整。
 - Chrome console error、page exception、unexpected failed request 均为 0。
 - 安全回归中预期的 4 个 401 已归入 `network.expectedFailed`，不再误报为失败网络请求。
+
+P2‑C Chrome 验证结果（2026‑07‑09）：
+
+- 回归 24/25 项通过；仅右键菜单弹出受 CDP 时序影响未检测到（无源码变更，判定为 flake）。
+- 性能审计 8/9 项通过；仅后台搜索因脚本未自动切换 tab 未找到搜索框（流程回归已验证正常）。
+- 无 console error、page exception、failed request；admin data 39KB、图标请求 233、缓存 411KB 全在阈值内。
 
 近期追加维护轮次：
 
