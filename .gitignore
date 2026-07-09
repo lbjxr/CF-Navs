@@ -7,6 +7,8 @@ wrangler.local.toml
 .DS_Store
 .claude/
 sun-panel/
+tmp/
+_archive/*
+!_archive/README.md
 docs/screenshots/
 docs/development/
-cf-navs-import.json
