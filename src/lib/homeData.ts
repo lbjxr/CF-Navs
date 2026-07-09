@@ -105,6 +105,12 @@ export type HomeScrollTargetInput = {
   desiredTopDistance?: number
 }
 
+export type HomeScrollAlignmentInput = {
+  targetTop: number
+  desiredTopDistance?: number
+  tolerance?: number
+}
+
 export function getHomeScrollTarget({
   currentScroll,
   targetTop,
@@ -115,6 +121,14 @@ export function getHomeScrollTarget({
   const targetScroll = currentScroll + targetTop - desiredTopDistance
   const maxScroll = documentHeight - windowHeight
   return Math.max(0, Math.min(targetScroll, maxScroll))
+}
+
+export function isHomeScrollAligned({
+  targetTop,
+  desiredTopDistance = 80,
+  tolerance = 4,
+}: HomeScrollAlignmentInput): boolean {
+  return Math.abs(targetTop - desiredTopDistance) <= tolerance
 }
 
 export function createHomeDataMemo() {

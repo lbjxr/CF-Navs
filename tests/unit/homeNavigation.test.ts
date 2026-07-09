@@ -4,6 +4,7 @@ import {
   getHomeScrollTarget,
   getHomeSectionsKey,
   getNearestIntersectingSectionId,
+  isHomeScrollAligned,
   resolveHomeActiveSectionId,
 } from '../../src/lib/homeData'
 
@@ -54,5 +55,24 @@ describe('home navigation helpers', () => {
       windowHeight: 800,
       documentHeight: 2000,
     })).toBe(0)
+
+    expect(getHomeScrollTarget({
+      currentScroll: 500,
+      targetTop: 320,
+      windowHeight: 700,
+      documentHeight: 2200,
+      desiredTopDistance: 96,
+    })).toBe(724)
+  })
+
+  it('detects when a navigated section needs scroll correction', () => {
+    expect(isHomeScrollAligned({ targetTop: 80 })).toBe(true)
+    expect(isHomeScrollAligned({ targetTop: 83.5 })).toBe(true)
+    expect(isHomeScrollAligned({ targetTop: 86 })).toBe(false)
+    expect(isHomeScrollAligned({
+      targetTop: 64,
+      desiredTopDistance: 60,
+      tolerance: 5,
+    })).toBe(true)
   })
 })

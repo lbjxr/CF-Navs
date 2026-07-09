@@ -14,6 +14,7 @@
     getHomeSections,
     getHomeSectionsKey,
     getHomeScrollTarget,
+    isHomeScrollAligned,
     getNearestIntersectingSectionId,
     getVisibleCategoryIds,
     groupBookmarksByCategory,
@@ -23,6 +24,12 @@
 
   type AsyncVoid<T = void> = T | Promise<T>
   const SEARCH_FILTER_DEBOUNCE_MS = 120
+  const NAV_SCROLL_TOP_OFFSET = 80
+  const NAV_SCROLL_ALIGNMENT_TOLERANCE = 4
+  const NAV_SCROLL_MAX_CORRECTIONS = 6
+  const NAV_SCROLL_INITIAL_CORRECTION_DELAY_MS = 650
+  const NAV_SCROLL_CORRECTION_DELAY_MS = 90
+  const NAV_SCROLL_RELEASE_DELAY_MS = 1300
   const homeData = createHomeDataMemo()
 
   export let categories: PublicCategory[] = []
@@ -53,6 +60,8 @@
   let sectionObserver: IntersectionObserver | null = null
   let fallbackScrollTimer: ReturnType<typeof setTimeout> | null = null
   let searchFilterTimer: ReturnType<typeof setTimeout> | null = null
+  let navigationCorrectionTimer: ReturnType<typeof setTimeout> | null = null
+  let navigationReleaseTimer: ReturnType<typeof setTimeout> | null = null
   let usingFallbackScroll = false
   let intersectingSectionTops = new Map<string, number>()
   let deferredSearchQuery = ''
@@ -157,6 +166,20 @@
     }
   }
 
+  function clearNavigationTimers() {
+    if (typeof window === 'undefined') return
+
+    if (navigationCorrectionTimer) {
+      window.clearTimeout(navigationCorrectionTimer)
+      navigationCorrectionTimer = null
+    }
+
+    if (navigationReleaseTimer) {
+      window.clearTimeout(navigationReleaseTimer)
+      navigationReleaseTimer = null
+    }
+  }
+
   function setupSectionTracking() {
     if (typeof window === 'undefined') return
 
@@ -238,9 +261,53 @@
       window.clearTimeout(searchFilterTimer)
       searchFilterTimer = null
     }
+    clearNavigationTimers()
   })
 
+  function scrollToSection(sectionElement: HTMLElement, behavior: ScrollBehavior): void {
+    const targetRect = sectionElement.getBoundingClientRect()
+    const finalScroll = getHomeScrollTarget({
+      currentScroll: window.scrollY,
+      targetTop: targetRect.top,
+      windowHeight: window.innerHeight,
+      documentHeight: document.documentElement.scrollHeight,
+      desiredTopDistance: NAV_SCROLL_TOP_OFFSET,
+    })
+
+    window.scrollTo({
+      top: finalScroll,
+      behavior,
+    })
+  }
+
+  function scheduleNavigationCorrection(targetId: string, attempt = 0): void {
+    if (typeof window === 'undefined') return
+
+    const delay = attempt === 0 ? NAV_SCROLL_INITIAL_CORRECTION_DELAY_MS : NAV_SCROLL_CORRECTION_DELAY_MS
+    navigationCorrectionTimer = window.setTimeout(() => {
+      navigationCorrectionTimer = null
+      const targetElement = document.querySelector<HTMLElement>(`[data-section-id="${targetId}"]`)
+      if (!targetElement) return
+
+      const targetTop = targetElement.getBoundingClientRect().top
+      if (isHomeScrollAligned({
+        targetTop,
+        desiredTopDistance: NAV_SCROLL_TOP_OFFSET,
+        tolerance: NAV_SCROLL_ALIGNMENT_TOLERANCE,
+      })) {
+        return
+      }
+
+      scrollToSection(targetElement, 'auto')
+      if (attempt < NAV_SCROLL_MAX_CORRECTIONS) {
+        scheduleNavigationCorrection(targetId, attempt + 1)
+      }
+    }, delay)
+  }
+
   function handleNavigate(id: string | number) {
+    clearNavigationTimers()
+
     const targetElement =
       sectionElements.find((sectionElement) => sectionElement.dataset.sectionId === String(id)) ??
       document.querySelector<HTMLElement>(`[data-section-id="${id}"]`)
@@ -250,25 +317,16 @@
       return
     }
 
-    const targetRect = targetElement.getBoundingClientRect()
-    const finalScroll = getHomeScrollTarget({
-      currentScroll: window.scrollY,
-      targetTop: targetRect.top,
-      windowHeight: window.innerHeight,
-      documentHeight: document.documentElement.scrollHeight,
-    })
-
     isScrolling = true
     activeId = String(id)
 
-    window.scrollTo({
-      top: finalScroll,
-      behavior: 'smooth',
-    })
+    scrollToSection(targetElement, 'smooth')
+    scheduleNavigationCorrection(String(id))
 
-    setTimeout(() => {
+    navigationReleaseTimer = setTimeout(() => {
+      navigationReleaseTimer = null
       isScrolling = false
-    }, 600)
+    }, NAV_SCROLL_RELEASE_DELAY_MS)
   }
 
 </script>
