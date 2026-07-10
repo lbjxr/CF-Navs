@@ -6,6 +6,7 @@ wrangler.local.toml
 *.log
 .DS_Store
 .claude/
+.codex/*.local.json
 tmp/
 _archive/*
 !_archive/README.md

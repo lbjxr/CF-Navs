@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { CardStyle, PublicBookmark, PublicCategory } from '../../shared/types'
   import BookmarkCard from './BookmarkCard.svelte'
+  import { getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
   import { createIconVersion } from '../lib/bookmarkIconDisplay'
   import { reorderByIds } from '../lib/reorder'
   import { sortableList } from '../lib/sortableList'
@@ -64,10 +65,11 @@
   $: categoryIconKey = `${category.id}:${category.icon ?? ''}:${category.title}`
   $: categoryIconUrl = getCategoryIconUrl(category)
   $: hasCategoryImageIcon = Boolean(categoryIconUrl) && !categoryIconFailed
-  $: gridMinWidth = cardStyle === 'info' ? 200 : cardIconSize // Sun-Panel 标准值
-  $: mobileGridMinWidth = cardStyle === 'info' ? 150 : cardIconSize
-  $: gridGap = cardStyle === 'info' ? '18px' : '50px'
-  $: mobileGridGap = cardStyle === 'info' ? '1rem' : '50px'
+  $: iconGridTrackWidth = getIconCardTrackWidth(cardIconSize, cardIconShowTitle)
+  $: gridMinWidth = cardStyle === 'info' ? 200 : iconGridTrackWidth // Sun-Panel 标准值
+  $: mobileGridMinWidth = cardStyle === 'info' ? 150 : iconGridTrackWidth
+  $: gridGap = cardStyle === 'info' ? '18px' : '22px 24px'
+  $: mobileGridGap = cardStyle === 'info' ? '1rem' : '14px 16px'
   $: if (categoryIconKey !== categoryIconStateKey) {
     categoryIconStateKey = categoryIconKey
     categoryIconFailed = false
@@ -132,6 +134,7 @@
     <div
       class="bookmark-grid"
       class:is-sorting={sortMode}
+      class:is-icon-grid={cardStyle !== 'info'}
       style="--card-min-width: {gridMinWidth}px; --mobile-card-min-width: {mobileGridMinWidth}px; --bookmark-grid-gap: {gridGap}; --mobile-bookmark-grid-gap: {mobileGridGap};"
       use:sortableList={{
         enabled: sortMode,
@@ -290,6 +293,16 @@
     grid-template-columns: repeat(auto-fill, minmax(var(--card-min-width, 200px), 1fr));
     gap: var(--bookmark-grid-gap, 18px);
     justify-content: start;
+    align-items: start;
+  }
+
+  .bookmark-grid.is-icon-grid {
+    grid-template-columns: repeat(auto-fill, minmax(var(--card-min-width, 72px), var(--card-min-width, 72px)));
+  }
+
+  .bookmark-grid.is-icon-grid .bookmark-grid-item {
+    justify-content: center;
+    align-items: flex-start;
   }
 
   .bookmark-grid-item {
@@ -320,6 +333,10 @@
     .bookmark-grid {
       grid-template-columns: repeat(auto-fill, minmax(var(--mobile-card-min-width, 150px), 1fr));
       gap: var(--mobile-bookmark-grid-gap, 1rem);
+    }
+
+    .bookmark-grid.is-icon-grid {
+      grid-template-columns: repeat(auto-fill, minmax(var(--mobile-card-min-width, 72px), var(--mobile-card-min-width, 72px)));
     }
   }
 

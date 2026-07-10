@@ -5,6 +5,7 @@
   import BookmarkCardInfo from './BookmarkCardInfo.svelte'
   import BookmarkContextMenu from './BookmarkContextMenu.svelte'
   import BookmarkLinkModal from './BookmarkLinkModal.svelte'
+  import { getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
   import { buildIconStyle } from '../lib/bookmarkIconDisplay'
   import {
     BOOKMARK_CONTEXT_MENU_OPEN_EVENT,
@@ -82,6 +83,7 @@
   $: infoIconInset = infoCardHeight <= 56 ? 6 : 8
   $: infoIconSize = Math.max(32, Math.min(infoCardHeight - infoIconInset * 2, width - infoIconInset * 2))
   $: compactIconSize = Math.max(0, iconSize)
+  $: compactShellWidth = getIconCardTrackWidth(compactIconSize, showIconTitle)
   $: iconBackgroundColor = bookmark.icon_background_color || ''
   $: hasCustomIconBackground = Boolean(iconBackgroundColor)
   $: infoIconStyle = buildIconStyle(infoIconSize, { customBackground: iconBackgroundColor })
@@ -93,7 +95,7 @@
   $: cardShellStyle =
     style === 'info'
       ? `min-width: ${width}px; ${height > 0 ? `height: ${height}px;` : ''}`
-      : `width: ${compactIconSize}px; height: ${compactIconSize}px;`
+      : `width: ${compactShellWidth}px;`
   $: cardLinkStyle = height > 0 ? `height: ${height}px;` : ''
   $: if (nextIconStateKey !== iconStateKey) {
     iconStateKey = nextIconStateKey
@@ -319,8 +321,10 @@
   }
 
   .bookmark-card-shell.is-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     flex: 0 0 auto;
-    aspect-ratio: 1 / 1;
   }
 
 </style>
