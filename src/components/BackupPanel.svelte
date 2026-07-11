@@ -113,7 +113,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
-    align-items: center;
+    align-items: flex-end;
   }
 
   .import-source-field {
@@ -163,6 +163,7 @@
 
   .primary-button,
   .ghost-button {
+    min-height: 39px;
     border-radius: 12px;
     padding: 10px 16px;
     font-size: 14px;
