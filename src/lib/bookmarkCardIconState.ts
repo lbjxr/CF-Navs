@@ -94,7 +94,7 @@ export function deriveBookmarkCardIconBase(input: BookmarkCardIconBaseInput): Bo
     !iconifyRemoteUrl &&
     !hasEmbeddedIcon &&
     !customTextIcon
-  const shouldUseIconProxy = canUseRawHttpIconFallback || hasCachedRemoteIcon
+  const shouldUseIconProxy = hasCachedRemoteIcon
   const proxiedHttpIconUrl = shouldUseIconProxy
     ? `/api/icon/${encodeURIComponent(String(bookmark.id))}?v=${createIconVersion(`${bookmark.id}:${rawIcon}:${bookmark.title}:${bookmark.url}`)}`
     : ''
@@ -156,6 +156,7 @@ export function deriveBookmarkCardIconUrl(input: BookmarkCardIconUrlInput): Book
     if (iconifyRemoteUrl) return iconifyRemoteUrl
     if (/^data:image\//i.test(rawIcon)) return rawIcon
     if (shouldUseIconProxy) return proxiedHttpIconUrl
+    if (baseState.canUseRawHttpIconFallback) return rawIcon
     return ''
   })()
 

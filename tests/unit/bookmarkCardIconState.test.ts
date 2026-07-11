@@ -65,13 +65,13 @@ describe('bookmark card icon state', () => {
     expect(generated).toContain('<svg')
   })
 
-  it('proxies saved remote logo.surf icons instead of loading third-party favicon URLs directly', () => {
+  it('uses the original URL when a saved remote icon has no persisted cache', () => {
     const result = state({
       icon: 'https://www.google.com/s2/favicons?sz=64&domain=example.com',
       icon_source: 'logo_surf',
     })
 
-    expect(result.iconUrl).toContain('/api/icon/42?v=')
+    expect(result.iconUrl).toBe('https://www.google.com/s2/favicons?sz=64&domain=example.com')
     expect(result.canUseRawHttpIconFallback).toBe(true)
     expect(result.shouldReadLocalIconCache).toBe(true)
   })
@@ -102,6 +102,17 @@ describe('bookmark card icon state', () => {
     expect(result.proxiedHttpIconUrl).toContain('/api/icon/42?v=')
   })
 
+  it('uses the bookmark proxy when D1 reports a persisted icon cache', () => {
+    const result = state({
+      icon: 'https://example.com/icon.png',
+      icon_source: 'custom',
+      icon_cached: true,
+    })
+
+    expect(result.iconUrl).toContain('/api/icon/42?v=')
+    expect(result.shouldUseIconProxy).toBe(true)
+  })
+
   it('proxies Iconify names and Iconify URLs through the Iconify endpoint', () => {
     expect(state({ icon: 'mdi:home', icon_source: 'iconify' }).iconUrl).toBe('/api/iconify/mdi/home.svg')
     expect(state({
@@ -110,10 +121,10 @@ describe('bookmark card icon state', () => {
     }).iconUrl).toBe('/api/iconify/logos/github-icon.svg')
   })
 
-  it('uses the bookmark icon proxy for ordinary HTTP icons when needed', () => {
+  it('uses ordinary HTTP icons directly when no persisted cache exists', () => {
     const result = state({ icon: 'https://cdn.example.com/icon.png', icon_source: 'custom' })
 
-    expect(result.iconUrl).toContain('/api/icon/42?v=')
+    expect(result.iconUrl).toBe('https://cdn.example.com/icon.png')
     expect(result.canUseRawHttpIconFallback).toBe(true)
     expect(result.shouldReadLocalIconCache).toBe(true)
   })
@@ -133,7 +144,7 @@ describe('bookmark card icon state', () => {
       { fallbackFailed: true },
     )
 
-    expect(result.iconUrl).toContain('/api/icon/42?v=')
+    expect(result.iconUrl).toBe('https://cdn.example.com/icon.png')
     expect(result.hasRenderableIcon).toBe(false)
   })
 

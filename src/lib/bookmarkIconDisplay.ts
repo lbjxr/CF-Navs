@@ -63,7 +63,9 @@ export function getBookmarkIconUrl(bookmark: BookmarkIconLike): string {
   if (iconifyUrl) return iconifyUrl
   if (/^data:image\//i.test(icon)) return icon
   if (/^https?:\/\//i.test(icon)) {
-    return `/api/icon/${bookmark.id}?v=${createIconVersion(`${bookmark.id}:${icon}:${bookmark.title}:${bookmark.url}`)}`
+    return bookmark.icon_cached
+      ? `/api/icon/${bookmark.id}?v=${createIconVersion(`${bookmark.id}:${icon}:${bookmark.title}:${bookmark.url}`)}`
+      : icon
   }
   if (bookmark.icon_cached) {
     return `/api/icon/${bookmark.id}?v=${createIconVersion(`${bookmark.id}:${bookmark.title}:${bookmark.url}:cached`)}`
