@@ -1,13 +1,23 @@
+# Dependencies and build output
 node_modules/
 dist/
 .wrangler/
+
+# Local environment and deployment configuration
 .dev.vars
 wrangler.local.toml
-*.log
-.DS_Store
+
+# Local agent/tool configuration
+.agents/
 .claude/
 .codex/*.local.json
+AGENTS.md
+
+# Logs and operating-system files
+*.log
+.DS_Store
+
+# Temporary and archived development artifacts
 tmp/
 _archive/*
 !_archive/README.md
-docs/development/

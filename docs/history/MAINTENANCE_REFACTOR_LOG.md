@@ -2,6 +2,13 @@
 
 本文记录 2026-07 的多轮解耦调整、验证方式和后续维护建议。目标是降低大文件职责密度，让前端组件、worker 路由和纯逻辑 helper 更容易维护和扩展。
 
+## 2026-07 项目目录整理
+
+- 将公开文档按 `guides/`、`reference/`、`history/` 和 `screenshots/` 分类，并新增 `docs/README.md` 文档索引。
+- README 当前使用的产品截图继续保留在 `docs/screenshots/`；历史截图和浏览器文本快照移入 `docs/history/`。
+- 本地开发过程文档与临时浏览器产物归档到 `_archive/`，继续保持 Git 忽略且不参与构建或部署。
+- 为 `scripts/` 增加用途索引，保持现有 npm script 路径不变，避免目录整理影响开发和部署命令。
+
 ## 2026-07 快照存储层拆分
 
 - 从 `publicDataCache.ts` 和 `adminDataCache.ts` 抽取 `snapshotStorage.ts`。

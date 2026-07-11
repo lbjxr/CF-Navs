@@ -5,7 +5,7 @@ This project includes two real-browser Chrome scripts for the production site or
 - `npm run perf:audit` checks performance-sensitive behavior and thresholds.
 - `npm run regression:chrome` checks broader functional regression paths without modifying data.
 
-Read `docs/PERFORMANCE_CONTRACT.md` before changing data freshness, icon loading, Service Worker caching, or admin loading behavior.
+Read `docs/reference/PERFORMANCE_CONTRACT.md` before changing data freshness, icon loading, Service Worker caching, or admin loading behavior.
 
 ## Chrome Setup
 

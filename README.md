@@ -9,7 +9,7 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/lbjxr/CF-Navs)
 
-[核心特性](#-核心特性) • [效果预览](#-效果预览) • [快速部署](#-快速部署) • [本地开发](#-本地开发) • [环境变量说明](#-环境变量说明) • [贡献](#-贡献) • [致谢](#-致谢)
+[核心特性](#-核心特性) • [效果预览](#-效果预览) • [快速部署](#-快速部署) • [项目文档](docs/README.md) • [本地开发](#-本地开发) • [环境变量说明](#-环境变量说明) • [贡献](#-贡献) • [致谢](#-致谢)
 
 ---
 

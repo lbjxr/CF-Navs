@@ -16,7 +16,7 @@
 2. 进入 **Workers & Pages → Create application → Import a repository**，关联 GitHub 并选择 fork。
 3. Deploy command 填写 `npm run build && npx wrangler deploy`。
 4. 首次部署完成后，在 Cloudflare 控制台创建 D1 数据库 `cf-navs-db` 和 KV 命名空间 `SESSION`。
-5. 在 D1 SQL Console 执行 [../schema.sql](../schema.sql)。
+5. 在 D1 SQL Console 执行 [schema.sql](../../schema.sql)。
 6. 在 Worker 的 **Settings → Bindings** 中添加 D1 绑定 `DB` 和 KV 绑定 `SESSION`。
 7. 在 Worker 的 **Settings → Variables & Secrets** 中添加 `INIT_ADMIN_PASSWORD`。
 8. 重新部署或重试最近一次部署。
@@ -318,4 +318,4 @@ npx wrangler d1 execute cf-navs-db --command "SELECT * FROM settings"
 
 ---
 
-有问题？查看 [README.md](../README.md) 或提交 Issue。
+有问题？查看 [README.md](../../README.md) 或提交 Issue。

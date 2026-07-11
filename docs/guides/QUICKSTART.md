@@ -73,7 +73,7 @@ npm run build && npx wrangler deploy
 ```
 
 5. 保存并完成首次部署。
-6. 在 Cloudflare 控制台创建 D1 数据库 `cf-navs-db`，打开 SQL Console，执行 [schema.sql](../schema.sql)。
+6. 在 Cloudflare 控制台创建 D1 数据库 `cf-navs-db`，打开 SQL Console，执行 [schema.sql](../../schema.sql)。
 7. 创建 KV 命名空间 `SESSION`。
 8. 在 Worker 的 **Settings → Bindings** 中添加：
 
@@ -110,7 +110,7 @@ INIT_ADMIN_PASSWORD = 你的管理员密码
 - 自定义背景和主题
 - 配置搜索引擎
 
-完整功能说明请查看 [README.md](../README.md)。
+完整功能说明请查看 [README.md](../../README.md)。
 
 ## ❓ 遇到问题？
 

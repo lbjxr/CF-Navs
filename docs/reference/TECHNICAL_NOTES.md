@@ -171,4 +171,4 @@ Worker 对 HTML 响应设置基础安全头：
 
 Sun-Panel 导入会转换分类、书签、打开方式和图标字段。Iconify 图标会尽量规范化为 CF-Navs 的标准保存格式；后台预览使用 `/api/iconify/*` 代理，首页展示优先复用浏览器本地缓存的 Iconify SVG。
 
-更完整的迁移步骤见 [SUNPANEL_IMPORT.md](SUNPANEL_IMPORT.md)。
+更完整的迁移步骤见 [SUNPANEL_IMPORT.md](../guides/SUNPANEL_IMPORT.md)。

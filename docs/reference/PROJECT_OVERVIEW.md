@@ -298,14 +298,11 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 
 ```
 docs/
-├── QUICKSTART.md       # 快速开始
-├── DEPLOYMENT.md       # 部署指南
-├── API_CONTRACT.md     # API 契约
-├── PROJECT_OVERVIEW.md # 项目概览
-├── TECHNICAL_NOTES.md  # 图标、缓存、性能和会话细节
-├── MAINTENANCE_REFACTOR_LOG.md # 维护性重构记录和验证方式
-├── TROUBLESHOOTING.md  # 常见问题排查
-└── SUNPANEL_IMPORT.md  # Sun-Panel 数据导入说明
+├── README.md           # 文档索引
+├── guides/             # 部署、快速开始、故障排查和数据导入
+├── reference/          # API、架构、性能契约和技术说明
+├── history/            # 阶段计划、审计、维护记录和历史快照
+└── screenshots/        # README 使用的当前界面截图
 ```
 
 ## 🎯 未来规划
@@ -339,7 +336,7 @@ docs/
 
 ## 📄 License
 
-MIT License - 详见 [LICENSE](../LICENSE) 文件
+MIT License - 详见 [LICENSE](../../LICENSE) 文件
 
 ## 🙏 致谢
 

@@ -219,4 +219,4 @@ sed -i 's/old-domain.com/new-domain.com/g' cf-navs-import.json
 
 ---
 
-如有问题，请查看 [README.md](../README.md) 或提交 Issue。
+如有问题，请查看 [README.md](../../README.md) 或提交 Issue。
