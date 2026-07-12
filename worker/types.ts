@@ -8,6 +8,7 @@ export interface Env {
   // vars / secrets
   INIT_ADMIN_USER: string
   INIT_ADMIN_PASSWORD: string
+  RESET_ADMIN_CREDENTIALS?: string
   SESSION_TTL: string
 }
 

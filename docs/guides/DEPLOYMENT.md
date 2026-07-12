@@ -18,7 +18,7 @@
 4. 首次部署完成后，在 Cloudflare 控制台创建 D1 数据库 `cf-navs-db` 和 KV 命名空间 `SESSION`。
 5. 在 D1 SQL Console 执行 [schema.sql](../../schema.sql)。
 6. 在 Worker 的 **Settings → Bindings** 中添加 D1 绑定 `DB` 和 KV 绑定 `SESSION`。
-7. 在 Worker 的 **Settings → Variables & Secrets** 中添加 `INIT_ADMIN_PASSWORD`。
+7. 在 Worker 的 **Settings → Variables & Secrets** 中添加 `INIT_ADMIN_USER`（可选，默认 `admin`）和 `INIT_ADMIN_PASSWORD`。
 8. 重新部署或重试最近一次部署。
 
 ## 📋 部署前准备
@@ -137,7 +137,7 @@ Published cf-navs (x.xx sec)
 
 1. 点击右上角 ⚙️ 图标
 2. 使用以下凭据登录：
-   - 用户名：`admin`
+   - 用户名：`INIT_ADMIN_USER` 的值（默认 `admin`）
    - 密码：你设置的 `INIT_ADMIN_PASSWORD`
 
 - [ ] 登录成功
@@ -237,14 +237,16 @@ npm run db:init:remote
 
 **密码错误**
 - 如果仍能登录后台：进入 **站点设置 → 账号安全**，用当前密码更新管理员密码。
-- 如果已经无法登录：`INIT_ADMIN_PASSWORD` 只用于首次初始化，不会自动覆盖 D1 中已保存的 `admin_password`。确认当前 Wrangler 指向正确项目后，可重新设置 secret 并清除已保存密码，让系统重新初始化：
+- 如果已经无法登录：修改 `INIT_ADMIN_USER` 和 `INIT_ADMIN_PASSWORD` 后重新部署，下一次登录会自动用新值覆盖 D1 中的管理员凭据。确认当前 Wrangler 指向正确的 Worker、D1 和账号后再执行：
 
 ```bash
 npx wrangler secret put INIT_ADMIN_PASSWORD
-npx wrangler d1 execute cf-navs-db --remote --command "DELETE FROM settings WHERE key = 'admin_password'"
+npx wrangler deploy
 ```
 
-- 修改或重置密码后，已有登录会话会失效，需要重新登录。
+- 已经存在但升级前创建的旧数据库可能还没有初始化标记。此时再增加一个新的 `RESET_ADMIN_CREDENTIALS` 变量值，例如 `reset-2026-07-12`，重新部署并登录一次。成功登录后可以移除该变量；同一个标记不会重复重置，以后再次强制重置时请使用新的标记值。
+
+重置成功后，已有登录会话会失效，需要重新登录。
 
 **KV 错误**
 - 检查 KV 命名空间是否正确绑定
@@ -306,7 +308,7 @@ npx wrangler d1 execute cf-navs-db --command "SELECT * FROM settings"
 如果所有检查项都已完成，恭喜你成功部署了 CF-Navs！
 
 **首次登录提醒：**
-- 用户名：`admin`
+- 用户名：`INIT_ADMIN_USER` 的值（默认 `admin`）
 - 密码：你设置的 `INIT_ADMIN_PASSWORD`
 
 **下一步建议：**

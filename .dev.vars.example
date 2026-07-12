@@ -2,4 +2,6 @@
 # 复制为 .dev.vars 并填写。
 INIT_ADMIN_USER = "admin"
 INIT_ADMIN_PASSWORD = "replace-with-a-local-dev-password"
+# Optional: set a new value to force a one-time credential reset.
+# RESET_ADMIN_CREDENTIALS = "reset-local-1"
 SESSION_TTL = "604800"

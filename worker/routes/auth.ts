@@ -67,6 +67,11 @@ authRoutes.post('/login', loginRateLimit, async (c) => {
   const session: SessionValue = { username: credentials.username, exp: expires_at }
   const loginRateLimitState = c.get('loginRateLimitState')
 
+  if (credentials.resetApplied) {
+    await clearAllSessions(c.env)
+    clearAllCachedSessions()
+  }
+
   const writes: Promise<unknown>[] = [
     c.env.SESSION.put(getSessionKey(token), JSON.stringify(session), { expirationTtl: ttlSeconds }),
   ]
@@ -108,7 +113,7 @@ authRoutes.post('/password', authRequired, async (c) => {
 
   let credentials: AdminCredentials
   try {
-    credentials = await ensureAdminBootstrap(c.env)
+    credentials = await ensureAdminBootstrap(c.env, { applyCredentialReset: false })
   } catch {
     return c.json(fail(ErrCode.SERVER_ERROR, 'admin bootstrap failed'))
   }

@@ -155,7 +155,7 @@ binding = "SESSION"
 id = "..."
 
 [vars]
-INIT_ADMIN_USER = "admin"          # 初始管理员用户名
+INIT_ADMIN_USER = "admin"          # 管理员初始化用户名
 SESSION_TTL = "604800"             # 会话有效期（7天）
 ```
 

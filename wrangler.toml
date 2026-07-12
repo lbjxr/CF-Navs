@@ -11,10 +11,12 @@ binding = "ASSETS"
 not_found_handling = "single-page-application"
 
 [vars]
-# 初始管理员用户名（首次部署用，之后可在后台修改）
+# 管理员初始化用户名；修改后下次登录会同步更新 D1
 INIT_ADMIN_USER = "admin"
 # 初始密码请用 secret，不要写明文：
 #   wrangler secret put INIT_ADMIN_PASSWORD
+# 旧数据库首次升级或强制重置时设置一个新的唯一标记：
+#   RESET_ADMIN_CREDENTIALS = "reset-2026-07-12"
 # Token 有效期（秒），默认 7 天
 SESSION_TTL = "604800"
 

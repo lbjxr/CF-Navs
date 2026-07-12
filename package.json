@@ -32,7 +32,7 @@
         "description": "KV namespace for HttpOnly admin session tokens."
       },
       "INIT_ADMIN_PASSWORD": {
-        "description": "Initial admin password used only during first bootstrap. Change it after login."
+        "description": "Admin initialization password. A changed value is applied on the next login; normal password changes should use the admin settings page."
       }
     }
   },

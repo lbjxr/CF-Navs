@@ -45,6 +45,8 @@ npx wrangler secret put INIT_ADMIN_PASSWORD
 # 输入你的管理员密码（建议使用强密码）
 ```
 
+管理员用户名默认是 `admin`，也可以在 Worker Variables 中设置 `INIT_ADMIN_USER`。
+
 ### 5. 初始化数据库
 
 ```bash
@@ -95,8 +97,10 @@ INIT_ADMIN_PASSWORD = 你的管理员密码
 1. 访问你的导航站点
 2. 点击右上角 **⚙️** 图标
 3. 输入凭据：
-   - 用户名：`admin`
+   - 用户名：`INIT_ADMIN_USER` 的值（默认 `admin`）
    - 密码：你刚才设置的密码
+
+如果修改了 `INIT_ADMIN_USER` 或 `INIT_ADMIN_PASSWORD`，重新部署后下一次登录会同步更新 D1 中的管理员凭据。旧数据库首次升级时，可额外设置一个新的 `RESET_ADMIN_CREDENTIALS` 标记后重新部署一次。
 
 登录成功后会回到前台首页，需要进入后台时再次点击右上角管理入口。
 

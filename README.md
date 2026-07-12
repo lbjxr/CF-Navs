@@ -179,7 +179,7 @@ npm run db:init:remote
 npm run deploy
 ```
 
-部署成功后，访问 Wrangler 返回的 Workers URL。首次登录用户名 `admin`，密码为 `INIT_ADMIN_PASSWORD`。
+部署成功后，访问 Wrangler 返回的 Workers URL。首次登录用户名 `INIT_ADMIN_USER`（默认 `admin`），密码为 `INIT_ADMIN_PASSWORD`。
 
 ### 方式二：Fork 后通过 Cloudflare 部署（推荐）
 
@@ -197,7 +197,7 @@ INIT_ADMIN_PASSWORD = 你的管理员密码
 ```
 
 5. Cloudflare 会根据 `wrangler.toml` 识别并创建/绑定 D1 与 KV，部署脚本会自动执行 [schema.sql](schema.sql) 初始化数据库。
-6. 部署成功后访问 Cloudflare 返回的 Workers URL。首次登录用户名 `admin`，密码为在环境变量/Secrets 步骤中设置的 `INIT_ADMIN_PASSWORD` 的值（如果忘记，可以去 Worker 项目的设置中修改）。
+6. 部署成功后访问 Cloudflare 返回的 Workers URL。首次登录用户名为 `INIT_ADMIN_USER`（默认 `admin`），密码为在环境变量/Secrets 步骤中设置的 `INIT_ADMIN_PASSWORD` 的值。
 
 资源绑定名必须保持如下配置：
 
@@ -240,7 +240,7 @@ npx wrangler tail       # 查看 Worker 日志
 
 | 变量名 | 说明 |
 |---|---|
-| `INIT_ADMIN_PASSWORD` | 管理员初始密码，仅首次初始化时写入 D1；之后在后台「站点设置 → 账号安全」修改 |
+| `INIT_ADMIN_PASSWORD` | 管理员初始化密码。首次初始化后，只有当该值发生变化时才会在下一次登录时同步覆盖 D1；日常修改密码请使用后台「站点设置 → 账号安全」 |
 
 ### 必需绑定
 
@@ -253,8 +253,11 @@ npx wrangler tail       # 查看 Worker 日志
 
 | 变量名 | 默认值 | 说明 |
 |---|---|---|
-| `INIT_ADMIN_USER` | `admin` | 初始管理员用户名 |
+| `INIT_ADMIN_USER` | `admin` | 管理员初始化用户名；值发生变化后会在下一次登录时同步覆盖 D1 |
+| `RESET_ADMIN_CREDENTIALS` | 空 | 旧数据库首次升级或需要强制重置时使用一次性标记，例如 `reset-2026-07-12`；每次强制重置请更换标记值 |
 | `SESSION_TTL` | `604800` | 会话有效期（秒），默认 7 天 |
+
+管理员凭据会同时保存在 D1 中。修改 `INIT_ADMIN_USER` 或 `INIT_ADMIN_PASSWORD` 后重新部署，下一次登录会使用新值更新管理员凭据；后台「账号安全」修改密码不会被旧的初始化变量覆盖。升级已有旧数据库时，如果数据库还没有初始化标记，请同时设置一个新的 `RESET_ADMIN_CREDENTIALS` 值并重新部署，成功登录后即可移除该变量。
 
 ---
 
