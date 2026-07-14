@@ -44,6 +44,10 @@ export const DEFAULT_SETTINGS: Settings = {
     margin_top: 0,
     margin_bottom: 0,
   },
+  navigation: {
+    position: 'left',
+    always_expanded: false,
+  },
   footer_html: '',
 }
 
@@ -81,6 +85,20 @@ function normalizeBackgroundPresetId(value: unknown): Settings['background_prese
     : 'custom'
 }
 
+function normalizeNavigationSetting(value: unknown): Settings['navigation'] {
+  return isValidNavigationSetting(value)
+    ? { position: value.position, always_expanded: value.always_expanded }
+    : { ...DEFAULT_SETTINGS.navigation }
+}
+
+export function isValidNavigationSetting(value: unknown): value is Settings['navigation'] {
+  if (!isRecord(value)) return false
+  return (
+    (value.position === 'left' || value.position === 'top') &&
+    typeof value.always_expanded === 'boolean'
+  )
+}
+
 export function readRawSettingsRows(rows: Array<{ key: string; value: string | null }>): Map<string, unknown> {
   const map = new Map<string, unknown>()
   for (const row of rows) {
@@ -105,6 +123,7 @@ export function settingsFromRawMap(raw: Map<string, unknown>): Settings {
   out.background_preset_id = normalizeBackgroundPresetId(out.background_preset_id)
   out.background = normalizeBackgroundSetting(out.background, DEFAULT_SETTINGS.background)
   out.backgrounds = normalizeThemeBackgroundSettings(raw.get('backgrounds'), out.background)
+  out.navigation = normalizeNavigationSetting(raw.get('navigation'))
   return out
 }
 

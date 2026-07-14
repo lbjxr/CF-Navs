@@ -6,7 +6,7 @@
   import HomeEmptyPanel from '../components/HomeEmptyPanel.svelte'
   import HomeFloatingActions from '../components/HomeFloatingActions.svelte'
   import HomeHeroSearch from '../components/HomeHeroSearch.svelte'
-  import type { PublicBookmark, PublicCategory, PublicSettings, ThemeMode } from '../../shared/types'
+  import type { NavigationSetting, PublicBookmark, PublicCategory, PublicSettings, ThemeMode } from '../../shared/types'
   import {
     bookmarkMatchesSearch,
     clampTitleFontSize,
@@ -23,7 +23,8 @@
 
   type AsyncVoid<T = void> = T | Promise<T>
   const SEARCH_FILTER_DEBOUNCE_MS = 120
-  const NAV_SCROLL_TOP_OFFSET = 80
+  const LEFT_NAV_SCROLL_TOP_OFFSET = 80
+  const TOP_NAV_SCROLL_TOP_OFFSET = 88
   const NAV_SCROLL_RELEASE_DELAY_MS = 900
   const homeData = createHomeDataMemo()
 
@@ -61,6 +62,8 @@
   let usingFallbackScroll = false
   let intersectingSectionTops = new Map<string, number>()
   let deferredSearchQuery = ''
+  let trackedNavigationOffset = 0
+  let persistentLeftExpanded = true
 
   $: sortedCategories = homeData.getSortedCategories(categories)
   $: sortedBookmarks = homeData.getSortedBookmarks(bookmarks)
@@ -101,6 +104,9 @@
     margin_bottom: 0,
   }
   $: contentMaxWidth = `${contentLayout.max_width}${contentLayout.max_width_unit}`
+  $: navigation = settings?.navigation ?? { position: 'left', always_expanded: false } satisfies NavigationSetting
+  $: isTopNavigation = navigation.position === 'top'
+  $: navigationScrollOffset = isTopNavigation ? TOP_NAV_SCROLL_TOP_OFFSET : LEFT_NAV_SCROLL_TOP_OFFSET
   $: cardTextColor = settings?.card_text_color?.trim() ?? ''
   $: homeShellStyle = [
     `--content-max-width: ${contentMaxWidth}`,
@@ -115,6 +121,9 @@
       : '一个简洁的公开导航首页。'
 
   $: activeId = resolveHomeActiveSectionId(sections, activeId)
+  $: if (isMounted && navigationScrollOffset !== trackedNavigationOffset) {
+    setupSectionTracking()
+  }
 
   function scheduleSearchFilterUpdate(value: string) {
     if (typeof window === 'undefined') {
@@ -177,12 +186,13 @@
 
     const browserWindow = window
     disconnectSectionTracking()
+    trackedNavigationOffset = navigationScrollOffset
     if (sectionElements.length === 0) return
 
     if (typeof IntersectionObserver !== 'undefined') {
       sectionObserver = new IntersectionObserver(handleSectionIntersections, {
         root: null,
-        rootMargin: '-120px 0px -55% 0px',
+        rootMargin: `-${navigationScrollOffset + 40}px 0px -55% 0px`,
         threshold: [0, 0.01],
       })
 
@@ -203,7 +213,7 @@
       if (!sectionId) continue
 
       if (entry.isIntersecting) {
-        intersectingSectionTops.set(sectionId, Math.abs(entry.boundingClientRect.top - 120))
+        intersectingSectionTops.set(sectionId, Math.abs(entry.boundingClientRect.top - navigationScrollOffset))
       } else {
         intersectingSectionTops.delete(sectionId)
       }
@@ -220,7 +230,7 @@
   }
 
   function updateActiveSectionFromLayout() {
-    const threshold = 140
+    const threshold = navigationScrollOffset + 60
     let nextActiveId = sectionElements[0]?.dataset.sectionId ?? ''
 
     for (const sectionElement of sectionElements) {
@@ -281,7 +291,7 @@
       targetTop: targetRect.top,
       windowHeight: window.innerHeight,
       documentHeight: document.documentElement.scrollHeight,
-      desiredTopDistance: NAV_SCROLL_TOP_OFFSET,
+      desiredTopDistance: navigationScrollOffset,
     })
 
     window.scrollTo({
@@ -325,7 +335,12 @@
   <meta name="description" content={pageDescription} />
 </svelte:head>
 
-<div class="home-shell" style={homeShellStyle}>
+<div
+  class="home-shell"
+  class:top-navigation-layout={isTopNavigation}
+  class:persistent-left-navigation={navigation.position === 'left' && navigation.always_expanded && persistentLeftExpanded}
+  style={homeShellStyle}
+>
   <HomeFloatingActions
     {isAuthenticated}
     {authLoading}
@@ -335,6 +350,7 @@
     {onSwitchToAdmin}
     {onLogout}
     {onOpenLogin}
+    topNavigation={isTopNavigation}
   />
 
   <HomeHeroSearch
@@ -342,10 +358,17 @@
     {siteTitleColor}
     {siteTitleFontSize}
     {settings}
+    topNavigation={isTopNavigation}
     bind:query={searchQuery}
   />
 
-  <Sidebar items={sections} {activeId} onNavigate={handleNavigate} />
+  <Sidebar
+    items={sections}
+    {activeId}
+    {navigation}
+    onNavigate={handleNavigate}
+    onPersistentExpansionChange={(expanded) => (persistentLeftExpanded = expanded)}
+  />
 
   <div class="content-layout">
     <main class="content-panel">
@@ -406,6 +429,16 @@
     --home-accent-color: #2563eb;
     color: var(--home-text-color);
     isolation: isolate;
+  }
+
+  .home-shell.top-navigation-layout {
+    padding-top: 5.25rem;
+  }
+
+  @media (min-width: 800px) {
+    .home-shell.persistent-left-navigation {
+      padding-left: calc(212px + var(--content-margin-x, 0px));
+    }
   }
 
   .home-shell::before {
@@ -493,6 +526,10 @@
   @media (max-width: 720px) {
     .home-shell {
       padding: 1rem max(1rem, var(--content-margin-x, 0px)) var(--content-margin-bottom, 0%);
+    }
+
+    .home-shell.top-navigation-layout {
+      padding-top: 4.5rem;
     }
   }
 </style>

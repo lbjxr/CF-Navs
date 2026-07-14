@@ -11,6 +11,7 @@
   export let onSwitchToAdmin: (() => AsyncVoid) | undefined = undefined
   export let onLogout: (() => AsyncVoid) | undefined = undefined
   export let onOpenLogin: (() => AsyncVoid) | undefined = undefined
+  export let topNavigation = false
 
   $: currentThemeLabel = activeThemeMode === 'auto'
     ? `跟随系统，当前${activeTheme === 'dark' ? '暗色' : '浅色'}`
@@ -38,7 +39,7 @@
   }
 </script>
 
-<div class="floating-actions">
+<div class="floating-actions" class:below-top-navigation={topNavigation}>
   <button
     type="button"
     class="icon-button theme-toggle-button"
@@ -95,6 +96,10 @@
     z-index: 50;
     display: flex;
     gap: 0.5rem;
+  }
+
+  .floating-actions.below-top-navigation {
+    top: 4.75rem;
   }
 
   .icon-button {
@@ -162,6 +167,10 @@
     .floating-actions {
       top: 1rem;
       right: 1rem;
+    }
+
+    .floating-actions.below-top-navigation {
+      top: 4rem;
     }
 
     .icon-button {

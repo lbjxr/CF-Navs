@@ -18,4 +18,14 @@ describe('admin settings layout', () => {
     expect(source).toContain('id="settings-public-mode"')
     expect(source).toContain('on:change={() => void syncForm()}')
   })
+
+  it('provides navigation position and persistent-left controls', () => {
+    const source = readFileSync('src/components/settings/NavigationSettingsSection.svelte', 'utf8')
+    const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
+
+    expect(panel).toContain('<NavigationSettingsSection bind:form {saving} />')
+    expect(source).toContain('bind:group={form.navigation.position}')
+    expect(source).toContain('bind:checked={form.navigation.always_expanded}')
+    expect(source).toContain("disabled={saving || form.navigation.position !== 'left'}")
+  })
 })

@@ -105,7 +105,9 @@ GET /api/admin/data
 
 首页内容统计条和分类下的站点数量徽标使用首页级 CSS 变量继承当前主题与 `card_text_color`，避免固定灰色在渐变背景或深色模式下对比度不足。
 
-前台分类快速选择栏（PC 侧边栏、移动端触发按钮和抽屉）复用书签卡片的 `--card-bg-rgb` / `--card-bg-opacity` 玻璃背景公式，并通过 `data-theme='dark'` 覆盖暗色模式下的边框、阴影、文字和激活态颜色。后台管理侧边栏则使用 `--admin-*` surface 变量集中控制浅色/深色背景、导航项和徽标状态，避免侧栏颜色与当前主题脱节。
+前台分类导航支持 `navigation.position = left | top`。左侧模式在桌面保留悬停展开，可通过 `navigation.always_expanded` 开启固定占位；用户手动收缩偏好由浏览器版本化 `localStorage` 键持有，移动端和顶部模式不读取该偏好。顶部模式固定悬浮，最大宽度复用 `content_layout.max_width`，桌面溢出时提供箭头和鼠标拖动，移动端使用原生触摸横向滑动。各模式复用书签卡片的 `--card-bg-rgb` / `--card-bg-opacity` 玻璃背景变量，并通过 `data-theme='dark'` 覆盖暗色状态。
+
+顶部拖动有两个必须保留的实现约束：DOM 的 `scrollLeft` 和拖动期样式通过局部元素引用修改，避免 Svelte 将绑定节点误判为引用变化并重新触发激活项自动滚动；`setPointerCapture` 只在超过拖动阈值后执行，普通分类点击不得提前捕获指针。顶部溢出状态由 `ResizeObserver` 在下一动画帧合并更新，组件销毁时同时释放 observer、animation frame、resize 定时器和点击抑制定时器。
 
 设置保存、导入恢复和排序接口尽量减少 D1 statement 数：
 

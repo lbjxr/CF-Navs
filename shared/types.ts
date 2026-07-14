@@ -90,6 +90,11 @@ export interface ContentLayoutSetting {
   margin_bottom: number // 0-50, %
 }
 
+export interface NavigationSetting {
+  position: 'left' | 'top'
+  always_expanded: boolean
+}
+
 // 卡片风格类型
 export type CardStyle = 'info' | 'icon' // info=详情风格, icon=极简风格
 
@@ -118,6 +123,7 @@ export interface Settings {
   search_box_show: boolean
   search_engine_selector_show: boolean
   content_layout: ContentLayoutSetting
+  navigation: NavigationSetting
   footer_html: string
 }
 
@@ -219,6 +225,7 @@ export interface PublicSettings {
   search_box_show: boolean
   search_engine_selector_show: boolean
   content_layout: ContentLayoutSetting
+  navigation: NavigationSetting
   footer_html: string
 }
 

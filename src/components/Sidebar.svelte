@@ -1,205 +1,516 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
+  import type { NavigationSetting } from '../../shared/types'
+  import {
+    getHorizontalNavigationMetrics,
+    readLeftNavigationCollapsed,
+    writeLeftNavigationCollapsed,
+  } from '../lib/navigationLayout'
 
   export let items: Array<{ id: string | number; title: string; count?: number }> = []
   export let activeId: string | number | null = null
+  export let navigation: NavigationSetting = { position: 'left', always_expanded: false }
   export let onNavigate: ((id: string | number) => void) | undefined = undefined
+  export let onPersistentExpansionChange: ((expanded: boolean) => void) | undefined = undefined
 
-  // 配置项
-  const scrollOffset = 80 // 滚动偏移量
-  const mobileWidth = 800 // 移动端宽度定义
+  const MOBILE_WIDTH = 800
+  const DRAG_THRESHOLD_PX = 6
+  const RESIZE_DEBOUNCE_MS = 120
 
-  let isExpanded = false
   let isMobileView = false
   let mobileSidebarOpen = false
+  let hoverExpanded = false
+  let manuallyCollapsed = false
+  let mounted = false
+  let leftPreferenceLoaded = false
+  let topTrack: HTMLElement | null = null
+  let resizeObserver: ResizeObserver | null = null
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null
+  let overflowFrame: number | null = null
+  let overflow = false
+  let canScrollLeft = false
+  let canScrollRight = false
+  let dragging = false
+  let suppressNextClick = false
+  let clickSuppressionTimer: ReturnType<typeof setTimeout> | null = null
+  let dragPointerId: number | null = null
+  let dragStartX = 0
+  let dragStartScrollLeft = 0
+  let reportedPersistentExpansion: boolean | null = null
 
-  function checkIsMobile() {
-    isMobileView = window.innerWidth < mobileWidth
-  }
+  $: isTop = navigation.position === 'top'
+  $: isPersistentLeft = !isTop && !isMobileView && navigation.always_expanded
+  $: isExpanded = isMobileView
+    ? mobileSidebarOpen
+    : isPersistentLeft
+      ? !manuallyCollapsed
+      : hoverExpanded
 
-  function handleResize() {
-    checkIsMobile()
-    if (isMobileView) {
-      // 移动端：如果侧栏没有主动打开，保持收起状态
-      if (!mobileSidebarOpen) {
-        isExpanded = false
-      }
-    } else {
-      // PC端：重置移动端状态
-      mobileSidebarOpen = false
-      isExpanded = false
+  $: {
+    const nextPersistentExpansion = isPersistentLeft && isExpanded
+    if (nextPersistentExpansion !== reportedPersistentExpansion) {
+      reportedPersistentExpansion = nextPersistentExpansion
+      onPersistentExpansionChange?.(nextPersistentExpansion)
     }
   }
 
-  function debounce(func: () => void, wait: number) {
-    let timeout: ReturnType<typeof setTimeout>
-    return function () {
-      clearTimeout(timeout)
-      timeout = setTimeout(func, wait)
-    }
+  $: if (mounted && isPersistentLeft && !leftPreferenceLoaded) {
+    manuallyCollapsed = readLeftNavigationCollapsed(window.localStorage)
+    leftPreferenceLoaded = true
   }
 
-  const debouncedHandleResize = debounce(handleResize, 200)
-
-  function handleMobileBtnClick() {
-    if (isMobileView) {
-      mobileSidebarOpen = !mobileSidebarOpen
-      isExpanded = mobileSidebarOpen
-    }
-  }
-
-  function handleCloseBtnClick(e: Event) {
-    e.preventDefault()
-    e.stopPropagation()
-
+  $: if (isTop && mobileSidebarOpen) {
     mobileSidebarOpen = false
-    isExpanded = false
   }
 
-  function handleMouseEnter() {
-    // PC端才响应 hover
-    if (isMobileView) return
-    isExpanded = true
+  $: if (isTop && topTrack) {
+    void items.length
+    void tick().then(() => {
+      updateOverflowState()
+      scrollActiveItemIntoView('auto')
+    })
   }
 
-  function handleMouseLeave() {
-    // PC端才响应 hover
-    if (isMobileView) return
-    isExpanded = false
+  $: if (isTop && activeId != null && topTrack) {
+    void activeId
+    void tick().then(() => scrollActiveItemIntoView('smooth'))
   }
 
-  function handleItemClick(id: string | number) {
-    onNavigate?.(id)
+  function checkIsMobile(): void {
+    isMobileView = window.innerWidth < MOBILE_WIDTH
+  }
 
-    // 移动端点击后自动关闭
-    if (isMobileView) {
+  function handleResize(): void {
+    const wasMobile = isMobileView
+    checkIsMobile()
+    if (!isMobileView) {
       mobileSidebarOpen = false
-      isExpanded = false
+    } else if (!wasMobile) {
+      hoverExpanded = false
+    }
+    updateOverflowState()
+  }
+
+  function scheduleResize(): void {
+    if (resizeTimer) clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(() => {
+      resizeTimer = null
+      handleResize()
+    }, RESIZE_DEBOUNCE_MS)
+  }
+
+  function handleMobileBtnClick(): void {
+    if (isMobileView && !isTop) {
+      mobileSidebarOpen = !mobileSidebarOpen
+    }
+  }
+
+  function closeMobileSidebar(event?: Event): void {
+    event?.preventDefault()
+    event?.stopPropagation()
+    mobileSidebarOpen = false
+  }
+
+  function handleMouseEnter(): void {
+    if (!isMobileView && !isPersistentLeft) hoverExpanded = true
+  }
+
+  function handleMouseLeave(): void {
+    if (!isMobileView && !isPersistentLeft) hoverExpanded = false
+  }
+
+  function togglePersistentLeft(): void {
+    if (!isPersistentLeft) return
+    manuallyCollapsed = !manuallyCollapsed
+    writeLeftNavigationCollapsed(window.localStorage, manuallyCollapsed)
+  }
+
+  function clearClickSuppression(): void {
+    suppressNextClick = false
+    if (clickSuppressionTimer) {
+      clearTimeout(clickSuppressionTimer)
+      clickSuppressionTimer = null
+    }
+  }
+
+  function handleItemClick(id: string | number): void {
+    if (suppressNextClick) {
+      clearClickSuppression()
+      return
+    }
+
+    onNavigate?.(id)
+    if (isMobileView && !isTop) mobileSidebarOpen = false
+  }
+
+  function updateOverflowState(): void {
+    if (!topTrack) {
+      overflow = false
+      canScrollLeft = false
+      canScrollRight = false
+      return
+    }
+
+    const metrics = getHorizontalNavigationMetrics(topTrack)
+    overflow = metrics.overflow
+    canScrollLeft = metrics.canScrollLeft
+    canScrollRight = metrics.canScrollRight
+  }
+
+  function scheduleOverflowUpdate(): void {
+    if (overflowFrame != null) cancelAnimationFrame(overflowFrame)
+    overflowFrame = requestAnimationFrame(() => {
+      overflowFrame = null
+      updateOverflowState()
+    })
+  }
+
+  function scrollTopTrack(direction: -1 | 1): void {
+    if (!topTrack) return
+    const metrics = getHorizontalNavigationMetrics(topTrack)
+    topTrack.scrollBy({ left: direction * metrics.scrollStep, behavior: 'smooth' })
+  }
+
+  function scrollActiveItemIntoView(behavior: ScrollBehavior): void {
+    if (!topTrack || activeId == null) return
+    const activeItem = Array.from(topTrack.querySelectorAll<HTMLElement>('[data-navigation-id]'))
+      .find((element) => element.dataset.navigationId === String(activeId))
+    if (!activeItem) return
+
+    const trackRect = topTrack.getBoundingClientRect()
+    const itemRect = activeItem.getBoundingClientRect()
+    if (itemRect.left < trackRect.left || itemRect.right > trackRect.right) {
+      activeItem.scrollIntoView({ behavior, block: 'nearest', inline: 'center' })
+    }
+  }
+
+  function handlePointerDown(event: PointerEvent): void {
+    if (!topTrack || event.pointerType !== 'mouse' || event.button !== 0) return
+    clearClickSuppression()
+    dragging = false
+    dragPointerId = event.pointerId
+    dragStartX = event.clientX
+    dragStartScrollLeft = topTrack.scrollLeft
+  }
+
+  function handlePointerMove(event: PointerEvent): void {
+    if (!topTrack || dragPointerId !== event.pointerId) return
+    // Mutate through a local DOM reference so Svelte does not invalidate the
+    // bound element variable and rerun active-item auto-scrolling mid-drag.
+    const track = topTrack
+    const delta = event.clientX - dragStartX
+    if (!dragging && Math.abs(delta) >= DRAG_THRESHOLD_PX) {
+      dragging = true
+      suppressNextClick = true
+      // Capture only after a real drag starts so ordinary item clicks keep
+      // their original button target and still produce a click event.
+      if (!track.hasPointerCapture(event.pointerId)) {
+        track.setPointerCapture(event.pointerId)
+      }
+      track.style.scrollBehavior = 'auto'
+    }
+    if (!dragging) return
+    event.preventDefault()
+    track.scrollLeft = dragStartScrollLeft - delta
+  }
+
+  function finishPointerDrag(event: PointerEvent): void {
+    if (!topTrack || dragPointerId !== event.pointerId) return
+    const track = topTrack
+    const didDrag = dragging
+    if (track.hasPointerCapture(event.pointerId)) {
+      track.releasePointerCapture(event.pointerId)
+    }
+    dragPointerId = null
+    dragging = false
+    track.style.removeProperty('scroll-behavior')
+    updateOverflowState()
+    if (didDrag) {
+      clickSuppressionTimer = setTimeout(() => {
+        suppressNextClick = false
+        clickSuppressionTimer = null
+      }, 0)
     }
   }
 
   onMount(() => {
     checkIsMobile()
-    window.addEventListener('resize', debouncedHandleResize)
+    mounted = true
+    window.addEventListener('resize', scheduleResize)
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(scheduleOverflowUpdate)
+      if (topTrack) resizeObserver.observe(topTrack)
+    }
+    updateOverflowState()
   })
 
+  $: if (resizeObserver && topTrack) {
+    resizeObserver.disconnect()
+    resizeObserver.observe(topTrack)
+  }
+
   onDestroy(() => {
-    window.removeEventListener('resize', debouncedHandleResize)
+    mounted = false
+    window.removeEventListener('resize', scheduleResize)
+    resizeObserver?.disconnect()
+    if (resizeTimer) clearTimeout(resizeTimer)
+    if (overflowFrame != null) cancelAnimationFrame(overflowFrame)
+    if (clickSuppressionTimer) clearTimeout(clickSuppressionTimer)
   })
 </script>
 
-<!-- 移动端触发按钮 -->
-<button
-  type="button"
-  class="toc-mobile-btn"
-  class:hidden={!isMobileView}
-  on:click={handleMobileBtnClick}
-  aria-label="目录导航"
->
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-    <path
-      fill="currentColor"
-      d="M17.5 4.5c-1.95 0-4.05.4-5.5 1.5c-1.45-1.1-3.55-1.5-5.5-1.5c-1.45 0-2.99.22-4.28.79C1.49 5.62 1 6.33 1 7.14v11.28c0 1.3 1.22 2.26 2.48 1.94c.98-.25 2.02-.36 3.02-.36c1.56 0 3.22.26 4.56.92c.6.3 1.28.3 1.87 0c1.34-.67 3-.92 4.56-.92c1 0 2.04.11 3.02.36c1.26.33 2.48-.63 2.48-1.94V7.14c0-.81-.49-1.52-1.22-1.85c-1.28-.57-2.82-.79-4.27-.79M21 17.23c0 .63-.58 1.09-1.2.98c-.75-.14-1.53-.2-2.3-.2c-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5c.92 0 1.83.09 2.7.28c.46.1.8.51.8.98z"
-    />
-    <path
-      fill="currentColor"
-      d="M13.98 11.01c-.32 0-.61-.2-.71-.52c-.13-.39.09-.82.48-.94c1.54-.5 3.53-.66 5.36-.45c.41.05.71.42.66.83s-.42.71-.83.66c-1.62-.19-3.39-.04-4.73.39c-.08.01-.16.03-.23.03m0 2.66c-.32 0-.61-.2-.71-.52c-.13-.39.09-.82.48-.94c1.53-.5 3.53-.66 5.36-.45c.41.05.71.42.66.83s-.42.71-.83.66c-1.62-.19-3.39-.04-4.73.39a1 1 0 0 1-.23.03m0 2.66c-.32 0-.61-.2-.71-.52c-.13-.39.09-.82.48-.94c1.53-.5 3.53-.66 5.36-.45c.41.05.71.42.66.83s-.42.7-.83.66c-1.62-.19-3.39-.04-4.73.39a1 1 0 0 1-.23.03"
-    />
-  </svg>
-</button>
+{#if isTop}
+  <aside class="top-navigation" data-testid="top-navigation" aria-label="分类导航">
+    <button
+      type="button"
+      class="scroll-arrow scroll-arrow-left"
+      class:hidden={!overflow}
+      disabled={!canScrollLeft}
+      on:click={() => scrollTopTrack(-1)}
+      aria-label="向左滚动分类"
+      title="向左滚动分类"
+    >
+      ‹
+    </button>
 
-<!-- 移动端遮罩层 -->
-{#if isMobileView && mobileSidebarOpen}
-  <button type="button" class="sidebar-overlay" on:click={handleCloseBtnClick} aria-label="关闭目录导航"></button>
-{/if}
+    <nav
+      class="top-track"
+      class:dragging
+      bind:this={topTrack}
+      on:scroll={updateOverflowState}
+      on:pointerdown={handlePointerDown}
+      on:pointermove={handlePointerMove}
+      on:pointerup={finishPointerDrag}
+      on:pointercancel={finishPointerDrag}
+    >
+      {#each items as item (item.id)}
+        <button
+          type="button"
+          class="top-item"
+          class:active={activeId === item.id}
+          data-navigation-id={item.id}
+          aria-current={activeId === item.id ? 'location' : undefined}
+          on:click={() => handleItemClick(item.id)}
+        >
+          <span>{item.title}</span>
+          {#if item.count != null}<small>{item.count}</small>{/if}
+        </button>
+      {/each}
+    </nav>
 
-<!-- 侧栏 -->
-<aside
-  class="toc-sidebar"
-  class:expanded={isExpanded}
-  class:mobile-hidden={isMobileView && !mobileSidebarOpen}
-  on:mouseenter={handleMouseEnter}
-  on:mouseleave={handleMouseLeave}
->
-  <!-- 关闭按钮（仅移动端展开时显示）-->
+    <button
+      type="button"
+      class="scroll-arrow scroll-arrow-right"
+      class:hidden={!overflow}
+      disabled={!canScrollRight}
+      on:click={() => scrollTopTrack(1)}
+      aria-label="向右滚动分类"
+      title="向右滚动分类"
+    >
+      ›
+    </button>
+  </aside>
+{:else}
   <button
     type="button"
-    class="toc-close-btn"
-    class:visible={isMobileView && isExpanded}
-    on:click={handleCloseBtnClick}
-    aria-label="收起目录"
+    class="toc-mobile-btn"
+    class:hidden={!isMobileView}
+    on:click={handleMobileBtnClick}
+    aria-label="目录导航"
+    aria-expanded={mobileSidebarOpen}
   >
-    ‹
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="currentColor" d="M4 5.5h16v2H4zm0 5.5h16v2H4zm0 5.5h16v2H4z" />
+    </svg>
   </button>
 
-  <!-- 导航列表 -->
-  <nav class="toc-nav">
-    {#each items as item (item.id)}
+  {#if isMobileView && mobileSidebarOpen}
+    <button type="button" class="sidebar-overlay" on:click={closeMobileSidebar} aria-label="关闭目录导航"></button>
+  {/if}
+
+  <aside
+    class="toc-sidebar"
+    class:expanded={isExpanded}
+    class:persistent={isPersistentLeft}
+    class:mobile-hidden={isMobileView && !mobileSidebarOpen}
+    aria-label="分类导航"
+    on:mouseenter={handleMouseEnter}
+    on:mouseleave={handleMouseLeave}
+  >
+    {#if isMobileView}
+      <button type="button" class="toc-close-btn" on:click={closeMobileSidebar} aria-label="收起目录">‹</button>
+    {:else if isPersistentLeft}
       <button
         type="button"
-        class="toc-item"
-        class:active={activeId === item.id}
-        on:click={() => handleItemClick(item.id)}
+        class="toc-collapse-btn"
+        on:click={togglePersistentLeft}
+        aria-label={isExpanded ? '收缩分类导航' : '展开分类导航'}
+        aria-expanded={isExpanded}
+        title={isExpanded ? '收缩分类导航' : '展开分类导航'}
       >
-        <span class="toc-slip"></span>
-        <span class="toc-title">{item.title}</span>
+        {isExpanded ? '‹' : '›'}
       </button>
-    {/each}
-  </nav>
-</aside>
+    {/if}
+
+    <nav class="toc-nav">
+      {#each items as item (item.id)}
+        <button
+          type="button"
+          class="toc-item"
+          class:active={activeId === item.id}
+          aria-current={activeId === item.id ? 'location' : undefined}
+          on:click={() => handleItemClick(item.id)}
+        >
+          <span class="toc-slip"></span>
+          <span class="toc-title">{item.title}</span>
+        </button>
+      {/each}
+    </nav>
+  </aside>
+{/if}
 
 <style>
-  /* 分类快速选择栏和移动端触发按钮共用书签卡片玻璃变量 */
   .toc-mobile-btn,
-  .toc-sidebar {
-    --toc-surface:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.78)), rgba(255, 255, 255, 0.34)),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.62));
-    --toc-surface-strong:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.86)), rgba(255, 255, 255, 0.42)),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.7));
-    --toc-item-bg:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.58)),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.46));
-    --toc-item-hover-bg:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(239, 246, 255, 0.68)),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.62));
-    --toc-item-border: rgba(148, 163, 184, 0.26);
-    --toc-item-hover-border: color-mix(in srgb, var(--toc-accent) 34%, var(--toc-item-border));
-    --toc-item-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.46),
-      0 1px 4px rgba(15, 23, 42, 0.06);
-    --toc-border: rgba(255, 255, 255, 0.42);
+  .toc-sidebar,
+  .top-navigation {
+    --toc-surface: rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.82));
+    --toc-surface-strong: rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.94));
+    --toc-item-bg: rgba(255, 255, 255, 0.58);
+    --toc-item-hover-bg: rgba(239, 246, 255, 0.82);
+    --toc-item-border: rgba(148, 163, 184, 0.24);
+    --toc-border: rgba(255, 255, 255, 0.48);
     --toc-text: var(--home-text-color, #0f172a);
     --toc-accent: var(--home-accent-color, #2563eb);
-    --toc-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.4),
-      0 4px 14px rgba(15, 23, 42, 0.08);
+    --toc-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
     --toc-slip: rgba(15, 23, 42, 0.72);
-    --toc-slip-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
   }
 
   :global([data-theme='dark']) .toc-mobile-btn,
-  :global([data-theme='dark']) .toc-sidebar {
-    --toc-surface:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.15) * 0.82)), rgba(15, 23, 42, 0.22)),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.15) * 0.7));
-    --toc-surface-strong:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.15) * 0.92)), rgba(15, 23, 42, 0.28)),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.15) * 0.78));
-    --toc-item-bg: rgba(15, 23, 42, 0.18);
-    --toc-item-hover-bg: rgba(30, 41, 59, 0.38);
-    --toc-item-border: rgba(255, 255, 255, 0.08);
-    --toc-item-hover-border: rgba(125, 211, 252, 0.22);
-    --toc-item-shadow: none;
-    --toc-border: rgba(255, 255, 255, 0.1);
+  :global([data-theme='dark']) .toc-sidebar,
+  :global([data-theme='dark']) .top-navigation {
+    --toc-surface: rgba(15, 23, 42, 0.82);
+    --toc-surface-strong: rgba(15, 23, 42, 0.94);
+    --toc-item-bg: rgba(30, 41, 59, 0.58);
+    --toc-item-hover-bg: rgba(51, 65, 85, 0.78);
+    --toc-item-border: rgba(148, 163, 184, 0.18);
+    --toc-border: rgba(148, 163, 184, 0.2);
     --toc-text: var(--home-text-color, #e5eefb);
     --toc-accent: var(--home-accent-color, #7dd3fc);
-    --toc-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 6px 18px rgba(0, 0, 0, 0.2);
+    --toc-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
     --toc-slip: rgba(226, 232, 240, 0.82);
-    --toc-slip-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  .top-navigation {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    z-index: 60;
+    transform: translateX(-50%);
+    box-sizing: border-box;
+    width: calc(100% - 32px);
+    max-width: var(--content-max-width, 1200px);
+    height: 52px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--toc-border);
+    border-radius: 12px;
+    padding: 5px;
+    background: var(--toc-surface);
+    box-shadow: var(--toc-shadow);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .top-track {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    scroll-behavior: smooth;
+    cursor: grab;
+    touch-action: pan-x;
+    user-select: none;
+  }
+
+  .top-track::-webkit-scrollbar {
+    display: none;
+  }
+
+  .top-track.dragging {
+    cursor: grabbing;
+    scroll-behavior: auto;
+  }
+
+  .top-item {
+    flex: 0 0 auto;
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0 12px;
+    background: transparent;
+    color: var(--toc-text);
+    font: inherit;
+    font-size: 14px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .top-item:hover,
+  .top-item:focus-visible {
+    border-color: var(--toc-item-border);
+    background: var(--toc-item-bg);
+    outline: none;
+  }
+
+  .top-item.active {
+    border-color: color-mix(in srgb, var(--toc-accent) 32%, var(--toc-item-border));
+    background: var(--toc-item-hover-bg);
+    color: var(--toc-accent);
+  }
+
+  .top-item small {
+    color: inherit;
+    opacity: 0.62;
+    font-size: 11px;
+  }
+
+  .scroll-arrow {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--toc-item-border);
+    border-radius: 8px;
+    background: var(--toc-item-bg);
+    color: var(--toc-text);
+    font: inherit;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .scroll-arrow:hover:not(:disabled),
+  .scroll-arrow:focus-visible {
+    border-color: var(--toc-accent);
+    background: var(--toc-item-hover-bg);
+    outline: none;
+  }
+
+  .scroll-arrow:disabled {
+    opacity: 0.32;
+    cursor: default;
+  }
+
+  .scroll-arrow.hidden {
+    display: none;
   }
 
   .toc-mobile-btn {
@@ -210,7 +521,7 @@
     width: 46px;
     height: 46px;
     border: 1px solid var(--toc-border);
-    border-radius: 0.9rem;
+    border-radius: 12px;
     background: var(--toc-surface);
     color: var(--toc-text);
     display: flex;
@@ -218,7 +529,6 @@
     justify-content: center;
     cursor: pointer;
     box-shadow: var(--toc-shadow);
-    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
   }
 
   .toc-mobile-btn svg {
@@ -226,191 +536,192 @@
     height: 21px;
   }
 
-  .toc-mobile-btn:hover {
-    background: var(--toc-surface-strong);
-    border-color: color-mix(in srgb, var(--toc-accent) 46%, var(--toc-border));
-    transform: scale(1.05);
-  }
-
   .toc-mobile-btn.hidden {
     display: none;
   }
 
-  /* 移动端遮罩层 */
   .sidebar-overlay {
     position: fixed;
+    inset: 0;
+    z-index: 30;
     border: 0;
     padding: 0;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 30;
     background: rgba(0, 0, 0, 0.5);
     cursor: pointer;
   }
 
-  /* 侧栏 */
   .toc-sidebar {
     position: fixed;
     top: 0;
     left: 0;
-    height: 100%;
+    z-index: 50;
+    box-sizing: border-box;
     width: 40px;
-    z-index: 50;  /* 从 35 提升到 50，高于 header (40) */
+    height: 100%;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 10px;
+    padding: 10px 0;
     overflow: hidden;
     border: 1px solid transparent;
-    border-left: none;
-    border-top-right-radius: 20px;
-    border-bottom-right-radius: 20px;
+    border-left: 0;
+    border-radius: 0 16px 16px 0;
     background: transparent;
-    box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
     transition: width 0.24s ease, background 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
   }
 
   .toc-sidebar.expanded {
     width: 200px;
-    background: var(--toc-surface);
     border-color: var(--toc-border);
+    background: var(--toc-surface);
     box-shadow: var(--toc-shadow);
+    backdrop-filter: blur(16px);
   }
 
   .toc-sidebar.mobile-hidden {
     display: none;
   }
 
-  /* 关闭按钮 */
-  .toc-close-btn {
+  .toc-close-btn,
+  .toc-collapse-btn {
     position: absolute;
     top: 12px;
-    right: 12px;
-    width: 40px;
-    height: 40px;
-    border: 1px solid var(--toc-border);
-    border-radius: 0.8rem;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--toc-item-border);
+    border-radius: 8px;
     background: var(--toc-item-bg);
     color: var(--toc-text);
-    font-size: 24px;
+    font: inherit;
+    font-size: 22px;
     line-height: 1;
-    display: none;
-    align-items: center;
-    justify-content: center;
     cursor: pointer;
-    z-index: 2;
-    transition: background 0.2s ease, transform 0.1s ease;
-    touch-action: manipulation;
   }
 
-  .toc-close-btn.visible {
-    display: flex !important;
+  .toc-sidebar.persistent:not(.expanded) .toc-collapse-btn {
+    right: 4px;
   }
 
-  .toc-close-btn:hover {
-    background: var(--toc-item-hover-bg);
-  }
-
-  .toc-close-btn:active {
-    background: var(--toc-item-hover-bg);
-    transform: scale(0.95);
-  }
-
-  /* 导航列表 */
   .toc-nav {
     width: 200px;
-    margin-top: 56px;
+    max-height: calc(100dvh - 96px);
     display: grid;
     gap: 6px;
+    overflow-y: auto;
+    scrollbar-width: thin;
   }
 
-  /* 导航项 */
   .toc-item {
-    width: calc(100% - 20px);
-    border: 1px solid transparent;
-    border-radius: 0.9rem;
-    background: transparent;
+    width: 190px;
+    min-height: 34px;
     display: flex;
     align-items: center;
-    cursor: pointer;
-    padding: 0 10px 0 0;
-    margin: 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0 8px 0 0;
+    background: transparent;
     color: var(--toc-text);
-    transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-  }
-
-  .toc-sidebar.expanded .toc-item {
-    background: var(--toc-item-bg);
-    border-color: var(--toc-item-border);
-    box-shadow: var(--toc-item-shadow);
+    cursor: pointer;
   }
 
   .toc-sidebar.expanded .toc-item:hover,
+  .toc-sidebar.expanded .toc-item:focus-visible,
   .toc-sidebar.expanded .toc-item.active {
+    border-color: var(--toc-item-border);
     background: var(--toc-item-hover-bg);
-    border-color: var(--toc-item-hover-border);
-    transform: translateX(2px);
+    outline: none;
   }
 
-  /* 条纹指示器 */
   .toc-slip {
     width: 40px;
     height: 6px;
-    background-color: var(--toc-slip);
+    flex: 0 0 40px;
+    margin: 12px 0;
     border-radius: 4px;
-    margin: 13px 0;
-    flex-shrink: 0;
+    background: var(--toc-slip);
     transform: scaleX(0.5);
     transform-origin: left center;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.18s ease;
-    box-shadow: var(--toc-slip-shadow);
+    transition: transform 0.2s ease, background 0.18s ease;
   }
 
-  .toc-sidebar.expanded .toc-slip {
-    box-shadow: none;
-  }
-
-  .toc-item:hover .toc-slip {
+  .toc-item:hover .toc-slip,
+  .toc-item:focus-visible .toc-slip {
     transform: scaleX(1);
   }
 
   .toc-item.active .toc-slip {
-    background-color: var(--toc-accent);
+    background: var(--toc-accent);
   }
 
-  /* 标题文字 */
   .toc-title {
+    min-width: 0;
+    overflow: hidden;
     opacity: 0;
     white-space: nowrap;
+    text-overflow: ellipsis;
     font-size: 14px;
-    color: var(--toc-text);
-    margin-left: 0;
-    display: inline-block;
-    transform: translateX(0);
-    transition: opacity 0.2s ease, margin-left 0.2s ease, transform 0.18s ease;
+    transition: opacity 0.2s ease;
   }
 
   .toc-sidebar.expanded .toc-title {
     opacity: 1;
-    margin-left: 10px;
-  }
-
-  .toc-item:hover .toc-title {
-    transform: translateX(1px);
   }
 
   .toc-item.active .toc-title {
     color: var(--toc-accent);
   }
 
-  /* 移动端适配 */
   @media (max-width: 799px) {
+    .top-navigation {
+      top: 8px;
+      width: calc(100% - 16px);
+      height: 48px;
+      grid-template-columns: minmax(0, 1fr);
+      padding: 4px;
+    }
+
+    .top-track {
+      gap: 4px;
+      cursor: auto;
+      scroll-snap-type: x proximity;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .top-item {
+      min-height: 38px;
+      padding: 0 11px;
+      scroll-snap-align: center;
+    }
+
+    .scroll-arrow {
+      display: none;
+    }
+
     .toc-sidebar {
       width: 200px;
+      padding-top: 54px;
+      border-color: var(--toc-border);
+      background: var(--toc-surface);
+      box-shadow: var(--toc-shadow);
+    }
+
+    .toc-nav {
+      max-height: calc(100dvh - 72px);
+    }
+
+    .toc-title {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .top-track,
+    .toc-sidebar,
+    .toc-slip,
+    .toc-title {
+      scroll-behavior: auto;
+      transition: none;
     }
   }
 </style>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SETTINGS,
+  isValidNavigationSetting,
   readRawSettingsRows,
   settingsFromPatchDefaults,
   settingsFromRows,
@@ -63,5 +64,25 @@ describe('worker settings data helpers', () => {
       maskColor: '#fff',
     })
     expect(settings.backgrounds.dark).toEqual(settings.background)
+  })
+
+  it('falls back from missing or invalid navigation settings', () => {
+    expect(settingsFromRows([]).navigation).toEqual({ position: 'left', always_expanded: false })
+    expect(settingsFromRows([
+      { key: 'navigation', value: JSON.stringify({ position: 'bottom', always_expanded: 'yes' }) },
+    ]).navigation).toEqual({ position: 'left', always_expanded: false })
+    expect(settingsFromRows([
+      { key: 'navigation', value: JSON.stringify({ position: 'top' }) },
+    ]).navigation).toEqual({ position: 'left', always_expanded: false })
+    expect(settingsFromRows([
+      { key: 'navigation', value: JSON.stringify({ position: 'top', always_expanded: true }) },
+    ]).navigation).toEqual({ position: 'top', always_expanded: true })
+  })
+
+  it('validates complete navigation payloads for settings updates', () => {
+    expect(isValidNavigationSetting({ position: 'left', always_expanded: false })).toBe(true)
+    expect(isValidNavigationSetting({ position: 'top', always_expanded: true })).toBe(true)
+    expect(isValidNavigationSetting({ position: 'bottom', always_expanded: false })).toBe(false)
+    expect(isValidNavigationSetting({ position: 'left' })).toBe(false)
   })
 })

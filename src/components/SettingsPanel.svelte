@@ -11,6 +11,7 @@
   import BasicSettingsSection from './settings/BasicSettingsSection.svelte'
   import CardSettingsSection from './settings/CardSettingsSection.svelte'
   import FooterSettingsSection from './settings/FooterSettingsSection.svelte'
+  import NavigationSettingsSection from './settings/NavigationSettingsSection.svelte'
   import SearchEngineSettingsSection from './settings/SearchEngineSettingsSection.svelte'
   import PasswordChangePanel from './PasswordChangePanel.svelte'
 
@@ -104,6 +105,8 @@
   {:else}
     <form class="settings-form" on:submit|preventDefault={handleSubmit}>
       <BasicSettingsSection bind:form {saving} />
+
+      <NavigationSettingsSection bind:form {saving} />
 
       <BackgroundSettingsSection bind:form {saving} />
 

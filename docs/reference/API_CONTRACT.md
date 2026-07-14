@@ -121,6 +121,8 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 
 设置存储在 D1 `settings` 表中，`value` 为 JSON 字符串。后端读取时聚合为完整 `Settings` 对象，并对缺失字段使用默认值。后台设置面板提交完整 `Settings` 字段时，`PUT /api/settings` 写入 D1 后直接用本次提交的 payload 和默认值合成响应，避免额外回读 settings 全表；只提交部分字段的兼容请求仍会写入后读取完整 `Settings` 返回。
 
+`navigation` 是公开设置对象，结构为 `{ position: 'left' | 'top', always_expanded: boolean }`。缺失或非法的 D1 历史值读取时回退为 `{ position: 'left', always_expanded: false }`；更新接口拒绝未知位置或非布尔 `always_expanded`。`always_expanded` 只控制桌面左侧布局，顶部和移动端不会应用该值，但后台切换布局时会保留原配置。
+
 背景配置保留旧版 `background` 字段作为兼容值，并新增 `backgrounds.light` / `backgrounds.dark` 分别保存浅色和深色主题的背景类型、背景值、模糊度、遮罩透明度和遮罩颜色。公开首页渲染时按当前实际主题优先读取 `backgrounds` 中对应配置；旧备份或旧数据库缺少 `backgrounds` 时，后端会用旧 `background` 自动派生两套背景。
 
 后台设置面板内置「清透蓝绿」和「晨雾石青」两组渐变方案。`Settings` 与 `PublicSettings` 会通过 `background_preset_id` 持久化当前选择，取值为 `clear-teal`、`mist-slate` 或 `custom`；选择内置方案时前端同时写入对应的 `backgrounds`、遮罩、卡片背景透明度和自动文字色设置。旧数据缺少 `background_preset_id`，或仍为 `custom` 但浅色/深色背景值匹配内置方案时，后台面板会自动识别并显示对应预设。

@@ -24,6 +24,7 @@ export const SETTINGS_KEYS = [
   'search_box_show',
   'search_engine_selector_show',
   'content_layout',
+  'navigation',
   'footer_html',
 ] as const satisfies readonly (keyof Settings)[]
 
@@ -48,6 +49,7 @@ export const PUBLIC_SETTINGS_KEYS = [
   'search_box_show',
   'search_engine_selector_show',
   'content_layout',
+  'navigation',
   'footer_html',
 ] as const satisfies readonly (keyof PublicSettings)[]
 
@@ -78,6 +80,7 @@ export function toPublicSettings(settings: Settings): PublicSettings {
     search_box_show: settings.search_box_show,
     search_engine_selector_show: settings.search_engine_selector_show,
     content_layout: settings.content_layout,
+    navigation: settings.navigation,
     footer_html: settings.footer_html,
   }
 }

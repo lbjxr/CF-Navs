@@ -93,6 +93,7 @@ const settings: Settings = {
   search_box_show: true,
   search_engine_selector_show: true,
   content_layout: { max_width: 1200, max_width_unit: 'px', margin_x: 0, margin_top: 0, margin_bottom: 0 },
+  navigation: { position: 'top', always_expanded: true },
   footer_html: '<p>Footer</p>',
 }
 
@@ -195,6 +196,7 @@ describe('app data adapters', () => {
       search_box_show: settings.search_box_show,
       search_engine_selector_show: settings.search_engine_selector_show,
       content_layout: settings.content_layout,
+      navigation: settings.navigation,
       footer_html: settings.footer_html,
     })
   })

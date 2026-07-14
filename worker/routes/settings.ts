@@ -152,6 +152,17 @@ settingsRoutes.put('/', async (c) => {
       return badRequest(c, 'invalid content_layout.margin_bottom')
     }
   }
+  if (body.navigation !== undefined) {
+    if (!body.navigation || typeof body.navigation !== 'object' || Array.isArray(body.navigation)) {
+      return badRequest(c, 'invalid navigation')
+    }
+    if (!['left', 'top'].includes(body.navigation.position)) {
+      return badRequest(c, 'invalid navigation.position')
+    }
+    if (typeof body.navigation.always_expanded !== 'boolean') {
+      return badRequest(c, 'invalid navigation.always_expanded')
+    }
+  }
   if (body.footer_html !== undefined && typeof body.footer_html !== 'string') {
     return badRequest(c, 'invalid footer_html')
   }

@@ -27,6 +27,7 @@ describe('settings form model', () => {
     expect(form.backgrounds.dark.value).toBe('#ffffff')
     expect(form.search_engine.current).toBe('Kagi')
     expect(form.card_size).toEqual({ width: 80, height: 60 })
+    expect(form.navigation).toEqual({ position: 'left', always_expanded: false })
   })
 
   it('normalizes and clamps settings before save', () => {
@@ -45,6 +46,7 @@ describe('settings form model', () => {
       card_background_color: 'rgba(18, 52, 86, 0.4)',
       card_background_opacity: 1,
       content_layout: { max_width: 10, max_width_unit: '%', margin_x: -1, margin_top: 90, margin_bottom: 90 },
+      navigation: { position: 'invalid' as never, always_expanded: true },
       footer_html: '  <p>Footer</p>  ',
     })
 
@@ -67,6 +69,7 @@ describe('settings form model', () => {
     expect(normalized.content_layout.max_width).toBe(40)
     expect(normalized.content_layout.margin_x).toBe(0)
     expect(normalized.content_layout.margin_top).toBe(50)
+    expect(normalized.navigation).toEqual({ position: 'left', always_expanded: true })
     expect(normalized.footer_html).toBe('<p>Footer</p>')
   })
 
@@ -108,9 +111,11 @@ describe('settings form model', () => {
     const cloned = cloneSettingsForm(emptySettingsForm)
     cloned.search_engine.engines[0].name = 'Changed'
     cloned.backgrounds.light.value = '#000000'
+    cloned.navigation.position = 'top'
 
     expect(emptySettingsForm.search_engine.engines[0].name).toBe('Google')
     expect(emptySettingsForm.backgrounds.light.value).toBe(defaultLightBackground.value)
+    expect(emptySettingsForm.navigation.position).toBe('left')
   })
 
   it('falls back to custom for unknown preset ids', () => {

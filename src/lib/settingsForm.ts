@@ -74,6 +74,7 @@ export const emptySettingsForm: SettingsFormModel = {
   search_box_show: true,
   search_engine_selector_show: true,
   content_layout: { max_width: 1200, max_width_unit: 'px', margin_x: 0, margin_top: 0, margin_bottom: 0 },
+  navigation: { position: 'left', always_expanded: false },
   footer_html: '',
 }
 
@@ -108,6 +109,7 @@ export function cloneSettingsForm(source: SettingsFormModel): SettingsFormModel 
     search_box_show: source.search_box_show,
     search_engine_selector_show: source.search_engine_selector_show,
     content_layout: { ...source.content_layout },
+    navigation: { ...source.navigation },
     footer_html: source.footer_html,
   }
 }
@@ -150,6 +152,7 @@ export function createSettingsFormState(
   const searchEngine = source?.search_engine
   const cardSize = source?.card_size
   const contentLayout = source?.content_layout
+  const navigation = source?.navigation
   return {
     site_title: source?.site_title ?? '',
     site_title_color: source?.site_title_color ?? '#ffffff',
@@ -213,6 +216,10 @@ export function createSettingsFormState(
       margin_x: typeof contentLayout?.margin_x === 'number' ? contentLayout.margin_x : 0,
       margin_top: typeof contentLayout?.margin_top === 'number' ? contentLayout.margin_top : 0,
       margin_bottom: typeof contentLayout?.margin_bottom === 'number' ? contentLayout.margin_bottom : 0,
+    },
+    navigation: {
+      position: navigation?.position === 'top' ? 'top' : 'left',
+      always_expanded: navigation?.always_expanded ?? false,
     },
     footer_html: source?.footer_html ?? '',
   }
@@ -288,6 +295,10 @@ export function normalizeSettingsForm(source: SettingsFormModel): SettingsFormMo
       margin_x: clampNumber(source.content_layout.margin_x, 0, 100),
       margin_top: clampNumber(source.content_layout.margin_top, 0, 50),
       margin_bottom: clampNumber(source.content_layout.margin_bottom, 0, 50),
+    },
+    navigation: {
+      position: source.navigation.position === 'top' ? 'top' : 'left',
+      always_expanded: Boolean(source.navigation.always_expanded),
     },
     footer_html: source.footer_html.trim(),
   }
