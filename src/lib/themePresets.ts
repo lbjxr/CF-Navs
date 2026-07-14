@@ -98,6 +98,104 @@ const emberNightDarkGradient = [
   'linear-gradient(145deg, #140b0d 0%, #141a1f 48%, #081214 100%)',
 ].join(', ')
 
+const violetDawnLightGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(196, 181, 253, 0.5), transparent 32%)',
+  'radial-gradient(circle at 84% 18%, rgba(244, 114, 182, 0.28), transparent 34%)',
+  'radial-gradient(circle at 54% 92%, rgba(186, 230, 253, 0.48), transparent 44%)',
+  'linear-gradient(145deg, #fbfaff 0%, #f4f0ff 48%, #f8f7ff 100%)',
+].join(', ')
+
+const violetDawnDarkGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(167, 139, 250, 0.28), transparent 34%)',
+  'radial-gradient(circle at 84% 20%, rgba(236, 72, 153, 0.16), transparent 36%)',
+  'radial-gradient(circle at 54% 92%, rgba(56, 189, 248, 0.14), transparent 44%)',
+  'linear-gradient(145deg, #120f22 0%, #1a1531 48%, #111827 100%)',
+].join(', ')
+
+const oceanDepthsLightGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(56, 189, 248, 0.38), transparent 31%)',
+  'radial-gradient(circle at 84% 18%, rgba(45, 212, 191, 0.32), transparent 35%)',
+  'radial-gradient(circle at 52% 92%, rgba(191, 219, 254, 0.56), transparent 43%)',
+  'linear-gradient(145deg, #f4fbff 0%, #edf8ff 46%, #f0fbfa 100%)',
+].join(', ')
+
+const oceanDepthsDarkGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(14, 165, 233, 0.3), transparent 34%)',
+  'radial-gradient(circle at 84% 20%, rgba(20, 184, 166, 0.2), transparent 36%)',
+  'radial-gradient(circle at 52% 92%, rgba(59, 130, 246, 0.16), transparent 44%)',
+  'linear-gradient(145deg, #061724 0%, #082b3a 48%, #0b1a2d 100%)',
+].join(', ')
+
+const auroraBorealisLightGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(163, 230, 53, 0.3), transparent 31%)',
+  'radial-gradient(circle at 84% 18%, rgba(45, 212, 191, 0.3), transparent 35%)',
+  'radial-gradient(circle at 54% 92%, rgba(216, 180, 254, 0.34), transparent 44%)',
+  'linear-gradient(145deg, #f8fff7 0%, #eefbf5 48%, #f7f4ff 100%)',
+].join(', ')
+
+const auroraBorealisDarkGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(132, 204, 22, 0.25), transparent 34%)',
+  'radial-gradient(circle at 84% 18%, rgba(45, 212, 191, 0.22), transparent 36%)',
+  'radial-gradient(circle at 54% 92%, rgba(168, 85, 247, 0.2), transparent 44%)',
+  'linear-gradient(145deg, #071b18 0%, #0b2827 48%, #17142b 100%)',
+].join(', ')
+
+const citrusSunsetLightGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(251, 191, 36, 0.36), transparent 31%)',
+  'radial-gradient(circle at 84% 18%, rgba(251, 113, 133, 0.3), transparent 35%)',
+  'radial-gradient(circle at 54% 92%, rgba(253, 230, 138, 0.44), transparent 44%)',
+  'linear-gradient(145deg, #fffdf4 0%, #fff4e8 48%, #fff7f1 100%)',
+].join(', ')
+
+const citrusSunsetDarkGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(245, 158, 11, 0.24), transparent 34%)',
+  'radial-gradient(circle at 84% 18%, rgba(244, 63, 94, 0.2), transparent 36%)',
+  'radial-gradient(circle at 54% 92%, rgba(249, 115, 22, 0.14), transparent 44%)',
+  'linear-gradient(145deg, #211305 0%, #2a1710 48%, #21100f 100%)',
+].join(', ')
+
+const roseOrbitLightGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(244, 114, 182, 0.34), transparent 31%)',
+  'radial-gradient(circle at 84% 18%, rgba(192, 132, 252, 0.3), transparent 35%)',
+  'radial-gradient(circle at 54% 92%, rgba(253, 186, 116, 0.28), transparent 44%)',
+  'linear-gradient(145deg, #fff8fc 0%, #fdf2ff 48%, #fff8f2 100%)',
+].join(', ')
+
+const roseOrbitDarkGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(236, 72, 153, 0.25), transparent 34%)',
+  'radial-gradient(circle at 84% 18%, rgba(168, 85, 247, 0.22), transparent 36%)',
+  'radial-gradient(circle at 54% 92%, rgba(249, 115, 22, 0.13), transparent 44%)',
+  'linear-gradient(145deg, #21101f 0%, #2a1230 48%, #251612 100%)',
+].join(', ')
+
+const indigoNoirLightGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(129, 140, 248, 0.38), transparent 31%)',
+  'radial-gradient(circle at 84% 18%, rgba(96, 165, 250, 0.3), transparent 35%)',
+  'radial-gradient(circle at 54% 92%, rgba(165, 180, 252, 0.36), transparent 44%)',
+  'linear-gradient(145deg, #f8f9ff 0%, #f0f3ff 48%, #f6f7ff 100%)',
+].join(', ')
+
+const indigoNoirDarkGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(99, 102, 241, 0.3), transparent 34%)',
+  'radial-gradient(circle at 84% 18%, rgba(59, 130, 246, 0.2), transparent 36%)',
+  'radial-gradient(circle at 54% 92%, rgba(139, 92, 246, 0.16), transparent 44%)',
+  'linear-gradient(145deg, #0c1024 0%, #11183a 48%, #15142b 100%)',
+].join(', ')
+
+const terracottaDuneLightGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(251, 146, 60, 0.3), transparent 31%)',
+  'radial-gradient(circle at 84% 18%, rgba(180, 83, 9, 0.22), transparent 35%)',
+  'radial-gradient(circle at 54% 92%, rgba(190, 242, 100, 0.22), transparent 44%)',
+  'linear-gradient(145deg, #fffaf4 0%, #fff3e6 48%, #f8f7ed 100%)',
+].join(', ')
+
+const terracottaDuneDarkGradient = [
+  'radial-gradient(circle at 16% 14%, rgba(234, 88, 12, 0.24), transparent 34%)',
+  'radial-gradient(circle at 84% 18%, rgba(202, 138, 4, 0.18), transparent 36%)',
+  'radial-gradient(circle at 54% 92%, rgba(132, 204, 22, 0.12), transparent 44%)',
+  'linear-gradient(145deg, #24130a 0%, #2a1b10 48%, #192019 100%)',
+].join(', ')
+
 export const gradientPresets: ThemeGradientPreset[] = [
   {
     id: 'clear-teal',
@@ -164,5 +262,61 @@ export const gradientPresets: ThemeGradientPreset[] = [
     cardBackgroundOpacity: 0.44,
     cardTextColor: '',
     siteTitleColor: '',
+  },
+  {
+    id: 'violet-dawn',
+    label: '紫晶破晓',
+    description: '薰衣草紫与玫瑰高光，冷暖分明且保持克制。',
+    light: { type: 'gradient', value: violetDawnLightGradient, blur: 0, mask: 0.12, maskColor: '#ffffff' },
+    dark: { type: 'gradient', value: violetDawnDarkGradient, blur: 0, mask: 0.28, maskColor: '#000000' },
+    cardBackgroundColor: '#ffffff', cardBackgroundOpacity: 0.44, cardTextColor: '', siteTitleColor: '',
+  },
+  {
+    id: 'ocean-depths',
+    label: '深海蔚蓝',
+    description: '高辨识度的湛蓝与海松绿，营造清澈水面感。',
+    light: { type: 'gradient', value: oceanDepthsLightGradient, blur: 0, mask: 0.12, maskColor: '#ffffff' },
+    dark: { type: 'gradient', value: oceanDepthsDarkGradient, blur: 0, mask: 0.3, maskColor: '#000000' },
+    cardBackgroundColor: '#ffffff', cardBackgroundOpacity: 0.42, cardTextColor: '', siteTitleColor: '',
+  },
+  {
+    id: 'aurora-borealis',
+    label: '极光苔原',
+    description: '酸橙、青绿与淡紫的极光层次，适合强调玻璃折射。',
+    light: { type: 'gradient', value: auroraBorealisLightGradient, blur: 0, mask: 0.14, maskColor: '#ffffff' },
+    dark: { type: 'gradient', value: auroraBorealisDarkGradient, blur: 0, mask: 0.3, maskColor: '#000000' },
+    cardBackgroundColor: '#ffffff', cardBackgroundOpacity: 0.42, cardTextColor: '', siteTitleColor: '',
+  },
+  {
+    id: 'citrus-sunset',
+    label: '柑橘日落',
+    description: '琥珀、珊瑚与奶油底色，给暖色系一个清晰选项。',
+    light: { type: 'gradient', value: citrusSunsetLightGradient, blur: 0, mask: 0.14, maskColor: '#ffffff' },
+    dark: { type: 'gradient', value: citrusSunsetDarkGradient, blur: 0, mask: 0.3, maskColor: '#000000' },
+    cardBackgroundColor: '#ffffff', cardBackgroundOpacity: 0.46, cardTextColor: '', siteTitleColor: '',
+  },
+  {
+    id: 'rose-orbit',
+    label: '玫瑰星轨',
+    description: '洋红、紫罗兰和杏色点光，柔和而不与旧方案雷同。',
+    light: { type: 'gradient', value: roseOrbitLightGradient, blur: 0, mask: 0.13, maskColor: '#ffffff' },
+    dark: { type: 'gradient', value: roseOrbitDarkGradient, blur: 0, mask: 0.3, maskColor: '#000000' },
+    cardBackgroundColor: '#ffffff', cardBackgroundOpacity: 0.44, cardTextColor: '', siteTitleColor: '',
+  },
+  {
+    id: 'indigo-noir',
+    label: '靛蓝秘境',
+    description: '靛蓝与电光蓝建立更冷静、有纵深的夜间氛围。',
+    light: { type: 'gradient', value: indigoNoirLightGradient, blur: 0, mask: 0.12, maskColor: '#ffffff' },
+    dark: { type: 'gradient', value: indigoNoirDarkGradient, blur: 0, mask: 0.3, maskColor: '#000000' },
+    cardBackgroundColor: '#ffffff', cardBackgroundOpacity: 0.42, cardTextColor: '', siteTitleColor: '',
+  },
+  {
+    id: 'terracotta-dune',
+    label: '陶土沙丘',
+    description: '陶土、赭金与苔绿，借自然土色提供低刺激的暖调选择。',
+    light: { type: 'gradient', value: terracottaDuneLightGradient, blur: 0, mask: 0.14, maskColor: '#ffffff' },
+    dark: { type: 'gradient', value: terracottaDuneDarkGradient, blur: 0, mask: 0.3, maskColor: '#000000' },
+    cardBackgroundColor: '#ffffff', cardBackgroundOpacity: 0.44, cardTextColor: '', siteTitleColor: '',
   },
 ]

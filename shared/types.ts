@@ -49,6 +49,13 @@ export const BUILTIN_BACKGROUND_PRESET_IDS = [
   'sage-graphite',
   'lumen-amber',
   'ember-night',
+  'violet-dawn',
+  'ocean-depths',
+  'aurora-borealis',
+  'citrus-sunset',
+  'rose-orbit',
+  'indigo-noir',
+  'terracotta-dune',
 ] as const
 export type BuiltinBackgroundPresetId = typeof BUILTIN_BACKGROUND_PRESET_IDS[number]
 export type BackgroundPresetId = BuiltinBackgroundPresetId | 'custom'
