@@ -13,8 +13,8 @@
 <div class="gradient-preset-panel">
   <div class="gradient-preset-header">
     <div>
-      <strong>内置渐变方案</strong>
-      <p>选择后会同时应用浅色/深色背景、遮罩、卡片透明度和自动文字颜色。</p>
+      <strong>内置配色方案</strong>
+      <p>每套方案包含浅色/深色两种背景，选中后会一并套用遮罩和推荐的卡片透明度、文字颜色。</p>
     </div>
     {#if activeGradientPresetId === 'custom'}
       <span>自定义</span>
@@ -60,7 +60,7 @@
       </span>
       <span class="preset-copy">
         <strong>自定义渐变</strong>
-        <small>保留下面浅色/深色背景的完整 CSS 渐变手动配置。</small>
+        <small>不套用方案，手动维护下方浅色/深色背景的完整配置。</small>
       </span>
     </label>
   </div>

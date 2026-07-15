@@ -71,15 +71,16 @@
     box-sizing: border-box;
     text-decoration: none;
     color: inherit;
-    border: 1px solid rgba(255, 255, 255, 0.42);
+    border: 1px solid rgba(255, 255, 255, 0.55);
     background:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.78)), rgba(255, 255, 255, 0.34)),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.62));
-    backdrop-filter: blur(18px) saturate(135%);
-    -webkit-backdrop-filter: blur(18px) saturate(135%);
+      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.72)), rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.28))),
+      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.4));
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.46),
-      0 2px 8px rgba(15, 23, 42, 0.08);
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+      0 4px 14px rgba(15, 23, 42, 0.08);
     transition:
       transform 0.16s ease,
       border-color 0.16s ease;
@@ -100,10 +101,10 @@
   }
 
   .bookmark-card-icon:hover {
-    border-color: rgba(255, 255, 255, 0.62);
+    border-color: rgba(255, 255, 255, 0.75);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.58),
-      0 6px 16px rgba(15, 23, 42, 0.1);
+      inset 0 1px 0 rgba(255, 255, 255, 0.65),
+      0 8px 20px rgba(15, 23, 42, 0.12);
     transform: translateY(-1px);
   }
 
@@ -167,18 +168,18 @@
   }
 
   :global([data-theme='dark']) .bookmark-card-icon {
-    border-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.14);
     background:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.15) * 0.82)), rgba(15, 23, 42, 0.22)),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.15) * 0.7));
+      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.15) * 0.2)), rgb(2 6 23 / calc(var(--card-bg-opacity, 0.15) * 0.42))),
+      rgb(15 23 42 / calc(var(--card-bg-opacity, 0.15) * 0.55));
     color: var(--card-text-color, #e2e8f0);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 2px 10px rgba(0, 0, 0, 0.18);
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 4px 16px rgba(0, 0, 0, 0.28);
   }
 
   :global([data-theme='dark']) .bookmark-card-icon:hover {
-    border-color: rgba(125, 211, 252, 0.26);
+    border-color: rgba(125, 211, 252, 0.32);
   }
 
   :global([data-theme='dark']) .bookmark-icon-title {

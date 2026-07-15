@@ -55,8 +55,9 @@
   }
 </script>
 
-<fieldset class="group group-wide" disabled={saving || changingPassword}>
+<fieldset id="settings-section-account" class="group group-wide" disabled={saving || changingPassword}>
   <legend>账号安全</legend>
+  <p class="group-desc">修改管理员登录密码。此操作独立生效，无需点击底部「保存设置」。</p>
   <div class="form-grid password-grid">
     <label class="field">
       <span>当前密码</span>
@@ -122,15 +123,23 @@
     align-content: start;
     border: 1px solid var(--sp-group-border);
     border-radius: 14px;
-    padding: 16px 16px 16px 18px;
+    padding: 14px 16px 16px 18px;
     display: grid;
-    gap: 14px;
+    gap: 12px;
     margin: 0;
     min-width: 0;
+    scroll-margin-top: 96px;
     background: var(--sp-group-bg);
     box-shadow:
       0 1px 2px rgba(15, 23, 42, 0.04),
       0 1px 0 rgba(255, 255, 255, 0.72) inset;
+  }
+
+  .group-desc {
+    margin: 0;
+    color: var(--sp-muted);
+    font-size: 13px;
+    line-height: 1.5;
   }
 
   .group::before {

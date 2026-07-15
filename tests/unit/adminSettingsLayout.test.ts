@@ -28,4 +28,40 @@ describe('admin settings layout', () => {
     expect(source).toContain('bind:checked={form.navigation.always_expanded}')
     expect(source).toContain("disabled={saving || form.navigation.position !== 'left'}")
   })
+
+  it('orders settings sections and exposes anchors for the section nav', () => {
+    const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
+
+    const sectionOrder = [
+      '<BasicSettingsSection',
+      '<BackgroundSettingsSection',
+      '<NavigationSettingsSection',
+      '<HeroSettingsSection',
+      '<CardSettingsSection',
+      '<SearchEngineSettingsSection',
+      '<FooterSettingsSection',
+      '<PasswordChangePanel',
+    ]
+    const positions = sectionOrder.map((marker) => panel.indexOf(marker))
+    expect(positions.every((position) => position >= 0)).toBe(true)
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions)
+
+    expect(panel).toContain("id: 'settings-section-appearance'")
+    expect(panel).toContain('scrollToSection')
+  })
+
+  it('keeps content layout fields in the layout section and search toggles in the hero section', () => {
+    const layout = readFileSync('src/components/settings/NavigationSettingsSection.svelte', 'utf8')
+    const hero = readFileSync('src/components/settings/HeroSettingsSection.svelte', 'utf8')
+    const card = readFileSync('src/components/settings/CardSettingsSection.svelte', 'utf8')
+    const search = readFileSync('src/components/settings/SearchEngineSettingsSection.svelte', 'utf8')
+    const appearance = readFileSync('src/components/settings/BackgroundSettingsSection.svelte', 'utf8')
+
+    expect(layout).toContain('bind:value={form.content_layout.max_width}')
+    expect(card).not.toContain('form.content_layout')
+    expect(hero).toContain('bind:checked={form.search_box_show}')
+    expect(hero).toContain('bind:checked={form.search_engine_selector_show}')
+    expect(search).not.toContain('form.search_box_show')
+    expect(appearance).toContain('bind:group={form.theme}')
+  })
 })

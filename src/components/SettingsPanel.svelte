@@ -7,10 +7,12 @@
     normalizeSettingsForm,
     type SettingsFormModel,
   } from '../lib/settingsForm'
+  import './settings/settingsSections.css'
   import BackgroundSettingsSection from './settings/BackgroundSettingsSection.svelte'
   import BasicSettingsSection from './settings/BasicSettingsSection.svelte'
   import CardSettingsSection from './settings/CardSettingsSection.svelte'
   import FooterSettingsSection from './settings/FooterSettingsSection.svelte'
+  import HeroSettingsSection from './settings/HeroSettingsSection.svelte'
   import NavigationSettingsSection from './settings/NavigationSettingsSection.svelte'
   import SearchEngineSettingsSection from './settings/SearchEngineSettingsSection.svelte'
   import PasswordChangePanel from './PasswordChangePanel.svelte'
@@ -25,9 +27,21 @@
   export let onSubmit: ((payload: SettingsPanelValue) => AsyncVoid) | undefined = undefined
   export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
 
+  const sectionAnchors = [
+    { id: 'settings-section-basic', label: '基础信息' },
+    { id: 'settings-section-appearance', label: '外观主题' },
+    { id: 'settings-section-layout', label: '布局与导航' },
+    { id: 'settings-section-hero', label: '标题与搜索' },
+    { id: 'settings-section-card', label: '卡片样式' },
+    { id: 'settings-section-search', label: '搜索引擎' },
+    { id: 'settings-section-footer', label: '页脚' },
+    { id: 'settings-section-account', label: '账号安全' },
+  ]
+
   let form: SettingsPanelValue = cloneSettingsForm(emptySettingsForm)
   let initialForm: SettingsPanelValue = cloneSettingsForm(emptySettingsForm)
   let formKey = ''
+  let activeAnchorId = ''
 
   $: nextKey = JSON.stringify({ value, loading })
   $: if (nextKey !== formKey) {
@@ -79,15 +93,33 @@
     await onSubmit?.(normalizedForm)
   }
 
+  function scrollToSection(anchorId: string): void {
+    activeAnchorId = anchorId
+    if (typeof document === 'undefined') return
+    document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
 </script>
 
 <section class="settings-panel" aria-busy={loading || saving}>
   <div class="panel-header">
-    <div>
+    <div class="panel-header-copy">
       <p class="panel-eyebrow">设置</p>
       <h2>站点设置</h2>
-      <p class="panel-desc">维护站点标题、公开访问、主题、背景与搜索引擎。</p>
+      <p class="panel-desc">按分组管理站点信息、外观、布局与账号；修改后点击底部「保存设置」统一生效。</p>
     </div>
+    <nav class="section-nav" aria-label="设置分组导航">
+      {#each sectionAnchors as anchor (anchor.id)}
+        <button
+          type="button"
+          class="section-nav-chip"
+          class:active={activeAnchorId === anchor.id}
+          on:click={() => scrollToSection(anchor.id)}
+        >
+          {anchor.label}
+        </button>
+      {/each}
+    </nav>
   </div>
 
   {#if error}
@@ -106,17 +138,19 @@
     <form class="settings-form" on:submit|preventDefault={handleSubmit}>
       <BasicSettingsSection bind:form {saving} />
 
+      <BackgroundSettingsSection bind:form {saving} />
+
       <NavigationSettingsSection bind:form {saving} />
 
-      <BackgroundSettingsSection bind:form {saving} />
+      <HeroSettingsSection bind:form {saving} />
 
       <CardSettingsSection bind:form {saving} />
 
       <SearchEngineSettingsSection bind:form {saving} {enginesValid} />
 
-      <PasswordChangePanel {saving} {onChangePassword} />
-
       <FooterSettingsSection bind:form {saving} />
+
+      <PasswordChangePanel {saving} {onChangePassword} />
 
       <div class="form-footer">
         <p class="helper-text">
@@ -277,18 +311,21 @@
     position: sticky;
     top: 0;
     z-index: 20;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
+    display: grid;
+    gap: 10px;
     border-bottom: 1px solid var(--sp-header-border);
     background: var(--sp-header-bg);
     backdrop-filter: blur(16px);
-    padding: 16px 20px 14px;
+    border-radius: 22px 22px 0 0;
+    padding: 14px 20px 12px;
+  }
+
+  .panel-header-copy {
+    min-width: 0;
   }
 
   .panel-eyebrow {
-    margin: 0 0 5px;
+    margin: 0 0 4px;
     font-size: 11px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -315,10 +352,44 @@
   }
 
   .panel-desc {
-    margin-top: 5px;
-    max-width: 64ch;
+    margin-top: 4px;
+    max-width: 72ch;
     font-size: 13px;
     text-wrap: pretty;
+  }
+
+  .section-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .section-nav-chip {
+    border: 1px solid var(--sp-toggle-border);
+    border-radius: 999px;
+    padding: 5px 12px;
+    background: var(--sp-toggle-bg);
+    color: var(--sp-label);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      border-color 0.16s ease,
+      background 0.16s ease,
+      color 0.16s ease;
+    white-space: nowrap;
+  }
+
+  .section-nav-chip:hover {
+    border-color: color-mix(in srgb, var(--sp-accent) 42%, var(--sp-toggle-border));
+    background: var(--sp-toggle-hover-bg);
+    color: var(--sp-accent-strong);
+  }
+
+  .section-nav-chip.active {
+    border-color: color-mix(in srgb, var(--sp-accent) 55%, transparent);
+    background: var(--sp-chip-bg);
+    color: var(--sp-chip-text);
   }
 
   .error-banner,
@@ -433,7 +504,19 @@
     }
 
     .panel-header {
-      padding: 18px;
+      border-radius: 18px 18px 0 0;
+      padding: 14px 16px 12px;
+    }
+
+    .section-nav {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+    }
+
+    .section-nav::-webkit-scrollbar {
+      display: none;
     }
 
     .settings-form {

@@ -226,15 +226,15 @@
   }
 
   .add-link-button {
-    border: 1px solid rgba(255, 255, 255, 0.42);
+    border: 1px solid rgba(255, 255, 255, 0.55);
     border-radius: 999px;
     padding: 0.45rem 0.8rem;
     background:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.78)), rgba(255, 255, 255, 0.28)),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.62));
+      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.72)), rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.3))),
+      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.42));
     color: var(--card-text-color, currentColor);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.42),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5),
       0 2px 8px rgba(15, 23, 42, 0.07);
     font-size: 0.86rem;
     font-weight: 600;
@@ -246,8 +246,8 @@
 
   .add-link-button.ghost {
     background:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.52)), rgba(255, 255, 255, 0.16)),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.38));
+      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.48)), rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.18))),
+      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.3));
     color: var(--card-text-color, currentColor);
   }
 
@@ -284,7 +284,8 @@
 
   .sort-hint {
     margin: 0;
-    color: rgba(100, 116, 139, 0.92);
+    color: var(--home-text-color, #64748b);
+    opacity: 0.78;
     font-size: 0.85rem;
   }
 
@@ -343,9 +344,10 @@
   .empty-card {
     padding: 1rem 1.1rem;
     border-radius: 1rem;
-    border: 1px dashed rgba(148, 163, 184, 0.4);
-    color: rgba(100, 116, 139, 0.95);
-    background: rgba(255, 255, 255, 0.45);
+    border: 1px dashed var(--home-stat-border, rgba(148, 163, 184, 0.4));
+    color: var(--home-text-color, #64748b);
+    opacity: 0.85;
+    background: var(--home-stat-chip-bg, rgba(255, 255, 255, 0.45));
   }
 
   /* 暗色主题 */
@@ -359,27 +361,27 @@
   }
 
   :global([data-theme='dark']) .add-link-button {
-    border-color: rgba(148, 163, 184, 0.28);
+    border-color: rgba(148, 163, 184, 0.26);
     background:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 15 23 42) / calc(var(--card-bg-opacity, 0.9) * 0.82)), rgba(15, 23, 42, 0.38)),
-      rgb(var(--card-bg-rgb, 15 23 42) / calc(var(--card-bg-opacity, 0.9) * 0.66));
+      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.16)), rgb(2 6 23 / calc(var(--card-bg-opacity, 0.9) * 0.4))),
+      rgb(15 23 42 / calc(var(--card-bg-opacity, 0.9) * 0.55));
     color: var(--card-text-color, currentColor);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 3px 10px rgba(0, 0, 0, 0.16);
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 3px 10px rgba(0, 0, 0, 0.24);
   }
 
   :global([data-theme='dark']) .add-link-button.ghost {
     background:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 15 23 42) / calc(var(--card-bg-opacity, 0.9) * 0.62)), rgba(15, 23, 42, 0.26)),
-      rgb(var(--card-bg-rgb, 15 23 42) / calc(var(--card-bg-opacity, 0.9) * 0.48));
+      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.1)), rgb(2 6 23 / calc(var(--card-bg-opacity, 0.9) * 0.3))),
+      rgb(15 23 42 / calc(var(--card-bg-opacity, 0.9) * 0.4));
   }
 
   :global([data-theme='dark']) .add-link-button:hover:not(:disabled) {
-    border-color: rgba(203, 213, 225, 0.38);
+    border-color: rgba(125, 211, 252, 0.36);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      0 6px 16px rgba(0, 0, 0, 0.2);
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 6px 16px rgba(0, 0, 0, 0.28);
   }
 
   :global([data-theme='dark']) .section-title-wrap p {

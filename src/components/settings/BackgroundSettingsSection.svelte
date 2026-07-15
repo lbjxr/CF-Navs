@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import type { BackgroundSetting } from '../../../shared/types'
   import {
     cloneBackgroundSetting,
     cloneSettingsForm,
     getActiveGradientPresetId,
     normalizeSettingsForm,
+    themeOptions,
     type SettingsFormModel,
   } from '../../lib/settingsForm'
   import type { ThemeGradientPreset } from '../../lib/themePresets'
@@ -19,6 +21,12 @@
   $: darkBackgroundValid = normalizedForm.backgrounds.dark.value.length > 0
   $: activeGradientPresetId = getActiveGradientPresetId(form)
   $: uploadHost = form.image_host_url.trim()
+  $: currentThemeHint = themeOptions.find((option) => option.value === form.theme)?.hint ?? ''
+
+  async function syncForm(): Promise<void> {
+    await tick()
+    form = cloneSettingsForm(form)
+  }
 
   function markCustomGradientPreset(): void {
     const next = cloneSettingsForm(form)
@@ -56,8 +64,29 @@
   }
 </script>
 
-<fieldset class="group group-wide group-background" disabled={saving}>
-  <legend>背景</legend>
+<fieldset id="settings-section-appearance" class="group group-wide group-background" disabled={saving}>
+  <legend>外观主题</legend>
+  <p class="group-desc">先选主题模式，再挑一套配色方案；也可以分别自定义浅色和深色背景。</p>
+
+  <div class="theme-mode-row">
+    <div class="field theme-mode-field">
+      <span class="field-label">主题模式</span>
+      <div class="segmented-control" role="radiogroup" aria-label="主题模式">
+        {#each themeOptions as option (option.value)}
+          <label class:active={form.theme === option.value}>
+            <input
+              type="radio"
+              bind:group={form.theme}
+              value={option.value}
+              on:change={() => void syncForm()}
+            />
+            <span>{option.label}</span>
+          </label>
+        {/each}
+      </div>
+      <small>{currentThemeHint}前台右上角仍可随时临时切换亮暗。</small>
+    </div>
+  </div>
 
   <GradientPresetSelector
     {activeGradientPresetId}
@@ -87,44 +116,13 @@
 </fieldset>
 
 <style>
-  .group {
-    position: relative;
-    grid-column: span 6;
-    align-content: start;
-    border: 1px solid var(--sp-group-border);
-    border-radius: 14px;
-    padding: 16px 16px 16px 18px;
+  .theme-mode-row {
     display: grid;
-    gap: 14px;
-    margin: 0;
-    min-width: 0;
-    background: var(--sp-group-bg-strong);
-    box-shadow:
-      0 1px 2px rgba(15, 23, 42, 0.04),
-      0 1px 0 rgba(255, 255, 255, 0.72) inset;
+    grid-template-columns: minmax(260px, 420px);
   }
 
-  .group::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 18px;
-    bottom: 18px;
-    width: 3px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--sp-accent) 52%, transparent);
-  }
-
-  .group-wide {
-    grid-column: 1 / -1;
-  }
-
-  .group legend {
-    padding: 0 7px;
-    margin-left: -4px;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--sp-strong);
+  .segmented-control {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .theme-background-grid {
@@ -133,13 +131,9 @@
     gap: 12px;
   }
 
-  fieldset:disabled {
-    opacity: 1;
-  }
-
   @media (max-width: 960px) {
-    .group {
-      grid-column: 1 / -1;
+    .theme-mode-row {
+      grid-template-columns: 1fr;
     }
   }
 
