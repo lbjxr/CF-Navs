@@ -149,6 +149,13 @@
     </div>
 
     <div class="admin-panel-scroll-body">
+      {#if !sortMode && !categoriesLoading && categories.length > 0}
+        <div class="admin-list-toolbar">
+          <div class="admin-bookmark-search-bar">
+            <input type="text" data-testid="admin-category-search" placeholder="搜索分类…" value={search} on:input={handleSearchInput} />
+          </div>
+        </div>
+      {/if}
       {#if categoriesLoading}
         <div class="admin-empty-state">
           <span class="admin-empty-state-icon">📁</span>
@@ -172,13 +179,6 @@
           <p>请尝试其他搜索关键词。</p>
         </div>
       {:else}
-        <div class="admin-list-toolbar">
-          {#if !sortMode}
-            <div class="admin-bookmark-search-bar">
-              <input type="text" data-testid="admin-category-search" placeholder="搜索分类…" value={search} on:input={handleSearchInput} />
-            </div>
-          {/if}
-        </div>
         <label class="batch-select-all"><input type="checkbox" checked={pageSelectedCount === pageIds.length && pageIds.length > 0} use:indeterminate={pageSelectedCount > 0 && pageSelectedCount < pageIds.length} on:change={togglePageSelection} />全选当前页</label>
         <div
           class="admin-list-stack"
