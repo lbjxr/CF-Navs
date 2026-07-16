@@ -276,8 +276,8 @@ export function prepareBrowserBookmarkHtml(text: string): PreparedImport {
   }
 
   const tokens = text.match(/<\/?(?:DL|H3|A|DD|DT)\b[^>]*>|[^<]+/gi) ?? []
-  const folderStack: string[] = []
-  const dlFolderMarkers: boolean[] = []
+  type DlContext = { topCategoryTitle: string | null }
+  const dlStack: DlContext[] = []
   let pendingHeading = ''
   let captureHeading = false
   let headingText = ''
@@ -295,10 +295,22 @@ export function prepareBrowserBookmarkHtml(text: string): PreparedImport {
     }
     if (/^<H3\b/i.test(token)) { captureHeading = true; headingText = ''; continue }
     if (/^<\/H3/i.test(token)) { captureHeading = false; pendingHeading = decode(headingText.replace(/<[^>]+>/g, '')).trim(); continue }
-    if (/^<DL\b/i.test(token)) { const isFolder = Boolean(pendingHeading); dlFolderMarkers.push(isFolder); if (isFolder) folderStack.push(pendingHeading); pendingHeading = ''; continue }
-    if (/^<\/DL/i.test(token)) { if (dlFolderMarkers.pop()) folderStack.pop(); continue }
+    if (/^<DL\b/i.test(token)) {
+      const parent = dlStack[dlStack.length - 1]
+      const topCategoryTitle = pendingHeading
+        ? (parent?.topCategoryTitle ?? pendingHeading)
+        : (parent?.topCategoryTitle ?? null)
+      dlStack.push({ topCategoryTitle })
+      pendingHeading = ''
+      continue
+    }
+    if (/^<\/DL/i.test(token)) { dlStack.pop(); continue }
     if (/^<A\b/i.test(token)) { captureLink = true; linkTag = token; linkText = ''; captureDescription = false; continue }
-    if (/^<\/A/i.test(token)) { captureLink = false; parseLink(linkTag, linkText, folderStack[0] || '浏览器书签'); continue }
+    if (/^<\/A/i.test(token)) {
+      captureLink = false
+      parseLink(linkTag, linkText, dlStack[dlStack.length - 1]?.topCategoryTitle ?? '浏览器书签')
+      continue
+    }
     if (/^<DD\b/i.test(token)) { captureDescription = true; descriptionText = ''; continue }
     if (captureDescription) { const description = decode(descriptionText).trim(); if (description && bookmarks.length > 0) bookmarks[bookmarks.length - 1].description = description; captureDescription = false }
   }
