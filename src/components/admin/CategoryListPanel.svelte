@@ -26,6 +26,7 @@
   export let onOpenCreateCategory: (() => AsyncVoid) | undefined = undefined
   export let onEditCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
   export let onDeleteCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
+  export let onBatchDeleteCategories: ((ids: number[]) => AsyncVoid) | undefined = undefined
   export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
   export let onSortCategories: SortHandler | undefined = undefined
 
@@ -33,18 +34,37 @@
   let localCategories: AdminCategory[] = []
   let savingSort = false
   let page = 1
+  let selectedIds = new Set<number>()
 
   $: totalPages = getAdminListTotalPages(categories.length)
   $: page = clampAdminListPage(page, totalPages)
   $: categoryPage = createAdminListPage(categories, page)
   $: pagedCategories = categoryPage.items
   $: displayCategories = sortMode ? localCategories : pagedCategories
+  $: selectedIds = new Set([...selectedIds].filter((id) => categories.some((category) => Number(category.id) === id)))
+  $: pageIds = pagedCategories.map((category) => Number(category.id))
+  $: pageSelectedCount = pageIds.filter((id) => selectedIds.has(id)).length
 
   function enterSort() {
     localCategories = createAdminSortDraft(categories)
     page = 1
     sortMode = true
   }
+
+  function togglePageSelection(event: Event) {
+    const checked = (event.currentTarget as HTMLInputElement).checked
+    const next = new Set(selectedIds)
+    pageIds.forEach((id) => checked ? next.add(id) : next.delete(id))
+    selectedIds = next
+  }
+
+  function toggleCategorySelection(event: Event, id: number) {
+    const next = new Set(selectedIds)
+    if ((event.currentTarget as HTMLInputElement).checked) next.add(id)
+    else next.delete(id)
+    selectedIds = next
+  }
+  function indeterminate(node: HTMLInputElement, value: boolean) { node.indeterminate = value; return { update(next: boolean) { node.indeterminate = next } } }
 
   function cancelSort() {
     sortMode = false
@@ -107,13 +127,15 @@
             class="admin-ghost-button"
             data-testid="admin-category-sort-button"
             on:click={enterSort}
-            disabled={!isAuthenticated || categoriesLoading || authLoading || categories.length < 2}
+            disabled={!isAuthenticated || categoriesLoading || authLoading || categories.length < 2 || selectedIds.size > 0}
           >
             排序
           </button>
           <button type="button" class="admin-primary-button" data-testid="admin-create-category-button" on:click={() => onOpenCreateCategory?.()} disabled={!isAuthenticated}>
             新增分类
           </button>
+          <button type="button" class="admin-danger-button" on:click={() => onBatchDeleteCategories?.([...selectedIds])} disabled={!isAuthenticated || selectedIds.size === 0}>删除已选 ({selectedIds.size})</button>
+          {#if selectedIds.size > 0}<button type="button" class="admin-ghost-button" on:click={() => selectedIds = new Set()}>清除选择</button>{/if}
         {/if}
       </div>
     </div>
@@ -136,6 +158,7 @@
           </div>
         </div>
       {:else}
+        <label class="batch-select-all"><input type="checkbox" checked={pageSelectedCount === pageIds.length && pageIds.length > 0} use:indeterminate={pageSelectedCount > 0 && pageSelectedCount < pageIds.length} on:change={togglePageSelection} />全选当前页</label>
         <div
           class="admin-list-stack"
           class:is-sorting={sortMode}
@@ -146,6 +169,7 @@
         >
           {#each displayCategories as category (category.id)}
             <article class="admin-compact-card" class:sortable={sortMode} data-sortable-item data-sort-id={category.id}>
+              {#if !sortMode}<input type="checkbox" aria-label={`选择分类 ${category.title}`} checked={selectedIds.has(Number(category.id))} on:change={(event) => toggleCategorySelection(event, Number(category.id))} />{/if}
               {#if sortMode}
                 <span class="admin-drag-handle" aria-hidden="true">⋮⋮</span>
               {/if}

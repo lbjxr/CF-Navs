@@ -67,6 +67,7 @@ describe('normalizeImportBookmark', () => {
     icon_background_color: '#333',
     icon_blob: null,
     description: 'Code host',
+    description_mode: null,
     open_method: 1,
     sort: 5,
     created_at: 100,

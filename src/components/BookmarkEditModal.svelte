@@ -300,6 +300,7 @@
           bind:url={form.url}
           bind:openMethod={form.open_method}
           bind:description={form.description}
+          bind:descriptionMode={form.description_mode}
           {categories}
           {loading}
         />

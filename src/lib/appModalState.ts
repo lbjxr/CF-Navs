@@ -16,6 +16,7 @@ export function createBookmarkDraft(categoryId: string | number | undefined): Pa
     icon: '',
     icon_background_color: '',
     description: '',
+    description_mode: 'inherit',
     open_method: 'new_tab',
   }
 }

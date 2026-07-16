@@ -49,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   card_style: 'info',
   card_icon_size: 60,
   card_show_description: true,
+  card_description_mode: 'always',
   card_background_color: '#ffffff',
   card_background_opacity: 0.42,
   card_icon_show_title: true,
@@ -139,6 +140,12 @@ export function settingsFromRawMap(raw: Map<string, unknown>): Settings {
   }
   for (const key of SETTINGS_KEYS) assignSetting(key)
   out.background_preset_id = normalizeBackgroundPresetId(out.background_preset_id)
+  const rawMode = raw.get('card_description_mode')
+  const rawLegacy = raw.get('card_show_description')
+  out.card_description_mode = rawMode === 'hover' || rawMode === 'hidden' || rawMode === 'always'
+    ? rawMode
+    : rawLegacy === false ? 'hidden' : 'always'
+  out.card_show_description = out.card_description_mode === 'always'
   out.background = normalizeBackgroundSetting(out.background, DEFAULT_SETTINGS.background)
   out.backgrounds = normalizeThemeBackgroundSettings(raw.get('backgrounds'), out.background)
   out.navigation = normalizeNavigationSetting(raw.get('navigation'))

@@ -6,6 +6,8 @@
   export let form: SettingsFormModel
   export let saving = false
 
+  $: form.card_show_description = form.card_description_mode === 'always'
+
   async function syncForm(): Promise<void> {
     await tick()
     form = cloneSettingsForm(form)
@@ -43,10 +45,15 @@
     </div>
 
     {#if form.card_style === 'info'}
-      <label class="checkbox-field style-option">
-        <input type="checkbox" bind:checked={form.card_show_description} />
-        <span>在卡片上显示书签描述</span>
-      </label>
+      <div class="description-mode-field">
+        <span>描述显示策略</span>
+        <div class="radio-group compact">
+          <label class="radio-option"><input type="radio" bind:group={form.card_description_mode} value="always" /><span>始终显示</span></label>
+          <label class="radio-option"><input type="radio" bind:group={form.card_description_mode} value="hover" /><span>悬停显示</span></label>
+          <label class="radio-option"><input type="radio" bind:group={form.card_description_mode} value="hidden" /><span>隐藏</span></label>
+        </div>
+        <small>旧版“显示描述”设置会自动映射为始终显示或隐藏。</small>
+      </div>
     {/if}
 
     {#if form.card_style === 'icon'}

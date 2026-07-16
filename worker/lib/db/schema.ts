@@ -42,6 +42,9 @@ export async function ensureSchema(db: D1Database, force = false): Promise<void>
   if (!colNames.has("icon_background_color")) {
     stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN icon_background_color TEXT"))
   }
+  if (!colNames.has("description_mode")) {
+    stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN description_mode TEXT"))
+  }
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_bookmarks_sort_global ON bookmarks(sort, id)"))
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_categories_sort_id ON categories(sort, id)"))
 

@@ -1,6 +1,8 @@
 import {
   ErrCode,
   type AdminData,
+  type BatchDeleteBookmarksResp,
+  type BatchDeleteCategoriesResp,
   type ApiResponse,
   type Bookmark,
   type BookmarkUpsertReq,
@@ -363,6 +365,7 @@ export const categoriesApi = {
   create: (payload: CategoryUpsertReq) => jsonRequest<Category>('/categories', 'POST', payload, true),
   update: (id: number, payload: CategoryUpsertReq) => jsonRequest<Category>(`/categories/${id}`, 'PUT', payload, true),
   remove: (id: number) => request<null>(`/categories/${id}`, { method: 'DELETE', auth: true }),
+  batchDelete: (ids: number[]) => jsonRequest<BatchDeleteCategoriesResp>('/categories/batch-delete', 'POST', { ids }, true),
   sort: (ids: SortReq['ids']) => jsonRequest<null>('/categories/sort', 'POST', { ids }, true),
 }
 
@@ -373,6 +376,7 @@ export const bookmarksApi = {
   refreshIconCache: (id: number) =>
     jsonRequest<{ icon_blob: string | null }>(`/bookmarks/${id}/icon-cache/refresh`, 'POST', undefined, true),
   remove: (id: number) => request<null>(`/bookmarks/${id}`, { method: 'DELETE', auth: true }),
+  batchDelete: (ids: number[]) => jsonRequest<BatchDeleteBookmarksResp>('/bookmarks/batch-delete', 'POST', { ids }, true),
   sort: (ids: SortReq['ids']) => jsonRequest<null>('/bookmarks/sort', 'POST', { ids }, true),
   fetchFavicon: (url: string) => request<FaviconResp>(`/fetch-favicon?url=${encodeURIComponent(url)}`, { auth: true }),
 }

@@ -49,6 +49,17 @@ export function createDeleteBookmarkConfirmation(bookmarkTitle: string): Confirm
   }
 }
 
+export function createBatchDeleteConfirmation(kind: 'category' | 'bookmark', count: number, bookmarkCount = 0): ConfirmDialogInput {
+  return {
+    title: `批量删除${kind === 'category' ? '分类' : '书签'}`,
+    message: kind === 'category'
+      ? `将删除 ${count} 个分类及其下 ${bookmarkCount} 个书签，此操作不可撤销。`
+      : `将删除 ${count} 个书签，此操作不可撤销。`,
+    confirmLabel: '确认删除',
+    variant: 'danger',
+  }
+}
+
 export function createImportOverwriteConfirmation(input: {
   sourceLabel: string
   categories: number

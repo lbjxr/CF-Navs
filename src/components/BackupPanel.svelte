@@ -9,9 +9,11 @@
   export let backupMessage = ''
   export let importSource: ImportSource = 'cf-navs'
   export let onExportData: (() => AsyncVoid) | undefined = undefined
-  export let onImportData: ((file: File, source: ImportSource) => AsyncVoid) | undefined = undefined
+  export let onImportData: ((file: File, source: ImportSource, mode: 'replace' | 'merge') => AsyncVoid) | undefined = undefined
 
   let importInput: HTMLInputElement | null = null
+  let importMode: 'replace' | 'merge' = 'replace'
+
 
   function triggerImport() {
     importInput?.click()
@@ -21,9 +23,18 @@
     const input = event.currentTarget as HTMLInputElement
     const file = input.files?.[0]
     if (file && onImportData) {
-      await onImportData(file, importSource)
+      const source = /\.html?$/i.test(file.name) ? 'browser-html' : importSource
+      await onImportData(file, source, source === 'browser-html' && importSource !== 'browser-html' ? 'merge' : importMode)
     }
     input.value = ''
+  }
+
+  async function handleDrop(event: DragEvent) {
+    event.preventDefault()
+    const file = event.dataTransfer?.files?.[0]
+    if (!file || !onImportData) return
+    const source = /\.html?$/i.test(file.name) ? 'browser-html' : importSource
+    await onImportData(file, source, source === 'browser-html' && importSource !== 'browser-html' ? 'merge' : importMode)
   }
 </script>
 
@@ -56,19 +67,21 @@
       </button>
     </section>
 
-    <section class="backup-operation" aria-labelledby="import-backup-title">
+    <section class="backup-operation" aria-labelledby="import-backup-title" on:dragover|preventDefault on:drop={handleDrop}>
       <div class="backup-operation-copy">
         <h3 id="import-backup-title">导入备份数据</h3>
-        <p>先选择备份来源，再选择对应的 JSON 文件进行覆盖导入。</p>
+        <p>支持点击或拖放 JSON、HTML、HTM 文件，格式会自动识别。</p>
       </div>
       <div class="import-actions">
         <label class="import-source-field" for="import-source">
           <span>导入来源</span>
-          <select id="import-source" bind:value={importSource} disabled={!isAuthenticated || importing}>
+          <select id="import-source" bind:value={importSource} on:change={() => { if (importSource === 'browser-html') importMode = 'merge' }} disabled={!isAuthenticated || importing}>
             <option value="cf-navs">CF-Navs 备份</option>
             <option value="sunpanel">SunPanel 导出</option>
+            <option value="browser-html">浏览器书签 HTML</option>
           </select>
         </label>
+        <label class="import-source-field"><span>导入模式</span><select bind:value={importMode} disabled={!isAuthenticated || importing}><option value="merge">追加合并</option><option value="replace">覆盖现有数据</option></select></label>
         <button type="button" class="ghost-button" on:click={triggerImport} disabled={!isAuthenticated || importing}>
           {#if importing}导入中...{:else}选择文件并导入{/if}
         </button>
@@ -76,7 +89,7 @@
           bind:this={importInput}
           class="import-input"
           type="file"
-          accept="application/json,.json,.sun-panel.json,.sunpanel.json"
+          accept="application/json,text/html,.json,.html,.htm,.sun-panel.json,.sunpanel.json"
           on:change={handleImportChange}
         />
       </div>

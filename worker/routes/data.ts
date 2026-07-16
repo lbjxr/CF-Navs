@@ -2,7 +2,8 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { ErrCode, type ImportReq, type ImportResp } from '../../shared/types'
 import { invalidatePublicDataCache, invalidateSiteConfigCache } from '../lib/cache'
-import { getSettings, importData, touchDataVersion } from '../lib/db'
+import { getSettings, importData, listBookmarks, listCategories, touchDataVersion } from '../lib/db'
+import { mergeImportData } from '../lib/db/importMerge'
 import { validateImportPayload } from '../lib/importValidation'
 import { fail, ok } from '../lib/response'
 import { invalidateRuntimeDataCache } from '../lib/runtimeCache'
@@ -31,7 +32,11 @@ dataRoutes.post('/import', async (c) => {
   const payload = validation.payload
 
   try {
-    const result = await importData(c.env.DB, {
+    const current = payload.mode === 'merge'
+      ? await Promise.all([listCategories(c.env.DB), listBookmarks(c.env.DB), getSettings(c.env.DB)]).then(([categories, bookmarks, settings]) => ({ categories, bookmarks, settings }))
+      : null
+    const merged = current ? mergeImportData(current, payload) : null
+    const result = await importData(c.env.DB, merged?.payload ?? {
       categories: payload.categories,
       bookmarks: payload.bookmarks,
       settings: payload.settings,
@@ -47,7 +52,15 @@ dataRoutes.post('/import', async (c) => {
     invalidateRuntimeDataCache()
     invalidatePublicDataCache(c, c.req.url)
     invalidateSiteConfigCache(c, c.req.url)
-    return c.json(ok<ImportResp>({ categories: result.categories, bookmarks: result.bookmarks, data }))
+    return c.json(ok<ImportResp>({
+      categories: payload.mode === 'merge' ? payload.categories.length : result.categories,
+      bookmarks: payload.mode === 'merge' ? payload.bookmarks.length - (merged?.skippedBookmarks ?? 0) : result.bookmarks,
+      data,
+      mode: payload.mode ?? 'replace',
+      created_categories: merged?.createdCategories ?? result.categories,
+      reused_categories: merged?.reusedCategories ?? 0,
+      skipped_bookmarks: merged?.skippedBookmarks ?? 0,
+    }))
   } catch {
     return c.json(fail(ErrCode.SERVER_ERROR, 'failed to import data'))
   }

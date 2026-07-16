@@ -56,6 +56,20 @@ export async function deleteCategory(db: D1Database, id: number): Promise<boolea
   return (categoryDelete.meta.changes ?? 0) > 0
 }
 
+export async function batchDeleteCategories(db: D1Database, ids: number[]): Promise<{ deleted: number; deleted_bookmarks: number }> {
+  if (ids.length === 0) return { deleted: 0, deleted_bookmarks: 0 }
+  const statements = [
+    ...ids.map((id) => db.prepare('DELETE FROM bookmarks WHERE category_id = ?').bind(id)),
+    ...ids.map((id) => db.prepare('DELETE FROM categories WHERE id = ?').bind(id)),
+  ]
+  const results = await db.batch(statements)
+  const bookmarkResults = results.slice(0, ids.length)
+  const categoryResults = results.slice(ids.length)
+  const deleted_bookmarks = bookmarkResults.reduce((sum, result) => sum + (result.meta.changes ?? 0), 0)
+  const deleted = categoryResults.reduce((sum, result) => sum + (result.meta.changes ?? 0), 0)
+  return { deleted, deleted_bookmarks }
+}
+
 // 批量排序：按 ids 下标写 sort，单次 batch 提交
 export async function sortCategories(db: D1Database, ids: number[]): Promise<void> {
   await sortRowsByIds(db, 'categories', ids)

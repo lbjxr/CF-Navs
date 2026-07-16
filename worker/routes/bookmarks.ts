@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { ErrCode, type BookmarkUpsertReq, type SortReq } from '../../shared/types'
+import { ErrCode, type BatchDeleteReq, type BookmarkUpsertReq, type SortReq } from '../../shared/types'
 import {
   createBookmark,
   deleteBookmark,
+  batchDeleteBookmarks,
   getBookmarkIconData,
   listBookmarks,
   sortBookmarks,
@@ -36,6 +37,12 @@ function isOptionalString(value: unknown): value is string | null | undefined {
   return value === undefined || value === null || typeof value === 'string'
 }
 
+function parseBatchIds(value: unknown): number[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 500) return null
+  const ids = [...new Set(value)]
+  return ids.length > 0 && ids.every((id) => Number.isInteger(id) && id > 0) ? ids as number[] : null
+}
+
 async function readJson<T>(c: AppContext): Promise<T | null> {
   try {
     return await c.req.json<T>()
@@ -65,6 +72,7 @@ bookmarksRoutes.post('/', async (c) => {
     !isOptionalString(body.icon) ||
     !isOptionalString(body.icon_background_color) ||
     !isOptionalString(body.description) ||
+    (body.description_mode !== undefined && body.description_mode !== null && !['always', 'hover', 'hidden'].includes(body.description_mode)) ||
     (body.icon_source !== undefined && body.icon_source !== null && !['direct','favicon_im','logo_surf','google','iconify','custom'].includes(body.icon_source)) ||
     (body.open_method !== undefined && body.open_method !== 1 && body.open_method !== 2 && body.open_method !== 3)
   ) {
@@ -80,6 +88,7 @@ bookmarksRoutes.post('/', async (c) => {
       icon_source: body.icon_source ?? null,
       icon_background_color: body.icon_background_color?.trim() || null,
       description: body.description ?? null,
+      ...(Object.prototype.hasOwnProperty.call(body, 'description_mode') ? { description_mode: body.description_mode } : {}),
       open_method: body.open_method,
     })
     if (!bookmark) return c.json(fail(ErrCode.NOT_FOUND, 'category not found'))
@@ -107,6 +116,7 @@ bookmarksRoutes.put('/:id', async (c) => {
     !isOptionalString(body.icon) ||
     !isOptionalString(body.icon_background_color) ||
     !isOptionalString(body.description) ||
+    (body.description_mode !== undefined && body.description_mode !== null && !['always', 'hover', 'hidden'].includes(body.description_mode)) ||
     (body.icon_source !== undefined && body.icon_source !== null && !['direct','favicon_im','logo_surf','google','iconify','custom'].includes(body.icon_source)) ||
     (body.open_method !== undefined && body.open_method !== 1 && body.open_method !== 2 && body.open_method !== 3)
   ) {
@@ -122,6 +132,7 @@ bookmarksRoutes.put('/:id', async (c) => {
       icon_source: body.icon_source ?? null,
       icon_background_color: body.icon_background_color?.trim() || null,
       description: body.description ?? null,
+      ...(Object.prototype.hasOwnProperty.call(body, 'description_mode') ? { description_mode: body.description_mode } : {}),
       open_method: body.open_method,
     })
     if (!bookmark) return c.json(fail(ErrCode.NOT_FOUND, 'bookmark or category not found'))
@@ -148,6 +159,23 @@ bookmarksRoutes.delete('/:id', async (c) => {
     return c.json(ok(null))
   } catch {
     return c.json(fail(ErrCode.SERVER_ERROR, 'failed to delete bookmark'))
+  }
+})
+
+bookmarksRoutes.post('/batch-delete', async (c) => {
+  const body = await readJson<BatchDeleteReq>(c)
+  const ids = parseBatchIds(body?.ids)
+  if (!ids) return badRequest(c, 'invalid batch delete payload')
+  try {
+    const deleted = await batchDeleteBookmarks(c.env.DB, ids)
+    if (deleted > 0) {
+      await touchDataVersion(c.env.DB)
+      invalidateRuntimeDataCache()
+      invalidatePublicDataCache(c, c.req.url)
+    }
+    return c.json(ok({ deleted }))
+  } catch {
+    return c.json(fail(ErrCode.SERVER_ERROR, 'failed to batch delete bookmarks'))
   }
 })
 

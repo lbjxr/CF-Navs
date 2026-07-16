@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS bookmarks (
   icon_background_color TEXT,             -- 单个图标背景色
   icon_blob    TEXT,                      -- 图标 base64 缓存（本地回退方案）
   description  TEXT,
+  description_mode TEXT,
   open_method  INTEGER NOT NULL DEFAULT 1,-- 1=新窗口 2=当前页 3=当前页弹层
   sort         INTEGER NOT NULL DEFAULT 0,
   created_at   INTEGER NOT NULL
@@ -61,6 +62,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('card_style', '"info"'),
   ('card_icon_size', '60'),
   ('card_show_description', 'true'),
+  ('card_description_mode', '"always"'),
   ('card_background_color', '"#ffffff"'),
   ('card_background_opacity', '0.42'),
   ('card_icon_show_title', 'true'),

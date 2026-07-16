@@ -61,6 +61,7 @@
 | POST | `/api/categories` | `CategoryUpsertReq` | `Category` |
 | PUT | `/api/categories/:id` | `CategoryUpsertReq` | `Category` |
 | DELETE | `/api/categories/:id` | 无 | `null` |
+| POST | `/api/categories/batch-delete` | `{ ids: number[] }` | `{ deleted: number, deleted_bookmarks: number }` |
 | POST | `/api/categories/sort` | `SortReq` | `null` |
 
 删除分类会显式删除该分类下的书签。
@@ -75,10 +76,13 @@
 | POST | `/api/bookmarks` | `BookmarkUpsertReq` | `Bookmark` |
 | PUT | `/api/bookmarks/:id` | `BookmarkUpsertReq` | `Bookmark` |
 | DELETE | `/api/bookmarks/:id` | 无 | `null` |
+| POST | `/api/bookmarks/batch-delete` | `{ ids: number[] }` | `{ deleted: number }` |
 | POST | `/api/bookmarks/sort` | `SortReq` | `null` |
 | POST | `/api/bookmarks/:id/icon-cache/refresh` | 无 | `{ icon_blob: string \| null }` |
 
 `POST /api/bookmarks/:id/icon-cache/refresh` 会按当前书签图标和 `icon_source` 刷新可持久化图标缓存：普通 HTTP(S) 图标在短超时时间内尝试写入 `bookmarks.icon_blob` 并返回 data URI，data URI 图标原样写入；Iconify、logo_surf 或非持久化来源会清空或跳过 `icon_blob`。前端只在编辑、保存等显式刷新动作调用该接口；编辑弹窗会先打开，再在后台触发刷新并把返回的 `icon_blob` 同步写入浏览器本地缓存。普通 HTTP(S) 图标抓取超时或失败时接口会尽快返回已有 `icon_blob` 或 `null`，前端可继续使用已保存的原始图标 URL 作为显示兜底。
+
+批量删除请求最多包含 500 个正整数 ID；服务端会去重并忽略已不存在的记录。书签写入可携带 `description_mode: "always" | "hover" | "hidden" | null`；更新时省略该字段会保留原覆盖值，显式 `null` 会恢复跟随全局设置。
 
 ## 图标接口
 
@@ -132,5 +136,7 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 | 方法 | 路径 | 鉴权 | 请求 | 返回 |
 | --- | --- | --- | --- | --- |
 | POST | `/api/import` | 登录 | `ImportReq` | `ImportResp` |
+
+`ImportReq.mode` 支持 `replace` 和 `merge`。合并模式按去除首尾空格、忽略大小写的分类名复用现有分类，重新分配导入记录 ID，保留重复 URL，并保持当前站点设置不变。
 
 导入是覆盖式操作：先清空分类和书签，再按传入数据重建；设置仅写入受支持的公开配置 key，不触碰管理员账号字段。`ImportResp` 包含导入数量和导入后的 `AdminData`，前端应直接使用该响应刷新后台与首页本地 store，避免导入后再请求 `/api/admin/data`。

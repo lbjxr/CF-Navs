@@ -17,6 +17,7 @@ export const emptyBookmarkForm: BookmarkFormValue = {
   icon_source: '',
   icon_background_color: '',
   description: '',
+  description_mode: 'inherit',
   open_method: 'new_tab',
 }
 

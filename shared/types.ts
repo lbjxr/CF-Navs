@@ -22,6 +22,7 @@ export interface Bookmark {
   icon_blob: string | null // 图标 data URI 缓存（优先用于本地加载）
   icon_cached?: boolean | number | null // Aggregate responses use this lightweight flag instead of sending icon_blob.
   description: string | null
+  description_mode?: DescriptionDisplayMode | null
   open_method: 1 | 2 | 3 // 1=新窗口 2=当前页 3=当前页弹层
   sort: number
   created_at: number
@@ -38,6 +39,8 @@ export type PublicBookmark = Omit<Bookmark, 'created_at'>
 //  iconify    = Iconify SVG 图标
 //  custom     = 手动填写 / 图床上传等
 export type IconSource = 'direct' | 'favicon_im' | 'logo_surf' | 'google' | 'iconify' | 'custom'
+
+export type DescriptionDisplayMode = 'always' | 'hover' | 'hidden'
 
 // ========== 设置 ==========
 
@@ -123,6 +126,7 @@ export interface Settings {
   card_style: CardStyle // 新增：卡片风格
   card_icon_size: number // 新增：图标尺寸 (px)
   card_show_description: boolean // 新增：是否显示描述（详情风格）
+  card_description_mode: DescriptionDisplayMode
   card_background_color: string // 卡片背景颜色，例如 '#ffffff'
   card_background_opacity: number // 卡片背景不透明度 0-1
   card_icon_show_title: boolean // 极简风格是否显示标题
@@ -240,6 +244,7 @@ export interface PublicSettings {
   card_style: CardStyle // 添加卡片风格
   card_icon_size: number // 添加图标尺寸
   card_show_description: boolean // 添加描述显示开关
+  card_description_mode: DescriptionDisplayMode
   card_background_color: string
   card_background_opacity: number
   card_icon_show_title: boolean
@@ -272,6 +277,7 @@ export interface BookmarkUpsertReq {
   icon_source?: IconSource | null
   icon_background_color?: string | null
   description?: string | null
+  description_mode?: DescriptionDisplayMode | null
   open_method?: 1 | 2 | 3
 }
 
@@ -319,11 +325,29 @@ export interface ImportReq {
   categories: Category[]
   bookmarks: Bookmark[]
   settings?: Partial<Settings>
+  mode?: 'replace' | 'merge'
 }
 export interface ImportResp {
   categories: number
   bookmarks: number
   data: AdminData
+  mode?: 'replace' | 'merge'
+  created_categories?: number
+  reused_categories?: number
+  skipped_bookmarks?: number
+}
+
+export interface BatchDeleteReq {
+  ids: number[]
+}
+
+export interface BatchDeleteBookmarksResp {
+  deleted: number
+}
+
+export interface BatchDeleteCategoriesResp {
+  deleted: number
+  deleted_bookmarks: number
 }
 
 // PUT /api/settings  —— 部分更新，传哪些 key 改哪些

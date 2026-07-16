@@ -8,6 +8,7 @@
 - [完整部署指南](guides/DEPLOYMENT.md)
 - [常见问题排查](guides/TROUBLESHOOTING.md)
 - [Sun-Panel 数据导入](guides/SUNPANEL_IMPORT.md)
+- [浏览器书签 HTML 导入](guides/BROWSER_BOOKMARK_IMPORT.md)
 
 ## 技术参考
 

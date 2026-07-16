@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { CardStyle, PublicBookmark, PublicCategory } from '../../shared/types'
+  import type { CardStyle, DescriptionDisplayMode, PublicBookmark, PublicCategory } from '../../shared/types'
+  import { resolveBookmarkDescriptionMode } from '../lib/descriptionMode'
   import BookmarkCard from './BookmarkCard.svelte'
   import { getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
   import { createIconVersion } from '../lib/bookmarkIconDisplay'
@@ -17,6 +18,7 @@
   export let cardStyle: CardStyle = 'info'
   export let cardIconSize = 70
   export let cardShowDescription = true
+  export let cardDescriptionMode: DescriptionDisplayMode = cardShowDescription ? 'always' : 'hidden'
   export let cardIconShowTitle = true
   export let onAddBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
   export let onEditBookmark: ((bookmark: PublicBookmark) => AsyncVoid) | undefined = undefined
@@ -148,6 +150,7 @@
             style={cardStyle}
             iconSize={cardIconSize}
             showDescription={cardShowDescription}
+            descriptionMode={resolveBookmarkDescriptionMode(bookmark, cardDescriptionMode)}
             showIconTitle={cardIconShowTitle}
             width={cardWidth}
             height={cardHeight}

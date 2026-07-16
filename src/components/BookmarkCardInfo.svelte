@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PublicBookmark } from '../../shared/types'
+  import type { DescriptionDisplayMode, PublicBookmark } from '../../shared/types'
   import BookmarkIcon from './BookmarkIcon.svelte'
 
   type AsyncVoid<T = void> = T | Promise<T>
@@ -9,6 +9,7 @@
   export let sortMode = false
   export let cardLinkStyle = ''
   export let showDescription = true
+  export let descriptionMode: DescriptionDisplayMode = showDescription ? 'always' : 'hidden'
   export let iconUrl = ''
   export let iconText = ''
   export let infoIconSize = 60
@@ -52,8 +53,8 @@
 
   <div class="bookmark-text">
     <h3 class="bookmark-title">{bookmark.title}</h3>
-    {#if showDescription && bookmark.description}
-      <p class="bookmark-description">{bookmark.description}</p>
+      {#if showDescription && descriptionMode !== 'hidden' && bookmark.description}
+      <p class="bookmark-description" class:is-hover-description={descriptionMode === 'hover'}>{bookmark.description}</p>
     {/if}
   </div>
 </a>
@@ -129,6 +130,35 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     line-height: 1.2;
+    min-height: 0.9em;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+
+  .bookmark-card-info .bookmark-description.is-hover-description {
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  .bookmark-card-info:hover .bookmark-description.is-hover-description,
+  .bookmark-card-info:focus-visible .bookmark-description.is-hover-description {
+    visibility: visible;
+    opacity: 0.88;
+    transform: translateY(0);
+  }
+
+  @media (hover: none) {
+    .bookmark-card-info .bookmark-description.is-hover-description {
+      visibility: hidden;
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bookmark-card-info .bookmark-description {
+      transition: none;
+      transform: none;
+    }
   }
 
   .bookmark-card-info.sort-mode {

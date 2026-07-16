@@ -26,6 +26,7 @@
   } from './lib/appImportExport'
   import {
     createConfirmDialogState,
+    createBatchDeleteConfirmation,
     createDeleteBookmarkConfirmation,
     createDeleteCategoryConfirmation,
     type ConfirmDialogInput,
@@ -676,6 +677,31 @@
     }
   }
 
+  async function handleBatchDeleteBookmarks(ids: number[]): Promise<void> {
+    if (ids.length === 0) return
+    if (!await requestConfirmation(createBatchDeleteConfirmation('bookmark', ids.length))) return
+    try {
+      const result = await api.bookmarks.batchDelete(ids)
+      if (result.deleted > 0) await refreshLoggedInData(true)
+      toastStore.addToast(`已删除 ${result.deleted} 个书签`, 'success')
+    } catch (error) {
+      bookmarkError = getErrorMessage(error)
+    }
+  }
+
+  async function handleBatchDeleteCategories(ids: number[]): Promise<void> {
+    if (ids.length === 0) return
+    const bookmarkCount = adminData.bookmarks.filter((bookmark) => ids.includes(bookmark.category_id)).length
+    if (!await requestConfirmation(createBatchDeleteConfirmation('category', ids.length, bookmarkCount))) return
+    try {
+      const result = await api.categories.batchDelete(ids)
+      if (result.deleted > 0 || result.deleted_bookmarks > 0) await refreshLoggedInData(true)
+      toastStore.addToast(`已删除 ${result.deleted} 个分类及 ${result.deleted_bookmarks} 个书签`, 'success')
+    } catch (error) {
+      categoryError = getErrorMessage(error)
+    }
+  }
+
   async function handleSubmitSettings(payload: SettingsSubset): Promise<void> {
     savingSettings = true
     settingsError = ''
@@ -749,8 +775,8 @@
     exportDataToFile(importExportState, adminData)
   }
 
-  async function handleImportData(file: File, source: ImportSource): Promise<void> {
-    await importDataFromFile(importExportState, file, source, {
+  async function handleImportData(file: File, source: ImportSource, mode: 'replace' | 'merge'): Promise<void> {
+    await importDataFromFile(importExportState, file, source, mode, {
       adminData,
       requestConfirmation,
       applyLoggedInData,
@@ -876,11 +902,13 @@
         onOpenCreateCategory={handleOpenCreateCategory}
         onEditCategory={handleEditCategory}
         onDeleteCategory={handleDeleteCategory}
+        onBatchDeleteCategories={handleBatchDeleteCategories}
         onCloseCategoryModal={handleCloseCategoryModal}
         onSubmitCategory={handleSubmitCategory}
         onOpenCreateBookmark={handleOpenCreateBookmark}
         onEditBookmark={handleEditBookmark}
         onDeleteBookmark={handleDeleteBookmark}
+        onBatchDeleteBookmarks={handleBatchDeleteBookmarks}
         onSubmitSettings={handleSubmitSettings}
         onChangePassword={handleChangePassword}
         onSortCategories={handleSortCategories}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
-  import type { CardStyle, PublicBookmark } from '../../shared/types'
+  import type { CardStyle, DescriptionDisplayMode, PublicBookmark } from '../../shared/types'
   import BookmarkCardCompact from './BookmarkCardCompact.svelte'
   import BookmarkCardInfo from './BookmarkCardInfo.svelte'
   import BookmarkContextMenu from './BookmarkContextMenu.svelte'
@@ -32,6 +32,7 @@
   export let style: CardStyle = 'info'
   export let iconSize: number = 100
   export let showDescription: boolean = true
+  export let descriptionMode: DescriptionDisplayMode = showDescription ? 'always' : 'hidden'
   export let showIconTitle: boolean = true
   export let width: number = 200
   export let height: number = 0
@@ -271,6 +272,7 @@
       {sortMode}
       {cardLinkStyle}
       {showDescription}
+      {descriptionMode}
       iconUrl={hasRenderableIcon ? iconUrl : ''}
       {iconText}
       {infoIconSize}

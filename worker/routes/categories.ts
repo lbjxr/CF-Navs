@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { ErrCode, type CategoryUpsertReq, type SortReq } from '../../shared/types'
+import { ErrCode, type BatchDeleteReq, type CategoryUpsertReq, type SortReq } from '../../shared/types'
 import {
   createCategory,
   deleteCategory,
+  batchDeleteCategories,
   listCategories,
   sortCategories,
   touchDataVersion,
@@ -31,6 +32,12 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isOptionalString(value: unknown): value is string | null | undefined {
   return value === undefined || value === null || typeof value === 'string'
+}
+
+function parseBatchIds(value: unknown): number[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 500) return null
+  const ids = [...new Set(value)]
+  return ids.length > 0 && ids.every((id) => Number.isInteger(id) && id > 0) ? ids as number[] : null
 }
 
 async function readJson<T>(c: AppContext): Promise<T | null> {
@@ -108,6 +115,23 @@ categoriesRoutes.delete('/:id', async (c) => {
     return c.json(ok(null))
   } catch {
     return c.json(fail(ErrCode.SERVER_ERROR, 'failed to delete category'))
+  }
+})
+
+categoriesRoutes.post('/batch-delete', async (c) => {
+  const body = await readJson<BatchDeleteReq>(c)
+  const ids = parseBatchIds(body?.ids)
+  if (!ids) return badRequest(c, 'invalid batch delete payload')
+  try {
+    const result = await batchDeleteCategories(c.env.DB, ids)
+    if (result.deleted > 0 || result.deleted_bookmarks > 0) {
+      await touchDataVersion(c.env.DB)
+      invalidateRuntimeDataCache()
+      invalidatePublicDataCache(c, c.req.url)
+    }
+    return c.json(ok(result))
+  } catch {
+    return c.json(fail(ErrCode.SERVER_ERROR, 'failed to batch delete categories'))
   }
 })
 

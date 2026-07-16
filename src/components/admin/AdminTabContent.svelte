@@ -35,15 +35,17 @@
   export let onOpenCreateCategory: (() => AsyncVoid) | undefined = undefined
   export let onEditCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
   export let onDeleteCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
+  export let onBatchDeleteCategories: ((ids: number[]) => AsyncVoid) | undefined = undefined
   export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
   export let onEditBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
   export let onDeleteBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
+  export let onBatchDeleteBookmarks: ((ids: number[]) => AsyncVoid) | undefined = undefined
   export let onSubmitSettings: ((payload: SettingsFormValue) => AsyncVoid) | undefined = undefined
   export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
   export let onSortCategories: SortHandler | undefined = undefined
   export let onSortBookmarks: SortHandler | undefined = undefined
   export let onExportData: (() => AsyncVoid) | undefined = undefined
-  export let onImportData: ((file: File, source: ImportSource) => AsyncVoid) | undefined = undefined
+  export let onImportData: ((file: File, source: ImportSource, mode: 'replace' | 'merge') => AsyncVoid) | undefined = undefined
 </script>
 
 <div class="admin-content">
@@ -58,6 +60,7 @@
       {onOpenCreateCategory}
       {onEditCategory}
       {onDeleteCategory}
+      {onBatchDeleteCategories}
       {onOpenCreateBookmark}
       {onSortCategories}
     />
@@ -72,6 +75,7 @@
       {onOpenCreateBookmark}
       {onEditBookmark}
       {onDeleteBookmark}
+      {onBatchDeleteBookmarks}
       {onSortBookmarks}
     />
   {:else if activeTab === 'settings'}

@@ -61,6 +61,7 @@ export async function importDataFromFile(
   state: ImportExportState,
   file: File,
   source: ImportSource,
+  mode: 'replace' | 'merge',
   deps: ImportDeps,
 ): Promise<void> {
   state.backupError = ''
@@ -68,10 +69,15 @@ export async function importDataFromFile(
 
   try {
     const text = await file.text()
-    const { prepareImportText } = await import('./importData')
-    const prepared = prepareImportText(text, source)
+    const { detectImportSource, prepareImportText } = await import('./importData')
+    const detectedSource = detectImportSource(text, file.name)
+    const prepared = prepareImportText(text, detectedSource || source)
+    const effectiveMode = detectedSource === 'browser-html' && source !== 'browser-html' ? 'merge' : mode
+    prepared.payload.mode = effectiveMode
 
-    const confirmed = await deps.requestConfirmation(createImportOverwriteConfirmation(prepared))
+    const confirmed = await deps.requestConfirmation(effectiveMode === 'replace'
+      ? createImportOverwriteConfirmation(prepared)
+      : { title: '追加导入数据', message: `将追加 ${prepared.categories} 个分类中的 ${prepared.bookmarks} 个书签，重复链接会保留。`, confirmLabel: '确认导入' })
     if (!confirmed) {
       return
     }

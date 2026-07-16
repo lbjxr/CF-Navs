@@ -8,6 +8,10 @@
     getAdminCategoryTitle,
     getAdminListTotalPages,
     getAdminSortIds,
+    cycleAdminBookmarkSort,
+    sortAdminBookmarks,
+    type AdminBookmarkSortField,
+    type AdminBookmarkSortState,
     reorderAdminSortDraft,
   } from '../../lib/adminListState'
   import { getBookmarkFallbackIcon, getBookmarkIconUrl, hasBookmarkImageIcon } from '../../lib/bookmarkIconDisplay'
@@ -28,6 +32,7 @@
   export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
   export let onEditBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
   export let onDeleteBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
+  export let onBatchDeleteBookmarks: ((ids: number[]) => AsyncVoid) | undefined = undefined
   export let onSortBookmarks: SortHandler | undefined = undefined
 
   let sortMode = false
@@ -35,23 +40,61 @@
   let savingSort = false
   let page = 1
   let search = ''
+  let selectedIds = new Set<number>()
+  let sortField: AdminBookmarkSortField | null = null
+  let sortDirection: AdminBookmarkSortState['direction'] = null
+  const sortColumns: Array<{ field: AdminBookmarkSortField; label: string }> = [
+    { field: 'title', label: '标题' }, { field: 'category', label: '分类' }, { field: 'url', label: '链接' }, { field: 'open_method', label: '打开方式' },
+  ]
 
-  $: filteredBookmarks = filterAdminBookmarks(bookmarks, categories, search)
+  $: filteredBookmarks = sortAdminBookmarks(filterAdminBookmarks(bookmarks, categories, search), { field: sortField, direction: sortDirection }, categories)
   $: totalPages = getAdminListTotalPages(filteredBookmarks.length)
   $: page = clampAdminListPage(page, totalPages)
   $: bookmarkPage = createAdminListPage(filteredBookmarks, page)
   $: pagedBookmarks = bookmarkPage.items
   $: displayBookmarks = sortMode ? localBookmarks : pagedBookmarks
+  $: selectedIds = new Set([...selectedIds].filter((id) => bookmarks.some((bookmark) => Number(bookmark.id) === id)))
+  $: pageIds = pagedBookmarks.map((bookmark) => Number(bookmark.id))
+  $: pageSelectedCount = pageIds.filter((id) => selectedIds.has(id)).length
 
   const getCategoryTitle = (categoryId: string | number) =>
     getAdminCategoryTitle(categories, categoryId)
 
   function enterSort() {
+    sortField = null
+    sortDirection = null
     search = ''
     page = 1
     localBookmarks = createAdminSortDraft(bookmarks)
     sortMode = true
   }
+
+  function toggleField(field: AdminBookmarkSortField) {
+    const next = cycleAdminBookmarkSort({ field: sortField, direction: sortDirection }, field)
+    sortField = next.field
+    sortDirection = next.direction
+    page = 1
+  }
+
+  function sortButtonLabel(field: AdminBookmarkSortField, label: string): string {
+    if (sortField !== field || sortDirection === null) return `${label}，当前未排序，点击按正序排列`
+    return sortDirection === 'asc' ? `${label}，当前正序，点击按倒序排列` : `${label}，当前倒序，点击取消排序`
+  }
+
+  function togglePageSelection(event: Event) {
+    const checked = (event.currentTarget as HTMLInputElement).checked
+    const next = new Set(selectedIds)
+    pageIds.forEach((id) => checked ? next.add(id) : next.delete(id))
+    selectedIds = next
+  }
+
+  function toggleBookmarkSelection(event: Event, id: number) {
+    const next = new Set(selectedIds)
+    if ((event.currentTarget as HTMLInputElement).checked) next.add(id)
+    else next.delete(id)
+    selectedIds = next
+  }
+  function indeterminate(node: HTMLInputElement, value: boolean) { node.indeterminate = value; return { update(next: boolean) { node.indeterminate = next } } }
 
   function cancelSort() {
     sortMode = false
@@ -95,10 +138,12 @@
           type="button"
           class="admin-ghost-button"
           on:click={enterSort}
-          disabled={sortMode || !isAuthenticated || bookmarksLoading || authLoading || bookmarks.length < 2}
+          disabled={sortMode || !isAuthenticated || bookmarksLoading || authLoading || bookmarks.length < 2 || selectedIds.size > 0}
         >
           排序
         </button>
+        <button type="button" class="admin-danger-button" on:click={() => onBatchDeleteBookmarks?.([...selectedIds])} disabled={!isAuthenticated || selectedIds.size === 0}>删除已选 ({selectedIds.size})</button>
+        {#if selectedIds.size > 0}<button type="button" class="admin-ghost-button" on:click={() => selectedIds = new Set()}>清除选择</button>{/if}
         <button
           type="button"
           class="admin-primary-button"
@@ -158,11 +203,11 @@
             </colgroup>
             <thead>
               <tr>
+                {#if !sortMode}<th style="width: 44px;"><input type="checkbox" aria-label="全选当前页" checked={pageSelectedCount === pageIds.length && pageIds.length > 0} use:indeterminate={pageSelectedCount > 0 && pageSelectedCount < pageIds.length} on:change={togglePageSelection} /></th>{/if}
                 {#if sortMode}<th style="width: 44px;">排序</th>{/if}
-                <th>标题</th>
-                <th style="width: 88px;">分类</th>
-                <th>链接</th>
-                <th style="width: 114px;">打开方式</th>
+                {#each sortColumns as column}
+                  <th aria-sort={sortField === column.field ? (sortDirection === 'asc' ? 'ascending' : sortDirection === 'desc' ? 'descending' : 'none') : 'none'}><button type="button" class="sort-header-button" aria-label={sortButtonLabel(column.field, column.label)} on:click={() => toggleField(column.field)} disabled={sortMode}>{column.label}<svg viewBox="0 0 16 16" aria-hidden="true"><path d={sortField === column.field && sortDirection === 'asc' ? 'M8 3 4 7h3v6h2V7h3L8 3Z' : sortField === column.field && sortDirection === 'desc' ? 'm8 13 4-4H9V3H7v6H4l4 4Z' : 'm5 2-3 3h2v6h2V5h2L5 2Zm6 12 3-3h-2V5h-2v6H8l3 3Z'} /></svg></button></th>
+                {/each}
                 {#if !sortMode}<th style="width: 122px;">操作</th>{/if}
               </tr>
             </thead>
@@ -175,6 +220,7 @@
             >
               {#each displayBookmarks as bookmark (bookmark.id)}
                 <tr data-sortable-item data-sort-id={bookmark.id} class:is-sorting={sortMode}>
+                  {#if !sortMode}<td><input type="checkbox" aria-label={`选择书签 ${bookmark.title}`} checked={selectedIds.has(Number(bookmark.id))} on:change={(event) => toggleBookmarkSelection(event, Number(bookmark.id))} /></td>{/if}
                   {#if sortMode}
                     <td>
                       <button
@@ -351,6 +397,24 @@
     font-size: 12px;
     color: var(--admin-subtle);
     font-weight: 600;
+  }
+
+  .sort-header-button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .sort-header-button svg { width: 14px; height: 14px; fill: currentColor; }
+
+  .sort-header-button:disabled {
+    cursor: not-allowed;
   }
 
   .admin-bookmark-table tr.is-sorting {

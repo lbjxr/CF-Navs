@@ -25,6 +25,7 @@ const settings: Settings = {
   card_style: 'info',
   card_icon_size: 60,
   card_show_description: true,
+  card_description_mode: 'always',
   card_background_color: '#ffffff',
   card_background_opacity: 0.9,
   card_icon_show_title: true,

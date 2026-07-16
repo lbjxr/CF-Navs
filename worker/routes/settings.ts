@@ -116,6 +116,12 @@ settingsRoutes.put('/', async (c) => {
   if (body.card_background_color !== undefined && typeof body.card_background_color !== 'string') {
     return badRequest(c, 'invalid card_background_color')
   }
+  if (body.card_show_description !== undefined && typeof body.card_show_description !== 'boolean') {
+    return badRequest(c, 'invalid card_show_description')
+  }
+  if (body.card_description_mode !== undefined && !['always', 'hover', 'hidden'].includes(body.card_description_mode)) {
+    return badRequest(c, 'invalid card_description_mode')
+  }
   if (body.card_background_opacity !== undefined && typeof body.card_background_opacity !== 'number') {
     return badRequest(c, 'invalid card_background_opacity')
   }
@@ -168,13 +174,19 @@ settingsRoutes.put('/', async (c) => {
   }
 
   try {
-    const hasCompletePublicSettings = isCompletePublicSettingsPatch(body)
+    const settingsPatch: SettingsUpdateReq = { ...body }
+    if (body.card_description_mode !== undefined) {
+      settingsPatch.card_show_description = body.card_description_mode === 'always'
+    } else if (body.card_show_description !== undefined) {
+      settingsPatch.card_description_mode = body.card_show_description ? 'always' : 'hidden'
+    }
+    const hasCompletePublicSettings = isCompletePublicSettingsPatch(settingsPatch)
     let settings: Settings
     if (hasCompletePublicSettings) {
-      await writeSettingsPatch(c.env.DB, body)
-      settings = settingsFromPatchDefaults(body)
+      await writeSettingsPatch(c.env.DB, settingsPatch)
+      settings = settingsFromPatchDefaults(settingsPatch)
     } else {
-      settings = await updateSettings(c.env.DB, body)
+      settings = await updateSettings(c.env.DB, settingsPatch)
     }
     await touchDataVersion(c.env.DB)
     invalidateRuntimeDataCache()

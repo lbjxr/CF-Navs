@@ -58,6 +58,18 @@ https://api.iconify.design/{set}/{name}.svg
 
 ## 首页数据读取
 
+## 描述显示策略
+
+全局设置 `card_description_mode` 是描述展示的权威值（`always`、`hover`、`hidden`）；`card_show_description` 仅作为旧客户端兼容字段派生输出。书签的 `description_mode` 为可空覆盖值，`NULL` 表示跟随全局。描述模式解析位于 `src/lib/descriptionMode.ts`，详情卡片在悬停模式下预留描述位置，并在触屏设备上保持隐藏。
+
+## 管理批量操作与字段排序
+
+批量删除接口使用单次 D1 batch，服务端限制 500 个正整数 ID 并按幂等方式忽略不存在的记录。后台字段排序只作用于前端展示：先按原始顺序过滤，再对完整搜索结果排序，最后分页，不写入书签 `sort` 字段，也不使用浏览器持久化存储。
+
+## 浏览器书签导入
+
+标准 Netscape Bookmark HTML 在浏览器内转换为共享 `ImportReq`。只导入 HTTP(S) 链接，顶层文件夹映射为分类，子文件夹书签并入顶层分类；合并模式由 Worker 生成完整目标数据后复用覆盖式事务重建，因而不会留下半次导入状态。
+
 公开首页优先请求：
 
 ```text

@@ -11,6 +11,7 @@ export {
   createCategory,
   updateCategory,
   deleteCategory,
+  batchDeleteCategories,
   sortCategories,
 } from './db/categories'
 
@@ -20,6 +21,7 @@ export {
   createBookmark,
   updateBookmark,
   deleteBookmark,
+  batchDeleteBookmarks,
   sortBookmarks,
   setIconBlob,
   type BookmarkIconData,

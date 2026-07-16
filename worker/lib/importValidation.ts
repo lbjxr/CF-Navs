@@ -28,8 +28,9 @@ function isValidBookmark(value: unknown): value is Bookmark {
     (value.category_id as number) > 0 &&
     typeof value.title === 'string' &&
     value.title.trim().length > 0 &&
-    typeof value.url === 'string' &&
-    value.url.trim().length > 0
+      typeof value.url === 'string' &&
+    value.url.trim().length > 0 &&
+    (value.description_mode === null || value.description_mode === undefined || value.description_mode === 'always' || value.description_mode === 'hover' || value.description_mode === 'hidden')
   )
 }
 
@@ -71,6 +72,9 @@ export function validateImportPayload(body: unknown): ImportValidationResult {
   if (body.settings !== undefined && !isPlainObject(body.settings)) {
     return { ok: false, message: 'invalid settings' }
   }
+  if (body.mode !== undefined && body.mode !== 'replace' && body.mode !== 'merge') {
+    return { ok: false, message: 'invalid import mode' }
+  }
 
   return {
     ok: true,
@@ -78,6 +82,7 @@ export function validateImportPayload(body: unknown): ImportValidationResult {
       categories: body.categories,
       bookmarks: body.bookmarks,
       settings: body.settings,
+      mode: body.mode,
     },
   }
 }

@@ -91,3 +91,83 @@ export function reorderAdminSortDraft<T extends AdminSortableItem>(
 export function getAdminSortIds<T extends AdminSortableItem>(items: T[]): Array<string | number> {
   return items.map((item) => item.id)
 }
+
+export type AdminBookmarkSortField = 'title' | 'category' | 'url' | 'open_method'
+export type AdminBookmarkSortDirection = 'asc' | 'desc' | null
+
+export interface AdminBookmarkSortState {
+  field: AdminBookmarkSortField | null
+  direction: AdminBookmarkSortDirection
+}
+
+export function cycleAdminBookmarkSort(state: AdminBookmarkSortState, field: AdminBookmarkSortField): AdminBookmarkSortState {
+  if (state.field !== field) return { field, direction: 'asc' }
+  if (state.direction === 'asc') return { field, direction: 'desc' }
+  return { field: null, direction: null }
+}
+
+function hostKey(url: string): { valid: boolean; parts: string[]; port: number } {
+  try {
+    const parsed = new URL(url)
+    const hostname = parsed.hostname.toLowerCase()
+    if (!hostname) return { valid: false, parts: [], port: -1 }
+    if (/^\d+(?:\.\d+){3}$/.test(hostname)) {
+      return { valid: true, parts: hostname.split('.').map((part) => part.padStart(3, '0')), port: parsed.port ? Number(parsed.port) : -1 }
+    }
+    if (hostname.includes(':')) return { valid: true, parts: [hostname], port: parsed.port ? Number(parsed.port) : -1 }
+    return { valid: true, parts: hostname.split('.').reverse(), port: parsed.port ? Number(parsed.port) : -1 }
+  } catch {
+    return { valid: false, parts: [], port: -1 }
+  }
+}
+
+function compareHost(a: ReturnType<typeof hostKey>, b: ReturnType<typeof hostKey>): number {
+  if (a.valid !== b.valid) return a.valid ? -1 : 1
+  if (!a.valid) return 0
+  if (a.parts.length !== b.parts.length) {
+    const shared = Math.min(a.parts.length, b.parts.length)
+    for (let i = 0; i < shared; i += 1) {
+      const result = a.parts[i].localeCompare(b.parts[i])
+      if (result) return result
+    }
+    return a.parts.length - b.parts.length
+  }
+  for (let i = 0; i < a.parts.length; i += 1) {
+    const result = a.parts[i].localeCompare(b.parts[i])
+    if (result) return result
+  }
+  return a.port - b.port
+}
+
+export function compareAdminBookmarkField(
+  a: AdminBookmarkSummary,
+  b: AdminBookmarkSummary,
+  field: AdminBookmarkSortField,
+  categories: AdminCategorySummary[] = [],
+): number {
+  if (field === 'url') return compareHost(hostKey(a.url), hostKey(b.url))
+  if (field === 'category') return getAdminCategoryTitle(categories, a.category_id).localeCompare(getAdminCategoryTitle(categories, b.category_id), 'zh-CN')
+  if (field === 'open_method') return Number(a.open_method === 'same_tab' ? 2 : a.open_method === 'modal' ? 3 : 1) - Number(b.open_method === 'same_tab' ? 2 : b.open_method === 'modal' ? 3 : 1)
+  return a.title.localeCompare(b.title, 'zh-CN', { sensitivity: 'base' })
+}
+
+export function sortAdminBookmarks(
+  bookmarks: AdminBookmarkSummary[],
+  state: AdminBookmarkSortState,
+  categories: AdminCategorySummary[] = [],
+): AdminBookmarkSummary[] {
+  if (!state.field || !state.direction) return bookmarks
+  const direction = state.direction === 'asc' ? 1 : -1
+  return bookmarks
+    .map((bookmark, index) => ({ bookmark, index }))
+    .sort((a, b) => {
+      if (state.field === 'url') {
+        const left = hostKey(a.bookmark.url)
+        const right = hostKey(b.bookmark.url)
+        if (left.valid !== right.valid) return left.valid ? -1 : 1
+        return compareHost(left, right) * direction || a.index - b.index
+      }
+      return compareAdminBookmarkField(a.bookmark, b.bookmark, state.field!, categories) * direction || a.index - b.index
+    })
+    .map(({ bookmark }) => bookmark)
+}

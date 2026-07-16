@@ -393,6 +393,7 @@
                 cardStyle={settings?.card_style ?? 'info'}
                 cardIconSize={settings?.card_icon_size ?? 60}
                 cardShowDescription={settings?.card_show_description ?? true}
+                cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
                 cardIconShowTitle={settings?.card_icon_show_title ?? true}
                 canSort={isAuthenticated && !hasSearchQuery}
                 onAddBookmark={onOpenCreateBookmark}

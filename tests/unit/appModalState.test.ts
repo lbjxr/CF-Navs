@@ -53,6 +53,7 @@ describe('app modal state helpers', () => {
       icon: '',
       icon_background_color: '',
       description: '',
+      description_mode: 'inherit',
       open_method: 'new_tab',
     })
   })

@@ -15,5 +15,6 @@ export type BookmarkFormValue = {
   icon_source: string
   icon_background_color: string
   description: string
+  description_mode: 'inherit' | 'always' | 'hover' | 'hidden'
   open_method: 'same_tab' | 'new_tab' | 'modal'
 }

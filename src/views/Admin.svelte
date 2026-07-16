@@ -81,12 +81,14 @@
   export let onOpenCreateCategory: (() => AsyncVoid) | undefined = undefined
   export let onEditCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
   export let onDeleteCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
+  export let onBatchDeleteCategories: ((ids: number[]) => AsyncVoid) | undefined = undefined
   export let onCloseCategoryModal: (() => AsyncVoid) | undefined = undefined
   export let onSubmitCategory: ((payload: CategoryFormValue) => AsyncVoid) | undefined = undefined
 
   export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
   export let onEditBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
   export let onDeleteBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
+  export let onBatchDeleteBookmarks: ((ids: number[]) => AsyncVoid) | undefined = undefined
   export let onSubmitSettings: ((payload: SettingsFormValue) => AsyncVoid) | undefined = undefined
   export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
   export let onSortCategories: SortHandler | undefined = undefined
@@ -96,7 +98,7 @@
   export let backupError = ''
   export let backupMessage = ''
   export let onExportData: (() => AsyncVoid) | undefined = undefined
-  export let onImportData: ((file: File, source: ImportSource) => AsyncVoid) | undefined = undefined
+  export let onImportData: ((file: File, source: ImportSource, mode: 'replace' | 'merge') => AsyncVoid) | undefined = undefined
 
   let importSource: ImportSource = 'cf-navs'
 
@@ -152,9 +154,11 @@
       {onOpenCreateCategory}
       {onEditCategory}
       {onDeleteCategory}
+      {onBatchDeleteCategories}
       {onOpenCreateBookmark}
       {onEditBookmark}
       {onDeleteBookmark}
+      {onBatchDeleteBookmarks}
       {onSubmitSettings}
       {onChangePassword}
       {onSortCategories}
