@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { gradientPresets } from '../../src/lib/themePresets'
 import {
   DEFAULT_SETTINGS,
   isValidNavigationSetting,
@@ -7,7 +9,39 @@ import {
   settingsFromRows,
 } from '../../worker/lib/settingsData'
 
+const schemaSql = readFileSync(new URL('../../schema.sql', import.meta.url), 'utf8')
+
+function readSchemaSetting(key: string): unknown {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = schemaSql.match(new RegExp(`\\('${escapedKey}',\\s*'((?:''|[^'])*)'\\)`))
+  if (!match) throw new Error(`Missing schema setting: ${key}`)
+  return JSON.parse(match[1].replace(/''/g, "'"))
+}
+
 describe('worker settings data helpers', () => {
+  it('keeps worker defaults aligned with schema seed settings', () => {
+    for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+      expect(readSchemaSetting(key)).toEqual(value)
+    }
+  })
+
+  it('uses the light ocean-depths preset for newly initialized sites', () => {
+    const preset = gradientPresets.find((item) => item.id === 'ocean-depths')
+
+    expect(preset).toBeDefined()
+    expect(DEFAULT_SETTINGS.theme).toBe('light')
+    expect(DEFAULT_SETTINGS.background_preset_id).toBe('ocean-depths')
+    expect(DEFAULT_SETTINGS.background).toEqual(preset?.light)
+    expect(DEFAULT_SETTINGS.backgrounds).toEqual({
+      light: preset?.light,
+      dark: preset?.dark,
+    })
+    expect(DEFAULT_SETTINGS.card_background_color).toBe(preset?.cardBackgroundColor)
+    expect(DEFAULT_SETTINGS.card_background_opacity).toBe(preset?.cardBackgroundOpacity)
+    expect(DEFAULT_SETTINGS.card_text_color).toBe(preset?.cardTextColor)
+    expect(DEFAULT_SETTINGS.site_title_color).toBe(preset?.siteTitleColor)
+  })
+
   it('normalizes patch defaults and rejects invalid background preset ids', () => {
     const settings = settingsFromPatchDefaults({
       site_title: 'Custom title',

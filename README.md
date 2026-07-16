@@ -77,22 +77,18 @@
 <table>
   <tr>
     <td align="center" width="50%">
-      <strong>桌面端亮色</strong><br>
-      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-light.jpg" alt="桌面端亮色" width="420">
+      <strong>默认主题 · 深海蔚蓝亮色</strong><br>
+      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-light.jpg" alt="深海蔚蓝亮色桌面首页" width="420">
     </td>
     <td align="center" width="50%">
-      <strong>桌面端暗色</strong><br>
-      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-dark.jpg" alt="桌面端暗色" width="420">
+      <strong>深海蔚蓝暗色</strong><br>
+      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-dark.jpg" alt="深海蔚蓝暗色桌面首页" width="420">
     </td>
   </tr>
   <tr>
-    <td align="center" width="50%">
-      <strong>分类视图</strong><br>
-      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-tag.jpg" alt="分类视图" width="420">
-    </td>
-    <td align="center" width="50%">
-      <strong>小卡片样式</strong><br>
-      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-bookmark-small.jpg" alt="小卡片样式" width="420">
+    <td align="center" colspan="2">
+      <strong>13 套内置主题模板 · 亮暗双背景 · 一键套用推荐参数</strong><br>
+      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-admin-setting.jpg" alt="13 套内置主题模板和亮暗背景设置" width="860">
     </td>
   </tr>
   <tr>
@@ -107,43 +103,51 @@
   </tr>
   <tr>
     <td align="center" width="50%">
-      <strong>浏览器网络耗时</strong><br>
-      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-loadtime.jpg" alt="浏览器网络耗时" width="420">
+      <strong>首次运行安装器</strong><br>
+      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-loading.jpg" alt="首次运行安装器" width="420">
     </td>
     <td align="center" width="50%">
-      <strong>首次加载过渡动画</strong><br>
-      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-loading.jpg" alt="首次加载过渡动画" width="420">
+      <strong>分类视图</strong><br>
+      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-tag.jpg" alt="分类视图" width="420">
     </td>
   </tr>
   <tr>
+    <td align="center" width="50%">
+      <strong>小卡片样式</strong><br>
+      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-bookmark-small.jpg" alt="小卡片样式" width="420">
+    </td>
     <td align="center" width="50%">
       <strong>书签编辑弹窗</strong><br>
       <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-bookmarkedit.jpg" alt="书签编辑弹窗" width="420">
     </td>
+  </tr>
+  <tr>
     <td align="center" width="50%">
       <strong>后台分类管理</strong><br>
       <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-admin-tag.jpg" alt="后台分类管理" width="420">
     </td>
-  </tr>
-  <tr>
     <td align="center" width="50%">
       <strong>后台书签管理</strong><br>
       <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-admin-bookmark.jpg" alt="后台书签管理" width="420">
     </td>
-    <td align="center" width="50%">
-      <strong>后台设置</strong><br>
-      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-admin-setting.jpg" alt="后台设置" width="420">
-    </td>
   </tr>
   <tr>
-    <td align="center" colspan="2">
+    <td align="center" width="50%">
+      <strong>浏览器网络耗时</strong><br>
+      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-loadtime.jpg" alt="浏览器网络耗时" width="420">
+    </td>
+    <td align="center" width="50%">
       <strong>后台备份</strong><br>
       <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-backup.jpg" alt="后台备份" width="420">
     </td>
   </tr>
 </table>
 
-> 💡 支持亮色/暗色/跟随系统三种主题模式，桌面端和移动端自适应。
+> 🎨 内置 13 套跨色系模板，每套同时提供亮色与暗色背景，并自动带入推荐的遮罩、卡片透明度和文字参数；仍可分别改成纯色、渐变或图片背景。
+>
+> 🌊 新安装站点默认启用「深海蔚蓝」亮色模式；前台仍可临时切换亮色、暗色或跟随系统，不会改写后台保存的主题配置。
+>
+> 🧩 首次部署通过 `/install` 引导校验绑定、创建数据库结构和管理员账号，完成后直接进入已登录状态。
 >
 > 🧭 后台「站点设置 → 布局与导航」可选择左侧或顶部布局。桌面左侧模式可开启常显并手动收缩；顶部模式固定悬浮，分类溢出时支持箭头、鼠标拖动和移动端触摸滑动。
 
