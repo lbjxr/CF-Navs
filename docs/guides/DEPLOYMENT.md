@@ -15,11 +15,14 @@
 1. 在 GitHub 上 Fork 仓库。
 2. 进入 **Workers & Pages → Create application → Import a repository**，关联 GitHub 并选择 fork。不要使用通用 Deploy Button：它会新建 GitHub 仓库，不能指定已有 Fork。
 3. 生产分支选择 `main`，Build command 填写 `npm run build`，Deploy command 填写 `npx wrangler deploy`。
-4. `wrangler.toml` 只声明 `DB` 和 `SESSION` 绑定，不包含真实资源 ID。Cloudflare Git 引导流程会自动创建并绑定 D1 与 KV 资源。
-5. 在 Variables and Secrets 步骤添加一个加密 Secret：`SETUP_TOKEN`。使用足够长的随机值，不要保存为普通明文变量。
-6. 首次部署完成后，打开站点的 `/install`，输入 `SETUP_TOKEN`，再设置管理员用户名和密码。安装器负责初始化 schema 和管理员账号。
-7. 在 Worker 的 **Settings → Bindings** 中确认 D1 绑定名为 `DB`、KV 绑定名为 `SESSION`。
-8. 确认管理员可以登录后，建议从 **Settings → Variables & Secrets** 删除 `SETUP_TOKEN`，或轮换为新的随机值。`GET /api/install/status` 是公开状态检查，不依赖该 Secret；删除后不影响运行，保留也不会解除永久安装锁。
+4. 保存并部署。Cloudflare 的 Git 引导流程会根据 `wrangler.toml` 中不带 ID 的声明创建并绑定 `DB` D1 数据库与 `SESSION` KV 命名空间。待部署完成后，进入该 Worker 的 **设置 → 变量和密钥**，添加一个类型为**密钥**的变量，变量名填写 `SETUP_TOKEN`，值填写一段足够长且随机的字符串。
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-deploy3.jpg" alt="在 Cloudflare Worker 中添加 SETUP_TOKEN 密钥" width="100%">
+</p>
+
+5. 打开部署后的 Workers URL，并访问 `/install`。输入 `SETUP_TOKEN`，再设置管理员用户名和密码；安装器会初始化数据库 schema 和管理员账号。
+6. 进入该 Worker 的 **域和路由** 页面，关闭两个 Workers URL，然后添加并启用你的自定义域名。
 
 > 正常在线安装不需要 Cloudflare API Token、GitHub Actions 或手动 SQL。只有 `/install` 报 schema 初始化错误时，才在 D1 SQL Console 执行一次 [schema.sql](../../schema.sql) 作为恢复步骤。
 
@@ -27,7 +30,7 @@
 
 首次资源创建请从生产分支 `main` 触发。资源创建完成前，建议关闭预览分支自动部署；预览分支可能使用 `wrangler versions upload`，不适合作为首次资源初始化流程。
 
-## 📋 部署前准备
+## 📋 Wrangler CLI 部署前准备
 
 ### 1. Cloudflare 账号
 - [ ] 已注册 Cloudflare 账号
@@ -177,17 +180,14 @@ Cloudflare Git 和 Wrangler CLI 全新安装都先访问 `/install`，输入 `SE
 
 ### 1. 自定义域名
 
-如果你有自己的域名：
+完成 `/install` 后，进入该 Worker 的 **域和路由** 页面：
 
-```bash
-npx wrangler deploy --route "nav.yourdomain.com/*"
-```
+1. 关闭页面中显示的两个 Workers URL。
+2. 添加你的自定义域名并按 Cloudflare 提示完成启用。
 
-或在 Cloudflare Dashboard 中配置 Workers Route。
-
-- [ ] 域名已解析到 Cloudflare
-- [ ] Workers Route 已配置
-- [ ] 自定义域名可访问
+- [ ] 两个 Workers URL 已关闭
+- [ ] 自定义域名已添加并启用
+- [ ] 自定义域名可以正常访问
 
 ### 2. 站点个性化
 

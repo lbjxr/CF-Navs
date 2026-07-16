@@ -63,33 +63,22 @@ npm run deploy
 
 1. 在 GitHub 上 Fork 本仓库。
 2. 进入 Cloudflare 控制台的 **Workers & Pages → Create application → Import a repository**，关联 GitHub 并选择你的 fork。已有 Fork 不能使用通用 Deploy Button：该按钮会创建新 GitHub 仓库，不能指定现有 Fork。
-3. 生产分支选择 `main`，根目录填写 `/`。
-4. Build command 填写 `npm run build`，Deploy command 填写：
+3. 生产分支选择 `main`，根目录填写 `/`，Build command 填写 `npm run build`，Deploy command 填写：
 
 ```bash
 npx wrangler deploy
 ```
 
-`wrangler.toml` 只声明 `DB` 和 `SESSION` 绑定，不包含真实资源 ID。Cloudflare Git 引导流程会自动创建并绑定 D1 与 KV 资源。
+4. 保存并部署。Cloudflare 的 Git 引导流程会根据 `wrangler.toml` 中不带 ID 的声明创建并绑定 `DB` D1 数据库与 `SESSION` KV 命名空间。待部署完成后，进入该 Worker 的 **设置 → 变量和密钥**，添加一个类型为**密钥**的变量，变量名填写 `SETUP_TOKEN`，值填写一段足够长且随机的字符串。
 
-5. 在 Variables and Secrets 步骤添加一个加密 Secret：
+<p align="center">
+  <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-deploy3.jpg" alt="在 Cloudflare Worker 中添加 SETUP_TOKEN 密钥" width="100%">
+</p>
 
-```text
-SETUP_TOKEN = 一段足够长且随机的安装令牌
-```
+5. 打开部署后的 Workers URL，并访问 `/install`。输入 `SETUP_TOKEN`，再设置管理员用户名和密码；安装器会初始化数据库 schema 和管理员账号。
+6. 进入该 Worker 的 **域和路由** 页面，关闭两个 Workers URL，然后添加并启用你的自定义域名。
 
-6. 保存并完成首次部署。
-7. 确认 Worker 的 **Settings → Bindings** 中存在：
-
-| 类型 | 绑定名 | 选择 |
-| --- | --- | --- |
-| D1 database | `DB` | Cloudflare 自动创建的 D1 数据库 |
-| KV namespace | `SESSION` | 你的会话 KV 命名空间 |
-
-8. 访问部署后的 Workers URL，并打开 `/install`。输入 `SETUP_TOKEN`，再设置管理员用户名和密码。安装器会初始化数据库 schema 和管理员账号。
-9. 安装完成并确认管理员可以登录后，可在 **Settings → Variables & Secrets** 删除 `SETUP_TOKEN`，或轮换为新的随机值。公开安装状态检查不依赖它，删除后不影响运行；即使保留，安装器也会永久拒绝再次初始化。正常路径无需 Cloudflare API Token、GitHub Actions 或手动 SQL；只有安装器报 schema 初始化错误时，才在 D1 SQL Console 执行 [schema.sql](../../schema.sql) 进行恢复。
-
-首次部署请从生产分支 `main` 触发。资源创建完成前不要使用预览分支自动部署。
+正常路径无需 Cloudflare API Token、GitHub Actions 或手动 SQL；只有安装器报 schema 初始化错误时，才在 D1 SQL Console 执行 [schema.sql](../../schema.sql) 进行恢复。首次部署请从生产分支 `main` 触发，资源创建完成前不要使用预览分支自动部署。
 
 ## 🔑 首次登录
 
@@ -99,7 +88,7 @@ SETUP_TOKEN = 一段足够长且随机的安装令牌
 2. 输入部署时保存的 `SETUP_TOKEN`
 3. 设置管理员用户名和密码
 4. 安装完成后按页面提示登录
-5. 确认登录成功后，建议从 Worker Secrets 删除或轮换 `SETUP_TOKEN`
+5. 确认登录成功后，建议进入该 Worker 的 **设置 → 变量和密钥** 删除或轮换 `SETUP_TOKEN`
 
 ### 旧数据库升级 / 凭据恢复
 

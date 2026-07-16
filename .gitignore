@@ -10,7 +10,7 @@ wrangler.local.toml
 # Local agent/tool configuration
 .agents/
 .claude/
-.codex/*.local.json
+.codex/
 AGENTS.md
 
 # Logs and operating-system files

@@ -28,8 +28,8 @@ npm run build && npx wrangler deploy
 
 ### `/install` 提示安装令牌无效
 
-1. 确认 Worker 的 **Settings → Variables & Secrets** 中存在加密 Secret `SETUP_TOKEN`，名称大小写完全一致。
-2. 确认输入值没有前后空格，修改 Secret 后重新部署。
+1. 确认 Worker 的 **设置 → 变量和密钥** 中存在类型为**密钥**的变量 `SETUP_TOKEN`，名称大小写完全一致。
+2. 确认输入值没有前后空格；如果修改了密钥，请等待 Cloudflare 保存完成后重新打开 `/install` 检查。
 3. 不要把管理员密码填到 `SETUP_TOKEN`；安装令牌仅用于授权一次安装，管理员密码在 `/install` 页面另行设置。
 4. 如果站点已经安装完成，则不再需要 `SETUP_TOKEN`。`GET /api/install/status` 可公开检查安装状态，删除 Secret 不影响运行；后续安装请求仍会被永久拒绝。
 
