@@ -1,4 +1,4 @@
-name = "cf-navs"
+name = "cf-navs3"
 main = "worker/index.ts"
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]
