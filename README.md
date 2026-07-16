@@ -196,15 +196,14 @@ npm run deploy
 npx wrangler deploy
 ```
 
-4. 在环境变量/Secrets 步骤中只需添加一个**加密 Secret**（不要保存为普通明文变量）：
+4. 保存并部署。Cloudflare 的 Git 引导流程会根据 `wrangler.toml` 中不带 ID 的声明创建并绑定 `DB` D1 数据库与 `SESSION` KV 命名空间。待部署完成后，进入该 Worker 的 **设置 → 变量和机密**，添加一个类型为**密钥**的变量，变量名填写 `SETUP_TOKEN`，值填写一段足够长且随机的字符串。
 
-```text
-SETUP_TOKEN = 一段足够长且随机的安装令牌
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-deploy3.jpg" alt="在 Cloudflare Worker 中添加 SETUP_TOKEN 密钥" width="100%">
+</p>
 
-5. 保存并部署。Cloudflare 的 Git 引导流程会根据 `wrangler.toml` 中不带 ID 的声明创建并绑定 `DB` D1 数据库与 `SESSION` KV 命名空间。
 6. 打开部署后的 Workers URL，并访问 `/install`。输入 `SETUP_TOKEN`，再设置管理员用户名和密码；安装器会初始化数据库 schema 和管理员账号。
-7. 安装完成后进入登录页。确认管理员可以登录后，可在 **Settings → Variables & Secrets** 删除 `SETUP_TOKEN`，或轮换为新的随机值；公开安装状态检查不依赖该 Secret，已完成的安装也会永久拒绝再次初始化。无需创建 Cloudflare API Token、配置 GitHub Actions，正常流程也无需手动执行 SQL。
+7. 进入该 Worker 的 **域和路由** 页面，关闭两个 Workers URL，然后添加并启用你的自定义域名。
 
 > 如果 `/install` 无法完成 schema 初始化，才使用 D1 SQL Console 手动执行 [schema.sql](schema.sql) 作为恢复手段；不要把手动 SQL 当作正常安装步骤。
 
