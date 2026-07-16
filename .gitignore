@@ -21,3 +21,10 @@ AGENTS.md
 tmp/
 _archive/*
 !_archive/README.md
+
+# Local-only documentation, drafts, and test captures
+docs/history/
+docs/local/
+docs/drafts/
+docs/screenshots/local-*
+docs/screenshots/test-*

@@ -312,7 +312,6 @@ docs/
 ├── README.md           # 文档索引
 ├── guides/             # 部署、快速开始、故障排查和数据导入
 ├── reference/          # API、架构、性能契约和技术说明
-├── history/            # 阶段计划、审计、维护记录和历史快照
 └── screenshots/        # README 使用的当前界面截图
 ```
 

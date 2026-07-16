@@ -18,17 +18,11 @@
 - [性能契约](reference/PERFORMANCE_CONTRACT.md)
 - [性能测试](reference/PERFORMANCE_TESTING.md)
 
-## 开发历史
-
-`history/` 保存已经完成或具有追溯价值的优化计划、性能审计、维护性重构记录、问题分析和浏览器调试记录。这些文件不属于部署必读内容，但可用于理解历史决策。
-
-## 图片与快照
+## 图片
 
 - `screenshots/`：README 当前使用的产品截图。
-- `history/screenshots/`：已替换但仍保留用于追溯的旧截图。
-- `history/snapshots/`：开发和浏览器验证产生的文本快照。
 
-本地临时开发资料、测试截图和上游参考源码统一存放在根目录 `_archive/`，不会进入构建、部署或 Git 提交。
+本地历史记录、草稿和浏览器验证资料应放在已忽略的 `docs/history/`、`docs/local/`、`docs/drafts/` 或根目录 `_archive/`，不会进入构建、部署或 Git 提交。
 
 ## 项目目录
 
