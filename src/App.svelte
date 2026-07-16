@@ -265,6 +265,15 @@
     }
   }
 
+  async function refreshAdminDataAfterMutation(): Promise<void> {
+    try {
+      await refreshLoggedInData(true)
+    } catch (error) {
+      // 写入已经成功；刷新失败时保留本地即时结果，并提示用户稍后重试。
+      rootError = getErrorMessage(error)
+    }
+  }
+
   function getInstallHintStorage(): Storage | null {
     if (typeof window === 'undefined') return null
 
@@ -555,6 +564,7 @@
 
      resetCategoryState()
      await applyLocalCategoryUpsert(category)
+      await refreshAdminDataAfterMutation()
       toastStore.addToast(
         categoryModalMode === 'edit' ? `分类「${category.title}」已更新` : `分类「${category.title}」已创建`,
         'success',
@@ -574,9 +584,10 @@
     categoryError = ''
 
     try {
-      const categoryId = Number(category.id)
-      await api.categories.remove(categoryId)
+     const categoryId = Number(category.id)
+     await api.categories.remove(categoryId)
      await applyLocalCategoryDelete(categoryId)
+      await refreshAdminDataAfterMutation()
       toastStore.addToast(`分类「${category.title}」已删除`, 'success')
    } catch (error) {
      categoryError = getErrorMessage(error)
@@ -645,6 +656,7 @@
 
       resetBookmarkState()
       await applyLocalBookmarkUpsert(bookmark)
+      await refreshAdminDataAfterMutation()
      refreshBookmarkIconCacheInBackground(bookmark.id)
       toastStore.addToast(
         bookmarkModalMode === 'edit' ? `书签「${bookmark.title}」已更新` : `书签「${bookmark.title}」已创建`,
@@ -669,6 +681,7 @@
       await api.bookmarks.remove(bookmarkId)
       resetBookmarkState()
      await applyLocalBookmarkDelete(bookmarkId)
+     await refreshAdminDataAfterMutation()
       toastStore.addToast(`书签「${bookmark.title}」已删除`, 'success')
    } catch (error) {
      bookmarkError = getErrorMessage(error)
@@ -682,7 +695,7 @@
     if (!await requestConfirmation(createBatchDeleteConfirmation('bookmark', ids.length))) return
     try {
       const result = await api.bookmarks.batchDelete(ids)
-      if (result.deleted > 0) await refreshLoggedInData(true)
+      if (result.deleted > 0) await refreshAdminDataAfterMutation()
       toastStore.addToast(`已删除 ${result.deleted} 个书签`, 'success')
     } catch (error) {
       bookmarkError = getErrorMessage(error)
@@ -695,7 +708,7 @@
     if (!await requestConfirmation(createBatchDeleteConfirmation('category', ids.length, bookmarkCount))) return
     try {
       const result = await api.categories.batchDelete(ids)
-      if (result.deleted > 0 || result.deleted_bookmarks > 0) await refreshLoggedInData(true)
+      if (result.deleted > 0 || result.deleted_bookmarks > 0) await refreshAdminDataAfterMutation()
       toastStore.addToast(`已删除 ${result.deleted} 个分类及 ${result.deleted_bookmarks} 个书签`, 'success')
     } catch (error) {
       categoryError = getErrorMessage(error)
@@ -740,6 +753,7 @@
       applyLocalSort: (sortedIds) => applyLocalCategorySort(sortedIds, false),
       saveRemoteSort: (sortedIds) => api.categories.sort(sortedIds),
       persist: persistCurrentAdminData,
+      onSuccess: refreshAdminDataAfterMutation,
       restoreOnError: () => refreshLoggedInData(true),
       onError: (error) => {
         categoryError = getErrorMessage(error)
@@ -754,6 +768,7 @@
       applyLocalSort: (sortedIds) => applyLocalBookmarkSort(sortedIds, false),
       saveRemoteSort: (sortedIds) => api.bookmarks.sort(sortedIds),
       persist: persistCurrentAdminData,
+      onSuccess: refreshAdminDataAfterMutation,
       restoreOnError: () => refreshLoggedInData(true),
       onError: (error) => {
         bookmarkError = getErrorMessage(error)
@@ -779,9 +794,12 @@
     await importDataFromFile(importExportState, file, source, mode, {
       adminData,
       requestConfirmation,
-      applyLoggedInData,
+      applyLoggedInData: (data) => applyLoggedInData(data),
       persistCurrentAdminData,
     })
+    if (!importExportState.backupError && importExportState.backupMessage) {
+      await refreshAdminDataAfterMutation()
+    }
   }
 
   onMount(() => {

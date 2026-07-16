@@ -21,6 +21,7 @@ export interface OptimisticSortOptions {
   applyLocalSort: (ids: number[]) => Promise<void>
   saveRemoteSort: (ids: number[]) => Promise<unknown>
   persist: () => Promise<void>
+  onSuccess?: () => Promise<void>
   restoreOnError: () => Promise<void>
   onError: (error: unknown) => void
 }
@@ -50,6 +51,7 @@ export async function runOptimisticSort(
     await savePromise
     if (isLatestSortRequest(requestSeq, state.requestSeq)) {
       await options.persist()
+      await options.onSuccess?.()
     }
   } catch (error) {
     if (isLatestSortRequest(requestSeq, state.requestSeq)) {
