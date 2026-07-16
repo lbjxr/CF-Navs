@@ -1,4 +1,10 @@
-export const ICON_SUCCESS_CACHE = 'public, max-age=604800, s-maxage=2592000, immutable'
+export const ICON_BROWSER_CACHE_SECONDS = 7 * 24 * 60 * 60
+export const ICON_EDGE_CACHE_SECONDS = 6 * 24 * 60 * 60
+
+// Keep the shared-cache TTL shorter so an edge HIT still has browser freshness
+// remaining after the response Age is applied by the client.
+export const ICON_SUCCESS_CACHE =
+  `public, max-age=${ICON_BROWSER_CACHE_SECONDS}, s-maxage=${ICON_EDGE_CACHE_SECONDS}, immutable`
 export const ICON_FAILURE_CACHE = 'no-store'
 export const ICON_FALLBACK_CACHE = 'public, max-age=300, s-maxage=300'
 
