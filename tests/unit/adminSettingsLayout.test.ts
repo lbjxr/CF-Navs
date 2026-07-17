@@ -65,4 +65,13 @@ describe('admin settings layout', () => {
     expect(search).not.toContain('form.search_box_show')
     expect(appearance).toContain('bind:group={form.theme}')
   })
+
+  it('reuses favicon.im for search engine icons', () => {
+    const search = readFileSync('src/components/settings/SearchEngineSettingsSection.svelte', 'utf8')
+
+    expect(search).toContain("import { faviconImIcon } from '../../lib/icons'")
+    expect(search).toContain('engine.icon = icon')
+    expect(search).toContain('Favicon.im')
+    expect(search).toContain('搜索引擎图标预览')
+  })
 })
