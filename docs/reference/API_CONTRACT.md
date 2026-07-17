@@ -129,7 +129,13 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 
 背景配置保留旧版 `background` 字段作为兼容值，并新增 `backgrounds.light` / `backgrounds.dark` 分别保存浅色和深色主题的背景类型、背景值、模糊度、遮罩透明度和遮罩颜色。公开首页渲染时按当前实际主题优先读取 `backgrounds` 中对应配置；旧备份或旧数据库缺少 `backgrounds` 时，后端会用旧 `background` 自动派生两套背景。
 
-后台设置面板内置 13 组渐变方案。`Settings` 与 `PublicSettings` 通过 `background_preset_id` 持久化当前选择，取值为 `clear-teal`、`mist-slate`、`coral-sky`、`sage-graphite`、`lumen-amber`、`ember-night`、`violet-dawn`、`ocean-depths`、`aurora-borealis`、`citrus-sunset`、`rose-orbit`、`indigo-noir`、`terracotta-dune` 或 `custom`。选择内置方案时前端同时写入对应的 `backgrounds`、遮罩、卡片背景透明度和自动文字色设置。旧数据缺少 `background_preset_id`，或仍为 `custom` 但浅色/深色背景值匹配内置方案时，后台面板会自动识别并显示对应预设。
+后台设置面板内置 22 组背景方案。`Settings` 与 `PublicSettings` 通过 `background_preset_id` 持久化当前选择，取值分为：
+
+- 护眼纯色：`paper-sage`、`paper-clay`、`paper-wheat`、`paper-slate`、`paper-pine`、`paper-sakura`、`paper-lavender`、`paper-indigo`、`paper-amber`；
+- 毛玻璃渐变：`clear-teal`、`mist-slate`、`coral-sky`、`sage-graphite`、`lumen-amber`、`ember-night`、`violet-dawn`、`ocean-depths`、`aurora-borealis`、`citrus-sunset`、`rose-orbit`、`indigo-noir`、`terracotta-dune`；
+- 自定义：`custom`。
+
+选择内置方案时前端同时写入对应的 `backgrounds`、遮罩、卡片背景透明度和自动文字色设置。运行时根据 `background_preset_id` 选择对应的亮暗强调色；护眼纯色在暗色模式下还会使用预设的深色卡片背景。旧数据缺少 `background_preset_id`，或仍为 `custom` 但浅色/深色背景值匹配内置方案时，后台面板会自动识别并显示对应预设。
 
 ## 导入接口
 
