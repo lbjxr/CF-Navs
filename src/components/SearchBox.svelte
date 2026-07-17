@@ -86,11 +86,15 @@
         on:click={toggleEngineMenu}
         on:keydown={handleKeydown}
       >
-        {#if currentEngine && isIconImage(currentEngine.icon)}
-          <img src={currentEngine.icon} alt="" loading="lazy" decoding="async" />
-        {:else}
-          <span>{getEngineIconText(currentEngine?.name ?? '')}</span>
-        {/if}
+        <span class="engine-current-icon">
+          {#if currentEngine && isIconImage(currentEngine.icon)}
+            <img src={currentEngine.icon} alt="" loading="lazy" decoding="async" />
+          {:else}
+            <span>{getEngineIconText(currentEngine?.name ?? '')}</span>
+          {/if}
+        </span>
+        <span class="engine-current-name">{currentEngine?.name ?? '未配置'}</span>
+        <span class="engine-chevron" aria-hidden="true"></span>
       </button>
 
       {#if engineMenuOpen}
@@ -130,24 +134,6 @@
     autocomplete="off"
   />
 
-  <label class="sr-only" for="search-engine">搜索引擎</label>
-  {#if showEngineSelector}
-    <select
-      id="search-engine"
-      bind:value={selectedName}
-      class="search-select native-select"
-      disabled={engines.length === 0}
-    >
-      {#if engines.length === 0}
-        <option value="">未配置</option>
-      {:else}
-        {#each engines as engine}
-          <option value={engine.name}>{engine.name}</option>
-        {/each}
-      {/if}
-    </select>
-  {/if}
-
   <button class="search-button" type="submit" disabled={!currentEngine || !query.trim()}>
     <span class="search-button-text">搜索</span>
     <span class="search-button-mobile-text" aria-hidden="true">搜</span>
@@ -163,12 +149,11 @@
     align-items: center;
   }
 
-  .search-box:has(.search-select) {
-    grid-template-columns: minmax(0, 1fr) 140px 80px;
+  .search-box.has-engine-selector {
+    grid-template-columns: 140px minmax(0, 1fr) 80px;
   }
 
   .search-input,
-  .search-select,
   .search-button {
     height: 2.8rem;
     border-radius: 0.75rem;
@@ -177,25 +162,22 @@
     font-size: 0.95rem;
   }
 
-  .engine-picker {
-    display: none;
-  }
-
-  .search-input,
-  .search-select {
+  .search-input {
     padding: 0 0.8rem;
     background-color: rgba(255, 255, 255, 0.82);
     color: inherit;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 
-  .search-select {
-    --select-hover-border: rgba(59, 130, 246, 0.45);
-    padding-right: 2.35rem;
+  .engine-picker {
+    position: relative;
+    display: block;
+    min-width: 0;
+    height: 2.8rem;
   }
 
   .search-input:focus,
-  .search-select:focus {
+  .engine-icon-button:focus-visible {
     outline: 2px solid rgba(59, 130, 246, 0.18);
     outline-offset: 1px;
     border-color: rgba(59, 130, 246, 0.45);
@@ -222,7 +204,7 @@
     font: inherit;
   }
 
-  :global(html[data-background-preset^='paper-']) :is(.search-input, .search-select, .engine-icon-button, .engine-menu) {
+  :global(html[data-background-preset^='paper-']) :is(.search-input, .engine-icon-button, .engine-menu) {
     border-color: color-mix(in srgb, var(--home-accent-color) 24%, transparent);
     background-color: rgb(var(--card-bg-rgb));
     backdrop-filter: none;
@@ -232,7 +214,7 @@
     background: var(--home-accent-color);
   }
 
-  :global(html[data-theme='dark'][data-background-preset^='paper-']) :is(.search-input, .search-select, .engine-icon-button, .engine-menu) {
+  :global(html[data-theme='dark'][data-background-preset^='paper-']) :is(.search-input, .engine-icon-button, .engine-menu) {
     border-color: color-mix(in srgb, var(--home-accent-color) 24%, transparent);
     background-color: rgb(var(--card-bg-rgb));
     color: #e5eee2;
@@ -246,25 +228,75 @@
     background: rgba(255, 255, 255, 0.82);
     color: inherit;
     cursor: pointer;
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: 1.7rem minmax(0, 1fr) 0.75rem;
     align-items: center;
-    justify-content: center;
-    padding: 0;
+    gap: 0.5rem;
+    padding: 0 0.7rem;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    text-align: left;
+    transition:
+      border-color 0.18s ease,
+      background-color 0.18s ease,
+      box-shadow 0.18s ease;
   }
 
-  .engine-icon-button img,
+  .engine-icon-button:hover:not(:disabled),
+  .engine-icon-button[aria-expanded='true'] {
+    border-color: rgba(59, 130, 246, 0.45);
+    background-color: rgba(248, 250, 252, 0.94);
+    box-shadow:
+      0 0 0 3px rgba(59, 130, 246, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  }
+
+  .engine-current-icon img,
   .engine-menu-icon img {
     width: 1.25rem;
     height: 1.25rem;
     object-fit: contain;
   }
 
-  .engine-icon-button span,
+  .engine-current-icon,
   .engine-menu-icon {
     font-size: 0.86rem;
     font-weight: 700;
     line-height: 1;
+  }
+
+  .engine-current-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 0.5rem;
+    background: rgba(226, 232, 240, 0.74);
+    color: #1e293b;
+  }
+
+  .engine-current-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .engine-chevron {
+    width: 0.48rem;
+    height: 0.48rem;
+    justify-self: end;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    opacity: 0.62;
+    transform: translateY(-0.12rem) rotate(45deg);
+    transition: transform 0.18s ease;
+  }
+
+  .engine-icon-button[aria-expanded='true'] .engine-chevron {
+    transform: translateY(0.12rem) rotate(225deg);
   }
 
   .engine-menu {
@@ -272,15 +304,18 @@
     top: calc(100% + 0.45rem);
     left: 0;
     z-index: 60;
+    width: 100%;
     min-width: 10.5rem;
     max-width: min(16rem, calc(100vw - 2rem));
     display: grid;
     gap: 0.25rem;
     padding: 0.35rem;
-    border: 1px solid rgba(148, 163, 184, 0.24);
+    border: 1px solid rgba(59, 130, 246, 0.28);
     border-radius: 0.85rem;
     background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
+    box-shadow:
+      0 18px 38px rgba(15, 23, 42, 0.18),
+      0 0 0 1px rgba(255, 255, 255, 0.7) inset;
     backdrop-filter: blur(12px);
   }
 
@@ -326,7 +361,6 @@
 
   /* 暗色主题 */
   :global([data-theme='dark']) .search-input,
-  :global([data-theme='dark']) .search-select,
   :global([data-theme='dark']) .engine-icon-button {
     background-color: rgba(15, 23, 42, 0.6);
     border-color: rgba(148, 163, 184, 0.28);
@@ -339,7 +373,7 @@
   }
 
   :global([data-theme='dark']) .engine-menu {
-    border-color: rgba(148, 163, 184, 0.24);
+    border-color: rgba(125, 211, 252, 0.3);
     background: rgba(15, 23, 42, 0.96);
     box-shadow: 0 16px 34px rgba(0, 0, 0, 0.26);
   }
@@ -356,6 +390,20 @@
   :global([data-theme='dark']) .engine-menu-icon {
     background: rgba(30, 41, 59, 0.86);
     color: #bae6fd;
+  }
+
+  :global([data-theme='dark']) .engine-current-icon {
+    background: rgba(30, 41, 59, 0.86);
+    color: #bae6fd;
+  }
+
+  :global([data-theme='dark']) .engine-icon-button:hover:not(:disabled),
+  :global([data-theme='dark']) .engine-icon-button[aria-expanded='true'] {
+    border-color: rgba(125, 211, 252, 0.42);
+    background-color: rgba(30, 41, 59, 0.78);
+    box-shadow:
+      0 0 0 3px rgba(125, 211, 252, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
   .sr-only {
@@ -381,10 +429,6 @@
       grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
     }
 
-    .search-box:has(.search-select) {
-      grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
-    }
-
     .search-input,
     .search-button {
       height: 2.5rem;
@@ -393,14 +437,8 @@
     }
 
     .engine-picker {
-      position: relative;
-      display: block;
       width: 2.5rem;
       height: 2.5rem;
-    }
-
-    .search-select {
-      display: none;
     }
 
     .search-input {
@@ -414,7 +452,15 @@
     }
 
     .engine-icon-button {
+      display: inline-flex;
+      justify-content: center;
+      padding: 0;
       border-radius: 0.7rem;
+    }
+
+    .engine-current-name,
+    .engine-chevron {
+      display: none;
     }
 
     .engine-menu {
@@ -445,9 +491,7 @@
       gap: 0.45rem;
     }
 
-    .search-box,
-    .search-box.has-engine-selector,
-    .search-box:has(.search-select) {
+    .search-box.has-engine-selector {
       grid-template-columns: 2.4rem minmax(0, 1fr) 2.4rem;
     }
 
