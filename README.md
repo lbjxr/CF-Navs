@@ -88,13 +88,13 @@
   <tr>
     <td align="center" colspan="2">
       <strong>13 套内置主题模板 · 亮暗双背景 · 一键套用推荐参数</strong><br>
-      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-admin-setting.jpg" alt="13 套内置主题模板和亮暗背景设置" width="860">
+      <img src="docs/screenshots/cf-navs-admin-setting.jpg" alt="13 套内置主题模板和亮暗背景设置" width="860">
     </td>
   </tr>
   <tr>
     <td align="center" colspan="2">
       <strong>主题选择菜单 · 从清透蓝绿到陶土沙丘的多种风格</strong><br>
-      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-theme-presets.jpg" alt="主题选择菜单和多种配色方案" width="860">
+      <img src="docs/screenshots/cf-navs-theme-presets.jpg" alt="主题选择菜单和多种配色方案" width="860">
     </td>
   </tr>
   <tr>
