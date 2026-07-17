@@ -189,30 +189,31 @@
     --sp-strong: #1e293b;
     --sp-label: #334155;
     --sp-muted: #64748b;
-    --sp-accent: #2563eb;
-    --sp-accent-strong: #1d4ed8;
-    --sp-border: rgba(148, 163, 184, 0.22);
+    --sp-accent: #71836f;
+    --sp-accent-strong: #52634f;
+    --sp-border: rgba(112, 126, 108, 0.22);
     --sp-panel-bg:
-      linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.92)),
-      #f8fafc;
+      radial-gradient(circle at 90% 0%, rgba(205, 220, 200, 0.24), transparent 30%),
+      linear-gradient(180deg, rgba(253, 252, 249, 0.98), rgba(246, 245, 239, 0.96)),
+      #f7f6f0;
     --sp-panel-shadow:
-      0 24px 54px rgba(30, 41, 59, 0.08),
+      0 24px 54px rgba(75, 83, 70, 0.1),
       0 1px 0 rgba(255, 255, 255, 0.72) inset;
-    --sp-header-bg: rgba(255, 255, 255, 0.9);
-    --sp-header-border: rgba(203, 213, 225, 0.78);
-    --sp-group-bg: rgba(255, 255, 255, 0.9);
-    --sp-group-bg-strong: rgba(255, 255, 255, 0.95);
-    --sp-group-border: rgba(203, 213, 225, 0.82);
-    --sp-subsection-border: rgba(226, 232, 240, 0.92);
-    --sp-input-bg: #ffffff;
-    --sp-input-border: #cbd5e1;
-    --sp-input-hover-border: #94a3b8;
-    --sp-input-text: #0f172a;
-    --sp-toggle-bg: rgba(248, 250, 252, 0.78);
-    --sp-toggle-border: rgba(226, 232, 240, 0.95);
-    --sp-toggle-hover-bg: #ffffff;
-    --sp-footer-bg: rgba(255, 255, 255, 0.94);
-    --sp-footer-border: rgba(148, 163, 184, 0.28);
+    --sp-header-bg: rgba(253, 252, 249, 0.88);
+    --sp-header-border: rgba(112, 126, 108, 0.2);
+    --sp-group-bg: rgba(253, 252, 249, 0.88);
+    --sp-group-bg-strong: rgba(255, 255, 255, 0.66);
+    --sp-group-border: rgba(112, 126, 108, 0.2);
+    --sp-subsection-border: rgba(112, 126, 108, 0.16);
+    --sp-input-bg: rgba(255, 255, 255, 0.78);
+    --sp-input-border: rgba(112, 126, 108, 0.28);
+    --sp-input-hover-border: rgba(112, 126, 108, 0.52);
+    --sp-input-text: #3f493d;
+    --sp-toggle-bg: rgba(239, 242, 235, 0.7);
+    --sp-toggle-border: rgba(112, 126, 108, 0.2);
+    --sp-toggle-hover-bg: rgba(255, 255, 255, 0.94);
+    --sp-footer-bg: rgba(253, 252, 249, 0.92);
+    --sp-footer-border: rgba(112, 126, 108, 0.24);
     --sp-danger: #dc2626;
     --sp-danger-bg: #fef2f2;
     --sp-danger-border: #fecaca;
@@ -222,15 +223,15 @@
     --sp-warn: #b45309;
     --sp-status-bg: #f8fbff;
     --sp-status-border: #dbeafe;
-    --sp-chip-bg: #dbeafe;
-    --sp-chip-text: #1d4ed8;
-    --sp-chip-sky-bg: #e0f2fe;
-    --sp-chip-sky-text: #0369a1;
+    --sp-chip-bg: #e5ebe2;
+    --sp-chip-text: #52634f;
+    --sp-chip-sky-bg: #edf0e8;
+    --sp-chip-sky-text: #667561;
     --sp-gradient-panel-bg:
-      radial-gradient(circle at 18% 0%, rgba(219, 234, 254, 0.62), transparent 32%),
-      linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(240, 253, 250, 0.7)),
+      radial-gradient(circle at 18% 0%, rgba(205, 220, 200, 0.42), transparent 32%),
+      linear-gradient(135deg, rgba(253, 252, 249, 0.96), rgba(241, 245, 238, 0.78)),
       #ffffff;
-    --sp-gradient-panel-border: rgba(191, 219, 254, 0.86);
+    --sp-gradient-panel-border: rgba(147, 165, 139, 0.48);
     --sp-option-bg: rgba(255, 255, 255, 0.88);
     --sp-option-bg-active: rgba(255, 255, 255, 0.96);
     --sp-option-border: rgba(203, 213, 225, 0.9);
@@ -255,8 +256,8 @@
     --sp-strong: #cbd5e1;
     --sp-label: #cbd5e1;
     --sp-muted: #94a3b8;
-    --sp-accent: #7dd3fc;
-    --sp-accent-strong: #bae6fd;
+    --sp-accent: #a9c2a0;
+    --sp-accent-strong: #d2e2ca;
     --sp-border: rgba(148, 163, 184, 0.22);
     --sp-panel-bg:
       linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0.7)),
@@ -293,10 +294,10 @@
     --sp-chip-sky-bg: rgba(125, 211, 252, 0.16);
     --sp-chip-sky-text: #7dd3fc;
     --sp-gradient-panel-bg:
-      radial-gradient(circle at 18% 0%, rgba(125, 211, 252, 0.12), transparent 32%),
+      radial-gradient(circle at 18% 0%, rgba(169, 194, 160, 0.14), transparent 32%),
       linear-gradient(135deg, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.5)),
       #0b1524;
-    --sp-gradient-panel-border: rgba(125, 211, 252, 0.28);
+    --sp-gradient-panel-border: rgba(169, 194, 160, 0.3);
     --sp-option-bg: rgba(15, 23, 42, 0.55);
     --sp-option-bg-active: rgba(30, 41, 59, 0.72);
     --sp-option-border: rgba(148, 163, 184, 0.24);
@@ -312,12 +313,14 @@
     top: 0;
     z-index: 20;
     display: grid;
-    gap: 10px;
+    grid-template-columns: minmax(260px, 0.9fr) minmax(420px, 1.4fr);
+    align-items: end;
+    gap: 28px;
     border-bottom: 1px solid var(--sp-header-border);
     background: var(--sp-header-bg);
     backdrop-filter: blur(16px);
     border-radius: 22px 22px 0 0;
-    padding: 14px 20px 12px;
+    padding: 20px 24px 18px;
   }
 
   .panel-header-copy {
@@ -338,8 +341,9 @@
   }
 
   h2 {
-    font-size: 20px;
-    line-height: 1.2;
+    font-size: clamp(24px, 2.2vw, 32px);
+    line-height: 1.08;
+    letter-spacing: -0.035em;
     color: var(--sp-heading);
     text-wrap: balance;
   }
@@ -352,25 +356,25 @@
   }
 
   .panel-desc {
-    margin-top: 4px;
-    max-width: 72ch;
+    margin-top: 8px;
+    max-width: 54ch;
     font-size: 13px;
     text-wrap: pretty;
   }
 
   .section-nav {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
   }
 
   .section-nav-chip {
     border: 1px solid var(--sp-toggle-border);
-    border-radius: 999px;
-    padding: 5px 12px;
+    border-radius: 10px;
+    padding: 8px 10px;
     background: var(--sp-toggle-bg);
     color: var(--sp-label);
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     transition:
@@ -428,8 +432,8 @@
   .settings-form {
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    gap: 12px;
-    padding: 16px 18px 20px;
+    gap: 18px;
+    padding: 22px 24px 28px;
   }
 
   .form-footer {
@@ -460,7 +464,7 @@
   .floating-save-btn {
     flex: 0 0 auto;
     border: none;
-    background: #2563eb;
+    background: #667a63;
     color: #ffffff;
     border-radius: 12px;
     min-height: 42px;
@@ -468,7 +472,7 @@
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
+    box-shadow: 0 10px 24px rgba(82, 99, 79, 0.26);
     transition:
       transform 0.15s ease,
       box-shadow 0.15s ease,
@@ -479,8 +483,8 @@
 
   .floating-save-btn:hover:not(:disabled) {
     transform: translateY(-2px);
-    background: #1d4ed8;
-    box-shadow: 0 14px 30px rgba(37, 99, 235, 0.34);
+    background: #52634f;
+    box-shadow: 0 14px 30px rgba(82, 99, 79, 0.34);
   }
 
   .floating-save-btn:active:not(:disabled) {
@@ -493,6 +497,12 @@
   }
 
   @media (max-width: 960px) {
+    .panel-header {
+      grid-template-columns: 1fr;
+      align-items: start;
+      gap: 16px;
+    }
+
     .settings-form {
       padding: 18px;
     }
