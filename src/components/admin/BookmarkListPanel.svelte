@@ -180,7 +180,7 @@
         <div class="admin-table-wrap">
           <table class="admin-bookmark-table" class:is-sorting={sortMode}>
             <colgroup>
-              {#if sortMode}<col style="width: 44px;" />{/if}
+              <col style="width: 44px;" />
               <col style="width: 30%;" />
               <col style="width: 53%;" />
               <col style="width: 5%;" />
