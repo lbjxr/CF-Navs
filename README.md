@@ -92,6 +92,12 @@
     </td>
   </tr>
   <tr>
+    <td align="center" colspan="2">
+      <strong>主题选择菜单 · 从清透蓝绿到陶土沙丘的多种风格</strong><br>
+      <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-theme-presets.jpg" alt="主题选择菜单和多种配色方案" width="860">
+    </td>
+  </tr>
+  <tr>
     <td align="center" width="50%">
       <strong>移动端亮色</strong><br>
       <img src="https://raw.githubusercontent.com/lbjxr/CF-Navs/main/docs/screenshots/cf-navs-light-mobile.jpg" alt="移动端亮色" width="260">
