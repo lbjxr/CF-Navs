@@ -101,7 +101,7 @@
     <div class="panel-header-copy">
       <p class="panel-eyebrow">设置</p>
       <h2>站点设置</h2>
-      <p class="panel-desc">按功能区管理站点信息、外观、布局与账号。切换功能区不会丢失未保存内容，完成后点击底部「保存设置」。</p>
+      <p class="panel-desc">按功能区管理站点信息、外观、布局与账号。切换功能区不会丢失未保存内容，修改完成后使用右上角「保存设置」。</p>
     </div>
     <div class="header-actions">
       <p class="helper-text">
@@ -214,8 +214,9 @@
     grid-template-rows: auto minmax(0, 1fr);
     gap: 0;
     position: relative;
-    height: calc(100dvh - 150px);
-    min-height: 560px;
+    height: calc(100dvh - 190px);
+    min-height: 0;
+    box-sizing: border-box;
     border: 1px solid var(--sp-border);
     border-radius: 22px;
     background: var(--sp-panel-bg);
@@ -375,6 +376,7 @@
     padding: 22px 24px 28px;
     min-height: 0;
     overflow: hidden;
+    box-sizing: border-box;
   }
 
   .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; align-self: center; }
