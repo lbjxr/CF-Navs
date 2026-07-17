@@ -142,17 +142,6 @@
     line-height: 1.5;
   }
 
-  .group::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 18px;
-    bottom: 18px;
-    width: 3px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--sp-accent) 52%, transparent);
-  }
-
   .group legend {
     padding: 0 7px;
     margin-left: -4px;
