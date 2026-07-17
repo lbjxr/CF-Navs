@@ -25,10 +25,18 @@ describe('settings form model', () => {
     expect(
       gradientPresets
         .filter((preset) => preset.surface === 'flat')
+        .map((preset) => preset.light.value),
+    ).toEqual([
+      '#e8f0e3', '#f1e2de', '#f2e8d6', '#e0ebf0', '#e3ecdf',
+      '#f3e1e7', '#e9e5f3', '#dbeaff', '#f4e6c8',
+    ])
+    expect(
+      gradientPresets
+        .filter((preset) => preset.surface === 'flat')
         .map((preset) => preset.accentColor),
     ).toEqual([
-      '#536b52', '#936b63', '#896a43', '#506f80', '#43523f',
-      '#a85f72', '#665a9e', '#425f8c', '#98651f',
+      '#71836f', '#b08f89', '#a98c65', '#718a98', '#5c6857',
+      '#c88797', '#857bb8', '#5f769b', '#bd8b42',
     ])
   })
 
