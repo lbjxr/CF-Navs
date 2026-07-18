@@ -8,9 +8,17 @@
   export let settings: PublicSettings | null = null
   export let query = ''
   export let topNavigation = false
+  export let preview = false
+  export let themeOverride: 'light' | 'dark' | null = null
 </script>
 
-<section class="hero-search" class:top-navigation={topNavigation} aria-label="站点搜索">
+<section
+  class="hero-search"
+  class:top-navigation={topNavigation}
+  class:preview
+  class:preview-light={preview && themeOverride === 'light'}
+  aria-label="站点搜索"
+>
   <h1 class="site-title" style="color: {siteTitleColor}; font-size: {siteTitleFontSize}px;">{pageTitle}</h1>
   {#if settings?.search_box_show ?? true}
     <div class="search-card">
@@ -18,6 +26,8 @@
         searchEngine={settings?.search_engine ?? null}
         bind:query
         showEngineSelector={settings?.search_engine_selector_show ?? true}
+        {preview}
+        {themeOverride}
       />
     </div>
   {/if}
@@ -56,6 +66,28 @@
   :global([data-theme='dark']) .search-card {
     border-color: transparent;
     background: transparent;
+  }
+
+  .hero-search.preview {
+    gap: 0.65rem;
+    width: min(100%, 34rem);
+    margin: calc(1.5rem + var(--content-margin-top, 0%)) auto 1rem;
+    padding: 0 0.75rem;
+    box-sizing: border-box;
+  }
+
+  .hero-search.preview.top-navigation {
+    margin-top: calc(3.2rem + var(--content-margin-top, 0%));
+  }
+
+  .hero-search.preview .search-card {
+    padding: 0.55rem;
+    border-radius: 1rem;
+  }
+
+  .hero-search.preview-light .search-card {
+    border-color: rgba(148, 163, 184, 0.18);
+    background: rgba(255, 255, 255, 0.68);
   }
 
   @media (max-width: 720px) {

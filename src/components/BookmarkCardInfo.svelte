@@ -17,6 +17,8 @@
   export let infoIconSize = 60
   export let infoIconStyle = ''
   export let hasCustomIconBackground = false
+  export let preview = false
+  export let themeOverride: 'light' | 'dark' | null = null
   export let onLinkClick: ((event: MouseEvent) => AsyncVoid) | undefined = undefined
   export let onContextMenu: ((event: MouseEvent) => AsyncVoid) | undefined = undefined
   export let onIconError: (() => AsyncVoid) | undefined = undefined
@@ -35,9 +37,12 @@
   class="bookmark-card bookmark-card-info"
   class:bookmark-tooltip-anchor={showDescription && descriptionMode === 'hover' && Boolean(bookmark.description)}
   class:sort-mode={sortMode}
-  href={bookmark.url}
-  target={openInNewTab ? '_blank' : undefined}
-  rel={openInNewTab ? 'noopener noreferrer' : undefined}
+  class:preview-light={preview && themeOverride === 'light'}
+  href={preview ? undefined : bookmark.url}
+  target={!preview && openInNewTab ? '_blank' : undefined}
+  rel={!preview && openInNewTab ? 'noopener noreferrer' : undefined}
+  tabindex={preview ? -1 : undefined}
+  aria-disabled={preview ? 'true' : undefined}
   style={cardLinkStyle}
   title={showDescription && descriptionMode === 'hover' ? tooltipText : undefined}
   aria-label={showDescription && descriptionMode === 'hover' ? tooltipText : undefined}
@@ -53,6 +58,7 @@
     iconStyle={infoIconStyle}
     hasCustomBackground={hasCustomIconBackground}
     variant="info"
+    {themeOverride}
     onError={onIconError}
     onLoad={onIconLoad}
   />
@@ -174,7 +180,7 @@
     color: var(--card-description-color, var(--card-text-color, #cbd5e1));
   }
 
-  :global(html[data-background-preset^='paper-']) .bookmark-card-info {
+  :global([data-background-preset^='paper-']) .bookmark-card-info {
     border-color: color-mix(in srgb, var(--home-accent-color) 24%, transparent);
     background: rgb(var(--card-bg-rgb) / var(--card-bg-opacity, 0.9));
     backdrop-filter: none;
@@ -182,10 +188,38 @@
     box-shadow: 0 8px 22px color-mix(in srgb, var(--home-accent-color) 16%, transparent);
   }
 
-  :global(html[data-theme='dark'][data-background-preset^='paper-']) .bookmark-card-info {
+  :global([data-theme='dark'][data-background-preset^='paper-']) .bookmark-card-info {
     border-color: color-mix(in srgb, var(--home-accent-color) 24%, transparent);
     background: rgb(var(--card-bg-rgb) / var(--card-bg-opacity, 0.9));
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  }
+
+  .bookmark-card-info.preview-light {
+    border-color: rgba(255, 255, 255, 0.55);
+    background:
+      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.72)), rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.28))),
+      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.4));
+    color: var(--card-text-color, #0f172a);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+      0 4px 14px rgba(15, 23, 42, 0.08);
+  }
+
+  .bookmark-card-info.preview-light .bookmark-title {
+    color: var(--card-title-color, var(--card-text-color, #0f172a));
+  }
+
+  .bookmark-card-info.preview-light .bookmark-description {
+    color: var(--card-description-color, var(--card-text-color, #475569));
+  }
+
+  :global([data-background-preset^='paper-']) .bookmark-card-info.preview-light {
+    border-color: color-mix(in srgb, var(--home-accent-color) 24%, transparent);
+    background: rgb(var(--card-bg-rgb) / var(--card-bg-opacity, 0.9));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 8px 22px color-mix(in srgb, var(--home-accent-color) 16%, transparent);
   }
 
 </style>

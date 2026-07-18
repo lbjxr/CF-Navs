@@ -8,6 +8,7 @@
   export let iconStyle = ''
   export let hasCustomBackground = false
   export let variant: 'info' | 'compact' = 'info'
+  export let themeOverride: 'light' | 'dark' | null = null
   export let onError: (() => AsyncVoid) | undefined = undefined
   export let onLoad: (() => AsyncVoid) | undefined = undefined
 
@@ -24,6 +25,7 @@
   class="bookmark-icon"
   class:has-custom-background={hasCustomBackground}
   class:is-info={variant === 'info'}
+  class:preview-light={themeOverride === 'light'}
   style={iconStyle}
 >
   {#if iconUrl}
@@ -103,5 +105,19 @@
 
   :global([data-theme='dark']) .bookmark-icon .icon-text {
     color: #cbd5e1;
+  }
+
+  .bookmark-icon.preview-light {
+    border-color: rgba(148, 163, 184, 0.18);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(248, 250, 252, 0.62)),
+      rgba(255, 255, 255, 0.52);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.5),
+      0 1px 4px rgba(15, 23, 42, 0.06);
+  }
+
+  .bookmark-icon.preview-light .icon-text {
+    color: #475569;
   }
 </style>

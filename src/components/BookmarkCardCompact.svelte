@@ -15,6 +15,8 @@
   export let iconUrl = ''
   export let iconText = ''
   export let hasCustomIconBackground = false
+  export let preview = false
+  export let themeOverride: 'light' | 'dark' | null = null
   export let onLinkClick: ((event: MouseEvent) => AsyncVoid) | undefined = undefined
   export let onContextMenu: ((event: MouseEvent) => AsyncVoid) | undefined = undefined
   export let onIconError: (() => AsyncVoid) | undefined = undefined
@@ -32,9 +34,12 @@
 <a
   class="bookmark-card bookmark-card-icon bookmark-tooltip-anchor"
   class:sort-mode={sortMode}
-  href={bookmark.url}
-  target={openInNewTab ? '_blank' : undefined}
-  rel={openInNewTab ? 'noopener noreferrer' : undefined}
+  class:preview-light={preview && themeOverride === 'light'}
+  href={preview ? undefined : bookmark.url}
+  target={!preview && openInNewTab ? '_blank' : undefined}
+  rel={!preview && openInNewTab ? 'noopener noreferrer' : undefined}
+  tabindex={preview ? -1 : undefined}
+  aria-disabled={preview ? 'true' : undefined}
   style="width: {compactIconSize}px; height: {compactIconSize}px;"
   title={tooltipText}
   aria-label={tooltipText}
@@ -50,6 +55,7 @@
     iconStyle={compactIconStyle}
     hasCustomBackground={hasCustomIconBackground}
     variant="compact"
+    {themeOverride}
     onError={onIconError}
     onLoad={onIconLoad}
   />
@@ -57,9 +63,12 @@
 {#if showIconTitle}
   <a
     class="bookmark-icon-title"
-    href={bookmark.url}
-    target={openInNewTab ? '_blank' : undefined}
-    rel={openInNewTab ? 'noopener noreferrer' : undefined}
+    class:preview-light={preview && themeOverride === 'light'}
+    href={preview ? undefined : bookmark.url}
+    target={!preview && openInNewTab ? '_blank' : undefined}
+    rel={!preview && openInNewTab ? 'noopener noreferrer' : undefined}
+    tabindex={preview ? -1 : undefined}
+    aria-disabled={preview ? 'true' : undefined}
     on:click={handleLinkClick}
     on:contextmenu={handleContextMenu}
   >
@@ -150,7 +159,7 @@
     border-color: rgba(125, 211, 252, 0.32);
   }
 
-  :global(html[data-background-preset^='paper-']) .bookmark-card-icon {
+  :global([data-background-preset^='paper-']) .bookmark-card-icon {
     border-color: color-mix(in srgb, var(--home-accent-color) 24%, transparent);
     background: rgb(var(--card-bg-rgb) / var(--card-bg-opacity, 0.9));
     backdrop-filter: none;
@@ -158,7 +167,7 @@
     box-shadow: 0 8px 22px color-mix(in srgb, var(--home-accent-color) 16%, transparent);
   }
 
-  :global(html[data-theme='dark'][data-background-preset^='paper-']) .bookmark-card-icon {
+  :global([data-theme='dark'][data-background-preset^='paper-']) .bookmark-card-icon {
     border-color: color-mix(in srgb, var(--home-accent-color) 24%, transparent);
     background: rgb(var(--card-bg-rgb) / var(--card-bg-opacity, 0.9));
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
@@ -166,5 +175,29 @@
 
   :global([data-theme='dark']) .bookmark-icon-title {
     color: var(--card-title-color, var(--card-text-color, #e5eefb));
+  }
+
+  .bookmark-card-icon.preview-light {
+    border-color: rgba(255, 255, 255, 0.55);
+    background:
+      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.72)), rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.28))),
+      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.4));
+    color: var(--card-text-color, #0f172a);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+      0 4px 14px rgba(15, 23, 42, 0.08);
+  }
+
+  .bookmark-icon-title.preview-light {
+    color: var(--card-title-color, var(--card-text-color, #0f172a));
+  }
+
+  :global([data-background-preset^='paper-']) .bookmark-card-icon.preview-light {
+    border-color: color-mix(in srgb, var(--home-accent-color) 24%, transparent);
+    background: rgb(var(--card-bg-rgb) / var(--card-bg-opacity, 0.9));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 8px 22px color-mix(in srgb, var(--home-accent-color) 16%, transparent);
   }
 </style>

@@ -166,4 +166,15 @@
       align-items: stretch;
     }
   }
+
+  @container settings-editor (max-width: 680px) {
+    .navigation-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .field-size,
+    .content-layout-grid .field-range {
+      grid-column: 1 / -1;
+    }
+  }
 </style>

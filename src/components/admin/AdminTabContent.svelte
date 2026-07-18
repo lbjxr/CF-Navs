@@ -149,4 +149,12 @@
       gap: 16px;
     }
   }
+
+  @media (max-width: 720px) {
+    .admin-content {
+      height: auto;
+      overflow: visible;
+      padding-right: 0;
+    }
+  }
 </style>

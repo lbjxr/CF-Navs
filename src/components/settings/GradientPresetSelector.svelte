@@ -70,8 +70,8 @@
         <span></span>
       </span>
       <span class="preset-copy">
-        <strong>自定义渐变</strong>
-        <small>不套用方案，手动维护下方浅色/深色背景的完整配置。</small>
+        <strong>自定义背景</strong>
+        <small>分别设置浅色和深色背景，可使用纯色、渐变或图片。</small>
       </span>
     </label>
   </div>

@@ -5,6 +5,8 @@
   export let searchEngine: SearchEngineSetting | null = null
   export let query = ''
   export let showEngineSelector = true
+  export let preview = false
+  export let themeOverride: 'light' | 'dark' | null = null
 
   let selectedName = ''
   let engineMenuOpen = false
@@ -32,7 +34,7 @@
   }
 
   function toggleEngineMenu() {
-    if (engines.length <= 1) return
+    if (preview || engines.length <= 1) return
     engineMenuOpen = !engineMenuOpen
   }
 
@@ -57,6 +59,7 @@
   }
 
   function handleSubmit() {
+    if (preview) return
     const keyword = query.trim()
 
     if (!keyword || !currentEngine) {
@@ -72,7 +75,13 @@
   })
 </script>
 
-<form class="search-box" class:has-engine-selector={showEngineSelector} on:submit|preventDefault={handleSubmit}>
+<form
+  class="search-box"
+  class:has-engine-selector={showEngineSelector}
+  class:is-preview={preview}
+  class:preview-light={preview && themeOverride === 'light'}
+  on:submit|preventDefault={handleSubmit}
+>
   {#if showEngineSelector}
     <div class="engine-picker" on:focusout={handlePickerFocusOut}>
       <button
@@ -81,7 +90,7 @@
         aria-label={currentEngine ? `当前搜索引擎：${currentEngine.name}` : '选择搜索引擎'}
         aria-haspopup="listbox"
         aria-expanded={engineMenuOpen}
-        disabled={engines.length === 0}
+        disabled={preview || engines.length === 0}
         title={currentEngine ? `搜索引擎：${currentEngine.name}` : '选择搜索引擎'}
         on:click={toggleEngineMenu}
         on:keydown={handleKeydown}
@@ -132,9 +141,10 @@
     type="search"
     placeholder="输入关键词搜索"
     autocomplete="off"
+    readonly={preview}
   />
 
-  <button class="search-button" type="submit" disabled={!currentEngine || !query.trim()}>
+  <button class="search-button" type="submit" disabled={preview || !currentEngine || !query.trim()}>
     <span class="search-button-text">搜索</span>
     <span class="search-button-mobile-text" aria-hidden="true">搜</span>
   </button>
@@ -195,6 +205,12 @@
     opacity: 0.55;
   }
 
+  .search-box.is-preview .search-button:disabled {
+    background: var(--home-accent-color, #2563eb);
+    color: #ffffff;
+    opacity: 0.86;
+  }
+
   .search-button-mobile-text {
     display: none;
   }
@@ -204,17 +220,17 @@
     font: inherit;
   }
 
-  :global(html[data-background-preset^='paper-']) :is(.search-input, .engine-icon-button, .engine-menu) {
+  :global([data-background-preset^='paper-']) :is(.search-input, .engine-icon-button, .engine-menu) {
     border-color: color-mix(in srgb, var(--home-accent-color) 24%, transparent);
     background-color: rgb(var(--card-bg-rgb) / var(--card-bg-opacity, 0.9));
     backdrop-filter: none;
   }
 
-  :global(html[data-background-preset^='paper-']) .search-button {
+  :global([data-background-preset^='paper-']) .search-button {
     background: var(--home-accent-color);
   }
 
-  :global(html[data-theme='dark'][data-background-preset^='paper-']) :is(.search-input, .engine-icon-button, .engine-menu) {
+  :global([data-theme='dark'][data-background-preset^='paper-']) :is(.search-input, .engine-icon-button, .engine-menu) {
     border-color: color-mix(in srgb, var(--home-accent-color) 24%, transparent);
     background-color: rgb(var(--card-bg-rgb) / var(--card-bg-opacity, 0.9));
     color: #e5eee2;
@@ -404,6 +420,29 @@
     box-shadow:
       0 0 0 3px rgba(125, 211, 252, 0.08),
       inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .search-box.preview-light .search-input,
+  .search-box.preview-light .engine-icon-button {
+    border-color: rgba(148, 163, 184, 0.28);
+    background-color: rgba(255, 255, 255, 0.82);
+    color: #0f172a;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .search-box.preview-light .search-input::placeholder {
+    color: #64748b;
+  }
+
+  .search-box.preview-light .engine-current-icon {
+    background: rgba(226, 232, 240, 0.74);
+    color: #1e293b;
+  }
+
+  :global([data-background-preset^='paper-']) .search-box.preview-light :is(.search-input, .engine-icon-button, .engine-menu) {
+    border-color: color-mix(in srgb, var(--home-accent-color) 24%, transparent);
+    background-color: rgb(var(--card-bg-rgb) / var(--card-bg-opacity, 0.9));
+    color: #0f172a;
   }
 
   .sr-only {

@@ -46,12 +46,19 @@ describe('admin settings layout', () => {
     expect(positions.every((position) => position >= 0)).toBe(true)
     expect(new Set(positions).size).toBe(sectionOrder.length)
 
+    const labels = ['站点信息', '外观与卡片', '布局与导航', '搜索设置', '页脚内容', '账号安全']
+    const labelPositions = labels.map((label) => panel.indexOf(`label: '${label}'`))
+    expect(labelPositions.every((position) => position >= 0)).toBe(true)
+    expect(labelPositions).toEqual([...labelPositions].sort((a, b) => a - b))
     expect(panel).toContain("{ id: 'appearance', label: '外观与卡片'")
     expect(panel).toContain('class="settings-submenu"')
+    expect(panel).toContain('grid-column: span 1')
+    expect(panel).toContain('grid-column: span 11')
     expect(panel).not.toContain('group::before')
   })
 
-  it('keeps content layout fields in the layout section and search toggles in the hero section', () => {
+  it('places theme, search, image-host, and layout controls in their current sections', () => {
+    const basic = readFileSync('src/components/settings/BasicSettingsSection.svelte', 'utf8')
     const layout = readFileSync('src/components/settings/NavigationSettingsSection.svelte', 'utf8')
     const hero = readFileSync('src/components/settings/HeroSettingsSection.svelte', 'utf8')
     const card = readFileSync('src/components/settings/CardSettingsSection.svelte', 'utf8')
@@ -63,7 +70,61 @@ describe('admin settings layout', () => {
     expect(hero).toContain('bind:checked={form.search_box_show}')
     expect(hero).toContain('bind:checked={form.search_engine_selector_show}')
     expect(search).not.toContain('form.search_box_show')
-    expect(appearance).toContain('bind:group={form.theme}')
+    expect(basic).toContain('bind:group={form.theme}')
+    expect(basic).not.toContain('form.image_host_url')
+    expect(appearance).toContain('bind:value={form.image_host_url}')
+    expect(appearance).not.toContain('bind:group={form.theme}')
+    expect(card).not.toContain('旧版')
+    expect(hero).not.toContain('标题与搜索')
+  })
+
+  it('connects a read-only live preview driven by the normalized form', () => {
+    const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
+    const preview = readFileSync('src/components/settings/SettingsHomePreview.svelte', 'utf8')
+
+    expect(panel).toContain('<SettingsHomePreview settings={normalizedForm} bind:theme={previewTheme} />')
+    expect(preview).toContain("import { buildHomeBackground } from '../../lib/appData'")
+    expect(preview).toContain("import BookmarkCard from '../BookmarkCard.svelte'")
+    expect(preview).toContain("import HomeHeroSearch from '../HomeHeroSearch.svelte'")
+    expect(preview).toContain('data-theme={theme}')
+    expect(preview).toContain('data-background-preset={previewSettings.background_preset_id}')
+    expect(preview).toContain('inert')
+    expect(preview).toContain('style={previewSettings.card_style}')
+    expect(preview).toContain('siteTitleFontSize={previewSettings.site_title_font_size}')
+    expect(preview).toContain('showIconTitle={previewSettings.card_icon_show_title}')
+    expect(preview).toContain('width={previewSettings.card_size.width}')
+    expect(preview).toContain('height={previewSettings.card_size.height}')
+    expect(preview).toContain("previewSettings.navigation.position === 'top'")
+    expect(preview).not.toContain('fetch(')
+    expect(preview).not.toContain('/api/')
+  })
+
+  it('keeps common appearance controls visible and gates advanced controls', () => {
+    const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
+    const appearance = readFileSync('src/components/settings/BackgroundSettingsSection.svelte', 'utf8')
+    const card = readFileSync('src/components/settings/CardSettingsSection.svelte', 'utf8')
+    const backgroundCard = readFileSync('src/components/settings/ThemeBackgroundCard.svelte', 'utf8')
+
+    expect(panel).toContain('appearanceAdvancedOpen = shouldAutoExpandAppearanceAdvanced(initialForm)')
+    expect(appearance).toContain('data-testid="appearance-advanced-toggle"')
+    expect(appearance).toContain('{#if advancedOpen}')
+    expect(card).toContain('{#if advancedOpen}')
+    expect(backgroundCard.indexOf('<span>背景值</span>')).toBeLessThan(backgroundCard.indexOf('<span>遮罩颜色</span>'))
+    expect(backgroundCard.indexOf('<span>遮罩颜色</span>')).toBeLessThan(backgroundCard.indexOf('<div class="background-range-grid">'))
+  })
+
+  it('stacks the admin shell and settings preview on narrow screens', () => {
+    const admin = readFileSync('src/views/Admin.svelte', 'utf8')
+    const sidebar = readFileSync('src/components/AdminSidebar.svelte', 'utf8')
+    const content = readFileSync('src/components/admin/AdminTabContent.svelte', 'utf8')
+    const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
+
+    expect(admin).toContain('@media (max-width: 720px)')
+    expect(admin).toContain('flex-direction: column')
+    expect(sidebar).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))')
+    expect(content).toContain('height: auto')
+    expect(panel).toContain('grid-template-columns: minmax(0, 1fr)')
+    expect(panel).toContain('position: static')
   })
 
   it('reuses favicon.im for search engine icons', () => {

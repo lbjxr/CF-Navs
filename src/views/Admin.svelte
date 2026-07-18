@@ -323,4 +323,19 @@
     }
 
   }
+
+  @media (max-width: 720px) {
+    .admin-page {
+      height: auto;
+      min-height: 100dvh;
+      padding: 12px;
+      overflow: visible;
+    }
+
+    .admin-layout {
+      flex-direction: column;
+      align-items: stretch;
+      overflow: visible;
+    }
+  }
 </style>

@@ -38,6 +38,8 @@
   export let height: number = 0
   export let canEdit = false
   export let sortMode = false
+  export let preview = false
+  export let themeOverride: 'light' | 'dark' | null = null
   export let onEdit: ((bookmark: PublicBookmark) => AsyncVoid) | undefined = undefined
 
   let cachedIconFailed = false
@@ -183,6 +185,10 @@
   }
 
   function handleLinkClick(event: MouseEvent) {
+    if (preview) {
+      event.preventDefault()
+      return
+    }
     if (shouldBlockCardNavigation(sortMode)) {
       event.preventDefault()
       return
@@ -279,6 +285,8 @@
       {infoIconSize}
       {infoIconStyle}
       {hasCustomIconBackground}
+      {preview}
+      {themeOverride}
       onLinkClick={handleLinkClick}
       onContextMenu={handleContextMenu}
       onIconError={handleIconError}
@@ -296,6 +304,8 @@
       iconUrl={hasRenderableIcon ? iconUrl : ''}
       {iconText}
       {hasCustomIconBackground}
+      {preview}
+      {themeOverride}
       onLinkClick={handleLinkClick}
       onContextMenu={handleContextMenu}
       onIconError={handleIconError}

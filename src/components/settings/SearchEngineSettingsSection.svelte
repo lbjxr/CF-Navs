@@ -70,7 +70,7 @@
           {/each}
         {/if}
       </select>
-      <small>首页搜索框默认选中的引擎；是否显示引擎选择器可在「标题与搜索」中设置。</small>
+      <small>首页搜索框默认选中的引擎；上方可控制搜索框和引擎选择器是否显示。</small>
     </label>
   </div>
 
@@ -241,6 +241,22 @@
 
     .favicon-button {
       grid-column: 1 / -1;
+      width: 100%;
+    }
+  }
+
+  @container settings-editor (max-width: 760px) {
+    .search-controls-grid .field-select {
+      grid-column: 1 / -1;
+    }
+
+    .engine-row {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+
+    .engine-cell.grow,
+    .engine-row .danger-button {
       width: 100%;
     }
   }

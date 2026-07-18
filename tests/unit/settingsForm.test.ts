@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { gradientPresets } from '../../src/lib/themePresets'
 import {
+  applyBackgroundPreset,
+  applyCustomThemeBackground,
   cloneSettingsForm,
   createSettingsFormState,
   defaultLightBackground,
   emptySettingsForm,
   getActiveGradientPresetId,
+  markBackgroundPresetCustom,
   normalizeBackgroundPresetId,
   normalizeBackgroundValueForType,
   normalizeSettingsForm,
+  shouldAutoExpandAppearanceAdvanced,
 } from '../../src/lib/settingsForm'
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -166,7 +170,6 @@ describe('settings form model', () => {
   it('detects gradient presets from background values', () => {
     const preset = gradientPresets[0]
     const form = createSettingsFormState({
-      background_preset_id: 'custom',
       backgrounds: {
         light: { ...preset.light },
         dark: { ...preset.dark },
@@ -175,6 +178,21 @@ describe('settings form model', () => {
 
     expect(form.background_preset_id).toBe(preset.id)
     expect(getActiveGradientPresetId(form)).toBe(preset.id)
+  })
+
+  it('keeps an explicitly saved custom preset custom even when values match a built-in scheme', () => {
+    const preset = gradientPresets[0]
+    const form = createSettingsFormState({
+      background_preset_id: 'custom',
+      backgrounds: {
+        light: { ...preset.light },
+        dark: { ...preset.dark },
+      },
+    })
+
+    expect(form.background_preset_id).toBe('custom')
+    expect(getActiveGradientPresetId(form)).toBe('custom')
+    expect(shouldAutoExpandAppearanceAdvanced(form)).toBe(true)
   })
 
   it('normalizes background values when switching type', () => {
@@ -210,5 +228,43 @@ describe('settings form model', () => {
 
   it('falls back to custom for unknown preset ids', () => {
     expect(normalizeBackgroundPresetId('unknown')).toBe('custom')
+  })
+
+  it('applies built-in presets and keeps their advanced panel collapsed by default', () => {
+    const source = createSettingsFormState(null)
+    const preset = gradientPresets[3]
+    const next = applyBackgroundPreset(source, preset)
+
+    expect(next.background_preset_id).toBe(preset.id)
+    expect(next.backgrounds.light).toEqual(preset.light)
+    expect(next.backgrounds.dark).toEqual(preset.dark)
+    expect(next.card_background_color).toBe(preset.cardBackgroundColor)
+    expect(next.card_background_opacity).toBe(preset.cardBackgroundOpacity)
+    expect(shouldAutoExpandAppearanceAdvanced(next)).toBe(false)
+  })
+
+  it('marks background edits as custom and expands custom appearance settings', () => {
+    const preset = gradientPresets[0]
+    const source = applyBackgroundPreset(createSettingsFormState(null), preset)
+    const editedBackground = { ...source.backgrounds.light, blur: 12, mask: 0.45 }
+    const next = applyCustomThemeBackground(source, 'light', editedBackground)
+
+    expect(next.background_preset_id).toBe('custom')
+    expect(next.backgrounds.light).toEqual(editedBackground)
+    expect(next.backgrounds.dark).toEqual(source.backgrounds.dark)
+    expect(shouldAutoExpandAppearanceAdvanced(next)).toBe(true)
+    expect(getActiveGradientPresetId(next)).toBe('custom')
+    expect(createSettingsFormState(next).background_preset_id).toBe('custom')
+    expect(markBackgroundPresetCustom(source).background_preset_id).toBe('custom')
+  })
+
+  it('keeps the selected preset when changing independent title and card dimensions', () => {
+    const preset = gradientPresets[1]
+    const next = applyBackgroundPreset(createSettingsFormState(null), preset)
+    next.site_title_font_size = 46
+    next.card_size = { width: 160, height: 90 }
+    next.card_icon_size = 75
+
+    expect(normalizeSettingsForm(next).background_preset_id).toBe(preset.id)
   })
 })

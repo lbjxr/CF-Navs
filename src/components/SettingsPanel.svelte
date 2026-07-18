@@ -5,6 +5,7 @@
     createSettingsFormState,
     emptySettingsForm,
     normalizeSettingsForm,
+    shouldAutoExpandAppearanceAdvanced,
     type SettingsFormModel,
   } from '../lib/settingsForm'
   import './settings/settingsSections.css'
@@ -15,6 +16,7 @@
   import HeroSettingsSection from './settings/HeroSettingsSection.svelte'
   import NavigationSettingsSection from './settings/NavigationSettingsSection.svelte'
   import SearchEngineSettingsSection from './settings/SearchEngineSettingsSection.svelte'
+  import SettingsHomePreview from './settings/SettingsHomePreview.svelte'
   import PasswordChangePanel from './PasswordChangePanel.svelte'
 
   type SettingsPanelValue = SettingsFormModel
@@ -28,11 +30,11 @@
   export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
 
   const settingsSections = [
-    { id: 'basic', label: '基础与标题', hint: '站点名称、公开状态与首页搜索' },
-    { id: 'appearance', label: '外观与卡片', hint: '主题、背景、卡片样式' },
+    { id: 'basic', label: '站点信息', hint: '标题、访问范围与默认主题' },
+    { id: 'appearance', label: '外观与卡片', hint: '配色、背景与书签卡片' },
     { id: 'layout', label: '布局与导航', hint: '内容宽度、边距与导航位置' },
-    { id: 'search', label: '搜索服务', hint: '搜索引擎与快捷入口' },
-    { id: 'footer', label: '页脚与扩展', hint: '页脚、自定义脚本与样式' },
+    { id: 'search', label: '搜索设置', hint: '显示范围与搜索引擎' },
+    { id: 'footer', label: '页脚内容', hint: '首页底部自定义内容' },
     { id: 'account', label: '账号安全', hint: '修改管理员密码' },
   ]
 
@@ -40,12 +42,15 @@
   let initialForm: SettingsPanelValue = cloneSettingsForm(emptySettingsForm)
   let formKey = ''
   let activeSectionId = 'basic'
+  let appearanceAdvancedOpen = false
+  let previewTheme: 'light' | 'dark' = 'light'
 
   $: nextKey = JSON.stringify({ value, loading })
   $: if (nextKey !== formKey) {
     formKey = nextKey
     initialForm = createSettingsFormState(value)
     form = cloneSettingsForm(initialForm)
+    appearanceAdvancedOpen = shouldAutoExpandAppearanceAdvanced(initialForm)
   }
 
   $: normalizedForm = normalizeSettingsForm(form)
@@ -91,6 +96,10 @@
     await onSubmit?.(normalizedForm)
   }
 
+  function handleAppearanceAdvancedChange(open: boolean): void {
+    appearanceAdvancedOpen = open
+  }
+
 </script>
 
 <section class="settings-panel" aria-busy={loading || saving}>
@@ -98,7 +107,7 @@
     <div class="panel-header-copy">
       <p class="panel-eyebrow">设置</p>
       <h2>站点设置</h2>
-      <p class="panel-desc">按功能区管理站点信息、外观、布局与账号。切换功能区不会丢失未保存内容，修改完成后使用右上角「保存设置」。</p>
+      <p class="panel-desc">按功能区管理站点信息、外观与访问方式。右侧预览直接使用当前未保存内容，保存后才会更新公开首页。</p>
     </div>
     <div class="header-actions">
       <p class="helper-text">
@@ -130,22 +139,37 @@
         {/each}
       </aside>
 
-      <div class="settings-section-content">
-        {#if activeSectionId === 'basic'}
-          <BasicSettingsSection bind:form {saving} />
-          <HeroSettingsSection bind:form {saving} />
-        {:else if activeSectionId === 'appearance'}
-          <BackgroundSettingsSection bind:form {saving} />
-          <CardSettingsSection bind:form {saving} />
-        {:else if activeSectionId === 'layout'}
-          <NavigationSettingsSection bind:form {saving} />
-        {:else if activeSectionId === 'search'}
-          <SearchEngineSettingsSection bind:form {saving} {enginesValid} />
-        {:else if activeSectionId === 'footer'}
-          <FooterSettingsSection bind:form {saving} />
-        {:else}
-          <PasswordChangePanel {saving} {onChangePassword} />
-        {/if}
+      <div class="settings-workspace">
+        <div class="settings-section-content">
+          {#if activeSectionId === 'basic'}
+            <BasicSettingsSection bind:form {saving} />
+          {:else if activeSectionId === 'appearance'}
+            <BackgroundSettingsSection
+              bind:form
+              {saving}
+              advancedOpen={appearanceAdvancedOpen}
+              onAdvancedChange={handleAppearanceAdvancedChange}
+            />
+          {:else if activeSectionId === 'layout'}
+            <NavigationSettingsSection bind:form {saving} />
+          {:else if activeSectionId === 'search'}
+            <HeroSettingsSection bind:form {saving} />
+          {/if}
+
+          {#if activeSectionId === 'appearance'}
+            <CardSettingsSection bind:form {saving} advancedOpen={appearanceAdvancedOpen} />
+          {:else if activeSectionId === 'search'}
+            <SearchEngineSettingsSection bind:form {saving} {enginesValid} />
+          {:else if activeSectionId === 'footer'}
+            <FooterSettingsSection bind:form {saving} />
+          {:else if activeSectionId === 'account'}
+            <PasswordChangePanel {saving} {onChangePassword} />
+          {/if}
+        </div>
+
+        <div class="settings-preview-column">
+          <SettingsHomePreview settings={normalizedForm} bind:theme={previewTheme} />
+        </div>
       </div>
 
     </form>
@@ -366,7 +390,7 @@
   .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; align-self: center; }
 
   .settings-submenu {
-    grid-column: span 3;
+    grid-column: span 1;
     align-self: start;
     display: grid;
     gap: 6px;
@@ -379,7 +403,7 @@
     gap: 4px;
     border: 1px solid transparent;
     border-radius: 12px;
-    padding: 12px 14px;
+    padding: 11px 8px;
     text-align: left;
     background: transparent;
     color: var(--sp-muted);
@@ -390,9 +414,38 @@
   .settings-submenu button:hover { background: var(--sp-toggle-bg); color: var(--sp-strong); transform: translateX(2px); }
   .settings-submenu button.active { border-color: var(--sp-toggle-border); background: var(--sp-toggle-bg); color: var(--sp-accent-strong); box-shadow: 0 6px 16px rgba(75, 83, 70, 0.06); }
   .settings-submenu strong { font-size: 13px; font-weight: 650; }
-  .settings-submenu span { font-size: 11px; line-height: 1.4; }
+  .settings-submenu span { display: none; font-size: 11px; line-height: 1.4; }
 
-  .settings-section-content { grid-column: span 9; display: grid; align-content: start; gap: 18px; min-width: 0; height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 8px; scrollbar-gutter: stable; }
+  .settings-workspace {
+    grid-column: span 11;
+    display: grid;
+    grid-template-columns: minmax(430px, 1.3fr) minmax(340px, 0.9fr);
+    gap: 18px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .settings-section-content {
+    container: settings-editor / inline-size;
+    display: grid;
+    align-content: start;
+    gap: 18px;
+    min-width: 0;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 8px;
+    scrollbar-gutter: stable;
+  }
+
+  .settings-preview-column {
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
 
   .helper-text {
     font-size: 13px;
@@ -434,6 +487,45 @@
     opacity: 0.5;
   }
 
+  @media (max-width: 1320px) {
+    .settings-panel {
+      height: auto;
+      min-height: 0;
+      overflow: visible;
+    }
+
+    .settings-form {
+      overflow: visible;
+    }
+
+    .settings-submenu {
+      grid-column: 1 / -1;
+      position: static;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .settings-submenu span {
+      display: block;
+    }
+
+    .settings-workspace {
+      grid-column: 1 / -1;
+      grid-template-columns: minmax(0, 1fr);
+      overflow: visible;
+    }
+
+    .settings-section-content {
+      height: auto;
+      overflow: visible;
+      padding-right: 0;
+    }
+
+    .settings-preview-column {
+      height: auto;
+      overflow: visible;
+    }
+  }
+
   @media (max-width: 960px) {
     .panel-header {
       grid-template-columns: 1fr;
@@ -447,9 +539,7 @@
       padding: 18px;
     }
 
-    .settings-submenu { grid-column: 1 / -1; position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .settings-panel { height: auto; min-height: 0; overflow: visible; }
-    .settings-section-content { grid-column: 1 / -1; height: auto; overflow: visible; padding-right: 0; }
+    .settings-submenu { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
 
   @media (max-width: 720px) {
@@ -461,6 +551,7 @@
     }
 
     .panel-header {
+      position: static;
       border-radius: 18px 18px 0 0;
       padding: 14px 16px 12px;
     }

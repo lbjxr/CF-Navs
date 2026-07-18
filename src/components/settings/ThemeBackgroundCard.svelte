@@ -134,6 +134,20 @@
           <small class="warn">请填写{isLight ? '浅色' : '深色'}模式背景值。</small>
         {/if}
       </div>
+
+      <div class="field background-mask-field">
+        <span>遮罩颜色</span>
+        <ColorAlphaInput
+          bind:value={background.maskColor}
+          bind:alpha={background.mask}
+          on:change={() => void syncBackground()}
+          placeholder={isLight ? '#ffffff' : '#000000'}
+          inputLabel={`${title}遮罩颜色值`}
+          swatchTitle={`选择${title}遮罩颜色`}
+          alphaText={`${title}遮罩透明度`}
+        />
+        <small>{isLight ? '浅色模式通常使用白色或浅灰。' : '深色模式通常使用黑色或深蓝。'}</small>
+      </div>
     </div>
 
     <div class="background-range-grid">
@@ -148,20 +162,6 @@
         <input bind:value={background.mask} type="range" min="0" max="1" step="0.05" on:input={() => void syncBackground()} />
         <small>叠加在背景上的遮罩，数值越大背景越淡。</small>
       </label>
-
-      <div class="field background-mask-field">
-        <span>遮罩颜色</span>
-        <ColorAlphaInput
-          bind:value={background.maskColor}
-          bind:alpha={background.mask}
-          on:change={() => void syncBackground()}
-          placeholder={isLight ? '#ffffff' : '#000000'}
-          inputLabel={`${title}遮罩颜色值`}
-          swatchTitle={`选择${title}遮罩颜色`}
-          alphaText={`${title}遮罩透明度`}
-        />
-        <small>{isLight ? '浅色常用白色或浅灰。' : '深色常用黑色或深蓝。'}</small>
-      </div>
     </div>
   </div>
 </section>
@@ -200,14 +200,23 @@
 
   .background-form {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 10px;
     min-width: 0;
   }
 
-  .background-main-row,
+  .background-main-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.55fr) minmax(220px, 1.45fr) minmax(190px, 1fr);
+    gap: 10px;
+    min-width: 0;
+    align-items: start;
+  }
+
   .background-range-grid {
-    display: contents;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    min-width: 0;
   }
 
   .field {
@@ -221,15 +230,8 @@
     align-content: start;
   }
 
-  .background-type-field,
-  .background-range-grid > .field {
-    order: 1;
-  }
-
   .background-value-field {
-    grid-column: 1 / -1;
-    order: 2;
-    padding-top: 2px;
+    min-width: 0;
   }
 
   .background-type-field select {
@@ -349,7 +351,8 @@
   }
 
   @media (max-width: 720px) {
-    .background-form {
+    .background-main-row,
+    .background-range-grid {
       grid-template-columns: 1fr;
     }
 
@@ -357,6 +360,22 @@
     .background-type-field select {
       width: 100%;
       min-width: 0;
+    }
+
+    .background-value-field .inline-input {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .background-value-field .ghost-button {
+      width: 100%;
+    }
+  }
+
+  @container settings-editor (max-width: 660px) {
+    .background-main-row,
+    .background-range-grid {
+      grid-template-columns: 1fr;
     }
 
     .background-value-field .inline-input {
