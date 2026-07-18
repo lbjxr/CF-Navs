@@ -155,15 +155,21 @@
               </div>
             </header>
 
-            <div class="preview-bookmarks" class:is-icon={previewSettings.card_style === 'icon'}>
+            <div
+              class="preview-bookmarks"
+              class:is-icon={previewSettings.card_style === 'icon'}
+              data-card-style={previewSettings.card_style}
+              data-card-description-mode={previewSettings.card_style === 'info' ? descriptionMode : 'hidden'}
+              data-card-icon-title={previewSettings.card_style === 'icon' ? String(previewSettings.card_icon_show_title) : 'false'}
+            >
               {#each previewBookmarks as bookmark (bookmark.id)}
                 <div class="preview-bookmark">
                   <BookmarkCard
                     {bookmark}
                     style={previewSettings.card_style}
                     iconSize={previewSettings.card_icon_size}
-                    {showDescription}
-                    {descriptionMode}
+                    showDescription={previewSettings.card_style === 'info' && showDescription}
+                    descriptionMode={previewSettings.card_style === 'info' ? descriptionMode : 'hidden'}
                     showIconTitle={previewSettings.card_icon_show_title}
                     width={previewSettings.card_size.width}
                     height={previewSettings.card_size.height}

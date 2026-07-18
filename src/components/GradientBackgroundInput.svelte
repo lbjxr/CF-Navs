@@ -8,8 +8,6 @@
   export let defaultEnd = '#0f172a'
   export let startLabel = '起始颜色'
   export let endLabel = '结束颜色'
-  export let manualLabel = '完整渐变值'
-  export let gradientPlaceholder = 'linear-gradient(135deg, #1e3a8a, #0f172a)'
 
   let startColor = defaultStart
   let endColor = defaultEnd
@@ -27,13 +25,6 @@
     startColor = stops?.[0] ?? (directColor || defaultStart)
     endColor = stops?.[1] ?? defaultEnd
     lastValue = nextValue
-  }
-
-  function handleManualInput(event: Event) {
-    const nextValue = (event.currentTarget as HTMLInputElement).value
-    value = nextValue
-    syncStopsFromValue(nextValue)
-    dispatch('change', value)
   }
 
   function handleStartChange(event: CustomEvent<string>) {
@@ -143,10 +134,6 @@
     </div>
   </div>
 
-  <label class="gradient-manual-field">
-    <span>{manualLabel}</span>
-    <input value={value} type="text" placeholder={gradientPlaceholder} on:input={handleManualInput} />
-  </label>
 </div>
 
 <style>
@@ -162,36 +149,16 @@
     gap: 10px;
   }
 
-  .gradient-color-field,
-  .gradient-manual-field {
+  .gradient-color-field {
     display: grid;
     gap: 8px;
     min-width: 0;
   }
 
-  .gradient-color-field span,
-  .gradient-manual-field span {
+  .gradient-color-field span {
     color: #334155;
     font-size: 13px;
     font-weight: 600;
-  }
-
-  .gradient-manual-field input {
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid #cbd5e1;
-    border-radius: 12px;
-    padding: 10px 12px;
-    font-size: 14px;
-    color: #0f172a;
-    background: #ffffff;
-    font-family: inherit;
-  }
-
-  .gradient-manual-field input:focus {
-    outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
   }
 
   @media (max-width: 720px) {

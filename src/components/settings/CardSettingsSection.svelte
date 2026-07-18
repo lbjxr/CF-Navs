@@ -46,15 +46,28 @@
     </div>
   </div>
 
-  <div class="settings-subsection description-mode-field" class:disabled={form.card_style !== 'info'}>
-    <h3>描述显示策略</h3>
-    <div class="radio-group compact">
-      <label class="radio-option"><input type="radio" bind:group={form.card_description_mode} value="always" disabled={form.card_style !== 'info'} /><span>始终显示</span></label>
-      <label class="radio-option"><input type="radio" bind:group={form.card_description_mode} value="hover" disabled={form.card_style !== 'info'} /><span>悬停显示</span></label>
-      <label class="radio-option"><input type="radio" bind:group={form.card_description_mode} value="hidden" disabled={form.card_style !== 'info'} /><span>隐藏</span></label>
+  {#if form.card_style === 'info'}
+    <div class="settings-subsection description-mode-field">
+      <h3>描述显示策略</h3>
+      <div class="radio-group compact">
+        <label class="radio-option"><input type="radio" bind:group={form.card_description_mode} value="always" /><span>始终显示</span></label>
+        <label class="radio-option"><input type="radio" bind:group={form.card_description_mode} value="hover" /><span>悬停显示</span></label>
+        <label class="radio-option"><input type="radio" bind:group={form.card_description_mode} value="hidden" /><span>隐藏</span></label>
+      </div>
+      <small>仅用于详情风格；单个书签仍可在编辑时覆盖这一策略。</small>
     </div>
-    <small>仅用于详情风格；单个书签仍可在编辑时覆盖这一策略。</small>
-  </div>
+  {:else}
+    <div class="settings-subsection icon-title-setting">
+      <h3>极简风格标题</h3>
+      <label class="toggle-field icon-title-toggle">
+        <div class="toggle-copy">
+          <span>显示极简卡片标题</span>
+          <p>在图标下方显示书签名称，仅对极简风格生效。</p>
+        </div>
+        <input type="checkbox" bind:checked={form.card_icon_show_title} />
+      </label>
+    </div>
+  {/if}
 
   {#if advancedOpen}
     <div id="settings-card-advanced" class="card-advanced" data-testid="card-advanced-settings">
@@ -66,14 +79,14 @@
             <input bind:value={form.card_size.width} type="number" min="80" max="400" step="10" />
             <small>数值越小，每行可排列的卡片越多。</small>
           </label>
-          <label class="field field-number">
+          <label class="field field-number" class:disabled={form.card_style !== 'info'}>
             <span>详情卡片最小高度 (px)</span>
-            <input bind:value={form.card_size.height} type="number" min="0" max="300" step="10" />
+            <input bind:value={form.card_size.height} type="number" min="0" max="300" step="10" disabled={form.card_style !== 'info'} />
             <small>仅影响详情风格；设置为 0 时由内容决定高度。</small>
           </label>
-          <label class="field field-number">
+          <label class="field field-number" class:disabled={form.card_style !== 'icon'}>
             <span>极简卡片图标大小 (px)</span>
-            <input bind:value={form.card_icon_size} type="number" min="40" max="100" step="5" />
+            <input bind:value={form.card_icon_size} type="number" min="40" max="100" step="5" disabled={form.card_style !== 'icon'} />
             <small>控制极简风格中图标卡片的边长。</small>
           </label>
         </div>
@@ -117,17 +130,6 @@
         </div>
       </div>
 
-      <label class="toggle-field icon-title-toggle" class:disabled={form.card_style !== 'icon'}>
-        <div class="toggle-copy">
-          <span>显示极简卡片标题</span>
-          <p>在图标下方显示书签名称，仅对极简风格生效。</p>
-        </div>
-        <input
-          type="checkbox"
-          bind:checked={form.card_icon_show_title}
-          disabled={saving || form.card_style !== 'icon'}
-        />
-      </label>
     </div>
   {/if}
 </fieldset>
@@ -192,7 +194,7 @@
     line-height: 1.5;
   }
 
-  .description-mode-field.disabled {
+  .field.disabled {
     opacity: 0.58;
   }
 

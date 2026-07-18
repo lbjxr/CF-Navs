@@ -11,6 +11,12 @@
 
   $: glassPresets = gradientPresets.filter((preset) => preset.surface === 'glass')
   $: flatPresets = gradientPresets.filter((preset) => preset.surface === 'flat')
+  $: presetGroups = [
+    { label: '毛玻璃氛围', hint: '渐变背景、半透明卡片与柔和光晕', items: glassPresets },
+    { label: '护眼纯色', hint: '低饱和纯色背景与不透明卡片', items: flatPresets },
+  ]
+
+  let presetsExpanded = false
 </script>
 
 <div class="gradient-preset-panel">
@@ -26,8 +32,9 @@
     {/if}
   </div>
 
-  {#each [{ label: '毛玻璃氛围', hint: '渐变背景、半透明卡片与柔和光晕', items: glassPresets }, { label: '护眼纯色', hint: '低饱和纯色背景与不透明卡片', items: flatPresets }] as group (group.label)}
-    <div class="gradient-preset-group">
+  <div id="builtin-preset-groups" class="builtin-preset-groups">
+  {#each presetGroups as group (group.label)}
+    <div class="gradient-preset-group" class:collapsed={!presetsExpanded}>
       <div class="gradient-preset-group-title"><strong>{group.label}</strong><span>{group.hint}</span></div>
       <div class="gradient-preset-grid">
       {#each group.items as preset (preset.id)}
@@ -35,6 +42,8 @@
         class="gradient-preset-option"
         class:active={activeGradientPresetId === preset.id}
         style={`--preset-light-bg: ${preset.light.value}; --preset-dark-bg: ${preset.dark.value};`}
+        title={`${preset.label}：${preset.description}`}
+        aria-label={`${preset.label}：${preset.description}`}
       >
         <input
           type="radio"
@@ -55,6 +64,19 @@
       </div>
     </div>
   {/each}
+  </div>
+
+  <button
+    type="button"
+    class="preset-expand-toggle"
+    aria-expanded={presetsExpanded}
+    aria-controls="builtin-preset-groups"
+    data-testid="gradient-preset-toggle"
+    on:click={() => presetsExpanded = !presetsExpanded}
+  >
+    <span>{presetsExpanded ? '收起其他方案' : '查看更多方案'}</span>
+    <span aria-hidden="true">{presetsExpanded ? '⌃' : '⌄'}</span>
+  </button>
 
   <div class="gradient-preset-group">
     <div class="gradient-preset-group-title"><strong>自定义</strong><span>手动维护浅色/深色背景与卡片参数</span></div>
@@ -120,11 +142,13 @@
 
   .gradient-preset-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px;
   }
 
   .gradient-preset-group { display: grid; gap: 8px; }
+  .builtin-preset-groups { display: grid; gap: 10px; }
+  .gradient-preset-group.collapsed .gradient-preset-option:nth-child(n + 5) { display: none; }
   .gradient-preset-group-title { display: flex; align-items: baseline; gap: 10px; }
   .gradient-preset-group-title strong { color: var(--sp-heading); font-size: 13px; }
   .gradient-preset-group-title span { color: var(--sp-muted); font-size: 12px; }
@@ -146,6 +170,27 @@
       box-shadow 0.18s ease,
       transform 0.18s ease,
       background 0.18s ease;
+  }
+
+  .preset-expand-toggle {
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    padding: 2px 0;
+    background: transparent;
+    color: var(--sp-accent);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+
+  .preset-expand-toggle:focus-visible {
+    outline: 2px solid var(--sp-accent);
+    outline-offset: 3px;
+    border-radius: 4px;
   }
 
   .gradient-preset-option:hover {
@@ -255,8 +300,16 @@
     display: -webkit-box;
     overflow: hidden;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
-    line-clamp: 1;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+
+  .gradient-preset-option:hover .preset-copy small,
+  .gradient-preset-option:focus-within .preset-copy small {
+    overflow: visible;
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
   }
 
   @media (max-width: 720px) {
@@ -265,7 +318,21 @@
     }
 
     .gradient-preset-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .gradient-preset-group.collapsed .gradient-preset-option:nth-child(n + 3) {
+      display: none;
+    }
+  }
+
+  @media (max-width: 960px) and (min-width: 721px) {
+    .gradient-preset-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .gradient-preset-group.collapsed .gradient-preset-option:nth-child(n + 4) { display: none; }
+  }
+
+  @media (max-width: 480px) {
+    .gradient-preset-grid { grid-template-columns: 1fr; }
+    .gradient-preset-group.collapsed .gradient-preset-option:nth-child(n + 2) { display: none; }
   }
 </style>

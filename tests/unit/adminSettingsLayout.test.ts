@@ -113,6 +113,27 @@ describe('admin settings layout', () => {
     expect(backgroundCard.indexOf('<span>遮罩颜色</span>')).toBeLessThan(backgroundCard.indexOf('<div class="background-range-grid">'))
   })
 
+  it('collapses built-in presets, removes manual gradient values, and binds card controls to style', () => {
+    const presets = readFileSync('src/components/settings/GradientPresetSelector.svelte', 'utf8')
+    const backgroundCard = readFileSync('src/components/settings/ThemeBackgroundCard.svelte', 'utf8')
+    const gradientInput = readFileSync('src/components/GradientBackgroundInput.svelte', 'utf8')
+    const card = readFileSync('src/components/settings/CardSettingsSection.svelte', 'utf8')
+    const preview = readFileSync('src/components/settings/SettingsHomePreview.svelte', 'utf8')
+
+    expect(presets).toContain('data-testid="gradient-preset-toggle"')
+    expect(presets).toContain('class:collapsed={!presetsExpanded}')
+    expect(presets).toContain('title={`${preset.label}：${preset.description}`}')
+    expect(backgroundCard).toContain('role="radiogroup"')
+    expect(backgroundCard).not.toContain('<select')
+    expect(backgroundCard).not.toContain('完整渐变值')
+    expect(gradientInput).not.toContain('gradient-manual-field')
+    expect(card).toContain('{#if form.card_style === \'info\'}')
+    expect(card).toContain('disabled={form.card_style !== \'info\'}')
+    expect(card).toContain('disabled={form.card_style !== \'icon\'}')
+    expect(preview).toContain('data-card-description-mode=')
+    expect(preview).toContain('showDescription={previewSettings.card_style === \'info\' && showDescription}')
+  })
+
   it('stacks the admin shell and settings preview on narrow screens', () => {
     const admin = readFileSync('src/views/Admin.svelte', 'utf8')
     const sidebar = readFileSync('src/components/AdminSidebar.svelte', 'utf8')
