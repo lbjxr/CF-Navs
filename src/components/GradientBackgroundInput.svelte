@@ -110,7 +110,6 @@
 <div class="gradient-input-shell">
   <div class="gradient-color-grid">
     <div class="gradient-color-field">
-      <span>{startLabel}</span>
       <ColorAlphaInput
         bind:value={startColor}
         placeholder={defaultStart}
@@ -119,10 +118,10 @@
         alphaText={`${startLabel}透明度`}
         on:change={handleStartChange}
       />
+      <span class="gradient-color-label">{startLabel}</span>
     </div>
 
     <div class="gradient-color-field">
-      <span>{endLabel}</span>
       <ColorAlphaInput
         bind:value={endColor}
         placeholder={defaultEnd}
@@ -131,6 +130,7 @@
         alphaText={`${endLabel}透明度`}
         on:change={handleEndChange}
       />
+      <span class="gradient-color-label">{endLabel}</span>
     </div>
   </div>
 
@@ -155,10 +155,10 @@
     min-width: 0;
   }
 
-  .gradient-color-field span {
-    color: #334155;
-    font-size: 13px;
-    font-weight: 600;
+  .gradient-color-label {
+    color: var(--sp-muted, #64748b);
+    font-size: 12px;
+    line-height: 1.4;
   }
 
   @media (max-width: 720px) {
