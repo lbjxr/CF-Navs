@@ -15,6 +15,11 @@ export type HomeSection = {
   children: HomeSection[]
 }
 
+export type HomeCategorySelection = {
+  root: CategoryNode<PublicCategory> | null
+  child: CategoryNode<PublicCategory> | null
+}
+
 export function clampTitleFontSize(value: number | undefined): number {
   if (!Number.isFinite(value)) return 32
   return Math.min(72, Math.max(16, Number(value)))
@@ -73,27 +78,36 @@ export function groupBookmarksByCategory(items: PublicBookmark[]): Map<number, P
   return grouped
 }
 
+export function getCategoryTreeBookmarkCount(
+  category: CategoryNode<PublicCategory>,
+  categoryBookmarks: Map<number, PublicBookmark[]>,
+): number {
+  return (categoryBookmarks.get(category.id)?.length ?? 0)
+    + category.children.reduce(
+      (total, child) => total + (categoryBookmarks.get(child.id)?.length ?? 0),
+      0,
+    )
+}
+
 export function getHomeSections(
   categories: CategoryNode<PublicCategory>[],
   categoryBookmarks: Map<number, PublicBookmark[]>,
 ): HomeSection[] {
-  return categories.map((category) => ({
-    id: `category-${category.id}`,
-    title: category.title,
-    count: categoryBookmarks.get(category.id)?.length ?? 0,
-    children: (category.children ?? []).map((child) => ({
+  return categories.map((category) => {
+    const children = (category.children ?? []).map((child) => ({
       id: `category-${child.id}`,
       title: child.title,
       count: categoryBookmarks.get(child.id)?.length ?? 0,
       children: [],
-    })),
-  }))
-}
+    }))
 
-export function getHomeSectionsKey(sections: HomeSection[]): string {
-  return sections
-    .flatMap((section) => [section.id, ...section.children.map((child) => child.id)])
-    .join('|')
+    return {
+      id: `category-${category.id}`,
+      title: category.title,
+      count: getCategoryTreeBookmarkCount(category, categoryBookmarks),
+      children,
+    }
+  })
 }
 
 export function resolveHomeActiveSectionId(sections: HomeSection[], activeId: string): string {
@@ -101,13 +115,24 @@ export function resolveHomeActiveSectionId(sections: HomeSection[], activeId: st
   return ids.has(activeId) ? activeId : sections[0]?.id ?? ''
 }
 
-export function getHomeSectionPathIds(sections: HomeSection[], targetId: string): string[] {
-  for (const section of sections) {
-    if (section.id === targetId) return [section.id]
-    if (section.children.some((child) => child.id === targetId)) return [section.id, targetId]
+export function resolveHomeCategorySelection(
+  forest: CategoryNode<PublicCategory>[],
+  activeId: string | number | null | undefined,
+): HomeCategorySelection {
+  const normalizedId = String(activeId ?? '')
+
+  for (const root of forest) {
+    if (`category-${root.id}` === normalizedId || String(root.id) === normalizedId) {
+      return { root, child: null }
+    }
+
+    const child = root.children.find((candidate) => (
+      `category-${candidate.id}` === normalizedId || String(candidate.id) === normalizedId
+    ))
+    if (child) return { root, child }
   }
 
-  return []
+  return { root: forest[0] ?? null, child: null }
 }
 
 export function getVisibleCategoryForest(
@@ -115,20 +140,6 @@ export function getVisibleCategoryForest(
   visibleCategoryIds: Set<number> | null,
 ): CategoryNode<PublicCategory>[] {
   return visibleCategoryIds ? filterCategoryForest(forest, visibleCategoryIds) : forest
-}
-
-export function getNearestIntersectingSectionId(intersectingSectionTops: Map<string, number>): string {
-  let nextActiveId = ''
-  let nearestDistance = Number.POSITIVE_INFINITY
-
-  for (const [sectionId, distance] of intersectingSectionTops) {
-    if (distance < nearestDistance) {
-      nearestDistance = distance
-      nextActiveId = sectionId
-    }
-  }
-
-  return nextActiveId
 }
 
 export type HomeScrollTargetInput = {

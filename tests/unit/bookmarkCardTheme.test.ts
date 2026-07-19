@@ -82,7 +82,7 @@ describe('bookmark card theme styles', () => {
   it('releases section paint containment while a tooltip can be interactive', () => {
     const home = readFileSync('src/views/Home.svelte', 'utf8')
     const interactiveRule = home.match(
-      /\.section-shell:hover,\s*\.section-shell:focus-within,\s*\.section-list\.is-navigation-layout-ready \.section-shell\s*\{([^}]+)\}/,
+      /\.search-category-group:hover,\s*\.search-category-group:focus-within\s*\{([^}]+)\}/,
     )?.[1] ?? ''
 
     expect(home).toContain('content-visibility: auto;')

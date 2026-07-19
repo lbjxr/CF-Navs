@@ -48,6 +48,7 @@
   let reportedPersistentExpansion: boolean | null = null
   let navigationRoot: HTMLElement | null = null
   let expandedParentIds = new Set<string>()
+  let revealedActiveParentId = ''
   let openTopMenuId = ''
   let topMenuStyle = ''
   let topMenuAnchor: HTMLElement | null = null
@@ -95,6 +96,13 @@
   $: activeParentId = items.find((item) => (
     item.children?.some((child) => String(child.id) === String(activeId))
   ))?.id
+
+  $: if (isTop || activeParentId == null) revealedActiveParentId = ''
+
+  $: if (!isTop && activeParentId != null && String(activeParentId) !== revealedActiveParentId) {
+    revealedActiveParentId = String(activeParentId)
+    expandedParentIds = new Set([...expandedParentIds, revealedActiveParentId])
+  }
 
   function checkIsMobile(): void {
     isMobileView = window.innerWidth < MOBILE_WIDTH

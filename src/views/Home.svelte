@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte'
+  import { onDestroy, tick } from 'svelte'
   import Sidebar from '../components/Sidebar.svelte'
   import CategorySection from '../components/CategorySection.svelte'
+  import HomeCategoryScope from '../components/HomeCategoryScope.svelte'
   import HomeContentSummary from '../components/HomeContentSummary.svelte'
   import HomeEmptyPanel from '../components/HomeEmptyPanel.svelte'
   import HomeFloatingActions from '../components/HomeFloatingActions.svelte'
@@ -11,23 +12,21 @@
     bookmarkMatchesSearch,
     clampTitleFontSize,
     createHomeDataMemo,
-    getHomeSections,
-    getHomeSectionsKey,
-    getHomeSectionPathIds,
+    getCategoryTreeBookmarkCount,
     getHomeScrollTarget,
-    getNearestIntersectingSectionId,
+    getHomeSections,
     getVisibleCategoryIds,
     getVisibleCategoryForest,
     groupBookmarksByCategory,
     normalizeSearchQuery,
     resolveHomeActiveSectionId,
+    resolveHomeCategorySelection,
   } from '../lib/homeData'
 
   type AsyncVoid<T = void> = T | Promise<T>
   const SEARCH_FILTER_DEBOUNCE_MS = 120
   const LEFT_NAV_SCROLL_TOP_OFFSET = 80
   const TOP_NAV_SCROLL_TOP_OFFSET = 88
-  const NAV_SCROLL_RELEASE_DELAY_MS = 900
   const homeData = createHomeDataMemo()
 
   export let categories: PublicCategory[] = []
@@ -46,35 +45,33 @@
   export let activeThemeMode: ThemeMode = 'auto'
   export let onToggleTheme: (() => AsyncVoid) | undefined = undefined
 
-  let categoryBookmarks = new Map<number, PublicBookmark[]>()
-  let categoryTitleById = new Map<number, string>()
-  let searchTextByBookmarkId = new Map<number, string>()
-  let sectionElements: HTMLElement[] = []
-  let activeId = ''
-  let isScrolling = false
-  let navigationLayoutReady = false
-  let navigationRequestId = 0
   let searchQuery = ''
-  let sectionsKey = ''
-  let isMounted = false
-  let sectionObserver: IntersectionObserver | null = null
-  let fallbackScrollTimer: ReturnType<typeof setTimeout> | null = null
-  let searchFilterTimer: ReturnType<typeof setTimeout> | null = null
-  let navigationReleaseTimer: ReturnType<typeof setTimeout> | null = null
-  let usingFallbackScroll = false
-  let intersectingSectionTops = new Map<string, number>()
   let deferredSearchQuery = ''
-  let trackedNavigationOffset = 0
+  let searchFilterTimer: ReturnType<typeof setTimeout> | null = null
+  let activeId = ''
   let persistentLeftExpanded = true
-  let expandedCategoryIds = new Set<string>()
-  let expansionScopeKey = ''
+  let contentAnchor: HTMLElement | null = null
 
   $: sortedCategories = homeData.getSortedCategories(categories)
   $: categoryForest = homeData.getCategoryForest(categories)
   $: sortedBookmarks = homeData.getSortedBookmarks(bookmarks)
-  $: if (searchQuery !== deferredSearchQuery) {
-    scheduleSearchFilterUpdate(searchQuery)
-  }
+  $: allCategoryBookmarks = groupBookmarksByCategory(sortedBookmarks)
+  $: navigationSections = getHomeSections(categoryForest, allCategoryBookmarks)
+  $: activeId = resolveHomeActiveSectionId(navigationSections, activeId)
+  $: activeSelection = resolveHomeCategorySelection(categoryForest, activeId)
+  $: activeRoot = activeSelection.root
+  $: activeChild = activeSelection.child
+  $: activeRootBookmarks = activeRoot ? allCategoryBookmarks.get(activeRoot.id) ?? [] : []
+  $: activeChildBookmarks = activeChild ? allCategoryBookmarks.get(activeChild.id) ?? [] : []
+  $: activeRootTotal = activeRoot ? getCategoryTreeBookmarkCount(activeRoot, allCategoryBookmarks) : 0
+  $: activeScopeItems = activeRoot?.children.map((child) => ({
+    id: child.id,
+    title: child.title,
+    count: allCategoryBookmarks.get(child.id)?.length ?? 0,
+  })) ?? []
+  $: activeCategoryId = activeChild?.id ?? activeRoot?.id ?? null
+
+  $: if (searchQuery !== deferredSearchQuery) scheduleSearchFilterUpdate(searchQuery)
   $: normalizedSearchQuery = normalizeSearchQuery(deferredSearchQuery)
   $: hasSearchQuery = normalizedSearchQuery.length > 0
   $: categoryTitleById = homeData.getCategoryTitleMap(sortedCategories)
@@ -85,20 +82,7 @@
   $: visibleCategoryIds = hasSearchQuery ? getVisibleCategoryIds(visibleBookmarks) : null
   $: visibleCategoryForest = getVisibleCategoryForest(categoryForest, visibleCategoryIds)
   $: visibleCategories = visibleCategoryForest.flatMap((category) => [category, ...category.children])
-
-  $: categoryBookmarks = groupBookmarksByCategory(visibleBookmarks)
-  $: sections = getHomeSections(visibleCategoryForest, categoryBookmarks)
-  $: nextSectionsKey = getHomeSectionsKey(sections)
-  $: if (nextSectionsKey !== sectionsKey) {
-    sectionsKey = nextSectionsKey
-    navigationLayoutReady = false
-    void refreshSectionElementsAfterRender()
-  }
-  $: nextExpansionScopeKey = `${sectionsKey}:${hasSearchQuery ? normalizedSearchQuery : ''}`
-  $: if (nextExpansionScopeKey !== expansionScopeKey) {
-    expansionScopeKey = nextExpansionScopeKey
-    expandedCategoryIds = hasSearchQuery ? new Set(sections.flatMap((section) => [section.id, ...section.children.map((child) => child.id)])) : new Set()
-  }
+  $: visibleCategoryBookmarks = groupBookmarksByCategory(visibleBookmarks)
 
   $: totalBookmarks = sortedBookmarks.length
   $: visibleBookmarkCount = visibleBookmarks.length
@@ -124,197 +108,42 @@
     `--content-margin-bottom: ${contentLayout.margin_bottom}%`,
     cardTextColor ? `--card-text-color: ${cardTextColor}` : '',
   ].filter(Boolean).join('; ')
-  $: pageDescription =
-    totalBookmarks > 0
-      ? `已整理 ${sortedCategories.length} 个分类，收录 ${totalBookmarks} 个站点。`
-      : '一个简洁的公开导航首页。'
+  $: pageDescription = totalBookmarks > 0
+    ? `已整理 ${sortedCategories.length} 个分类，收录 ${totalBookmarks} 个站点。`
+    : '一个简洁的公开导航首页。'
 
-  $: activeId = resolveHomeActiveSectionId(sections, activeId)
-  $: if (isMounted && navigationScrollOffset !== trackedNavigationOffset) {
-    setupSectionTracking()
-  }
-
-  function scheduleSearchFilterUpdate(value: string) {
+  function scheduleSearchFilterUpdate(value: string): void {
     if (typeof window === 'undefined') {
       deferredSearchQuery = value
       return
     }
 
-    if (searchFilterTimer) {
-      window.clearTimeout(searchFilterTimer)
-    }
-
+    if (searchFilterTimer) window.clearTimeout(searchFilterTimer)
     searchFilterTimer = window.setTimeout(() => {
       searchFilterTimer = null
       deferredSearchQuery = value
     }, SEARCH_FILTER_DEBOUNCE_MS)
   }
 
-  function refreshSectionElements() {
-    sectionElements = Array.from(document.querySelectorAll<HTMLElement>('[data-section-id]'))
-    if (isMounted) setupSectionTracking()
-  }
-
-  async function refreshSectionElementsAfterRender() {
-    if (typeof document === 'undefined') return
-    await tick()
-    refreshSectionElements()
-  }
-
-  function getSectionId(sectionElement: Element): string {
-    return (sectionElement as HTMLElement).dataset.sectionId ?? ''
-  }
-
-  function disconnectSectionTracking() {
-    sectionObserver?.disconnect()
-    sectionObserver = null
-    intersectingSectionTops.clear()
-
-    if (typeof window !== 'undefined' && usingFallbackScroll) {
-      window.removeEventListener('scroll', handleMainScroll)
-      usingFallbackScroll = false
-    }
-
-    if (typeof window !== 'undefined' && fallbackScrollTimer) {
-      window.clearTimeout(fallbackScrollTimer)
-      fallbackScrollTimer = null
-    }
-  }
-
-  function clearNavigationTimers() {
-    if (typeof window === 'undefined') return
-
-    if (navigationReleaseTimer) {
-      window.clearTimeout(navigationReleaseTimer)
-      navigationReleaseTimer = null
-    }
-  }
-
-  function setupSectionTracking() {
-    if (typeof window === 'undefined') return
-
-    const browserWindow = window
-    disconnectSectionTracking()
-    trackedNavigationOffset = navigationScrollOffset
-    if (sectionElements.length === 0) return
-
-    if (typeof IntersectionObserver !== 'undefined') {
-      sectionObserver = new IntersectionObserver(handleSectionIntersections, {
-        root: null,
-        rootMargin: `-${navigationScrollOffset + 40}px 0px -55% 0px`,
-        threshold: [0, 0.01],
-      })
-
-      for (const sectionElement of sectionElements) {
-        sectionObserver.observe(sectionElement)
-      }
-      return
-    }
-
-    usingFallbackScroll = true
-    browserWindow.addEventListener('scroll', handleMainScroll, { passive: true })
-    updateActiveSectionFromLayout()
-  }
-
-  function handleSectionIntersections(entries: IntersectionObserverEntry[]) {
-    for (const entry of entries) {
-      const sectionId = getSectionId(entry.target)
-      if (!sectionId) continue
-
-      if (entry.isIntersecting) {
-        intersectingSectionTops.set(sectionId, Math.abs(entry.boundingClientRect.top - navigationScrollOffset))
-      } else {
-        intersectingSectionTops.delete(sectionId)
-      }
-    }
-
-    updateActiveSectionFromIntersections()
-  }
-
-  function updateActiveSectionFromIntersections() {
-    const nextActiveId = getNearestIntersectingSectionId(intersectingSectionTops)
-    if (nextActiveId && nextActiveId !== activeId) {
-      activeId = nextActiveId
-    }
-  }
-
-  function updateActiveSectionFromLayout() {
-    const threshold = navigationScrollOffset + 60
-    let nextActiveId = sectionElements[0]?.dataset.sectionId ?? ''
-
-    for (const sectionElement of sectionElements) {
-      if (sectionElement.getBoundingClientRect().top <= threshold) {
-        nextActiveId = sectionElement.dataset.sectionId ?? nextActiveId
-      }
-    }
-
-    activeId = nextActiveId
-  }
-
-  function handleMainScroll() {
-    if (isScrolling || fallbackScrollTimer) return
-
-    fallbackScrollTimer = window.setTimeout(() => {
-      fallbackScrollTimer = null
-      updateActiveSectionFromLayout()
-    }, 140)
-  }
-
-  onMount(() => {
-    isMounted = true
-    refreshSectionElements()
-  })
-
-  onDestroy(() => {
-    isMounted = false
-    disconnectSectionTracking()
+  function clearSearchImmediately(): void {
     if (typeof window !== 'undefined' && searchFilterTimer) {
       window.clearTimeout(searchFilterTimer)
       searchFilterTimer = null
     }
-    clearNavigationTimers()
-  })
-
-  function waitForNextFrame(): Promise<void> {
-    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
-      return Promise.resolve()
-    }
-
-    return new Promise((resolve) => {
-      window.requestAnimationFrame(() => resolve())
-    })
+    searchQuery = ''
+    deferredSearchQuery = ''
   }
 
-  async function ensureNavigationLayoutReady(): Promise<void> {
-    if (navigationLayoutReady) return
+  function normalizeSectionId(id: string | number): string {
+    const value = String(id)
+    return value.startsWith('category-') ? value : `category-${value}`
+  }
 
-    navigationLayoutReady = true
+  async function scrollContentIntoView(): Promise<void> {
     await tick()
-    await waitForNextFrame()
-  }
+    if (!contentAnchor || typeof window === 'undefined') return
 
-  function setCategoryExpanded(categoryId: string | number, expanded: boolean) {
-    const id = `category-${categoryId}`
-    const next = new Set(expandedCategoryIds)
-    if (expanded) next.add(id)
-    else next.delete(id)
-    expandedCategoryIds = next
-    void refreshSectionElementsAfterRender()
-  }
-
-  async function expandNavigationPath(targetId: string): Promise<void> {
-    const pathIds = getHomeSectionPathIds(sections, targetId)
-    if (pathIds.length === 0) return
-
-    const next = new Set(expandedCategoryIds)
-    pathIds.forEach((id) => next.add(id))
-    expandedCategoryIds = next
-    await tick()
-    refreshSectionElements()
-  }
-
-  function scrollToSection(sectionElement: HTMLElement, behavior: ScrollBehavior): void {
-    const targetRect = sectionElement.getBoundingClientRect()
+    const targetRect = contentAnchor.getBoundingClientRect()
     const finalScroll = getHomeScrollTarget({
       currentScroll: window.scrollY,
       targetTop: targetRect.top,
@@ -323,41 +152,21 @@
       desiredTopDistance: navigationScrollOffset,
     })
 
-    window.scrollTo({
-      top: finalScroll,
-      behavior,
-    })
+    window.scrollTo({ top: finalScroll, behavior: 'smooth' })
   }
 
-  async function handleNavigate(id: string | number) {
-    clearNavigationTimers()
-    const requestId = ++navigationRequestId
-    const targetId = String(id)
+  async function handleNavigate(id: string | number): Promise<void> {
+    clearSearchImmediately()
+    activeId = resolveHomeActiveSectionId(navigationSections, normalizeSectionId(id))
+    await scrollContentIntoView()
+  }
 
-    isScrolling = true
-    activeId = targetId
-
-    await expandNavigationPath(targetId)
-    await ensureNavigationLayoutReady()
-    if (requestId !== navigationRequestId) return
-
-    const targetElement =
-      sectionElements.find((sectionElement) => sectionElement.dataset.sectionId === targetId) ??
-      document.querySelector<HTMLElement>(`[data-section-id="${targetId}"]`)
-
-    if (!targetElement) {
-      isScrolling = false
-      return
+  onDestroy(() => {
+    if (typeof window !== 'undefined' && searchFilterTimer) {
+      window.clearTimeout(searchFilterTimer)
+      searchFilterTimer = null
     }
-
-    scrollToSection(targetElement, 'smooth')
-
-    navigationReleaseTimer = setTimeout(() => {
-      navigationReleaseTimer = null
-      isScrolling = false
-    }, NAV_SCROLL_RELEASE_DELAY_MS)
-  }
-
+  })
 </script>
 
 <svelte:head>
@@ -393,34 +202,125 @@
   />
 
   <Sidebar
-    items={sections}
+    items={navigationSections}
     {activeId}
     {navigation}
     onNavigate={handleNavigate}
     onPersistentExpansionChange={(expanded) => (persistentLeftExpanded = expanded)}
   />
 
-  <div class="content-layout">
+  <div class="content-layout" bind:this={contentAnchor}>
     <main class="content-panel">
-      <HomeContentSummary
-        {hasSearchQuery}
-        visibleCategoriesCount={visibleCategories.length}
-        {visibleBookmarkCount}
-        totalCategories={sortedCategories.length}
-        {totalBookmarks}
-      />
+      {#if hasSearchQuery}
+        <HomeContentSummary
+          {hasSearchQuery}
+          visibleCategoriesCount={visibleCategories.length}
+          {visibleBookmarkCount}
+          totalCategories={sortedCategories.length}
+          {totalBookmarks}
+        />
 
-      {#if visibleCategories.length > 0}
-        <div class="section-list" class:is-navigation-layout-ready={navigationLayoutReady}>
-          {#each visibleCategoryForest as category (category.id)}
-            <div class="section-shell root-section-shell" data-section-id={`category-${category.id}`}>
+        {#if visibleCategoryForest.length > 0}
+          <div class="search-results" aria-label="搜索结果">
+            {#each visibleCategoryForest as category (category.id)}
+              <section class="search-category-group" aria-labelledby={`search-category-${category.id}`}>
+                <header class="search-group-header">
+                  <h2 id={`search-category-${category.id}`}>{category.title}</h2>
+                  <span>{getCategoryTreeBookmarkCount(category, visibleCategoryBookmarks)} 个匹配站点</span>
+                </header>
+
+                <div class="search-section-list">
+                  {#if (visibleCategoryBookmarks.get(category.id)?.length ?? 0) > 0}
+                    <CategorySection
+                      category={category}
+                      bookmarks={visibleCategoryBookmarks.get(category.id) ?? []}
+                      level={2}
+                      displayTitle="本分类"
+                      showCategoryIcon={false}
+                      showEmpty={false}
+                      canAddBookmark={isAuthenticated}
+                      cardWidth={settings?.card_size?.width ?? 80}
+                      cardHeight={settings?.card_size?.height ?? 60}
+                      cardStyle={settings?.card_style ?? 'info'}
+                      cardIconSize={settings?.card_icon_size ?? 60}
+                      cardShowDescription={settings?.card_show_description ?? true}
+                      cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+                      cardIconShowTitle={settings?.card_icon_show_title ?? true}
+                      canSort={false}
+                      onAddBookmark={onOpenCreateBookmark}
+                      onEditBookmark={onEditBookmark}
+                      onSortBookmarks={onSortBookmarksInCategory}
+                    />
+                  {/if}
+
+                  {#each category.children as child (child.id)}
+                    <CategorySection
+                      category={child}
+                      bookmarks={visibleCategoryBookmarks.get(child.id) ?? []}
+                      level={2}
+                      showEmpty={false}
+                      canAddBookmark={isAuthenticated}
+                      cardWidth={settings?.card_size?.width ?? 80}
+                      cardHeight={settings?.card_size?.height ?? 60}
+                      cardStyle={settings?.card_style ?? 'info'}
+                      cardIconSize={settings?.card_icon_size ?? 60}
+                      cardShowDescription={settings?.card_show_description ?? true}
+                      cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+                      cardIconShowTitle={settings?.card_icon_show_title ?? true}
+                      canSort={false}
+                      onAddBookmark={onOpenCreateBookmark}
+                      onEditBookmark={onEditBookmark}
+                      onSortBookmarks={onSortBookmarksInCategory}
+                    />
+                  {/each}
+                </div>
+              </section>
+            {/each}
+          </div>
+        {:else}
+          <HomeEmptyPanel {hasSearchQuery} />
+        {/if}
+      {:else if activeRoot}
+        <HomeCategoryScope
+          rootId={activeRoot.id}
+          title={activeRoot.title}
+          totalCount={activeRootTotal}
+          children={activeScopeItems}
+          activeId={activeCategoryId}
+          onSelect={handleNavigate}
+        />
+
+        <div
+          id="home-category-panel"
+          class="scope-section-list"
+        >
+          {#if activeChild}
+            <CategorySection
+              category={activeChild}
+              bookmarks={activeChildBookmarks}
+              showEmpty={true}
+              canAddBookmark={isAuthenticated}
+              cardWidth={settings?.card_size?.width ?? 80}
+              cardHeight={settings?.card_size?.height ?? 60}
+              cardStyle={settings?.card_style ?? 'info'}
+              cardIconSize={settings?.card_icon_size ?? 60}
+              cardShowDescription={settings?.card_show_description ?? true}
+              cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+              cardIconShowTitle={settings?.card_icon_show_title ?? true}
+              canSort={isAuthenticated}
+              onAddBookmark={onOpenCreateBookmark}
+              onEditBookmark={onEditBookmark}
+              onSortBookmarks={onSortBookmarksInCategory}
+            />
+          {:else}
+            {#if activeRootBookmarks.length > 0 || isAuthenticated || activeRoot.children.length === 0}
               <CategorySection
-                category={category}
-                bookmarks={categoryBookmarks.get(category.id) ?? []}
-                showEmpty={false}
-                expanded={expandedCategoryIds.has(`category-${category.id}`)}
-                hasNestedCategories={category.children.length > 0}
-                onExpandedChange={(expanded) => setCategoryExpanded(category.id, expanded)}
+                category={activeRoot}
+                bookmarks={activeRootBookmarks}
+                level={2}
+                displayTitle={activeRoot.children.length > 0 ? '本分类' : '书签'}
+                showCategoryIcon={false}
+                showEmpty={activeRootBookmarks.length === 0}
                 canAddBookmark={isAuthenticated}
                 cardWidth={settings?.card_size?.width ?? 80}
                 cardHeight={settings?.card_size?.height ?? 60}
@@ -429,45 +329,37 @@
                 cardShowDescription={settings?.card_show_description ?? true}
                 cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
                 cardIconShowTitle={settings?.card_icon_show_title ?? true}
-                canSort={isAuthenticated && !hasSearchQuery}
+                canSort={isAuthenticated}
                 onAddBookmark={onOpenCreateBookmark}
                 onEditBookmark={onEditBookmark}
                 onSortBookmarks={onSortBookmarksInCategory}
-              >
-                {#if category.children.length > 0}
-                  <div class="child-section-list">
-                    {#each category.children as child (child.id)}
-                      <div class="section-shell child-section-shell" data-section-id={`category-${child.id}`}>
-                        <CategorySection
-                          category={child}
-                          bookmarks={categoryBookmarks.get(child.id) ?? []}
-                          level={2}
-                          showEmpty={false}
-                          expanded={expandedCategoryIds.has(`category-${child.id}`)}
-                          onExpandedChange={(expanded) => setCategoryExpanded(child.id, expanded)}
-                          canAddBookmark={isAuthenticated}
-                          cardWidth={settings?.card_size?.width ?? 80}
-                          cardHeight={settings?.card_size?.height ?? 60}
-                          cardStyle={settings?.card_style ?? 'info'}
-                          cardIconSize={settings?.card_icon_size ?? 60}
-                          cardShowDescription={settings?.card_show_description ?? true}
-                          cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
-                          cardIconShowTitle={settings?.card_icon_show_title ?? true}
-                          canSort={isAuthenticated && !hasSearchQuery}
-                          onAddBookmark={onOpenCreateBookmark}
-                          onEditBookmark={onEditBookmark}
-                          onSortBookmarks={onSortBookmarksInCategory}
-                        />
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </CategorySection>
-            </div>
-          {/each}
+              />
+            {/if}
+
+            {#each activeRoot.children as child (child.id)}
+              <CategorySection
+                category={child}
+                bookmarks={allCategoryBookmarks.get(child.id) ?? []}
+                level={2}
+                showEmpty={isAuthenticated}
+                canAddBookmark={isAuthenticated}
+                cardWidth={settings?.card_size?.width ?? 80}
+                cardHeight={settings?.card_size?.height ?? 60}
+                cardStyle={settings?.card_style ?? 'info'}
+                cardIconSize={settings?.card_icon_size ?? 60}
+                cardShowDescription={settings?.card_show_description ?? true}
+                cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+                cardIconShowTitle={settings?.card_icon_show_title ?? true}
+                canSort={isAuthenticated}
+                onAddBookmark={onOpenCreateBookmark}
+                onEditBookmark={onEditBookmark}
+                onSortBookmarks={onSortBookmarksInCategory}
+              />
+            {/each}
+          {/if}
         </div>
       {:else}
-        <HomeEmptyPanel {hasSearchQuery} />
+        <HomeEmptyPanel />
       {/if}
     </main>
   </div>
@@ -482,7 +374,7 @@
 <style>
   .home-shell {
     position: relative;
-    min-height: 100vh;
+    min-height: 100dvh;
     padding: 1.5rem calc(1.5rem + var(--content-margin-x, 0px)) var(--content-margin-bottom, 0%);
     --home-text-color: var(--card-text-color, #0f172a);
     --home-muted-opacity: 0.72;
@@ -536,67 +428,90 @@
     color: var(--home-text-color);
   }
 
-  :global([data-theme='dark']) .home-shell::after {
-    background: var(--home-background-mask-color, #000000);
-    opacity: var(--home-background-mask, 0.3);
-  }
-
-  .content-panel {
-    border-radius: 1.5rem;
-    border: none;
-    background: transparent;
-    backdrop-filter: none;
-  }
-
-  :global([data-theme='dark']) .content-panel {
-    border-color: transparent;
-    background: transparent;
-  }
-
   .content-layout {
     position: relative;
     max-width: var(--content-max-width, 1200px);
     margin: 0 auto;
+    scroll-margin-top: 6rem;
   }
 
   .content-panel {
     display: flex;
     flex-direction: column;
-    gap: 0.95rem;
+    gap: 1.15rem;
     padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
   }
 
-  .section-list {
+  .scope-section-list,
+  .search-results,
+  .search-section-list {
     display: flex;
     flex-direction: column;
-    gap: 1.75rem;
   }
 
-  .section-shell {
+  .scope-section-list {
+    gap: 1.7rem;
+    outline: none;
+  }
+
+  .scope-section-list:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--home-accent-color) 46%, transparent);
+    outline-offset: 6px;
+    border-radius: 4px;
+  }
+
+  .search-results {
+    gap: 2.2rem;
+  }
+
+  .search-category-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
     content-visibility: auto;
     contain-intrinsic-size: auto 420px;
   }
 
-  .root-section-shell {
-    display: flex;
-    flex-direction: column;
-    gap: 1.4rem;
-  }
-
-  .child-section-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1.45rem;
-    margin-left: 1.25rem;
-    padding-left: 1.25rem;
-    border-left: 1px solid color-mix(in srgb, var(--home-accent-color) 24%, transparent);
-  }
-
-  .section-shell:hover,
-  .section-shell:focus-within,
-  .section-list.is-navigation-layout-ready .section-shell {
+  .search-category-group:hover,
+  .search-category-group:focus-within {
     content-visibility: visible;
     contain-intrinsic-size: none;
+  }
+
+  .search-group-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.7rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--home-text-color) 14%, transparent);
+  }
+
+  .search-group-header h2,
+  .search-group-header span {
+    margin: 0;
+    color: var(--home-text-color);
+  }
+
+  .search-group-header h2 {
+    min-width: 0;
+    font-size: 1.28rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .search-group-header span {
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    opacity: var(--home-muted-opacity);
+  }
+
+  .search-section-list {
+    gap: 1.5rem;
   }
 
   .home-footer {
@@ -614,9 +529,18 @@
       padding-top: 4.5rem;
     }
 
-    .child-section-list {
-      margin-left: 0.45rem;
-      padding-left: 0.85rem;
+    .scope-section-list {
+      gap: 1.45rem;
+    }
+
+    .search-results {
+      gap: 1.8rem;
+    }
+
+    .search-group-header {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 0.3rem;
     }
   }
 </style>

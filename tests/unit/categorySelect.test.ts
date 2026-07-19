@@ -3,6 +3,7 @@ import {
   buildCategoryTreeOptions,
   buildParentCategoryOptions,
   findCategoryTreeOption,
+  getCategoryTreeExpandedRootIds,
   getCategoryTreeOptionLabel,
 } from '../../src/lib/categorySelect'
 
@@ -43,5 +44,8 @@ describe('category tree select helpers', () => {
     expect(getCategoryTreeOptionLabel(tree, 1)).toBe('Tools')
     expect(getCategoryTreeOptionLabel(tree, 4)).toBe('Tools / Backend')
     expect(getCategoryTreeOptionLabel(tree, 99)).toBeNull()
+    expect(getCategoryTreeExpandedRootIds(tree, 4)).toEqual(new Set(['1']))
+    expect(getCategoryTreeExpandedRootIds(tree, 1)).toEqual(new Set())
+    expect(getCategoryTreeExpandedRootIds(tree, null)).toEqual(new Set())
   })
 })

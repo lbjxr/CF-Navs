@@ -119,7 +119,7 @@ node scripts/convert-sunpanel.cjs SunPanel-Data.json cf-navs-import.json
 
 ### 3. 调整书签排序
 
-1. 在首页展开目标分类并点击“排序”
+1. 在首页切换到目标分类并点击“排序”
 2. 拖动书签调整顺序
 3. 点击“保存排序”提交，或点击“取消”放弃本次调整
 

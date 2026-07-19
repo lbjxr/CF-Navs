@@ -81,3 +81,17 @@ export function getCategoryTreeOptionLabel(
 
   return null
 }
+
+export function getCategoryTreeExpandedRootIds(
+  items: CategoryTreeOption[],
+  value: string | number | null | undefined,
+): Set<string> {
+  if (value == null || value === '') return new Set()
+  const normalizedValue = String(value)
+
+  const selectedRoot = items.find((root) => (
+    root.children.some((child) => String(child.id) === normalizedValue)
+  ))
+
+  return selectedRoot ? new Set([String(selectedRoot.id)]) : new Set()
+}

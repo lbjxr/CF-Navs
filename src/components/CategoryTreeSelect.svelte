@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
   import {
+    getCategoryTreeExpandedRootIds,
     getCategoryTreeOptionLabel,
     type CategoryTreeOption,
   } from '../lib/categorySelect'
@@ -33,7 +34,7 @@
 
   function toggleMenu(): void {
     if (disabled || !hasOptions) return
-    if (!open) expandedRootIds = new Set()
+    if (!open) expandedRootIds = getCategoryTreeExpandedRootIds(items, value)
     open = !open
   }
 
@@ -112,7 +113,7 @@
     if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return
     event.preventDefault()
     if (!open) {
-      expandedRootIds = new Set()
+      expandedRootIds = getCategoryTreeExpandedRootIds(items, value)
       open = true
     }
     requestAnimationFrame(() => {
