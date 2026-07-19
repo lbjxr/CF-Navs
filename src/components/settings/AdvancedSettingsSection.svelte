@@ -43,14 +43,12 @@
 
 <fieldset
   id="settings-section-advanced"
-  class="group group-wide group-advanced"
+  class="advanced-settings-section"
+  aria-label="高级设置"
   disabled={saving}
   on:input={() => void syncForm()}
   on:change={() => void syncForm()}
 >
-  <legend>高级设置</legend>
-  <p class="group-desc">精细调整标题、背景、图床、卡片尺寸与卡片表面。内置配色方案会自动提供推荐值。</p>
-
   <button
     type="button"
     class="advanced-toggle"
@@ -185,6 +183,14 @@
 </fieldset>
 
 <style>
+  .advanced-settings-section {
+    display: grid;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
   .advanced-toggle {
     width: 100%;
     min-height: 52px;
@@ -250,6 +256,7 @@
   .advanced-content {
     display: grid;
     gap: 18px;
+    margin-top: 12px;
     border-top: 1px solid var(--sp-subsection-border);
     padding-top: 18px;
   }
