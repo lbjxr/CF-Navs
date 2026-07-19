@@ -73,7 +73,7 @@
   let candidates: IconCandidate[] = []
   let candidateError = ''
 
-  $: nextKey = JSON.stringify({ open, mode, value, categoryIds: categories.map((item) => item.id) })
+  $: nextKey = JSON.stringify({ open, mode, value, categories })
   $: setPageScrollLocked(open)
   $: if (nextKey !== formKey) {
     formKey = nextKey

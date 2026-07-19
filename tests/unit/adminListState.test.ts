@@ -7,6 +7,7 @@ import {
   createAdminSortDraft,
   filterAdminBookmarks,
   filterAdminCategoryGroups,
+  getAdminBookmarkCategoryOptions,
   filterAdminCategories,
   getAdminCategoryBookmarkCount,
   getAdminCategoryTitle,
@@ -64,6 +65,7 @@ describe('admin list state helpers', () => {
 
   it('derives category titles and count fallback values', () => {
     expect(getAdminCategoryTitle(categories, 1)).toBe('Tools')
+    expect(getAdminCategoryTitle(categories, 3)).toBe('Tools / Frontend')
     expect(getAdminCategoryTitle(categories, 'missing')).toBe('未分类')
     expect(getAdminCategoryTitle(categories, 'missing', 'Unknown')).toBe('Unknown')
 
@@ -81,6 +83,18 @@ describe('admin list state helpers', () => {
     expect(filterAdminCategoryGroups(groups, 'tools')).toEqual([
       { root: categories[0], children: [categories[2]] },
     ])
+  })
+
+  it('builds hierarchical bookmark options and searches child bookmarks by parent path', () => {
+    expect(getAdminBookmarkCategoryOptions(categories)).toEqual([
+      { id: 2, title: 'Documentation' },
+      { id: 1, title: 'Tools' },
+      { id: 3, title: 'Tools / Frontend' },
+    ])
+
+    const childBookmark = { ...bookmarks[0], id: 13, category_id: 3, title: 'Vite' }
+    expect(filterAdminBookmarks([childBookmark], categories, 'tools')).toEqual([childBookmark])
+    expect(filterAdminBookmarks([childBookmark], categories, 'frontend')).toEqual([childBookmark])
   })
 
   it('creates a clamped page view with display range metadata', () => {

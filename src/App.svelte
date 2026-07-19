@@ -62,6 +62,7 @@
     type AppView,
   } from './lib/appNavigation'
   import { createOptimisticSortState, runOptimisticSort } from './lib/appSortQueue'
+  import { getAdminBookmarkCategoryOptions } from './lib/adminListState'
   import { getNextThemePreference, resolveAppThemeState } from './lib/appThemeState'
   import type { ImportSource } from './lib/importData'
   import { pruneBookmarkIconCacheStorageBackedByLocalStorage } from './lib/localBookmarkIconCache'
@@ -1015,7 +1016,7 @@
         error={bookmarkError}
         mode={bookmarkModalMode}
         value={activeBookmark}
-        categories={adminCategories.map((category) => ({ id: category.id, title: category.title }))}
+        categories={getAdminBookmarkCategoryOptions(adminCategories)}
         onSubmit={handleSubmitBookmark}
         onCancel={handleCloseBookmarkModal}
         onDelete={handleDeleteBookmark}

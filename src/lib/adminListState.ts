@@ -20,7 +20,15 @@ export function getAdminCategoryTitle(
   categoryId: string | number,
   fallback = '未分类',
 ): string {
-  return categories.find((category) => category.id === categoryId)?.title ?? fallback
+  return getAdminCategoryPathMap(categories).get(categoryId) ?? fallback
+}
+
+export function getAdminCategoryPathMap(categories: AdminCategorySummary[]): Map<string | number, string> {
+  const byId = new Map(categories.map((category) => [Number(category.id), category]))
+  return new Map(categories.map((category) => {
+    const parent = category.parent_id == null ? null : byId.get(Number(category.parent_id))
+    return [category.id, parent ? `${parent.title} / ${category.title}` : category.title]
+  }))
 }
 
 export function getAdminCategoryBookmarkCount(
@@ -38,7 +46,9 @@ export function filterAdminBookmarks(
   const normalizedSearch = search.trim().toLowerCase()
   if (!normalizedSearch) return bookmarks
 
-  const categoryTitleById = new Map(categories.map((category) => [category.id, category.title.toLowerCase()]))
+  const categoryTitleById = new Map(
+    [...getAdminCategoryPathMap(categories)].map(([id, path]) => [id, path.toLowerCase()]),
+  )
 
   return bookmarks.filter((bookmark) => {
     const categoryTitle = categoryTitleById.get(bookmark.category_id) ?? ''
@@ -104,6 +114,18 @@ export function filterAdminCategoryGroups(
 
 export function flattenAdminCategoryGroups(groups: AdminCategoryGroup[]): AdminCategorySummary[] {
   return groups.flatMap((group) => [group.root, ...group.children])
+}
+
+export function getAdminBookmarkCategoryOptions(
+  categories: AdminCategorySummary[],
+): Array<{ id: string | number; title: string }> {
+  return buildAdminCategoryGroups(categories).flatMap((group) => [
+    { id: group.root.id, title: group.root.title },
+    ...group.children.map((child) => ({
+      id: child.id,
+      title: `${group.root.title} / ${child.title}`,
+    })),
+  ])
 }
 
 export function createAdminListPage<T>(
