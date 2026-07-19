@@ -16,6 +16,12 @@ type HomeViewGuardInput = {
   canSeeHome: boolean
 }
 
+type LocalSnapshotRevealInput = {
+  booting: boolean
+  adminPath: boolean
+  homeView: Extract<AppView, 'home' | 'login'>
+}
+
 export function canSeeHomeView(input: HomeAccessInput): boolean {
   return Boolean(input.publicMode || input.authenticated)
 }
@@ -34,4 +40,8 @@ export function createHomeGateState(input: HomeAccessInput): HomeGateState {
 
 export function shouldOpenLoginGate(input: HomeViewGuardInput): boolean {
   return !input.booting && input.currentView === 'home' && !input.canSeeHome
+}
+
+export function shouldRevealHomeFromLocalSnapshot(input: LocalSnapshotRevealInput): boolean {
+  return input.booting && !input.adminPath && input.homeView === 'home'
 }

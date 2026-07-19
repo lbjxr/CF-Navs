@@ -54,7 +54,13 @@
   } from './lib/appInstall'
   import { buildOrderedBookmarkIdsForCategory } from './lib/appLocalData'
   import { createBookmarkDraft, createCategoryDraft, findBookmarkForEdit } from './lib/appModalState'
-  import { canSeeHomeView, createHomeGateState, shouldOpenLoginGate, type AppView } from './lib/appNavigation'
+  import {
+    canSeeHomeView,
+    createHomeGateState,
+    shouldOpenLoginGate,
+    shouldRevealHomeFromLocalSnapshot,
+    type AppView,
+  } from './lib/appNavigation'
   import { createOptimisticSortState, runOptimisticSort } from './lib/appSortQueue'
   import { getNextThemePreference, resolveAppThemeState } from './lib/appThemeState'
   import type { ImportSource } from './lib/importData'
@@ -421,17 +427,19 @@
   }
 
   function revealHomeFromCurrentData(): void {
-    if (!booting) return
-
     const homeGate = createHomeGateState({
       publicMode: get(configStore).data?.public_mode,
       authenticated: isLoggedIn(),
     })
-    if (homeGate.view === 'home') {
-      loginModalOpen = false
-      currentView = 'home'
-      booting = false
-    }
+    if (!shouldRevealHomeFromLocalSnapshot({
+      booting,
+      adminPath: isAdminPath(),
+      homeView: homeGate.view,
+    })) return
+
+    loginModalOpen = false
+    currentView = 'home'
+    booting = false
   }
 
   function resetCategoryState(): void {

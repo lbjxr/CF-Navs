@@ -4,6 +4,7 @@ import {
   createHomeGateState,
   getHomeGateView,
   shouldOpenLoginGate,
+  shouldRevealHomeFromLocalSnapshot,
 } from '../../src/lib/appNavigation'
 
 describe('app navigation helpers', () => {
@@ -44,5 +45,12 @@ describe('app navigation helpers', () => {
     expect(shouldOpenLoginGate({ booting: true, currentView: 'home', canSeeHome: false })).toBe(false)
     expect(shouldOpenLoginGate({ booting: false, currentView: 'admin', canSeeHome: false })).toBe(false)
     expect(shouldOpenLoginGate({ booting: false, currentView: 'home', canSeeHome: true })).toBe(false)
+  })
+
+  it('does not reveal the home view from cache while an admin route is booting', () => {
+    expect(shouldRevealHomeFromLocalSnapshot({ booting: true, adminPath: false, homeView: 'home' })).toBe(true)
+    expect(shouldRevealHomeFromLocalSnapshot({ booting: true, adminPath: true, homeView: 'home' })).toBe(false)
+    expect(shouldRevealHomeFromLocalSnapshot({ booting: false, adminPath: false, homeView: 'home' })).toBe(false)
+    expect(shouldRevealHomeFromLocalSnapshot({ booting: true, adminPath: false, homeView: 'login' })).toBe(false)
   })
 })
