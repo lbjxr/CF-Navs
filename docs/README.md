@@ -15,7 +15,7 @@
 - [项目概览](reference/PROJECT_OVERVIEW.md)
 - [API 契约](reference/API_CONTRACT.md)
 - [技术说明](reference/TECHNICAL_NOTES.md)
-- [分类层级设计提案（尚未实现）](reference/CATEGORY_HIERARCHY_DESIGN.md)
+- [分类层级设计](reference/CATEGORY_HIERARCHY_DESIGN.md)
 - [性能契约](reference/PERFORMANCE_CONTRACT.md)
 - [性能测试](reference/PERFORMANCE_TESTING.md)
 

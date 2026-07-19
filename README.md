@@ -205,8 +205,7 @@ CF-Navs/
 
 - CF-Navs JSON 备份：保存两层分类关系，支持按完整路径追加合并或覆盖恢复。
 - Sun-Panel 数据：分类按一级导入，并转换书签与兼容图标字段。
-- 浏览器书签 HTML：有效文件夹映射为两层分类，更深路径压平到二级标题。
-- 浏览器书签 HTML：导入浏览器导出的标准书签文件。
+- 浏览器书签 HTML：导入浏览器导出的标准文件，有效文件夹映射为两层分类，更深路径压平到二级标题。
 
 参阅 [Sun-Panel 数据导入](docs/guides/SUNPANEL_IMPORT.md) 和 [浏览器书签导入](docs/guides/BROWSER_BOOKMARK_IMPORT.md)。
 
