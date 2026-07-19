@@ -3,6 +3,7 @@ import type { BookmarkFormValue, CategoryFormValue } from './adminTypes'
 
 export function createCategoryDraft(): Partial<CategoryFormValue> {
   return {
+    parent_id: null,
     title: '',
     icon: '',
   }

@@ -777,7 +777,7 @@
 
     await runOptimisticSort(categorySortState, ids, {
       applyLocalSort: (sortedIds) => applyLocalCategorySort(sortedIds, false),
-      saveRemoteSort: (sortedIds) => api.categories.sort(sortedIds),
+      saveRemoteSort: (sortedIds) => api.categories.sort(null, sortedIds),
       persist: persistCurrentAdminData,
       onSuccess: refreshAdminDataAfterMutation,
       restoreOnError: () => refreshLoggedInData(true),

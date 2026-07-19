@@ -178,6 +178,7 @@
     error={categoryError}
     mode={categoryModalMode}
     value={activeCategory}
+    {categories}
     onSubmit={onSubmitCategory}
     onCancel={onCloseCategoryModal}
     imageHostUrl={imageHostUrl}

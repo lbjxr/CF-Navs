@@ -1,4 +1,5 @@
 import type { AdminData } from '../../shared/types'
+import { normalizeCategories } from '../../shared/categoryHierarchy'
 import { getStoredAuthSession } from './api'
 import { clearSnapshots, currentSnapshotOrigin, hashSnapshotScope, pruneOtherSnapshots, readSnapshot, type SnapshotStorageConfig, writeSnapshot } from './snapshotStorage'
 
@@ -13,7 +14,11 @@ function parsePayload(value: unknown): CachedAdminDataEntry | null {
   if (!isRecord(value) || !isRecord(value.data)) return null
   const data = value.data
   if (!Array.isArray(data.categories) || !Array.isArray(data.bookmarks) || !isRecord(data.settings) || typeof data.settings.background_preset_id !== 'string') return null
-  return { version: typeof value.version === 'string' ? value.version : null, data: data as unknown as AdminData }
+  const adminData = data as unknown as AdminData
+  return {
+    version: typeof value.version === 'string' ? value.version : null,
+    data: { ...adminData, categories: normalizeCategories(adminData.categories) },
+  }
 }
 
 const storage: SnapshotStorageConfig<CachedAdminDataEntry> = {

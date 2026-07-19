@@ -34,7 +34,7 @@ describe('prepareImportPayload', () => {
     expect(prepared.sourceLabel).toBe('CF-Navs backup')
     expect(prepared.categories).toBe(1)
     expect(prepared.bookmarks).toBe(1)
-    expect(prepared.payload.categories).toBe(backup.categories)
+    expect(prepared.payload.categories).toEqual([{ ...backup.categories[0], parent_id: null }])
     expect(prepared.payload.bookmarks).toBe(backup.bookmarks)
     expect(prepared.payload.settings).toEqual({ site_title: 'Imported' })
   })
@@ -102,7 +102,7 @@ describe('prepareImportPayload', () => {
   it('parses JSON text before preparing import payloads', () => {
     const prepared = prepareImportText(JSON.stringify({
       version: 1,
-      categories: [{ id: 1, title: 'Tools', icon: null, sort: 0, created_at: 100 }],
+      categories: [{ id: 1, parent_id: null, title: 'Tools', icon: null, sort: 0, created_at: 100 }],
       bookmarks: [],
     }), 'cf-navs')
 

@@ -1,4 +1,5 @@
 import type { BackupData, Bookmark, Category, ImportReq, Settings } from '../../shared/types'
+import { normalizeCategories } from '../../shared/categoryHierarchy'
 import { iconifyIcon } from './icons'
 
 export type ImportSource = 'cf-navs' | 'sunpanel' | 'browser-html'
@@ -118,7 +119,7 @@ function prepareCFNavsImport(parsed: unknown): PreparedImport {
 
   return {
     payload: {
-      categories: data.categories as Category[],
+      categories: normalizeCategories(data.categories as Category[]),
       bookmarks: data.bookmarks as Bookmark[],
       settings: (data.settings ?? undefined) as Partial<Settings> | undefined,
     },
@@ -149,6 +150,7 @@ function prepareSunPanelImport(parsed: unknown): PreparedImport {
     const categoryId = categoryIndex + 1
     categories.push({
       id: categoryId,
+      parent_id: null,
       title: readString(rawCategory.title, `Category ${categoryId}`).trim() || `Category ${categoryId}`,
       icon: null,
       sort: readNumber(rawCategory.sort, categoryIndex),
@@ -251,7 +253,7 @@ export function prepareBrowserBookmarkHtml(text: string): PreparedImport {
     const normalized = title.trim() || '浏览器书签'
     const existing = categoryByTitle.get(normalized)
     if (existing) return existing
-    const category: Category = { id: nextCategoryId++, title: normalized, icon: null, sort: categories.length, created_at: now }
+    const category: Category = { id: nextCategoryId++, parent_id: null, title: normalized, icon: null, sort: categories.length, created_at: now }
     categories.push(category); categoryByTitle.set(normalized, category); nextSort.set(category.id, 0)
     return category
   }

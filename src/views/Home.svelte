@@ -16,6 +16,7 @@
     getHomeScrollTarget,
     getNearestIntersectingSectionId,
     getVisibleCategoryIds,
+    getVisibleCategoryForest,
     groupBookmarksByCategory,
     normalizeSearchQuery,
     resolveHomeActiveSectionId,
@@ -66,6 +67,7 @@
   let persistentLeftExpanded = true
 
   $: sortedCategories = homeData.getSortedCategories(categories)
+  $: categoryForest = homeData.getCategoryForest(categories)
   $: sortedBookmarks = homeData.getSortedBookmarks(bookmarks)
   $: if (searchQuery !== deferredSearchQuery) {
     scheduleSearchFilterUpdate(searchQuery)
@@ -78,12 +80,11 @@
     ? sortedBookmarks.filter((bookmark) => bookmarkMatchesSearch(bookmark, normalizedSearchQuery, searchTextByBookmarkId))
     : sortedBookmarks
   $: visibleCategoryIds = hasSearchQuery ? getVisibleCategoryIds(visibleBookmarks) : null
-  $: visibleCategories = hasSearchQuery
-    ? sortedCategories.filter((category) => visibleCategoryIds?.has(category.id))
-    : sortedCategories
+  $: visibleCategoryForest = getVisibleCategoryForest(categoryForest, visibleCategoryIds)
+  $: visibleCategories = visibleCategoryForest.flatMap((category) => [category, ...category.children])
 
   $: categoryBookmarks = groupBookmarksByCategory(visibleBookmarks)
-  $: sections = getHomeSections(visibleCategories, categoryBookmarks)
+  $: sections = getHomeSections(visibleCategoryForest, categoryBookmarks)
   $: nextSectionsKey = getHomeSectionsKey(sections)
   $: if (nextSectionsKey !== sectionsKey) {
     sectionsKey = nextSectionsKey
@@ -382,11 +383,12 @@
 
       {#if visibleCategories.length > 0}
         <div class="section-list" class:is-navigation-layout-ready={navigationLayoutReady}>
-          {#each visibleCategories as category (category.id)}
-            <div class="section-shell" data-section-id={`category-${category.id}`}>
+          {#each visibleCategoryForest as category (category.id)}
+            <div class="section-shell root-section-shell" data-section-id={`category-${category.id}`}>
               <CategorySection
                 category={category}
                 bookmarks={categoryBookmarks.get(category.id) ?? []}
+                showEmpty={false}
                 canAddBookmark={isAuthenticated}
                 cardWidth={settings?.card_size?.width ?? 80}
                 cardHeight={settings?.card_size?.height ?? 60}
@@ -400,6 +402,32 @@
                 onEditBookmark={onEditBookmark}
                 onSortBookmarks={onSortBookmarksInCategory}
               />
+              {#if category.children.length > 0}
+                <div class="child-section-list">
+                  {#each category.children as child (child.id)}
+                    <div class="section-shell child-section-shell" data-section-id={`category-${child.id}`}>
+                      <CategorySection
+                        category={child}
+                        bookmarks={categoryBookmarks.get(child.id) ?? []}
+                        level={2}
+                        showEmpty={false}
+                        canAddBookmark={isAuthenticated}
+                        cardWidth={settings?.card_size?.width ?? 80}
+                        cardHeight={settings?.card_size?.height ?? 60}
+                        cardStyle={settings?.card_style ?? 'info'}
+                        cardIconSize={settings?.card_icon_size ?? 60}
+                        cardShowDescription={settings?.card_show_description ?? true}
+                        cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+                        cardIconShowTitle={settings?.card_icon_show_title ?? true}
+                        canSort={isAuthenticated && !hasSearchQuery}
+                        onAddBookmark={onOpenCreateBookmark}
+                        onEditBookmark={onEditBookmark}
+                        onSortBookmarks={onSortBookmarksInCategory}
+                      />
+                    </div>
+                  {/each}
+                </div>
+              {/if}
             </div>
           {/each}
         </div>
@@ -513,6 +541,21 @@
     contain-intrinsic-size: auto 420px;
   }
 
+  .root-section-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+  }
+
+  .child-section-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.45rem;
+    margin-left: 1.25rem;
+    padding-left: 1.25rem;
+    border-left: 1px solid color-mix(in srgb, var(--home-accent-color) 24%, transparent);
+  }
+
   .section-shell:hover,
   .section-shell:focus-within,
   .section-list.is-navigation-layout-ready .section-shell {
@@ -533,6 +576,11 @@
 
     .home-shell.top-navigation-layout {
       padding-top: 4.5rem;
+    }
+
+    .child-section-list {
+      margin-left: 0.45rem;
+      padding-left: 0.85rem;
     }
   }
 </style>

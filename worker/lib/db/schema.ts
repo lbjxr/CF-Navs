@@ -26,27 +26,35 @@ export async function ensureSchema(db: D1Database, force = false): Promise<void>
   _schemaChecked = true
 
   // 判断列是否存在，不存在则 ADD COLUMN（D1/SQLite 允许）
-  const { results: cols } = await db
+  const { results: bookmarkCols } = await db
     .prepare("PRAGMA table_info(bookmarks)")
     .all<{ name: string }>()
+  const { results: categoryCols } = await db
+    .prepare("PRAGMA table_info(categories)")
+    .all<{ name: string }>()
 
-  const colNames = new Set((cols ?? []).map((c) => c.name))
+  const bookmarkColNames = new Set((bookmarkCols ?? []).map((c) => c.name))
+  const categoryColNames = new Set((categoryCols ?? []).map((c) => c.name))
 
   const stmts: D1PreparedStatement[] = []
-  if (!colNames.has("icon_source")) {
+  if (!bookmarkColNames.has("icon_source")) {
     stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN icon_source TEXT"))
   }
-  if (!colNames.has("icon_blob")) {
+  if (!bookmarkColNames.has("icon_blob")) {
     stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN icon_blob TEXT"))
   }
-  if (!colNames.has("icon_background_color")) {
+  if (!bookmarkColNames.has("icon_background_color")) {
     stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN icon_background_color TEXT"))
   }
-  if (!colNames.has("description_mode")) {
+  if (!bookmarkColNames.has("description_mode")) {
     stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN description_mode TEXT"))
+  }
+  if (!categoryColNames.has("parent_id")) {
+    stmts.push(db.prepare("ALTER TABLE categories ADD COLUMN parent_id INTEGER"))
   }
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_bookmarks_sort_global ON bookmarks(sort, id)"))
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_categories_sort_id ON categories(sort, id)"))
+  stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_categories_parent_sort_id ON categories(parent_id, sort, id)"))
 
   if (stmts.length > 0) await db.batch(stmts)
 }

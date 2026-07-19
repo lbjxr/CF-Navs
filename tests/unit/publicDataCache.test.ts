@@ -32,7 +32,7 @@ class MemoryStorage implements Storage {
 }
 
 const publicData: PublicData = {
-  categories: [{ id: 1, title: 'Tools', icon: null, sort: 0 }],
+  categories: [{ id: 1, parent_id: null, title: 'Tools', icon: null, sort: 0 }],
   bookmarks: [],
   settings: toPublicSettings(DEFAULT_SETTINGS),
 }

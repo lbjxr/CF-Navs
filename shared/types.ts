@@ -5,6 +5,7 @@
 
 export interface Category {
   id: number
+  parent_id: number | null
   title: string
   icon: string | null
   sort: number
@@ -164,6 +165,7 @@ export const ErrCode = {
   NOT_FOUND: 1003, // 资源不存在
   RATE_LIMITED: 1004, // 登录限流
   FORBIDDEN: 1005, // 公开模式关闭且未登录
+  CONFLICT: 1006, // 当前资源状态不允许该操作
   SERVER_ERROR: 1500,
 } as const
 
@@ -275,6 +277,7 @@ export interface SiteConfig {
 export interface CategoryUpsertReq {
   title: string
   icon?: string | null
+  parent_id?: number | null
 }
 
 // POST/PUT 书签
@@ -316,6 +319,10 @@ export interface IconifySearchResp {
 // 传有序 id 数组，后端按下标写 sort
 export interface SortReq {
   ids: number[]
+}
+
+export interface CategorySortReq extends SortReq {
+  parent_id: number | null
 }
 
 // ========== 数据备份 / 导入导出 ==========

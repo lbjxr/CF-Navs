@@ -3,7 +3,7 @@ import { validateImportPayload } from '../../worker/lib/importValidation'
 
 const validPayload = {
   categories: [
-    { id: 1, title: 'Tools', icon: null, sort: 0 },
+    { id: 1, parent_id: null, title: 'Tools', icon: null, sort: 0 },
   ],
   bookmarks: [
     {

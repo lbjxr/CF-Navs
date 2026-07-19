@@ -11,6 +11,7 @@ describe('normalizeImportCategory', () => {
 
     expect(output).toEqual({
       id: 1,
+      parent_id: null,
       title: 'Tools',
       icon: '/icon.svg',
       sort: 3,

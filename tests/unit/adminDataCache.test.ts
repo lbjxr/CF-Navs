@@ -43,7 +43,7 @@ vi.mock('../../src/lib/api', async (importOriginal) => {
 })
 
 const adminData: AdminData = {
-  categories: [{ id: 1, title: 'Tools', icon: null, sort: 0, created_at: 100 }],
+  categories: [{ id: 1, parent_id: null, title: 'Tools', icon: null, sort: 0, created_at: 100 }],
   bookmarks: [],
   settings: DEFAULT_SETTINGS,
 }

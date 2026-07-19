@@ -20,6 +20,7 @@
   import IconifySelector from './IconifySelector.svelte'
 
   const emptyForm: CategoryFormValue = {
+    parent_id: null,
     title: '',
     icon: '',
   }
@@ -32,6 +33,7 @@
   export let onSubmit: ((payload: CategoryFormValue) => void | Promise<void>) | undefined = undefined
   export let onCancel: (() => void) | undefined = undefined
   export let imageHostUrl = ''
+  export let categories: Array<{ id: string | number; parent_id: string | number | null; title: string }> = []
 
   let form: CategoryFormValue = { ...emptyForm }
   let formKey = ''
@@ -49,6 +51,7 @@
     form = {
       ...emptyForm,
       ...(value ?? {}),
+      parent_id: value?.parent_id ?? null,
       title: value?.title ?? '',
       icon: value?.icon ?? '',
     }
@@ -204,6 +207,16 @@
         <label>
           <span>分类名称</span>
           <input bind:value={form.title} type="text" placeholder="例如：常用工具" required />
+        </label>
+
+        <label>
+          <span>上级分类</span>
+          <select bind:value={form.parent_id}>
+            <option value={null}>无上级（一级分类）</option>
+            {#each categories.filter((category) => category.parent_id == null && Number(category.id) !== Number(form.id)) as category (category.id)}
+              <option value={category.id}>{category.title}</option>
+            {/each}
+          </select>
         </label>
 
         <label>

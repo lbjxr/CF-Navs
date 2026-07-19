@@ -27,6 +27,7 @@ import { reorderByIds } from '../../src/lib/reorder'
 
 const categoryA: PublicCategory = {
   id: 1,
+  parent_id: null,
   title: 'Tools',
   icon: null,
   sort: 2,
@@ -34,6 +35,7 @@ const categoryA: PublicCategory = {
 
 const categoryB: PublicCategory = {
   id: 2,
+  parent_id: null,
   title: 'Docs',
   icon: null,
   sort: 1,
@@ -127,16 +129,17 @@ describe('refactored helper modules', () => {
     expect(sortedBookmarks.map((bookmark) => bookmark.id)).toEqual([11, 10])
     expect(bookmarkMatchesSearch(bookmarkA, normalizeSearchQuery('tools'), searchIndex)).toBe(true)
     expect(getVisibleCategoryIds([bookmarkB])).toEqual(new Set([2]))
-    expect(getHomeSections(sortedCategories, grouped)).toEqual([
-      { id: 'category-2', title: 'Docs', count: 1 },
-      { id: 'category-1', title: 'Tools', count: 1 },
+    expect(getHomeSections(memo.getCategoryForest(sortedCategories), grouped)).toEqual([
+      { id: 'category-2', title: 'Docs', count: 1, children: [] },
+      { id: 'category-1', title: 'Tools', count: 1, children: [] },
     ])
   })
 
   it('normalizes admin form values and payloads', () => {
-    expect(toCategoryPayload({ title: '  Tools  ', icon: '  tool  ' })).toEqual({
+    expect(toCategoryPayload({ parent_id: null, title: '  Tools  ', icon: '  tool  ' })).toEqual({
       title: 'Tools',
       icon: 'tool',
+      parent_id: null,
     })
 
     expect(toBookmarkPayload({

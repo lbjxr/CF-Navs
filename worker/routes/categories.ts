@@ -1,7 +1,9 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { ErrCode, type BatchDeleteReq, type CategoryUpsertReq, type SortReq } from '../../shared/types'
+import { ErrCode, type BatchDeleteReq, type CategorySortReq, type CategoryUpsertReq } from '../../shared/types'
 import {
+  CategoryConflictError,
+  CategoryValidationError,
   createCategory,
   deleteCategory,
   batchDeleteCategories,
@@ -34,6 +36,12 @@ function isOptionalString(value: unknown): value is string | null | undefined {
   return value === undefined || value === null || typeof value === 'string'
 }
 
+function parseParentId(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  return Number.isInteger(value) && Number(value) > 0 ? Number(value) : undefined
+}
+
 function parseBatchIds(value: unknown): number[] | null {
   if (!Array.isArray(value) || value.length === 0 || value.length > 500) return null
   const ids = [...new Set(value)]
@@ -50,6 +58,12 @@ async function readJson<T>(c: AppContext): Promise<T | null> {
 
 export const categoriesRoutes = new Hono<HonoEnv>()
 
+function categoryWriteError(c: AppContext, error: unknown, fallback: string) {
+  if (error instanceof CategoryValidationError) return badRequest(c, error.message)
+  if (error instanceof CategoryConflictError) return c.json(fail(ErrCode.CONFLICT, error.message))
+  return c.json(fail(ErrCode.SERVER_ERROR, fallback))
+}
+
 categoriesRoutes.get('/', async (c) => {
   try {
     return c.json(ok(await listCategories(c.env.DB)))
@@ -60,7 +74,8 @@ categoriesRoutes.get('/', async (c) => {
 
 categoriesRoutes.post('/', async (c) => {
   const body = await readJson<CategoryUpsertReq>(c)
-  if (!body || !isNonEmptyString(body.title) || !isOptionalString(body.icon)) {
+  const parentId = parseParentId(body?.parent_id)
+  if (!body || !isNonEmptyString(body.title) || !isOptionalString(body.icon) || (body.parent_id !== undefined && parentId === undefined)) {
     return badRequest(c, 'invalid category payload')
   }
 
@@ -68,13 +83,14 @@ categoriesRoutes.post('/', async (c) => {
     const category = await createCategory(c.env.DB, {
       title: body.title.trim(),
       icon: body.icon ?? null,
+      parent_id: parentId ?? null,
     })
     await touchDataVersion(c.env.DB)
     invalidateRuntimeDataCache()
     invalidatePublicDataCache(c, c.req.url)
     return c.json(ok(category))
-  } catch {
-    return c.json(fail(ErrCode.SERVER_ERROR, 'failed to create category'))
+  } catch (error) {
+    return categoryWriteError(c, error, 'failed to create category')
   }
 })
 
@@ -83,7 +99,8 @@ categoriesRoutes.put('/:id', async (c) => {
   if (id == null) return badRequest(c, 'invalid category id')
 
   const body = await readJson<CategoryUpsertReq>(c)
-  if (!body || !isNonEmptyString(body.title) || !isOptionalString(body.icon)) {
+  const parentId = parseParentId(body?.parent_id)
+  if (!body || !isNonEmptyString(body.title) || !isOptionalString(body.icon) || (body.parent_id !== undefined && parentId === undefined)) {
     return badRequest(c, 'invalid category payload')
   }
 
@@ -91,14 +108,15 @@ categoriesRoutes.put('/:id', async (c) => {
     const category = await updateCategory(c.env.DB, id, {
       title: body.title.trim(),
       icon: body.icon ?? null,
+      parent_id: parentId ?? null,
     })
     if (!category) return c.json(fail(ErrCode.NOT_FOUND, 'category not found'))
     await touchDataVersion(c.env.DB)
     invalidateRuntimeDataCache()
     invalidatePublicDataCache(c, c.req.url)
     return c.json(ok(category))
-  } catch {
-    return c.json(fail(ErrCode.SERVER_ERROR, 'failed to update category'))
+  } catch (error) {
+    return categoryWriteError(c, error, 'failed to update category')
   }
 })
 
@@ -113,8 +131,8 @@ categoriesRoutes.delete('/:id', async (c) => {
     invalidateRuntimeDataCache()
     invalidatePublicDataCache(c, c.req.url)
     return c.json(ok(null))
-  } catch {
-    return c.json(fail(ErrCode.SERVER_ERROR, 'failed to delete category'))
+  } catch (error) {
+    return categoryWriteError(c, error, 'failed to delete category')
   }
 })
 
@@ -130,26 +148,27 @@ categoriesRoutes.post('/batch-delete', async (c) => {
       invalidatePublicDataCache(c, c.req.url)
     }
     return c.json(ok(result))
-  } catch {
-    return c.json(fail(ErrCode.SERVER_ERROR, 'failed to batch delete categories'))
+  } catch (error) {
+    return categoryWriteError(c, error, 'failed to batch delete categories')
   }
 })
 
 categoriesRoutes.post('/sort', async (c) => {
-  const body = await readJson<SortReq>(c)
+  const body = await readJson<CategorySortReq>(c)
   const ids = body?.ids
-  if (!Array.isArray(ids) || !ids.every((id) => Number.isInteger(id) && id > 0)) {
+  const parentId = parseParentId(body?.parent_id)
+  if (!Array.isArray(ids) || !ids.every((id) => Number.isInteger(id) && id > 0) || parentId === undefined) {
     return badRequest(c, 'invalid sort payload')
   }
 
   try {
-    await sortCategories(c.env.DB, ids)
+    await sortCategories(c.env.DB, { parent_id: parentId, ids })
     await touchDataVersion(c.env.DB)
     invalidateRuntimeDataCache()
     invalidatePublicDataCache(c, c.req.url)
     return c.json(ok(null))
-  } catch {
-    return c.json(fail(ErrCode.SERVER_ERROR, 'failed to sort categories'))
+  } catch (error) {
+    return categoryWriteError(c, error, 'failed to sort categories')
   }
 })
 

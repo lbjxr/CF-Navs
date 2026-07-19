@@ -11,6 +11,8 @@
 
   export let category: PublicCategory
   export let bookmarks: PublicBookmark[] = []
+  export let level: 1 | 2 = 1
+  export let showEmpty = true
   export let canAddBookmark = false
   export let canSort = false
   export let cardWidth = 200 // 改为 200，Sun-Panel 标准
@@ -95,7 +97,7 @@
   }
 </script>
 
-<section class="category-section" id={sectionId}>
+<section class="category-section" class:child-category={level === 2} id={sectionId}>
   <header class="section-header">
     <div class="section-title-wrap">
       {#if hasCategoryImageIcon}
@@ -127,7 +129,7 @@
             {/if}
           {/if}
         </div>
-        <p>共 {bookmarks.length} 个站点</p>
+        <p>{level === 1 ? '直属' : '共'} {bookmarks.length} 个站点</p>
       </div>
     </div>
   </header>
@@ -164,7 +166,7 @@
     {#if sortMode}
       <p class="sort-hint">拖动卡片调整顺序，完成后点击「保存排序」。</p>
     {/if}
-  {:else}
+  {:else if showEmpty}
     <div class="empty-card">这个分类下暂时还没有可展示的书签。</div>
   {/if}
 </section>
@@ -175,6 +177,20 @@
     flex-direction: column;
     gap: 1rem;
     scroll-margin-top: 1.5rem;
+  }
+
+  .category-section.child-category {
+    gap: 0.85rem;
+  }
+
+  .category-section.child-category .section-title-wrap h2 {
+    font-size: 1.08rem;
+  }
+
+  .category-section.child-category .section-icon {
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 0.65rem;
   }
 
   .section-header {

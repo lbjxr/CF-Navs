@@ -3,6 +3,7 @@
 -- 分类（栏目）
 CREATE TABLE IF NOT EXISTS categories (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  parent_id   INTEGER,                    -- NULL=一级分类，非空=所属一级分类
   title       TEXT NOT NULL,
   icon        TEXT,                       -- 图标 URL（可填 cftc 直链）
   sort        INTEGER NOT NULL DEFAULT 0,
@@ -37,6 +38,7 @@ CREATE INDEX IF NOT EXISTS idx_bookmarks_sort ON bookmarks(category_id, sort);
 CREATE INDEX IF NOT EXISTS idx_bookmarks_sort_global ON bookmarks(sort, id);
 CREATE INDEX IF NOT EXISTS idx_categories_sort ON categories(sort);
 CREATE INDEX IF NOT EXISTS idx_categories_sort_id ON categories(sort, id);
+CREATE INDEX IF NOT EXISTS idx_categories_parent_sort_id ON categories(parent_id, sort, id);
 
 -- 全局设置（key-value，避免频繁改表结构）
 CREATE TABLE IF NOT EXISTS settings (

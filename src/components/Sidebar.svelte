@@ -7,7 +7,14 @@
     writeLeftNavigationCollapsed,
   } from '../lib/navigationLayout'
 
-  export let items: Array<{ id: string | number; title: string; count?: number }> = []
+  type NavigationItem = {
+    id: string | number
+    title: string
+    count?: number
+    children?: NavigationItem[]
+  }
+
+  export let items: NavigationItem[] = []
   export let activeId: string | number | null = null
   export let navigation: NavigationSetting = { position: 'left', always_expanded: false }
   export let onNavigate: ((id: string | number) => void) | undefined = undefined
@@ -37,6 +44,10 @@
   let dragStartX = 0
   let dragStartScrollLeft = 0
   let reportedPersistentExpansion: boolean | null = null
+  let navigationRoot: HTMLElement | null = null
+  let expandedParentIds = new Set<string>()
+  let openTopMenuId = ''
+  let topMenuStyle = ''
 
   $: isTop = navigation.position === 'top'
   $: isPersistentLeft = !isTop && !isMobileView && navigation.always_expanded
@@ -74,6 +85,14 @@
   $: if (isTop && activeId != null && topTrack) {
     void activeId
     void tick().then(() => scrollActiveItemIntoView('smooth'))
+  }
+
+  $: activeParentId = items.find((item) => (
+    item.children?.some((child) => String(child.id) === String(activeId))
+  ))?.id
+
+  $: if (activeParentId != null && !expandedParentIds.has(String(activeParentId))) {
+    expandedParentIds = new Set([...expandedParentIds, String(activeParentId)])
   }
 
   function checkIsMobile(): void {
@@ -140,7 +159,43 @@
     }
 
     onNavigate?.(id)
+    openTopMenuId = ''
     if (isMobileView && !isTop) mobileSidebarOpen = false
+  }
+
+  function toggleParent(item: NavigationItem, event?: MouseEvent): void {
+    const id = String(item.id)
+    if (isTop) {
+      if (openTopMenuId === id) {
+        openTopMenuId = ''
+        return
+      }
+      const button = event?.currentTarget as HTMLElement | null
+      const rect = button?.getBoundingClientRect()
+      topMenuStyle = rect ? `top: ${rect.bottom + 8}px; left: ${Math.max(8, rect.right - 220)}px;` : ''
+      openTopMenuId = id
+      return
+    }
+
+    const next = new Set(expandedParentIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    expandedParentIds = next
+  }
+
+  function handleDocumentPointerDown(event: PointerEvent): void {
+    if (openTopMenuId && navigationRoot && !navigationRoot.contains(event.target as Node)) {
+      openTopMenuId = ''
+    }
+  }
+
+  function handleDocumentKeyDown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape') return
+    if (openTopMenuId) {
+      openTopMenuId = ''
+      return
+    }
+    if (mobileSidebarOpen) mobileSidebarOpen = false
   }
 
   function updateOverflowState(): void {
@@ -173,8 +228,9 @@
 
   function scrollActiveItemIntoView(behavior: ScrollBehavior): void {
     if (!topTrack || activeId == null) return
+    const navigationId = activeParentId ?? activeId
     const activeItem = Array.from(topTrack.querySelectorAll<HTMLElement>('[data-navigation-id]'))
-      .find((element) => element.dataset.navigationId === String(activeId))
+      .find((element) => element.dataset.navigationId === String(navigationId))
     if (!activeItem) return
 
     const trackRect = topTrack.getBoundingClientRect()
@@ -237,6 +293,8 @@
     checkIsMobile()
     mounted = true
     window.addEventListener('resize', scheduleResize)
+    document.addEventListener('pointerdown', handleDocumentPointerDown)
+    document.addEventListener('keydown', handleDocumentKeyDown)
 
     if (typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(scheduleOverflowUpdate)
@@ -253,6 +311,8 @@
   onDestroy(() => {
     mounted = false
     window.removeEventListener('resize', scheduleResize)
+    document.removeEventListener('pointerdown', handleDocumentPointerDown)
+    document.removeEventListener('keydown', handleDocumentKeyDown)
     resizeObserver?.disconnect()
     if (resizeTimer) clearTimeout(resizeTimer)
     if (overflowFrame != null) cancelAnimationFrame(overflowFrame)
@@ -261,7 +321,7 @@
 </script>
 
 {#if isTop}
-  <aside class="top-navigation" data-testid="top-navigation" aria-label="分类导航">
+  <aside class="top-navigation" bind:this={navigationRoot} data-testid="top-navigation" aria-label="分类导航">
     <button
       type="button"
       class="scroll-arrow scroll-arrow-left"
@@ -285,17 +345,29 @@
       on:pointercancel={finishPointerDrag}
     >
       {#each items as item (item.id)}
-        <button
-          type="button"
-          class="top-item"
-          class:active={activeId === item.id}
-          data-navigation-id={item.id}
-          aria-current={activeId === item.id ? 'location' : undefined}
-          on:click={() => handleItemClick(item.id)}
-        >
-          <span>{item.title}</span>
-          {#if item.count != null}<small>{item.count}</small>{/if}
-        </button>
+        <div class="top-item-group" data-navigation-id={item.id}>
+          <button
+            type="button"
+            class="top-item"
+            class:active={String(activeId) === String(item.id) || String(activeParentId) === String(item.id)}
+            aria-current={String(activeId) === String(item.id) ? 'location' : undefined}
+            on:click={() => handleItemClick(item.id)}
+          >
+            <span>{item.title}</span>
+            {#if item.count != null}<small>{item.count}</small>{/if}
+          </button>
+          {#if item.children?.length}
+            <button
+              type="button"
+              class="top-submenu-toggle"
+              aria-label={`${openTopMenuId === String(item.id) ? '收起' : '展开'} ${item.title} 的子分类`}
+              aria-expanded={openTopMenuId === String(item.id)}
+              on:click={(event) => toggleParent(item, event)}
+            >
+              ▾
+            </button>
+          {/if}
+        </div>
       {/each}
     </nav>
 
@@ -310,6 +382,25 @@
     >
       ›
     </button>
+
+    {#if openTopMenuId}
+      {@const parent = items.find((item) => String(item.id) === openTopMenuId)}
+      {#if parent?.children?.length}
+        <div class="top-submenu" style={topMenuStyle} role="menu" aria-label={`${parent.title} 子分类`}>
+          {#each parent.children as child (child.id)}
+            <button
+              type="button"
+              role="menuitem"
+              class:active={String(activeId) === String(child.id)}
+              on:click={() => handleItemClick(child.id)}
+            >
+              <span>{child.title}</span>
+              {#if child.count != null}<small>{child.count}</small>{/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    {/if}
   </aside>
 {:else}
   <button
@@ -337,6 +428,7 @@
     aria-label="分类导航"
     on:mouseenter={handleMouseEnter}
     on:mouseleave={handleMouseLeave}
+    bind:this={navigationRoot}
   >
     {#if isMobileView}
       <button type="button" class="toc-close-btn" on:click={closeMobileSidebar} aria-label="收起目录">‹</button>
@@ -355,16 +447,48 @@
 
     <nav class="toc-nav">
       {#each items as item (item.id)}
-        <button
-          type="button"
-          class="toc-item"
-          class:active={activeId === item.id}
-          aria-current={activeId === item.id ? 'location' : undefined}
-          on:click={() => handleItemClick(item.id)}
-        >
-          <span class="toc-slip"></span>
-          <span class="toc-title">{item.title}</span>
-        </button>
+        <div class="toc-group">
+          <div class="toc-parent-row">
+            <button
+              type="button"
+              class="toc-item"
+              class:active={String(activeId) === String(item.id)}
+              aria-current={String(activeId) === String(item.id) ? 'location' : undefined}
+              on:click={() => handleItemClick(item.id)}
+            >
+              <span class="toc-slip"></span>
+              <span class="toc-title">{item.title}</span>
+              {#if item.count != null}<small>{item.count}</small>{/if}
+            </button>
+            {#if item.children?.length}
+              <button
+                type="button"
+                class="toc-expand-button"
+                aria-label={`${expandedParentIds.has(String(item.id)) ? '收起' : '展开'} ${item.title} 的子分类`}
+                aria-expanded={expandedParentIds.has(String(item.id))}
+                on:click={() => toggleParent(item)}
+              >
+                {expandedParentIds.has(String(item.id)) ? '▾' : '▸'}
+              </button>
+            {/if}
+          </div>
+          {#if item.children?.length && expandedParentIds.has(String(item.id)) && isExpanded}
+            <div class="toc-children">
+              {#each item.children as child (child.id)}
+                <button
+                  type="button"
+                  class="toc-child-item"
+                  class:active={String(activeId) === String(child.id)}
+                  aria-current={String(activeId) === String(child.id) ? 'location' : undefined}
+                  on:click={() => handleItemClick(child.id)}
+                >
+                  <span>{child.title}</span>
+                  {#if child.count != null}<small>{child.count}</small>{/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
       {/each}
     </nav>
   </aside>
@@ -470,13 +594,27 @@
     scroll-behavior: auto;
   }
 
-  .top-item {
+  .top-item-group {
     flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+  }
+
+  .top-item-group:focus-within,
+  .top-item-group:hover {
+    border-color: var(--toc-item-border);
+    background: var(--toc-item-bg);
+  }
+
+  .top-item {
     min-height: 38px;
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    border: 1px solid transparent;
+    border: 0;
     border-radius: 8px;
     padding: 0 12px;
     background: transparent;
@@ -489,13 +627,11 @@
 
   .top-item:hover,
   .top-item:focus-visible {
-    border-color: var(--toc-item-border);
-    background: var(--toc-item-bg);
+    background: transparent;
     outline: none;
   }
 
   .top-item.active {
-    border-color: color-mix(in srgb, var(--toc-accent) 32%, var(--toc-item-border));
     background: var(--toc-item-hover-bg);
     color: var(--toc-accent);
   }
@@ -504,6 +640,70 @@
     color: inherit;
     opacity: 0.62;
     font-size: 11px;
+  }
+
+  .top-submenu-toggle {
+    width: 30px;
+    min-height: 32px;
+    margin-right: 3px;
+    border: 0;
+    border-left: 1px solid var(--toc-item-border);
+    border-radius: 0 6px 6px 0;
+    background: transparent;
+    color: var(--toc-text);
+    cursor: pointer;
+  }
+
+  .top-submenu-toggle:hover,
+  .top-submenu-toggle:focus-visible,
+  .top-submenu-toggle[aria-expanded='true'] {
+    background: var(--toc-item-hover-bg);
+    color: var(--toc-accent);
+    outline: none;
+  }
+
+  .top-submenu {
+    position: fixed;
+    z-index: 80;
+    width: 220px;
+    max-height: min(360px, calc(100vh - 80px));
+    display: grid;
+    gap: 4px;
+    overflow-y: auto;
+    padding: 6px;
+    border: 1px solid var(--toc-border);
+    border-radius: 8px;
+    background: var(--toc-surface-strong);
+    box-shadow: var(--toc-shadow);
+    backdrop-filter: blur(16px);
+  }
+
+  .top-submenu button {
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 0 10px;
+    background: transparent;
+    color: var(--toc-text);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .top-submenu button:hover,
+  .top-submenu button:focus-visible,
+  .top-submenu button.active {
+    border-color: var(--toc-item-border);
+    background: var(--toc-item-hover-bg);
+    color: var(--toc-accent);
+    outline: none;
+  }
+
+  .top-submenu small {
+    opacity: 0.64;
   }
 
   .scroll-arrow {
@@ -634,8 +834,19 @@
     scrollbar-width: thin;
   }
 
-  .toc-item {
+  .toc-group {
+    display: grid;
+    gap: 3px;
+  }
+
+  .toc-parent-row {
     width: 190px;
+    display: flex;
+    align-items: center;
+  }
+
+  .toc-item {
+    width: 158px;
     min-height: 34px;
     display: flex;
     align-items: center;
@@ -645,6 +856,83 @@
     background: transparent;
     color: var(--toc-text);
     cursor: pointer;
+  }
+
+  .toc-item small {
+    margin-left: auto;
+    opacity: 0;
+    font-size: 11px;
+  }
+
+  .toc-sidebar.expanded .toc-item small {
+    opacity: 0.62;
+  }
+
+  .toc-expand-button {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--toc-text);
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .toc-sidebar.expanded .toc-expand-button {
+    opacity: 0.78;
+  }
+
+  .toc-expand-button:hover,
+  .toc-expand-button:focus-visible {
+    background: var(--toc-item-hover-bg);
+    color: var(--toc-accent);
+    outline: none;
+  }
+
+  .toc-children {
+    display: grid;
+    gap: 3px;
+    margin-left: 40px;
+    padding-left: 10px;
+    border-left: 1px solid var(--toc-item-border);
+  }
+
+  .toc-child-item {
+    width: 140px;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 0 8px;
+    background: transparent;
+    color: var(--toc-text);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .toc-child-item:hover,
+  .toc-child-item:focus-visible,
+  .toc-child-item.active {
+    border-color: var(--toc-item-border);
+    background: var(--toc-item-hover-bg);
+    color: var(--toc-accent);
+    outline: none;
+  }
+
+  .toc-child-item span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .toc-child-item small {
+    opacity: 0.62;
   }
 
   .toc-sidebar.expanded .toc-item:hover,

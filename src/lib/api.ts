@@ -7,6 +7,7 @@ import {
   type Bookmark,
   type BookmarkUpsertReq,
   type Category,
+  type CategorySortReq,
   type CategoryUpsertReq,
   type ChangePasswordReq,
   type DataVersionResp,
@@ -366,7 +367,8 @@ export const categoriesApi = {
   update: (id: number, payload: CategoryUpsertReq) => jsonRequest<Category>(`/categories/${id}`, 'PUT', payload, true),
   remove: (id: number) => request<null>(`/categories/${id}`, { method: 'DELETE', auth: true }),
   batchDelete: (ids: number[]) => jsonRequest<BatchDeleteCategoriesResp>('/categories/batch-delete', 'POST', { ids }, true),
-  sort: (ids: SortReq['ids']) => jsonRequest<null>('/categories/sort', 'POST', { ids }, true),
+  sort: (parentId: CategorySortReq['parent_id'], ids: CategorySortReq['ids']) =>
+    jsonRequest<null>('/categories/sort', 'POST', { parent_id: parentId, ids }, true),
 }
 
 export const bookmarksApi = {

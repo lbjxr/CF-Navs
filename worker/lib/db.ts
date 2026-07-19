@@ -13,6 +13,8 @@ export {
   deleteCategory,
   batchDeleteCategories,
   sortCategories,
+  CategoryConflictError,
+  CategoryValidationError,
 } from './db/categories'
 
 export {

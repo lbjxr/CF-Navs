@@ -1,4 +1,5 @@
 import type { Bookmark, Category, ImportReq } from '../../shared/types'
+import { normalizeCategoryParentId, validateCategoryHierarchy } from '../../shared/categoryHierarchy'
 
 export type ImportValidationResult =
   | { ok: true; payload: ImportReq }
@@ -15,6 +16,7 @@ function isValidCategory(value: unknown): value is Category {
     (value.id as number) > 0 &&
     typeof value.title === 'string' &&
     value.title.trim().length > 0 &&
+    (value.parent_id === undefined || value.parent_id === null || (Number.isInteger(value.parent_id) && Number(value.parent_id) > 0)) &&
     (value.icon === null || value.icon === undefined || typeof value.icon === 'string')
   )
 }
@@ -50,12 +52,19 @@ export function validateImportPayload(body: unknown): ImportValidationResult {
   }
 
   const categoryIds = new Set<number>()
-  for (const category of body.categories) {
+  const normalizedCategories = body.categories.map((category) => ({
+    ...category,
+    parent_id: normalizeCategoryParentId(category.parent_id),
+  }))
+  for (const category of normalizedCategories) {
     if (categoryIds.has(category.id)) {
       return { ok: false, message: `duplicate category id: ${category.id}` }
     }
     categoryIds.add(category.id)
   }
+
+  const hierarchyError = validateCategoryHierarchy(normalizedCategories)
+  if (hierarchyError) return { ok: false, message: hierarchyError }
 
   const bookmarkIds = new Set<number>()
   for (const bookmark of body.bookmarks) {
@@ -76,13 +85,11 @@ export function validateImportPayload(body: unknown): ImportValidationResult {
     return { ok: false, message: 'invalid import mode' }
   }
 
-  return {
-    ok: true,
-    payload: {
-      categories: body.categories,
-      bookmarks: body.bookmarks,
-      settings: body.settings,
-      mode: body.mode,
-    },
+  const payload: ImportReq = {
+    categories: normalizedCategories,
+    bookmarks: body.bookmarks,
   }
+  if (body.settings !== undefined) payload.settings = body.settings
+  if (body.mode !== undefined) payload.mode = body.mode
+  return { ok: true, payload }
 }

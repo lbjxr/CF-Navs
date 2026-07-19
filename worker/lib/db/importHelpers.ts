@@ -1,4 +1,5 @@
 import type { Bookmark, Category } from '../../../shared/types'
+import { normalizeCategoryParentId } from '../../../shared/categoryHierarchy'
 
 // Pure helpers extracted from db/import.ts to enable unit testing
 // without D1 database dependencies.
@@ -6,6 +7,7 @@ import type { Bookmark, Category } from '../../../shared/types'
 export function normalizeImportCategory(c: Category, now: number): Category {
   return {
     id: c.id,
+    parent_id: normalizeCategoryParentId(c.parent_id),
     title: c.title,
     icon: c.icon ?? null,
     sort: Number.isFinite(c.sort) ? c.sort : 0,

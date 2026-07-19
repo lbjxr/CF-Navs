@@ -40,6 +40,7 @@ const publicBookmark: PublicBookmark = {
 describe('app modal state helpers', () => {
   it('creates empty category drafts', () => {
     expect(createCategoryDraft()).toEqual({
+      parent_id: null,
       title: '',
       icon: '',
     })

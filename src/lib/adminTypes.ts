@@ -2,6 +2,7 @@ export type AdminTab = 'categories' | 'bookmarks' | 'settings' | 'backup'
 
 export type CategoryFormValue = {
   id?: string | number
+  parent_id: string | number | null
   title: string
   icon: string
 }

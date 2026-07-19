@@ -1,4 +1,5 @@
 import type { PublicData } from '../../shared/types'
+import { normalizeCategories } from '../../shared/categoryHierarchy'
 import { clearSnapshots, currentSnapshotOrigin, hashSnapshotScope, readSnapshot, type SnapshotStorageConfig, writeSnapshot } from './snapshotStorage'
 
 type CachedPublicDataPayload = { saved_at: number; version?: string | null; data: PublicData }
@@ -11,7 +12,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parsePayload(value: unknown): CachedPublicDataEntry | null {
   if (!isRecord(value) || !isRecord(value.data)) return null
   if (!Array.isArray(value.data.categories) || !Array.isArray(value.data.bookmarks) || !isRecord(value.data.settings)) return null
-  return { version: typeof value.version === 'string' ? value.version : null, data: value.data as unknown as PublicData }
+  const data = value.data as unknown as PublicData
+  return {
+    version: typeof value.version === 'string' ? value.version : null,
+    data: { ...data, categories: normalizeCategories(data.categories) },
+  }
 }
 
 const storage: SnapshotStorageConfig<CachedPublicDataEntry> = {
