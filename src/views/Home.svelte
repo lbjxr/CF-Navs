@@ -13,6 +13,7 @@
     createHomeDataMemo,
     getHomeSections,
     getHomeSectionsKey,
+    getHomeSectionPathIds,
     getHomeScrollTarget,
     getNearestIntersectingSectionId,
     getVisibleCategoryIds,
@@ -65,6 +66,8 @@
   let deferredSearchQuery = ''
   let trackedNavigationOffset = 0
   let persistentLeftExpanded = true
+  let expandedCategoryIds = new Set<string>()
+  let expansionScopeKey = ''
 
   $: sortedCategories = homeData.getSortedCategories(categories)
   $: categoryForest = homeData.getCategoryForest(categories)
@@ -90,6 +93,11 @@
     sectionsKey = nextSectionsKey
     navigationLayoutReady = false
     void refreshSectionElementsAfterRender()
+  }
+  $: nextExpansionScopeKey = `${sectionsKey}:${hasSearchQuery ? normalizedSearchQuery : ''}`
+  $: if (nextExpansionScopeKey !== expansionScopeKey) {
+    expansionScopeKey = nextExpansionScopeKey
+    expandedCategoryIds = hasSearchQuery ? new Set(sections.flatMap((section) => [section.id, ...section.children.map((child) => child.id)])) : new Set()
   }
 
   $: totalBookmarks = sortedBookmarks.length
@@ -285,6 +293,26 @@
     await waitForNextFrame()
   }
 
+  function setCategoryExpanded(categoryId: string | number, expanded: boolean) {
+    const id = `category-${categoryId}`
+    const next = new Set(expandedCategoryIds)
+    if (expanded) next.add(id)
+    else next.delete(id)
+    expandedCategoryIds = next
+    void refreshSectionElementsAfterRender()
+  }
+
+  async function expandNavigationPath(targetId: string): Promise<void> {
+    const pathIds = getHomeSectionPathIds(sections, targetId)
+    if (pathIds.length === 0) return
+
+    const next = new Set(expandedCategoryIds)
+    pathIds.forEach((id) => next.add(id))
+    expandedCategoryIds = next
+    await tick()
+    refreshSectionElements()
+  }
+
   function scrollToSection(sectionElement: HTMLElement, behavior: ScrollBehavior): void {
     const targetRect = sectionElement.getBoundingClientRect()
     const finalScroll = getHomeScrollTarget({
@@ -309,6 +337,7 @@
     isScrolling = true
     activeId = targetId
 
+    await expandNavigationPath(targetId)
     await ensureNavigationLayoutReady()
     if (requestId !== navigationRequestId) return
 
@@ -389,6 +418,9 @@
                 category={category}
                 bookmarks={categoryBookmarks.get(category.id) ?? []}
                 showEmpty={false}
+                expanded={expandedCategoryIds.has(`category-${category.id}`)}
+                hasNestedCategories={category.children.length > 0}
+                onExpandedChange={(expanded) => setCategoryExpanded(category.id, expanded)}
                 canAddBookmark={isAuthenticated}
                 cardWidth={settings?.card_size?.width ?? 80}
                 cardHeight={settings?.card_size?.height ?? 60}
@@ -401,33 +433,36 @@
                 onAddBookmark={onOpenCreateBookmark}
                 onEditBookmark={onEditBookmark}
                 onSortBookmarks={onSortBookmarksInCategory}
-              />
-              {#if category.children.length > 0}
-                <div class="child-section-list">
-                  {#each category.children as child (child.id)}
-                    <div class="section-shell child-section-shell" data-section-id={`category-${child.id}`}>
-                      <CategorySection
-                        category={child}
-                        bookmarks={categoryBookmarks.get(child.id) ?? []}
-                        level={2}
-                        showEmpty={false}
-                        canAddBookmark={isAuthenticated}
-                        cardWidth={settings?.card_size?.width ?? 80}
-                        cardHeight={settings?.card_size?.height ?? 60}
-                        cardStyle={settings?.card_style ?? 'info'}
-                        cardIconSize={settings?.card_icon_size ?? 60}
-                        cardShowDescription={settings?.card_show_description ?? true}
-                        cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
-                        cardIconShowTitle={settings?.card_icon_show_title ?? true}
-                        canSort={isAuthenticated && !hasSearchQuery}
-                        onAddBookmark={onOpenCreateBookmark}
-                        onEditBookmark={onEditBookmark}
-                        onSortBookmarks={onSortBookmarksInCategory}
-                      />
-                    </div>
-                  {/each}
-                </div>
-              {/if}
+              >
+                {#if category.children.length > 0}
+                  <div class="child-section-list">
+                    {#each category.children as child (child.id)}
+                      <div class="section-shell child-section-shell" data-section-id={`category-${child.id}`}>
+                        <CategorySection
+                          category={child}
+                          bookmarks={categoryBookmarks.get(child.id) ?? []}
+                          level={2}
+                          showEmpty={false}
+                          expanded={expandedCategoryIds.has(`category-${child.id}`)}
+                          onExpandedChange={(expanded) => setCategoryExpanded(child.id, expanded)}
+                          canAddBookmark={isAuthenticated}
+                          cardWidth={settings?.card_size?.width ?? 80}
+                          cardHeight={settings?.card_size?.height ?? 60}
+                          cardStyle={settings?.card_style ?? 'info'}
+                          cardIconSize={settings?.card_icon_size ?? 60}
+                          cardShowDescription={settings?.card_show_description ?? true}
+                          cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+                          cardIconShowTitle={settings?.card_icon_show_title ?? true}
+                          canSort={isAuthenticated && !hasSearchQuery}
+                          onAddBookmark={onOpenCreateBookmark}
+                          onEditBookmark={onEditBookmark}
+                          onSortBookmarks={onSortBookmarksInCategory}
+                        />
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </CategorySection>
             </div>
           {/each}
         </div>

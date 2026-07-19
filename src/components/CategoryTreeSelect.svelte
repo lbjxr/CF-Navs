@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import {
     getCategoryTreeOptionLabel,
     type CategoryTreeOption,
@@ -18,6 +18,7 @@
   let root: HTMLElement | null = null
   let open = false
   let trigger: HTMLButtonElement | null = null
+  let expandedRootIds = new Set<string>()
 
   $: selectedOptionLabel = getCategoryTreeOptionLabel(items, value)
   $: selectedLabel = value == null && rootOptionLabel
@@ -32,6 +33,7 @@
 
   function toggleMenu(): void {
     if (disabled || !hasOptions) return
+    if (!open) expandedRootIds = new Set()
     open = !open
   }
 
@@ -43,6 +45,56 @@
   function getTreeItems(): HTMLButtonElement[] {
     if (!root) return []
     return Array.from(root.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'))
+  }
+
+  function toggleRootExpansion(id: string | number, event: MouseEvent): void {
+    event.preventDefault()
+    event.stopPropagation()
+    const normalizedId = String(id)
+    const next = new Set(expandedRootIds)
+    if (next.has(normalizedId)) next.delete(normalizedId)
+    else next.add(normalizedId)
+    expandedRootIds = next
+  }
+
+  function focusRootItem(id: string): void {
+    root?.querySelector<HTMLButtonElement>(`.tree-root-option[data-tree-root-id="${id}"]`)?.focus()
+  }
+
+  function handleTreeHorizontalKey(event: KeyboardEvent): boolean {
+    const target = event.target as HTMLElement | null
+    const rootOption = target?.closest<HTMLButtonElement>('.tree-root-option')
+    const childOption = target?.closest<HTMLButtonElement>('.tree-child-option')
+    const rootId = rootOption?.dataset.treeRootId ?? childOption?.dataset.treeParentId
+    if (!rootId) return false
+    const item = items.find((candidate) => String(candidate.id) === rootId)
+    if (!item || item.children.length === 0) return false
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      if (!expandedRootIds.has(rootId)) {
+        expandedRootIds = new Set([...expandedRootIds, rootId])
+        return true
+      }
+      if (rootOption) {
+        void tick().then(() => root?.querySelector<HTMLButtonElement>(`.tree-child-option[data-tree-parent-id="${rootId}"]`)?.focus())
+      }
+      return true
+    }
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      if (childOption) {
+        focusRootItem(rootId)
+      } else if (expandedRootIds.has(rootId)) {
+        const next = new Set(expandedRootIds)
+        next.delete(rootId)
+        expandedRootIds = next
+      }
+      return true
+    }
+
+    return false
   }
 
   function focusTreeItem(index: number): void {
@@ -59,7 +111,10 @@
     }
     if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return
     event.preventDefault()
-    if (!open) open = true
+    if (!open) {
+      expandedRootIds = new Set()
+      open = true
+    }
     requestAnimationFrame(() => {
       const options = getTreeItems()
       if (event.key === 'ArrowUp') options.at(-1)?.focus()
@@ -68,6 +123,7 @@
   }
 
   function handleTreeKeyDown(event: KeyboardEvent): void {
+    if (handleTreeHorizontalKey(event)) return
     const options = getTreeItems()
     const currentIndex = options.indexOf(document.activeElement as HTMLButtonElement)
 
@@ -138,27 +194,47 @@
 
       {#each items as item (item.id)}
         <div class="tree-group">
-          <button
-            type="button"
-            class="tree-option tree-root-option"
-            class:selected={String(value) === String(item.id)}
-            role="treeitem"
-            aria-level="1"
-            aria-expanded={item.children.length > 0 ? true : undefined}
-            aria-selected={String(value) === String(item.id)}
-            on:click={() => selectValue(item.id)}
-          >
-            <span class="tree-folder-mark" aria-hidden="true"></span>
-            <span>{item.title}</span>
-          </button>
+          <div class="tree-root-row">
+            {#if item.children.length > 0}
+              <button
+                type="button"
+                class="tree-expand-button"
+                aria-label={`${expandedRootIds.has(String(item.id)) ? '收起' : '展开'} ${item.title} 的子分类`}
+                aria-expanded={expandedRootIds.has(String(item.id))}
+                aria-controls={`category-tree-children-${item.id}`}
+                title={`${expandedRootIds.has(String(item.id)) ? '收起' : '展开'} ${item.title} 的子分类`}
+                tabindex="-1"
+                on:click={(event) => toggleRootExpansion(item.id, event)}
+              >
+                <span class="tree-node-chevron" class:open={expandedRootIds.has(String(item.id))} aria-hidden="true"></span>
+              </button>
+            {:else}
+              <span class="tree-expand-spacer" aria-hidden="true"></span>
+            {/if}
+            <button
+              type="button"
+              class="tree-option tree-root-option"
+              class:selected={String(value) === String(item.id)}
+              data-tree-root-id={item.id}
+              role="treeitem"
+              aria-level="1"
+              aria-expanded={item.children.length > 0 ? expandedRootIds.has(String(item.id)) : undefined}
+              aria-selected={String(value) === String(item.id)}
+              on:click={() => selectValue(item.id)}
+            >
+              <span class="tree-folder-mark" aria-hidden="true"></span>
+              <span>{item.title}</span>
+            </button>
+          </div>
 
-          {#if item.children.length > 0}
-            <div class="tree-children" role="group">
+          {#if item.children.length > 0 && expandedRootIds.has(String(item.id))}
+            <div class="tree-children" id={`category-tree-children-${item.id}`} role="group">
               {#each item.children as child (child.id)}
                 <button
                   type="button"
                   class="tree-option tree-child-option"
                   class:selected={String(value) === String(child.id)}
+                  data-tree-parent-id={item.id}
                   role="treeitem"
                   aria-level="2"
                   aria-selected={String(value) === String(child.id)}
@@ -290,6 +366,56 @@
 
   .tree-group + .tree-group {
     margin-top: 3px;
+  }
+
+  .tree-root-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .tree-root-row > .tree-option {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .tree-expand-button,
+  .tree-expand-spacer {
+    width: 24px;
+    height: 30px;
+    flex: 0 0 auto;
+  }
+
+  .tree-expand-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    padding: 0;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+  }
+
+  .tree-expand-button:hover,
+  .tree-expand-button:focus-visible {
+    outline: none;
+    background: #f1f5f9;
+    color: #1d4ed8;
+  }
+
+  .tree-node-chevron {
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 4px 0 4px 5px;
+    border-color: transparent transparent transparent currentColor;
+  }
+
+  .tree-node-chevron.open {
+    border-width: 5px 4px 0;
+    border-color: currentColor transparent transparent;
   }
 
   .tree-option {

@@ -96,10 +96,6 @@
     item.children?.some((child) => String(child.id) === String(activeId))
   ))?.id
 
-  $: if (activeParentId != null && !expandedParentIds.has(String(activeParentId))) {
-    expandedParentIds = new Set([...expandedParentIds, String(activeParentId)])
-  }
-
   function checkIsMobile(): void {
     isMobileView = window.innerWidth < MOBILE_WIDTH
   }

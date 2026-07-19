@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { HomeSection } from '../../src/lib/homeData'
 import {
+  getHomeSectionPathIds,
   getHomeScrollTarget,
   getHomeSectionsKey,
   getNearestIntersectingSectionId,
@@ -28,6 +29,12 @@ describe('home navigation helpers', () => {
     expect(resolveHomeActiveSectionId(sections, 'category-3')).toBe('category-3')
     expect(resolveHomeActiveSectionId(sections, 'missing')).toBe('category-1')
     expect(resolveHomeActiveSectionId([], 'category-1')).toBe('')
+  })
+
+  it('resolves the expandable path for root and child sections', () => {
+    expect(getHomeSectionPathIds(sections, 'category-1')).toEqual(['category-1'])
+    expect(getHomeSectionPathIds(sections, 'category-3')).toEqual(['category-1', 'category-3'])
+    expect(getHomeSectionPathIds(sections, 'missing')).toEqual([])
   })
 
   it('selects the nearest intersecting section', () => {

@@ -356,3 +356,15 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 640px) {
+  .admin-list-panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-header-actions-row {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}

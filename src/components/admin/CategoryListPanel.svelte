@@ -42,6 +42,9 @@
   let page = 1
   let selectedIds = new Set<number>()
   let search = ''
+  let expandedRootIds = new Set<string>()
+  let collapsedSearchRootIds = new Set<string>()
+  let trackedCategorySearch = ''
 
   $: categoryGroups = buildAdminCategoryGroups(categories)
   $: filteredGroups = filterAdminCategoryGroups(categoryGroups, search)
@@ -55,6 +58,16 @@
   $: selectedIds = new Set([...selectedIds].filter((id) => categories.some((category) => Number(category.id) === id)))
   $: pageIds = pagedCategories.map((category) => Number(category.id))
   $: pageSelectedCount = pageIds.filter((id) => selectedIds.has(id)).length
+  $: normalizedCategorySearch = search.trim().toLowerCase()
+  $: if (normalizedCategorySearch !== trackedCategorySearch) {
+    trackedCategorySearch = normalizedCategorySearch
+    collapsedSearchRootIds = new Set()
+  }
+  $: displayedExpandedRootIds = normalizedCategorySearch
+    ? new Set(filteredGroups
+        .map((group) => String(group.root.id))
+        .filter((id) => !collapsedSearchRootIds.has(id)))
+    : expandedRootIds
 
   function enterSort(parentId: number | null, scopeTitle: string) {
     const siblings = parentId == null
@@ -65,7 +78,24 @@
     sortScopeTitle = scopeTitle
     search = ''
     page = 1
+    expandedRootIds = new Set()
     sortMode = true
+  }
+
+  function toggleCategoryGroup(id: string | number) {
+    const normalizedId = String(id)
+    if (normalizedCategorySearch) {
+      const next = new Set(collapsedSearchRootIds)
+      if (next.has(normalizedId)) next.delete(normalizedId)
+      else next.add(normalizedId)
+      collapsedSearchRootIds = next
+      return
+    }
+
+    const next = new Set(expandedRootIds)
+    if (next.has(normalizedId)) next.delete(normalizedId)
+    else next.add(normalizedId)
+    expandedRootIds = next
   }
 
   function togglePageSelection(event: Event) {
@@ -84,6 +114,12 @@
   function handleSearchInput(event: Event) {
     search = (event.currentTarget as HTMLInputElement).value
     page = 1
+    expandedRootIds = new Set()
+  }
+
+  function changePage(delta: number) {
+    page += delta
+    expandedRootIds = new Set()
   }
   function indeterminate(node: HTMLInputElement, value: boolean) { node.indeterminate = value; return { update(next: boolean) { node.indeterminate = next } } }
 
@@ -215,8 +251,25 @@
             {/each}
           {:else}
             {#each pagedGroups as group (group.root.id)}
+              {@const rootId = String(group.root.id)}
               <article class="admin-compact-card admin-root-category-card" data-category-id={group.root.id}>
                 <input type="checkbox" aria-label={`选择分类 ${group.root.title}`} checked={selectedIds.has(Number(group.root.id))} on:change={(event) => toggleCategorySelection(event, Number(group.root.id))} />
+                {#if group.children.length > 0}
+                  <button
+                    type="button"
+                    class="admin-tree-toggle"
+                    aria-label={`${displayedExpandedRootIds.has(rootId) ? '收起' : '展开'} ${group.root.title} 的子分类`}
+                    aria-expanded={displayedExpandedRootIds.has(rootId)}
+                    aria-controls={`admin-category-children-${rootId}`}
+                    title={`${displayedExpandedRootIds.has(rootId) ? '收起' : '展开'} ${group.root.title} 的子分类`}
+                    data-testid={`admin-category-expand-${rootId}`}
+                    on:click={() => toggleCategoryGroup(rootId)}
+                  >
+                    <span class="admin-tree-chevron" class:open={displayedExpandedRootIds.has(rootId)} aria-hidden="true"></span>
+                  </button>
+                {:else}
+                  <span class="admin-tree-toggle-spacer" aria-hidden="true"></span>
+                {/if}
                 <span class="admin-icon-badge">
                   {#if getCategoryIconUrl(group.root)}
                     <img src={getCategoryIconUrl(group.root)} alt="" loading="lazy" />
@@ -243,31 +296,35 @@
                 </div>
               </article>
 
-              {#each group.children as category (category.id)}
-                <article class="admin-compact-card admin-child-category-card" data-category-id={category.id}>
-                  <input type="checkbox" aria-label={`选择分类 ${category.title}`} checked={selectedIds.has(Number(category.id))} on:change={(event) => toggleCategorySelection(event, Number(category.id))} />
-                  <span class="admin-hierarchy-connector" aria-hidden="true">↳</span>
-                  <span class="admin-icon-badge">
-                    {#if getCategoryIconUrl(category)}
-                      <img src={getCategoryIconUrl(category)} alt="" loading="lazy" />
-                    {:else}
-                      {category.icon || '📁'}
-                    {/if}
-                  </span>
-                  <div class="admin-compact-info">
-                    <h3>{category.title}</h3>
-                    <span class="admin-parent-path">{group.root.title} / {category.title}</span>
-                    <span class="admin-count-badge">{getAdminCategoryBookmarkCount(category, bookmarks)} 个直属书签</span>
-                  </div>
-                  <div class="admin-inline-actions">
-                    <button type="button" class="admin-sm-button" on:click={() => onEditCategory?.(category)} disabled={!isAuthenticated}>编辑</button>
-                    <button type="button" class="admin-sm-button" on:click={() => onOpenCreateBookmark?.(category.id)} disabled={!isAuthenticated}>加书签</button>
-                    <button type="button" class="admin-sm-button danger" on:click={() => onDeleteCategory?.(category)} disabled={!isAuthenticated || deletingCategoryId === category.id}>
-                      {#if deletingCategoryId === category.id}删除中...{:else}删除{/if}
-                    </button>
-                  </div>
-                </article>
-              {/each}
+              {#if displayedExpandedRootIds.has(rootId)}
+                <div class="admin-child-category-list" id={`admin-category-children-${rootId}`}>
+                  {#each group.children as category (category.id)}
+                    <article class="admin-compact-card admin-child-category-card" data-category-id={category.id}>
+                      <input type="checkbox" aria-label={`选择分类 ${category.title}`} checked={selectedIds.has(Number(category.id))} on:change={(event) => toggleCategorySelection(event, Number(category.id))} />
+                      <span class="admin-hierarchy-connector" aria-hidden="true">↳</span>
+                      <span class="admin-icon-badge">
+                        {#if getCategoryIconUrl(category)}
+                          <img src={getCategoryIconUrl(category)} alt="" loading="lazy" />
+                        {:else}
+                          {category.icon || '📁'}
+                        {/if}
+                      </span>
+                      <div class="admin-compact-info">
+                        <h3>{category.title}</h3>
+                        <span class="admin-parent-path">{group.root.title} / {category.title}</span>
+                        <span class="admin-count-badge">{getAdminCategoryBookmarkCount(category, bookmarks)} 个直属书签</span>
+                      </div>
+                      <div class="admin-inline-actions">
+                        <button type="button" class="admin-sm-button" on:click={() => onEditCategory?.(category)} disabled={!isAuthenticated}>编辑</button>
+                        <button type="button" class="admin-sm-button" on:click={() => onOpenCreateBookmark?.(category.id)} disabled={!isAuthenticated}>加书签</button>
+                        <button type="button" class="admin-sm-button danger" on:click={() => onDeleteCategory?.(category)} disabled={!isAuthenticated || deletingCategoryId === category.id}>
+                          {#if deletingCategoryId === category.id}删除中...{:else}删除{/if}
+                        </button>
+                      </div>
+                    </article>
+                  {/each}
+                </div>
+              {/if}
             {/each}
           {/if}
         </div>
@@ -282,9 +339,9 @@
           <div class="admin-pagination">
             <span>第 {categoryPage.start}-{categoryPage.end} 个 / 共 {categoryPage.total} 个一级分类</span>
             <div class="admin-pager-actions">
-              <button type="button" class="admin-ghost-button compact" on:click={() => page -= 1} disabled={page <= 1}>上一页</button>
+              <button type="button" class="admin-ghost-button compact" on:click={() => changePage(-1)} disabled={page <= 1}>上一页</button>
               <span>{page} / {totalPages}</span>
-              <button type="button" class="admin-ghost-button compact" on:click={() => page += 1} disabled={page >= totalPages}>下一页</button>
+              <button type="button" class="admin-ghost-button compact" on:click={() => changePage(1)} disabled={page >= totalPages}>下一页</button>
             </div>
           </div>
         {/if}
@@ -357,6 +414,74 @@
 
   .admin-root-category-card {
     border-left: 3px solid color-mix(in srgb, var(--admin-accent) 44%, var(--admin-card-border));
+  }
+
+  .admin-tree-toggle,
+  .admin-tree-toggle-spacer {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+  }
+
+  .admin-tree-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--admin-input-border);
+    border-radius: 8px;
+    padding: 0;
+    background: var(--admin-control-bg);
+    color: var(--admin-subtle);
+    cursor: pointer;
+  }
+
+  .admin-tree-toggle:hover,
+  .admin-tree-toggle:focus-visible {
+    outline: none;
+    border-color: var(--admin-accent);
+    background: var(--admin-nav-hover-bg);
+    color: var(--admin-accent);
+  }
+
+  .admin-tree-chevron {
+    position: relative;
+    width: 10px;
+    height: 8px;
+  }
+
+  .admin-tree-chevron::before,
+  .admin-tree-chevron::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    width: 6px;
+    height: 1.5px;
+    border-radius: 999px;
+    background: currentColor;
+    transition: transform 0.16s ease;
+  }
+
+  .admin-tree-chevron::before {
+    left: 0;
+    transform: rotate(40deg);
+  }
+
+  .admin-tree-chevron::after {
+    right: 0;
+    transform: rotate(-40deg);
+  }
+
+  .admin-tree-chevron.open::before {
+    transform: rotate(-40deg);
+  }
+
+  .admin-tree-chevron.open::after {
+    transform: rotate(40deg);
+  }
+
+  .admin-child-category-list {
+    display: grid;
+    gap: 8px;
   }
 
   .admin-child-category-card {

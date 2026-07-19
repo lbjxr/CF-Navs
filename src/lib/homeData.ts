@@ -101,6 +101,15 @@ export function resolveHomeActiveSectionId(sections: HomeSection[], activeId: st
   return ids.has(activeId) ? activeId : sections[0]?.id ?? ''
 }
 
+export function getHomeSectionPathIds(sections: HomeSection[], targetId: string): string[] {
+  for (const section of sections) {
+    if (section.id === targetId) return [section.id]
+    if (section.children.some((child) => child.id === targetId)) return [section.id, targetId]
+  }
+
+  return []
+}
+
 export function getVisibleCategoryForest(
   forest: CategoryNode<PublicCategory>[],
   visibleCategoryIds: Set<number> | null,

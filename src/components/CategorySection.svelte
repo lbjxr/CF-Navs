@@ -13,6 +13,9 @@
   export let bookmarks: PublicBookmark[] = []
   export let level: 1 | 2 = 1
   export let showEmpty = true
+  export let expanded = false
+  export let hasNestedCategories = false
+  export let onExpandedChange: ((expanded: boolean) => void) | undefined = undefined
   export let canAddBookmark = false
   export let canSort = false
   export let cardWidth = 200 // 改为 200，Sun-Panel 标准
@@ -37,6 +40,10 @@
   $: displayBookmarks = sortMode ? localBookmarks : bookmarks
 
   function enterSort() {
+    if (!expanded) {
+      expanded = true
+      onExpandedChange?.(true)
+    }
     localBookmarks = [...bookmarks]
     sortMode = true
   }
@@ -66,6 +73,8 @@
   }
 
   $: sectionId = `category-${category.id}`
+  $: contentId = `${sectionId}-content`
+  $: hasExpandableContent = bookmarks.length > 0 || showEmpty || hasNestedCategories
   $: categoryIconKey = `${category.id}:${category.icon ?? ''}:${category.title}`
   $: categoryIconUrl = getCategoryIconUrl(category)
   $: hasCategoryImageIcon = Boolean(categoryIconUrl) && !categoryIconFailed
@@ -95,11 +104,33 @@
   async function handleAddBookmark() {
     await onAddBookmark?.(category.id)
   }
+
+  function toggleExpanded() {
+    if (!hasExpandableContent) return
+    expanded = !expanded
+    onExpandedChange?.(expanded)
+  }
 </script>
 
-<section class="category-section" class:child-category={level === 2} id={sectionId}>
+<section class="category-section" class:child-category={level === 2} class:collapsed={!expanded && hasExpandableContent} id={sectionId}>
   <header class="section-header">
     <div class="section-title-wrap">
+      {#if hasExpandableContent}
+        <button
+          type="button"
+          class="section-expand-button"
+          aria-label={`${expanded ? '收起' : '展开'} ${category.title} 的分类内容`}
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          title={`${expanded ? '收起' : '展开'} ${category.title} 的分类内容`}
+          data-testid={`category-expand-${category.id}`}
+          on:click={toggleExpanded}
+        >
+          <span class="section-chevron" class:open={expanded} aria-hidden="true"></span>
+        </button>
+      {:else}
+        <span class="section-expand-placeholder" aria-hidden="true"></span>
+      {/if}
       {#if hasCategoryImageIcon}
         <img
           class="section-icon"
@@ -134,40 +165,46 @@
     </div>
   </header>
 
-  {#if bookmarks.length > 0}
-    <div
-      class="bookmark-grid"
-      class:is-sorting={sortMode}
-      class:is-icon-grid={cardStyle !== 'info'}
-      style="--card-min-width: {gridMinWidth}px; --mobile-card-min-width: {mobileGridMinWidth}px; --bookmark-grid-gap: {gridGap}; --mobile-bookmark-grid-gap: {mobileGridGap};"
-      use:sortableList={{
-        enabled: sortMode,
-        onSort: handleReorder,
-      }}
-    >
-      {#each displayBookmarks as bookmark (bookmark.id)}
-        <div class="bookmark-grid-item" data-sortable-item data-sort-id={bookmark.id}>
-          <BookmarkCard
-            {bookmark}
-            style={cardStyle}
-            iconSize={cardIconSize}
-            showDescription={resolveBookmarkDescriptionMode(bookmark, cardDescriptionMode) !== 'hidden'}
-            descriptionMode={resolveBookmarkDescriptionMode(bookmark, cardDescriptionMode)}
-            showIconTitle={cardIconShowTitle}
-            width={cardWidth}
-            height={cardHeight}
-            canEdit={Boolean(onEditBookmark)}
-            sortMode={sortMode}
-            onEdit={onEditBookmark}
-          />
+  {#if expanded && hasExpandableContent}
+    <div class="section-content" id={contentId}>
+      {#if bookmarks.length > 0}
+        <div
+          class="bookmark-grid"
+          class:is-sorting={sortMode}
+          class:is-icon-grid={cardStyle !== 'info'}
+          style="--card-min-width: {gridMinWidth}px; --mobile-card-min-width: {mobileGridMinWidth}px; --bookmark-grid-gap: {gridGap}; --mobile-bookmark-grid-gap: {mobileGridGap};"
+          use:sortableList={{
+            enabled: sortMode,
+            onSort: handleReorder,
+          }}
+        >
+          {#each displayBookmarks as bookmark (bookmark.id)}
+            <div class="bookmark-grid-item" data-sortable-item data-sort-id={bookmark.id}>
+              <BookmarkCard
+                {bookmark}
+                style={cardStyle}
+                iconSize={cardIconSize}
+                showDescription={resolveBookmarkDescriptionMode(bookmark, cardDescriptionMode) !== 'hidden'}
+                descriptionMode={resolveBookmarkDescriptionMode(bookmark, cardDescriptionMode)}
+                showIconTitle={cardIconShowTitle}
+                width={cardWidth}
+                height={cardHeight}
+                canEdit={Boolean(onEditBookmark)}
+                sortMode={sortMode}
+                onEdit={onEditBookmark}
+              />
+            </div>
+          {/each}
         </div>
-      {/each}
+        {#if sortMode}
+          <p class="sort-hint">拖动卡片调整顺序，完成后点击「保存排序」。</p>
+        {/if}
+      {:else if showEmpty}
+        <div class="empty-card">这个分类下暂时还没有可展示的书签。</div>
+      {/if}
+
+      <slot />
     </div>
-    {#if sortMode}
-      <p class="sort-hint">拖动卡片调整顺序，完成后点击「保存排序」。</p>
-    {/if}
-  {:else if showEmpty}
-    <div class="empty-card">这个分类下暂时还没有可展示的书签。</div>
   {/if}
 </section>
 
@@ -205,6 +242,69 @@
     align-items: center;
     gap: 0.85rem;
     min-width: 0;
+  }
+
+  .section-expand-button,
+  .section-expand-placeholder {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+  }
+
+  .section-expand-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--home-stat-border, rgba(148, 163, 184, 0.28));
+    border-radius: 8px;
+    padding: 0;
+    background: var(--home-stat-chip-bg, rgba(255, 255, 255, 0.28));
+    color: var(--home-text-color, currentColor);
+    cursor: pointer;
+    transition: border-color 0.16s ease, background 0.16s ease;
+  }
+
+  .section-expand-button:hover,
+  .section-expand-button:focus-visible {
+    outline: none;
+    border-color: color-mix(in srgb, var(--home-accent-color) 48%, transparent);
+    background: color-mix(in srgb, var(--home-accent-color) 10%, transparent);
+  }
+
+  .section-chevron {
+    position: relative;
+    width: 11px;
+    height: 8px;
+  }
+
+  .section-chevron::before,
+  .section-chevron::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    width: 7px;
+    height: 1.5px;
+    border-radius: 999px;
+    background: currentColor;
+    transition: transform 0.16s ease;
+  }
+
+  .section-chevron::before {
+    left: 0;
+    transform: rotate(40deg);
+  }
+
+  .section-chevron::after {
+    right: 0;
+    transform: rotate(-40deg);
+  }
+
+  .section-chevron.open::before {
+    transform: rotate(-40deg);
+  }
+
+  .section-chevron.open::after {
+    transform: rotate(40deg);
   }
 
   .section-icon {
@@ -299,6 +399,12 @@
     line-height: 1.25;
     font-variant-numeric: tabular-nums;
     opacity: var(--home-muted-opacity, 0.72);
+  }
+
+  .section-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
   }
 
   .sort-hint {
@@ -401,6 +507,11 @@
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.12),
       0 6px 16px rgba(0, 0, 0, 0.28);
+  }
+
+  :global([data-theme='dark']) .section-expand-button {
+    border-color: rgba(148, 163, 184, 0.28);
+    background: rgba(15, 23, 42, 0.34);
   }
 
   :global([data-theme='dark']) .section-title-wrap p {
