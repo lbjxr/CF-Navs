@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeImportCategory, normalizeImportBookmark } from '../../worker/lib/db/importHelpers'
+import { normalizeImportCategory, normalizeImportBookmark, remapImportRecords } from '../../worker/lib/db/importHelpers'
 import type { Bookmark, Category } from '../../shared/types'
 
 describe('normalizeImportCategory', () => {
@@ -130,5 +130,35 @@ describe('normalizeImportBookmark', () => {
     expect(output.icon_source).toBe('favicon_im')
     expect(output.icon_background_color).toBe('#333')
     expect(output.description).toBe('Code host')
+  })
+})
+
+describe('remapImportRecords', () => {
+  it('inserts roots before children and rewrites parent and bookmark category ids', () => {
+    const result = remapImportRecords([
+      { id: 10, parent_id: 20, title: 'Child', icon: null, sort: 0, created_at: 1 },
+      { id: 20, parent_id: null, title: 'Root', icon: null, sort: 0, created_at: 1 },
+    ], [{
+      id: 30,
+      category_id: 10,
+      title: 'Bookmark',
+      url: 'https://bookmark.test',
+      icon: null,
+      icon_source: null,
+      icon_background_color: null,
+      icon_blob: null,
+      description: null,
+      description_mode: null,
+      open_method: 1,
+      sort: 0,
+      created_at: 1,
+    }], 100)
+
+    expect(result.categories.map((category) => ({ id: category.id, parent_id: category.parent_id, title: category.title }))).toEqual([
+      { id: 1, parent_id: null, title: 'Root' },
+      { id: 2, parent_id: 1, title: 'Child' },
+    ])
+    expect(result.bookmarks[0].category_id).toBe(2)
+    expect(result.categoryIdMap).toEqual(new Map([[20, 1], [10, 2]]))
   })
 })

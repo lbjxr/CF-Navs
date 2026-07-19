@@ -147,7 +147,7 @@
   let bookmarkError = ''
   let settingsError = ''
 
-  const importExportState = createImportExportState()
+  let importExportState = createImportExportState()
   let preferredThemeMode: ThemeMode | null = null
   let prefersReducedMotion = false
   const categorySortState = createOptimisticSortState()
@@ -823,7 +823,9 @@
   }
 
   function handleExportData(): void {
-    exportDataToFile(importExportState, adminData)
+    exportDataToFile(importExportState, adminData, (next) => {
+      importExportState = next
+    })
   }
 
   async function handleImportData(file: File, source: ImportSource, mode: 'replace' | 'merge'): Promise<void> {
@@ -832,6 +834,9 @@
       requestConfirmation,
       applyLoggedInData: (data) => applyLoggedInData(data),
       persistCurrentAdminData,
+      onStateChange: (next) => {
+        importExportState = next
+      },
     })
     if (!importExportState.backupError && importExportState.backupMessage) {
       await refreshAdminDataAfterMutation()

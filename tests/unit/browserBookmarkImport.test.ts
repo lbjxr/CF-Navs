@@ -55,4 +55,29 @@ describe('browser bookmark import', () => {
     expect(result.payload.categories.map(category => category.title)).toEqual(['浏览器书签'])
     expect(result.payload.bookmarks.map(bookmark => bookmark.category_id)).toEqual([1, 1])
   })
+
+  it('maps two levels and flattens deeper folders with a distinct separator', () => {
+    const exportedHtml = `<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><p>
+<DT><H3>Bookmarks Bar</H3><DL><p>
+  <DT><H3>Development</H3><DL><p>
+    <DT><A HREF="https://root.dev">Root dev</A>
+    <DT><H3>Frontend</H3><DL><p>
+      <DT><A HREF="https://frontend.dev">Frontend</A>
+      <DT><H3>Frameworks</H3><DL><p><DT><A HREF="https://framework.dev">Framework</A></DL><p>
+    </DL><p>
+  </DL><p>
+</DL><p></DL><p>`
+
+    const result = prepareBrowserBookmarkHtml(exportedHtml)
+    expect(result.payload.categories.map((category) => ({
+      title: category.title,
+      parent_id: category.parent_id,
+      sort: category.sort,
+    }))).toEqual([
+      { title: 'Development', parent_id: null, sort: 0 },
+      { title: 'Frontend', parent_id: 1, sort: 0 },
+      { title: 'Frontend › Frameworks', parent_id: 1, sort: 1 },
+    ])
+    expect(result.payload.bookmarks.map((bookmark) => bookmark.category_id)).toEqual([1, 2, 3])
+  })
 })

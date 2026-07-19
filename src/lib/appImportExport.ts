@@ -19,13 +19,25 @@ export function createImportExportState(): ImportExportState {
   }
 }
 
+function notifyState(
+  state: ImportExportState,
+  listener?: (next: ImportExportState) => void,
+): void {
+  listener?.({ ...state })
+}
+
 /**
  * Synchronous export: builds the backup JSON artifact from current admin data,
  * triggers a file download, and sets the success/error state + toast.
  */
-export function exportDataToFile(state: ImportExportState, adminData: AdminData): void {
+export function exportDataToFile(
+  state: ImportExportState,
+  adminData: AdminData,
+  onStateChange?: (next: ImportExportState) => void,
+): void {
   state.backupError = ''
   state.backupMessage = ''
+  notifyState(state, onStateChange)
 
   try {
     const artifact = createBackupExportArtifact(adminData)
@@ -39,9 +51,11 @@ export function exportDataToFile(state: ImportExportState, adminData: AdminData)
     anchor.remove()
     URL.revokeObjectURL(href)
     state.backupMessage = artifact.message
+    notifyState(state, onStateChange)
     toastStore.addToast(artifact.message, 'success')
   } catch (error) {
     state.backupError = getErrorMessage(error)
+    notifyState(state, onStateChange)
   }
 }
 
@@ -51,6 +65,7 @@ export interface ImportDeps {
   requestConfirmation: (input: ConfirmDialogInput) => Promise<boolean>
   applyLoggedInData: (data: AdminData) => void
   persistCurrentAdminData: () => Promise<void>
+  onStateChange?: (next: ImportExportState) => void
 }
 
 /**
@@ -66,6 +81,7 @@ export async function importDataFromFile(
 ): Promise<void> {
   state.backupError = ''
   state.backupMessage = ''
+  notifyState(state, deps.onStateChange)
 
   try {
     const text = await file.text()
@@ -83,14 +99,18 @@ export async function importDataFromFile(
     }
 
     state.importing = true
+    notifyState(state, deps.onStateChange)
     const result = await api.data.importAll(prepared.payload)
     deps.applyLoggedInData(result.data)
     await deps.persistCurrentAdminData()
     state.backupMessage = createImportSuccessMessage(result)
+    notifyState(state, deps.onStateChange)
     toastStore.addToast(state.backupMessage, 'success')
   } catch (error) {
     state.backupError = getErrorMessage(error)
+    notifyState(state, deps.onStateChange)
   } finally {
     state.importing = false
+    notifyState(state, deps.onStateChange)
   }
 }

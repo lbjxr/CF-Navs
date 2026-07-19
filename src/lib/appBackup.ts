@@ -1,6 +1,6 @@
 import type { AdminData, BackupData, ImportResp } from '../../shared/types'
 
-export const BACKUP_VERSION = 1
+export const BACKUP_VERSION = 2
 
 export type BackupExportArtifact = {
   payload: BackupData
