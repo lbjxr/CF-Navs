@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
-  import { findCategoryTreeOption, type CategoryTreeOption } from '../lib/categorySelect'
+  import {
+    getCategoryTreeOptionLabel,
+    type CategoryTreeOption,
+  } from '../lib/categorySelect'
 
   export let value: string | number | null | undefined = undefined
   export let items: CategoryTreeOption[] = []
@@ -16,10 +19,10 @@
   let open = false
   let trigger: HTMLButtonElement | null = null
 
-  $: selectedOption = findCategoryTreeOption(items, value)
+  $: selectedOptionLabel = getCategoryTreeOptionLabel(items, value)
   $: selectedLabel = value == null && rootOptionLabel
     ? rootOptionLabel
-    : selectedOption?.title ?? placeholder
+    : selectedOptionLabel ?? placeholder
   $: hasOptions = Boolean(rootOptionLabel) || items.length > 0
 
   function closeMenu(focusTrigger = false): void {
@@ -49,6 +52,11 @@
   }
 
   function handleTriggerKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && open) {
+      event.preventDefault()
+      closeMenu(true)
+      return
+    }
     if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return
     event.preventDefault()
     if (!open) open = true
@@ -101,6 +109,7 @@
     bind:this={trigger}
     data-testid={testId || undefined}
     aria-label={ariaLabel}
+    title={hasOptions ? selectedLabel : emptyLabel}
     aria-haspopup="tree"
     aria-expanded={open}
     {disabled}
@@ -218,19 +227,49 @@
     opacity: 0.6;
   }
 
+  .category-select-trigger > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .select-chevron {
-    width: 7px;
+    position: relative;
+    width: 10px;
     height: 7px;
     flex: 0 0 auto;
-    border-right: 1.5px solid currentColor;
-    border-bottom: 1.5px solid currentColor;
-    transform: rotate(45deg) translateY(-2px);
-    transition: transform 0.16s ease;
     opacity: 0.68;
   }
 
-  .select-chevron.open {
-    transform: rotate(225deg) translate(-1px, -1px);
+  .select-chevron::before,
+  .select-chevron::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    width: 6px;
+    height: 1.5px;
+    border-radius: 999px;
+    background: currentColor;
+    transition: transform 0.16s ease;
+  }
+
+  .select-chevron::before {
+    left: 0;
+    transform: rotate(40deg);
+  }
+
+  .select-chevron::after {
+    right: 0;
+    transform: rotate(-40deg);
+  }
+
+  .select-chevron.open::before {
+    transform: rotate(-40deg);
+  }
+
+  .select-chevron.open::after {
+    transform: rotate(40deg);
   }
 
   .category-tree-menu {

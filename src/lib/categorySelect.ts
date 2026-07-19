@@ -65,3 +65,19 @@ export function findCategoryTreeOption(
 
   return null
 }
+
+export function getCategoryTreeOptionLabel(
+  items: CategoryTreeOption[],
+  value: string | number | null | undefined,
+): string | null {
+  if (value == null || value === '') return null
+  const normalizedValue = String(value)
+
+  for (const root of items) {
+    if (String(root.id) === normalizedValue) return root.title
+    const child = root.children.find((item) => String(item.id) === normalizedValue)
+    if (child) return `${root.title} / ${child.title}`
+  }
+
+  return null
+}

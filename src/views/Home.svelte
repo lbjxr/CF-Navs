@@ -456,6 +456,7 @@
     --home-stat-border: rgba(148, 163, 184, 0.24);
     --home-stat-shadow: 0 3px 10px rgba(15, 23, 42, 0.06);
     --home-accent-color: var(--theme-accent-color, #2563eb);
+    --toc-expanded-width: 232px;
     color: var(--home-text-color);
     isolation: isolate;
   }
@@ -466,7 +467,7 @@
 
   @media (min-width: 800px) {
     .home-shell.persistent-left-navigation {
-      padding-left: calc(212px + var(--content-margin-x, 0px));
+      padding-left: calc(var(--toc-expanded-width) + 12px + var(--content-margin-x, 0px));
     }
   }
 

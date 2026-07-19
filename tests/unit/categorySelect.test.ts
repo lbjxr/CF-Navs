@@ -3,6 +3,7 @@ import {
   buildCategoryTreeOptions,
   buildParentCategoryOptions,
   findCategoryTreeOption,
+  getCategoryTreeOptionLabel,
 } from '../../src/lib/categorySelect'
 
 const categories = [
@@ -39,5 +40,8 @@ describe('category tree select helpers', () => {
     expect(findCategoryTreeOption(tree, 4)?.title).toBe('Backend')
     expect(findCategoryTreeOption(tree, null)).toBeNull()
     expect(findCategoryTreeOption(tree, 99)).toBeNull()
+    expect(getCategoryTreeOptionLabel(tree, 1)).toBe('Tools')
+    expect(getCategoryTreeOptionLabel(tree, 4)).toBe('Tools / Backend')
+    expect(getCategoryTreeOptionLabel(tree, 99)).toBeNull()
   })
 })

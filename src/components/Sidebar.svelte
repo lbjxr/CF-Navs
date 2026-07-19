@@ -51,6 +51,8 @@
   let openTopMenuId = ''
   let topMenuStyle = ''
   let topMenuAnchor: HTMLElement | null = null
+  let topMenuToggle: HTMLButtonElement | null = null
+  let topMenuElement: HTMLElement | null = null
 
   $: isTop = navigation.position === 'top'
   $: isPersistentLeft = !isTop && !isMobileView && navigation.always_expanded
@@ -174,10 +176,14 @@
         closeTopMenu()
         return
       }
-      const button = event?.currentTarget as HTMLElement | null
+      const button = event?.currentTarget as HTMLButtonElement | null
       topMenuAnchor = button?.closest<HTMLElement>('.top-item-group') ?? button
+      topMenuToggle = button
       updateTopMenuPosition()
       openTopMenuId = id
+      if (event?.detail === 0) {
+        void tick().then(() => getTopMenuItems()[0]?.focus())
+      }
       return
     }
 
@@ -187,10 +193,35 @@
     expandedParentIds = next
   }
 
-  function closeTopMenu(): void {
+  function closeTopMenu(restoreFocus = false): void {
+    const toggle = topMenuToggle
     openTopMenuId = ''
     topMenuAnchor = null
+    topMenuToggle = null
+    topMenuElement = null
     topMenuStyle = ''
+    if (restoreFocus) void tick().then(() => toggle?.focus())
+  }
+
+  function getTopMenuItems(): HTMLButtonElement[] {
+    if (!topMenuElement) return []
+    return Array.from(topMenuElement.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+  }
+
+  function handleTopMenuKeyDown(event: KeyboardEvent): void {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+    const menuItems = getTopMenuItems()
+    if (menuItems.length === 0) return
+    event.preventDefault()
+    const currentIndex = menuItems.indexOf(document.activeElement as HTMLButtonElement)
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? menuItems.length - 1
+        : event.key === 'ArrowUp'
+          ? (currentIndex - 1 + menuItems.length) % menuItems.length
+          : (currentIndex + 1) % menuItems.length
+    menuItems[nextIndex]?.focus()
   }
 
   function updateTopMenuPosition(): void {
@@ -221,7 +252,7 @@
   function handleDocumentKeyDown(event: KeyboardEvent): void {
     if (event.key !== 'Escape') return
     if (openTopMenuId) {
-      closeTopMenu()
+      closeTopMenu(true)
       return
     }
     if (mobileSidebarOpen) mobileSidebarOpen = false
@@ -378,6 +409,7 @@
           <button
             type="button"
             class="top-item"
+            title={item.title}
             class:active={String(activeId) === String(item.id) || String(activeParentId) === String(item.id)}
             aria-current={String(activeId) === String(item.id) ? 'location' : undefined}
             on:click={() => handleItemClick(item.id)}
@@ -415,11 +447,20 @@
     {#if openTopMenuId}
       {@const parent = items.find((item) => String(item.id) === openTopMenuId)}
       {#if parent?.children?.length}
-        <div class="top-submenu" style={topMenuStyle} role="menu" aria-label={`${parent.title} 子分类`}>
+        <div
+          class="top-submenu"
+          style={topMenuStyle}
+          role="menu"
+          tabindex="-1"
+          aria-label={`${parent.title} 子分类`}
+          bind:this={topMenuElement}
+          on:keydown={handleTopMenuKeyDown}
+        >
           {#each parent.children as child (child.id)}
             <button
               type="button"
               role="menuitem"
+              title={child.title}
               class:active={String(activeId) === String(child.id)}
               on:click={() => handleItemClick(child.id)}
             >
@@ -481,6 +522,7 @@
             <button
               type="button"
               class="toc-item"
+              title={item.title}
               class:active={String(activeId) === String(item.id)}
               aria-current={String(activeId) === String(item.id) ? 'location' : undefined}
               on:click={() => handleItemClick(item.id)}
@@ -507,6 +549,7 @@
                 <button
                   type="button"
                   class="toc-child-item"
+                  title={child.title}
                   class:active={String(activeId) === String(child.id)}
                   aria-current={String(activeId) === String(child.id) ? 'location' : undefined}
                   on:click={() => handleItemClick(child.id)}
@@ -736,6 +779,13 @@
     opacity: 0.64;
   }
 
+  .top-submenu button span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .scroll-arrow {
     width: 36px;
     height: 36px;
@@ -823,7 +873,7 @@
   }
 
   .toc-sidebar.expanded {
-    width: 200px;
+    width: var(--toc-expanded-width, 232px);
     border-color: var(--toc-border);
     background: var(--toc-surface);
     box-shadow: var(--toc-shadow);
@@ -856,7 +906,7 @@
   }
 
   .toc-nav {
-    width: 200px;
+    width: var(--toc-expanded-width, 232px);
     max-height: calc(100dvh - 96px);
     display: grid;
     gap: 6px;
@@ -870,13 +920,13 @@
   }
 
   .toc-parent-row {
-    width: 190px;
+    width: calc(var(--toc-expanded-width, 232px) - 10px);
     display: flex;
     align-items: center;
   }
 
   .toc-item {
-    width: 158px;
+    width: calc(var(--toc-expanded-width, 232px) - 42px);
     min-height: 34px;
     display: flex;
     align-items: center;
@@ -930,7 +980,7 @@
   }
 
   .toc-child-item {
-    width: 140px;
+    width: calc(var(--toc-expanded-width, 232px) - 60px);
     min-height: 32px;
     display: flex;
     align-items: center;
@@ -1039,7 +1089,8 @@
     }
 
     .toc-sidebar {
-      width: 200px;
+      --toc-expanded-width: min(78vw, 280px);
+      width: var(--toc-expanded-width);
       padding-top: 54px;
       border-color: var(--toc-border);
       background: var(--toc-surface);

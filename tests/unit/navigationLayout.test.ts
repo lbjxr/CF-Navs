@@ -84,4 +84,13 @@ describe('navigation layout helpers', () => {
     expect(source).not.toContain('topTrack.setPointerCapture(event.pointerId)')
     expect(source).not.toContain('topTrack.scrollLeft = dragStartScrollLeft - delta')
   })
+
+  it('keeps top submenu keyboard focus inside the opened menu', () => {
+    const source = readFileSync('src/components/Sidebar.svelte', 'utf8')
+
+    expect(source).toContain("if (event?.detail === 0)")
+    expect(source).toContain('getTopMenuItems()[0]?.focus()')
+    expect(source).toContain('handleTopMenuKeyDown')
+    expect(source).toContain('closeTopMenu(true)')
+  })
 })
