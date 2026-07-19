@@ -76,7 +76,7 @@ node scripts/convert-sunpanel.cjs SunPanel-Data.json cf-navs-import.json
 2. 点击右上角 **⚙️** 图标
 3. 输入管理员凭据登录
 
-### 步骤 2：进入数据管理
+### 步骤 2：进入数据备份与导入
 
 1. 在侧边栏点击 **数据备份与导入**
 2. 找到"导入 / 导出"区域
