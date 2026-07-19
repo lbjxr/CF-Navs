@@ -57,7 +57,11 @@ npm run deploy
 
 `npm run db:init:remote` 仅作为安装器无法初始化 schema 时的恢复命令，不是全新 CLI 部署的正常步骤。
 
-部署新版后建议强制刷新一次页面，让新版 Service Worker 接管。验证首页搜索时，输入关键词应直接筛选书签区域；打开浏览器 Network 面板时，刷新首页、上下滚动、搜索筛选和后台切回首页不应让已缓存的普通书签图标重复请求 `/api/icon/*`，分类图标可显示为 `/api/category-icon/*`，后台预览和新增/编辑弹窗中的 Iconify 图标应显示为 `/api/iconify/*`。编辑书签时弹窗应立即显示，随后可在后台调用 `/api/bookmarks/:id/icon-cache/refresh` 刷新普通书签图标缓存；保存书签后也会显式刷新。该请求遇到慢速外站图标时不应长时间卡住保存流程；如果缓存失败但保存的是 `https://favicon.im/...`、Google favicon 或自定义 HTTP(S) 图标，首页仍应使用已保存 URL 显示图标，而不是退成标题首字。首页展示已保存的 Iconify 图标时可直接请求 `api.iconify.design` 并依赖浏览器 HTTP 缓存，但新增/编辑弹窗中的 Iconify 候选、手动预览和从 `icon-sets.iconify.design` 粘贴的页面链接应走 `/api/iconify/*`。
+部署新版后建议强制刷新一次页面，让新版 Service Worker 接管。首页应同时展示所有一级分类分组；每组默认显示直属书签，点击标题下方的二级分类横向标签时只替换当前分组内容。输入搜索关键词后应切换到全站一级分类分组结果，清除关键词后恢复各分组此前选择的分类。
+
+一级标题、二级标签、搜索分组和折叠导航应显示已保存的分类图片、data URI、文字或表情图标。打开浏览器 Network 面板时，刷新首页、上下滚动、搜索和后台切回首页不应让已缓存的普通书签图标重复请求 `/api/icon/*`；HTTP(S) 分类图片可请求 `/api/category-icon/*`，后台预览和新增/编辑弹窗中的 Iconify 图标应请求 `/api/iconify/*`。首页展示已保存的 Iconify 书签图标时可直接请求 `api.iconify.design` 并依赖浏览器 HTTP 缓存，但新增/编辑弹窗中的 Iconify 候选、手动预览和从 `icon-sets.iconify.design` 粘贴的页面链接应走 `/api/iconify/*`。
+
+编辑书签时弹窗应立即显示，随后可在后台调用 `/api/bookmarks/:id/icon-cache/refresh` 刷新普通书签图标缓存；保存书签后也会显式刷新。该请求遇到慢速外站图标时不应长时间卡住保存流程；如果缓存失败但保存的是 `https://favicon.im/...`、Google favicon 或自定义 HTTP(S) 图标，首页仍应使用已保存 URL 显示图标，而不是退成标题首字。
 
 ## 方式二：Cloudflare 控制台在线部署
 
