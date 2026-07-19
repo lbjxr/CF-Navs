@@ -59,7 +59,7 @@
   >
     <span>
       <strong>{advancedOpen ? '收起高级设置' : '展开高级设置'}</strong>
-      <small>背景、图床、尺寸与卡片表面</small>
+      <small>背景、尺寸与卡片表面</small>
     </span>
     <span class="advanced-chevron" class:open={advancedOpen} aria-hidden="true">›</span>
   </button>
@@ -68,16 +68,8 @@
     <div id="settings-appearance-advanced" class="advanced-content" data-testid="appearance-advanced">
       <div class="settings-subsection">
         <div class="advanced-heading">
-          <h3>背景与图床</h3>
+          <h3>背景设置</h3>
           <p>修改任一背景内容时，当前配色方案会自动切换为自定义。</p>
-        </div>
-
-        <div class="settings-grid background-tools-grid">
-          <label class="field field-image-host">
-            <span>图床地址（可选）</span>
-            <input bind:value={form.image_host_url} type="url" placeholder="https://img.example.com" />
-            <small>背景类型为图片时，可从下方直接打开该图床的上传入口。</small>
-          </label>
         </div>
 
         <div class="theme-background-grid">
@@ -266,10 +258,6 @@
 
   .field.disabled {
     opacity: 0.58;
-  }
-
-  .field-image-host {
-    grid-column: 1 / -1;
   }
 
   .field-number,

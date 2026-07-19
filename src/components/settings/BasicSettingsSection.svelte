@@ -93,6 +93,20 @@
       <small>{currentThemeHint}访客仍可在首页临时切换浅色或深色。</small>
     </div>
   </div>
+
+  <div class="settings-subsection external-resource-section">
+    <h3>外部资源</h3>
+    <label class="field field-image-host">
+      <span>图床服务地址（可选）</span>
+      <input
+        bind:value={form.image_host_url}
+        type="url"
+        placeholder="https://img.example.com"
+        on:input={() => void syncForm()}
+      />
+      <small>用于背景图片、分类图标和书签自定义图标的上传入口。</small>
+    </label>
+  </div>
 </fieldset>
 
 <style>
@@ -112,6 +126,15 @@
 
   .segmented-control {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .external-resource-section {
+    border-top: 1px solid var(--sp-subsection-border);
+    padding-top: 18px;
+  }
+
+  .field-image-host {
+    max-width: 720px;
   }
 
   @media (max-width: 960px) {
