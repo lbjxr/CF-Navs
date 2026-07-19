@@ -1,4 +1,5 @@
 import type { AdminBookmarkSummary, AdminCategorySummary } from './appData'
+import { buildCategoryTreeOptions, type CategoryTreeOption } from './categorySelect'
 import { DEFAULT_PAGE_SIZE, clampPage, pageCount, pageEnd, pageStart, slicePage } from './pagination'
 import { reorderByIds } from './reorder'
 
@@ -118,14 +119,8 @@ export function flattenAdminCategoryGroups(groups: AdminCategoryGroup[]): AdminC
 
 export function getAdminBookmarkCategoryOptions(
   categories: AdminCategorySummary[],
-): Array<{ id: string | number; title: string }> {
-  return buildAdminCategoryGroups(categories).flatMap((group) => [
-    { id: group.root.id, title: group.root.title },
-    ...group.children.map((child) => ({
-      id: child.id,
-      title: `${group.root.title} / ${child.title}`,
-    })),
-  ])
+): CategoryTreeOption[] {
+  return buildCategoryTreeOptions(categories)
 }
 
 export function createAdminListPage<T>(

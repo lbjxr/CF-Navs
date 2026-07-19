@@ -10,6 +10,7 @@
   } from '../lib/icons'
   import { getErrorMessage, iconifyApi } from '../lib/api'
   import type { BookmarkFormValue } from '../lib/adminTypes'
+  import type { CategoryTreeOption } from '../lib/categorySelect'
   import {
     buildBookmarkSubmitPayload,
     createBookmarkFormValue,
@@ -40,17 +41,12 @@
   import LogoSchemeSelector from './LogoSchemeSelector.svelte'
   import type { IconifyCandidate as IconifySearchCandidate } from '../../shared/types'
 
-  type BookmarkCategoryOption = {
-    id: string | number
-    title: string
-  }
-
   export let open = false
   export let loading = false
   export let error = ''
   export let mode: 'create' | 'edit' = 'create'
   export let value: Partial<BookmarkFormValue> | null = null
-  export let categories: BookmarkCategoryOption[] = []
+  export let categories: CategoryTreeOption[] = []
   export let onSubmit: ((payload: BookmarkFormValue) => void | Promise<void>) | undefined = undefined
   export let onCancel: (() => void) | undefined = undefined
   export let onDelete: ((bookmark: { id: string | number; title: string }) => void | Promise<void>) | undefined = undefined

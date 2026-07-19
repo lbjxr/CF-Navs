@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import {
   getHorizontalNavigationMetrics,
+  getAnchoredOverlayPosition,
   LEFT_NAV_COLLAPSED_STORAGE_KEY,
   parseLeftNavigationCollapsed,
   readLeftNavigationCollapsed,
@@ -47,6 +48,29 @@ describe('navigation layout helpers', () => {
       canScrollLeft: false,
       canScrollRight: false,
     })
+  })
+
+  it('left-aligns an overlay with its anchor and clamps it inside the viewport', () => {
+    expect(getAnchoredOverlayPosition({
+      anchorLeft: 160,
+      anchorBottom: 64,
+      overlayWidth: 220,
+      viewportWidth: 1200,
+    })).toEqual({ left: 160, top: 72 })
+
+    expect(getAnchoredOverlayPosition({
+      anchorLeft: 1100,
+      anchorBottom: 64,
+      overlayWidth: 220,
+      viewportWidth: 1200,
+    })).toEqual({ left: 972, top: 72 })
+
+    expect(getAnchoredOverlayPosition({
+      anchorLeft: -20,
+      anchorBottom: 40,
+      overlayWidth: 220,
+      viewportWidth: 320,
+    })).toEqual({ left: 8, top: 48 })
   })
 
   it('mutates the horizontal track through a local DOM reference while dragging', () => {

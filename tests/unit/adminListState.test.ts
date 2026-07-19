@@ -87,9 +87,12 @@ describe('admin list state helpers', () => {
 
   it('builds hierarchical bookmark options and searches child bookmarks by parent path', () => {
     expect(getAdminBookmarkCategoryOptions(categories)).toEqual([
-      { id: 2, title: 'Documentation' },
-      { id: 1, title: 'Tools' },
-      { id: 3, title: 'Tools / Frontend' },
+      { id: 2, title: 'Documentation', children: [] },
+      {
+        id: 1,
+        title: 'Tools',
+        children: [{ id: 3, title: 'Frontend', children: [] }],
+      },
     ])
 
     const childBookmark = { ...bookmarks[0], id: 13, category_id: 3, title: 'Vite' }

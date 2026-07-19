@@ -17,6 +17,8 @@
     type BookmarkIconifySearchState,
   } from '../lib/bookmarkIconifyController'
   import { iconifyIcon, iconifyNameFromUrl } from '../lib/icons'
+  import { buildParentCategoryOptions } from '../lib/categorySelect'
+  import CategoryTreeSelect from './CategoryTreeSelect.svelte'
   import IconifySelector from './IconifySelector.svelte'
 
   const emptyForm: CategoryFormValue = {
@@ -70,6 +72,7 @@
   $: iconifyInput = deriveBookmarkIconifyInput(iconifyName)
   $: normalizedIconifyName = iconifyInput.normalizedIconifyName
   $: categoryHasChildren = form.id != null && categories.some((category) => Number(category.parent_id) === Number(form.id))
+  $: parentCategoryOptions = categoryHasChildren ? [] : buildParentCategoryOptions(categories, form.id)
   $: iconifyPreviewUrl = iconifyInput.iconifyPreviewUrl
   $: iconifySelected = isBookmarkIconifySelected({
     iconifyUseConfirmed,
@@ -210,18 +213,18 @@
           <input bind:value={form.title} type="text" placeholder="例如：常用工具" required />
         </label>
 
-        <label>
+        <div class="field-label">
           <span>上级分类</span>
-          <select bind:value={form.parent_id}>
-            <option value={null}>无上级（一级分类）</option>
-            {#if !categoryHasChildren}
-              {#each categories.filter((category) => category.parent_id == null && Number(category.id) !== Number(form.id)) as category (category.id)}
-                <option value={category.id}>{category.title}</option>
-              {/each}
-            {/if}
-          </select>
+          <CategoryTreeSelect
+            bind:value={form.parent_id}
+            items={parentCategoryOptions}
+            rootOptionLabel="无上级分类"
+            disabled={loading || categoryHasChildren}
+            ariaLabel="选择上级分类"
+            testId="category-parent-tree-select"
+          />
           {#if categoryHasChildren}<small>该分类包含子分类，需先移动或删除子分类后才能设置上级分类。</small>{/if}
-        </label>
+        </div>
 
         <label>
           <span>图标</span>
@@ -335,8 +338,16 @@
     font-size: 14px;
   }
 
+  .field-label {
+    display: grid;
+    gap: 8px;
+    color: #334155;
+    font-size: 14px;
+  }
+
   input {
     width: 100%;
+    min-height: 42px;
     box-sizing: border-box;
     border: 1px solid #cbd5e1;
     border-radius: 12px;

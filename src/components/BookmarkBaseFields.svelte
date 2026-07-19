@@ -1,10 +1,7 @@
 <script lang="ts">
   import type { BookmarkFormValue } from '../lib/adminTypes'
-
-  type BookmarkCategoryOption = {
-    id: string | number
-    title: string
-  }
+  import type { CategoryTreeOption } from '../lib/categorySelect'
+  import CategoryTreeSelect from './CategoryTreeSelect.svelte'
 
   export let categoryId: string | number | undefined = undefined
   export let title = ''
@@ -12,22 +9,21 @@
   export let openMethod: BookmarkFormValue['open_method'] = 'new_tab'
   export let description = ''
   export let descriptionMode: BookmarkFormValue['description_mode'] = 'inherit'
-  export let categories: BookmarkCategoryOption[] = []
+  export let categories: CategoryTreeOption[] = []
   export let loading = false
 </script>
 
-<label class="field-compact">
+<div class="field-compact field-label">
   <span>所属分类</span>
-  <select class="native-select" bind:value={categoryId} disabled={loading || categories.length === 0} required>
-    {#if categories.length === 0}
-      <option value="">暂无分类可选</option>
-    {:else}
-      {#each categories as category}
-        <option value={category.id}>{category.title}</option>
-      {/each}
-    {/if}
-  </select>
-</label>
+  <CategoryTreeSelect
+    bind:value={categoryId}
+    items={categories}
+    disabled={loading || categories.length === 0}
+    ariaLabel="选择所属分类"
+    compact
+    testId="bookmark-category-tree-select"
+  />
+</div>
 
 <label class="field-compact">
   <span>书签标题</span>
@@ -65,6 +61,14 @@
 
 <style>
   label {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+    color: #334155;
+    font-size: 13px;
+  }
+
+  .field-label {
     display: grid;
     min-width: 0;
     gap: 4px;

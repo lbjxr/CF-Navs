@@ -2,6 +2,7 @@
   import { onDestroy, onMount, tick } from 'svelte'
   import type { NavigationSetting } from '../../shared/types'
   import {
+    getAnchoredOverlayPosition,
     getHorizontalNavigationMetrics,
     readLeftNavigationCollapsed,
     writeLeftNavigationCollapsed,
@@ -23,6 +24,7 @@
   const MOBILE_WIDTH = 800
   const DRAG_THRESHOLD_PX = 6
   const RESIZE_DEBOUNCE_MS = 120
+  const TOP_SUBMENU_WIDTH = 220
 
   let isMobileView = false
   let mobileSidebarOpen = false
@@ -48,6 +50,7 @@
   let expandedParentIds = new Set<string>()
   let openTopMenuId = ''
   let topMenuStyle = ''
+  let topMenuAnchor: HTMLElement | null = null
 
   $: isTop = navigation.position === 'top'
   $: isPersistentLeft = !isTop && !isMobileView && navigation.always_expanded
@@ -108,6 +111,7 @@
       hoverExpanded = false
     }
     updateOverflowState()
+    updateTopMenuPosition()
   }
 
   function scheduleResize(): void {
@@ -159,7 +163,7 @@
     }
 
     onNavigate?.(id)
-    openTopMenuId = ''
+    closeTopMenu()
     if (isMobileView && !isTop) mobileSidebarOpen = false
   }
 
@@ -167,12 +171,12 @@
     const id = String(item.id)
     if (isTop) {
       if (openTopMenuId === id) {
-        openTopMenuId = ''
+        closeTopMenu()
         return
       }
       const button = event?.currentTarget as HTMLElement | null
-      const rect = button?.getBoundingClientRect()
-      topMenuStyle = rect ? `top: ${rect.bottom + 8}px; left: ${Math.max(8, rect.right - 220)}px;` : ''
+      topMenuAnchor = button?.closest<HTMLElement>('.top-item-group') ?? button
+      updateTopMenuPosition()
       openTopMenuId = id
       return
     }
@@ -183,16 +187,40 @@
     expandedParentIds = next
   }
 
+  function closeTopMenu(): void {
+    openTopMenuId = ''
+    topMenuAnchor = null
+    topMenuStyle = ''
+  }
+
+  function updateTopMenuPosition(): void {
+    if (!topMenuAnchor || !navigationRoot || !isTop) return
+    const anchorRect = topMenuAnchor.getBoundingClientRect()
+    const navigationRect = navigationRoot.getBoundingClientRect()
+    const position = getAnchoredOverlayPosition({
+      anchorLeft: anchorRect.left,
+      anchorBottom: anchorRect.bottom,
+      overlayWidth: TOP_SUBMENU_WIDTH,
+      viewportWidth: window.innerWidth,
+    })
+    topMenuStyle = `top: ${position.top - navigationRect.top}px; left: ${position.left - navigationRect.left}px;`
+  }
+
+  function handleTopTrackScroll(): void {
+    updateOverflowState()
+    updateTopMenuPosition()
+  }
+
   function handleDocumentPointerDown(event: PointerEvent): void {
     if (openTopMenuId && navigationRoot && !navigationRoot.contains(event.target as Node)) {
-      openTopMenuId = ''
+      closeTopMenu()
     }
   }
 
   function handleDocumentKeyDown(event: KeyboardEvent): void {
     if (event.key !== 'Escape') return
     if (openTopMenuId) {
-      openTopMenuId = ''
+      closeTopMenu()
       return
     }
     if (mobileSidebarOpen) mobileSidebarOpen = false
@@ -338,7 +366,7 @@
       class="top-track"
       class:dragging
       bind:this={topTrack}
-      on:scroll={updateOverflowState}
+      on:scroll={handleTopTrackScroll}
       on:pointerdown={handlePointerDown}
       on:pointermove={handlePointerMove}
       on:pointerup={finishPointerDrag}
@@ -663,7 +691,7 @@
   }
 
   .top-submenu {
-    position: fixed;
+    position: absolute;
     z-index: 80;
     width: 220px;
     max-height: min(360px, calc(100vh - 80px));
