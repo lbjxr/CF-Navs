@@ -459,28 +459,37 @@
 
   .floating-save-btn {
     flex: 0 0 auto;
-    border: none;
-    background: #667a63;
-    color: #ffffff;
+    border: 1px solid #bfdbfe;
+    background: #dbeafe;
+    color: #1d4ed8;
     border-radius: 12px;
     min-height: 36px;
     padding: 0 15px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 6px 14px rgba(82, 99, 79, 0.2);
+    box-shadow: 0 6px 14px rgba(37, 99, 235, 0.14);
     transition:
       transform 0.15s ease,
       box-shadow 0.15s ease,
       opacity 0.15s ease,
-      background 0.15s ease;
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
     white-space: nowrap;
   }
 
   .floating-save-btn:hover:not(:disabled) {
     transform: translateY(-2px);
-    background: #52634f;
-    box-shadow: 0 14px 30px rgba(82, 99, 79, 0.34);
+    border-color: #93c5fd;
+    background: #bfdbfe;
+    color: #1e40af;
+    box-shadow: 0 14px 30px rgba(37, 99, 235, 0.22);
+  }
+
+  .floating-save-btn:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: 2px;
   }
 
   .floating-save-btn:active:not(:disabled) {

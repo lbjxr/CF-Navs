@@ -182,6 +182,18 @@ describe('admin settings layout', () => {
     expect(panel).toContain('position: static')
   })
 
+  it('uses the default light-blue treatment for the settings save button', () => {
+    const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
+    const saveButtonRule = panel.match(/\.floating-save-btn\s*\{([^}]+)\}/)?.[1] ?? ''
+    const saveButtonHoverRule = panel.match(/\.floating-save-btn:hover:not\(:disabled\)\s*\{([^}]+)\}/)?.[1] ?? ''
+
+    expect(saveButtonRule).toContain('background: #dbeafe')
+    expect(saveButtonRule).toContain('color: #1d4ed8')
+    expect(saveButtonHoverRule).toContain('background: #bfdbfe')
+    expect(panel).not.toContain('#667a63')
+    expect(panel).not.toContain('#52634f')
+  })
+
   it('reuses favicon.im for search engine icons', () => {
     const search = readFileSync('src/components/settings/SearchEngineSettingsSection.svelte', 'utf8')
 
