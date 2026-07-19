@@ -59,7 +59,7 @@
   >
     <span>
       <strong>{advancedOpen ? '收起高级设置' : '展开高级设置'}</strong>
-      <small>标题、背景、图床、尺寸与卡片表面</small>
+      <small>背景、图床、尺寸与卡片表面</small>
     </span>
     <span class="advanced-chevron" class:open={advancedOpen} aria-hidden="true">›</span>
   </button>
@@ -68,30 +68,11 @@
     <div id="settings-appearance-advanced" class="advanced-content" data-testid="appearance-advanced">
       <div class="settings-subsection">
         <div class="advanced-heading">
-          <h3>标题与背景</h3>
-          <p>标题参数独立于配色方案；修改任一背景内容时，当前方案会自动切换为自定义。</p>
+          <h3>背景与图床</h3>
+          <p>修改任一背景内容时，当前配色方案会自动切换为自定义。</p>
         </div>
 
-        <div class="settings-grid title-settings-grid">
-          <div class="field field-title-color">
-            <span>首页标题颜色</span>
-            <ColorAlphaInput
-              bind:value={form.site_title_color}
-              on:change={() => void syncForm()}
-              placeholder="留空则跟随主题"
-              inputLabel="首页标题颜色值"
-              swatchTitle="选择首页标题颜色"
-              alphaText="首页标题透明度"
-            />
-            <small>留空时跟随当前主题文字颜色；自定义颜色会同时用于浅色和深色模式。</small>
-          </div>
-
-          <label class="field field-title-size">
-            <span>首页标题字号 <em>{form.site_title_font_size}px</em></span>
-            <input bind:value={form.site_title_font_size} type="range" min="16" max="72" step="1" />
-            <small>仅调整首页主标题大小，不改变当前配色方案。</small>
-          </label>
-
+        <div class="settings-grid background-tools-grid">
           <label class="field field-image-host">
             <span>图床地址（可选）</span>
             <input bind:value={form.image_host_url} type="url" placeholder="https://img.example.com" />
@@ -287,9 +268,10 @@
     opacity: 0.58;
   }
 
-  .field-title-color,
-  .field-title-size,
-  .field-image-host,
+  .field-image-host {
+    grid-column: 1 / -1;
+  }
+
   .field-number,
   .card-size-grid .field-number,
   .field-color,
@@ -305,9 +287,6 @@
   }
 
   @media (max-width: 960px) {
-    .field-title-color,
-    .field-title-size,
-    .field-image-host,
     .field-number,
     .field-color,
     .card-size-grid .field-number,
@@ -318,9 +297,6 @@
   }
 
   @container settings-editor (max-width: 640px) {
-    .field-title-color,
-    .field-title-size,
-    .field-image-host,
     .field-number,
     .field-color,
     .card-size-grid .field-number,

@@ -5,6 +5,7 @@
     themeOptions,
     type SettingsFormModel,
   } from '../../lib/settingsForm'
+  import ColorAlphaInput from '../ColorAlphaInput.svelte'
 
   export let form: SettingsFormModel
   export let saving = false
@@ -19,7 +20,7 @@
 
 <fieldset id="settings-section-basic" class="group group-wide" disabled={saving}>
   <legend>站点信息</legend>
-  <p class="group-desc">设置站点名称、首页访问范围和访客首次打开页面时使用的主题模式。</p>
+  <p class="group-desc">设置站点标题及其首页样式，并管理访问范围和访客首次打开页面时使用的主题模式。</p>
 
   <div class="form-grid base-grid">
     <label class="field field-title">
@@ -33,6 +34,32 @@
         on:input={() => void syncForm()}
       />
       <small>显示在浏览器标签页、首页顶部和管理界面中，必填。</small>
+    </label>
+
+    <div class="field field-title-color">
+      <span>首页标题颜色</span>
+      <ColorAlphaInput
+        bind:value={form.site_title_color}
+        on:change={() => void syncForm()}
+        placeholder="留空则跟随主题"
+        inputLabel="首页标题颜色值"
+        swatchTitle="选择首页标题颜色"
+        alphaText="首页标题透明度"
+      />
+      <small>留空时跟随当前主题文字颜色；配色方案也会提供推荐值。</small>
+    </div>
+
+    <label class="field field-title-size">
+      <span>首页标题字号 <em>{form.site_title_font_size}px</em></span>
+      <input
+        bind:value={form.site_title_font_size}
+        type="range"
+        min="16"
+        max="72"
+        step="1"
+        on:input={() => void syncForm()}
+      />
+      <small>仅调整首页主标题大小，不影响浏览器标签页文字。</small>
     </label>
 
     <div class="toggle-field field-toggle">
@@ -73,9 +100,14 @@
     grid-column: span 4;
   }
 
+  .field-title-color,
+  .field-title-size {
+    grid-column: span 4;
+  }
+
   .field-toggle,
   .field-theme {
-    grid-column: span 4;
+    grid-column: span 6;
   }
 
   .segmented-control {
@@ -84,6 +116,8 @@
 
   @media (max-width: 960px) {
     .field-title,
+    .field-title-color,
+    .field-title-size,
     .field-toggle,
     .field-theme {
       grid-column: 1 / -1;
@@ -92,6 +126,8 @@
 
   @container settings-editor (max-width: 620px) {
     .field-title,
+    .field-title-color,
+    .field-title-size,
     .field-toggle,
     .field-theme {
       grid-column: 1 / -1;
