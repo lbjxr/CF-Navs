@@ -1,26 +1,31 @@
 <script lang="ts">
+  import CategoryIcon from './CategoryIcon.svelte'
+
   type HomeCategoryScopeItem = {
-    id: string | number
+    id: number
     title: string
+    icon: string | null
     count: number
   }
 
   type AsyncVoid<T = void> = T | Promise<T>
 
-  export let rootId: string | number
+  export let rootId: number
   export let title = ''
+  export let icon: string | null = null
+  export let directCount = 0
   export let totalCount = 0
   export let children: HomeCategoryScopeItem[] = []
-  export let activeId: string | number | null = null
-  export let panelId = 'home-category-panel'
-  export let onSelect: ((id: string | number) => AsyncVoid) | undefined = undefined
+  export let activeId: number | null = null
+  export let panelId = ''
+  export let onSelect: ((id: number) => AsyncVoid) | undefined = undefined
 
   let tabList: HTMLElement | null = null
 
+  $: resolvedPanelId = panelId || `home-category-panel-${rootId}`
   $: rootTabId = `home-category-tab-${rootId}`
   $: rootActive = activeId == null || String(activeId) === String(rootId)
-
-  function select(id: string | number): void {
+  function select(id: number): void {
     void onSelect?.(id)
   }
 
@@ -44,9 +49,10 @@
   }
 </script>
 
-<section class="category-scope" aria-labelledby={`home-category-heading-${rootId}`}>
+<section class="category-scope" data-home-category-scope={rootId} aria-labelledby={`home-category-heading-${rootId}`}>
   <div class="scope-heading">
-    <span class="scope-accent" aria-hidden="true"></span>
+    <CategoryIcon category={{ id: rootId, title, icon }} size={46} className="scope-icon" />
+    <div class="scope-accent" aria-hidden="true"></div>
     <div class="scope-copy">
       <h2 id={`home-category-heading-${rootId}`}>{title}</h2>
       <p>
@@ -70,26 +76,31 @@
         type="button"
         role="tab"
         aria-selected={rootActive}
-        aria-controls={panelId}
+        aria-controls={resolvedPanelId}
         tabindex={rootActive ? 0 : -1}
         class:active={rootActive}
         on:click={() => select(rootId)}
       >
-        <span>全部</span>
-        <small>{totalCount}</small>
+        <span>本分类</span>
+        <small>{directCount}</small>
       </button>
 
       {#each children as child (child.id)}
+        {@const childActive = String(activeId) === String(child.id)}
         <button
           id={`home-category-tab-${child.id}`}
           type="button"
           role="tab"
-          aria-selected={String(activeId) === String(child.id)}
-          aria-controls={panelId}
-          tabindex={String(activeId) === String(child.id) ? 0 : -1}
-          class:active={String(activeId) === String(child.id)}
+          aria-selected={childActive}
+          aria-controls={resolvedPanelId}
+          tabindex={childActive ? 0 : -1}
+          class:active={childActive}
+          title={child.title}
           on:click={() => select(child.id)}
         >
+          {#if child.icon}
+            <CategoryIcon category={{ id: child.id, title: child.title, icon: child.icon }} size={22} className="scope-tab-icon" />
+          {/if}
           <span>{child.title}</span>
           <small>{child.count}</small>
         </button>
@@ -105,17 +116,25 @@
     gap: 1rem;
     padding: 0.25rem 0 1rem;
     border-bottom: 1px solid color-mix(in srgb, var(--home-text-color) 14%, transparent);
+    scroll-margin-top: 6rem;
   }
 
   .scope-heading {
     display: flex;
-    align-items: stretch;
+    align-items: center;
     gap: 0.8rem;
     min-width: 0;
   }
 
+  .scope-heading :global(.scope-icon) {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+  }
+
   .scope-accent {
     width: 4px;
+    align-self: stretch;
     flex: 0 0 auto;
     border-radius: 2px;
     background: var(--home-accent-color);
@@ -168,11 +187,11 @@
   .scope-tabs button {
     position: relative;
     display: inline-flex;
-    min-height: 36px;
+    min-height: 38px;
     flex: 0 0 auto;
     align-items: center;
-    gap: 0.45rem;
-    padding: 0.45rem 0.7rem;
+    gap: 0.42rem;
+    padding: 0.42rem 0.7rem;
     border: 1px solid transparent;
     border-radius: 7px;
     background: transparent;
@@ -214,6 +233,13 @@
     background: var(--home-accent-color);
   }
 
+  .scope-tabs :global(.scope-tab-icon) {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border-radius: 6px;
+  }
+
   .scope-tabs small {
     min-width: 1.2rem;
     color: inherit;
@@ -227,6 +253,11 @@
     .category-scope {
       gap: 0.85rem;
       padding-bottom: 0.85rem;
+    }
+
+    .scope-heading :global(.scope-icon) {
+      width: 40px;
+      height: 40px;
     }
 
     .scope-copy h2 {

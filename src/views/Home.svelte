@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onDestroy, tick } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import Sidebar from '../components/Sidebar.svelte'
   import CategorySection from '../components/CategorySection.svelte'
+  import CategoryIcon from '../components/CategoryIcon.svelte'
   import HomeCategoryScope from '../components/HomeCategoryScope.svelte'
   import HomeContentSummary from '../components/HomeContentSummary.svelte'
   import HomeEmptyPanel from '../components/HomeEmptyPanel.svelte'
@@ -13,12 +14,15 @@
     clampTitleFontSize,
     createHomeDataMemo,
     getCategoryTreeBookmarkCount,
+    getHomeCategoryGroups,
     getHomeScrollTarget,
     getHomeSections,
     getVisibleCategoryIds,
     getVisibleCategoryForest,
     groupBookmarksByCategory,
     normalizeSearchQuery,
+    resolveActiveHomeRootId,
+    resolveHomeCategoryForRoot,
     resolveHomeActiveSectionId,
     resolveHomeCategorySelection,
   } from '../lib/homeData'
@@ -49,27 +53,20 @@
   let deferredSearchQuery = ''
   let searchFilterTimer: ReturnType<typeof setTimeout> | null = null
   let activeId = ''
+  let selectedCategoryIds = new Map<number, number>()
   let persistentLeftExpanded = true
   let contentAnchor: HTMLElement | null = null
+  let rootSectionNodes = new Map<number, HTMLElement>()
+  let scrollFrame: number | null = null
+  let scrollSpySuppressedUntil = 0
 
   $: sortedCategories = homeData.getSortedCategories(categories)
   $: categoryForest = homeData.getCategoryForest(categories)
   $: sortedBookmarks = homeData.getSortedBookmarks(bookmarks)
   $: allCategoryBookmarks = groupBookmarksByCategory(sortedBookmarks)
   $: navigationSections = getHomeSections(categoryForest, allCategoryBookmarks)
+  $: categoryGroups = getHomeCategoryGroups(categoryForest, selectedCategoryIds)
   $: activeId = resolveHomeActiveSectionId(navigationSections, activeId)
-  $: activeSelection = resolveHomeCategorySelection(categoryForest, activeId)
-  $: activeRoot = activeSelection.root
-  $: activeChild = activeSelection.child
-  $: activeRootBookmarks = activeRoot ? allCategoryBookmarks.get(activeRoot.id) ?? [] : []
-  $: activeChildBookmarks = activeChild ? allCategoryBookmarks.get(activeChild.id) ?? [] : []
-  $: activeRootTotal = activeRoot ? getCategoryTreeBookmarkCount(activeRoot, allCategoryBookmarks) : 0
-  $: activeScopeItems = activeRoot?.children.map((child) => ({
-    id: child.id,
-    title: child.title,
-    count: allCategoryBookmarks.get(child.id)?.length ?? 0,
-  })) ?? []
-  $: activeCategoryId = activeChild?.id ?? activeRoot?.id ?? null
 
   $: if (searchQuery !== deferredSearchQuery) scheduleSearchFilterUpdate(searchQuery)
   $: normalizedSearchQuery = normalizeSearchQuery(deferredSearchQuery)
@@ -139,6 +136,53 @@
     return value.startsWith('category-') ? value : `category-${value}`
   }
 
+  function setSelectedCategory(rootId: number, categoryId: string | number): void {
+    const next = new Map(selectedCategoryIds)
+    next.set(rootId, Number(String(categoryId).replace(/^category-/, '')))
+    selectedCategoryIds = next
+  }
+
+  function registerRootSection(node: HTMLElement, rootId: number) {
+    rootSectionNodes.set(rootId, node)
+    scheduleActiveRootUpdate()
+
+    return {
+      update(nextRootId: number) {
+        if (nextRootId === rootId) return
+        rootSectionNodes.delete(rootId)
+        rootId = nextRootId
+        rootSectionNodes.set(rootId, node)
+      },
+      destroy() {
+        rootSectionNodes.delete(rootId)
+      },
+    }
+  }
+
+  function scheduleActiveRootUpdate(): void {
+    if (typeof window === 'undefined' || scrollFrame != null) return
+    scrollFrame = window.requestAnimationFrame(() => {
+      scrollFrame = null
+      updateActiveRootFromScroll()
+    })
+  }
+
+  function updateActiveRootFromScroll(): void {
+    if (hasSearchQuery || performance.now() < scrollSpySuppressedUntil || rootSectionNodes.size === 0) return
+
+    const threshold = navigationScrollOffset + 36
+    const sectionTops = new Map(
+      [...rootSectionNodes].map(([rootId, node]) => [rootId, node.getBoundingClientRect().top]),
+    )
+    const nextRootId = resolveActiveHomeRootId(sectionTops, threshold)
+    if (nextRootId == null) return
+    const root = categoryForest.find((category) => category.id === nextRootId)
+    if (!root) return
+    const selected = resolveHomeCategoryForRoot(root, selectedCategoryIds.get(root.id))
+    const nextId = `category-${selected.id}`
+    if (nextId !== activeId) activeId = nextId
+  }
+
   async function scrollContentIntoView(): Promise<void> {
     await tick()
     if (!contentAnchor || typeof window === 'undefined') return
@@ -157,14 +201,51 @@
 
   async function handleNavigate(id: string | number): Promise<void> {
     clearSearchImmediately()
-    activeId = resolveHomeActiveSectionId(navigationSections, normalizeSectionId(id))
-    await scrollContentIntoView()
+    const selection = resolveHomeCategorySelection(categoryForest, normalizeSectionId(id))
+    if (!selection.root) return
+
+    const selectedId = selection.child?.id ?? selection.root.id
+    setSelectedCategory(selection.root.id, selectedId)
+    activeId = `category-${selectedId}`
+    scrollSpySuppressedUntil = performance.now() + 900
+    await tick()
+
+    const targetNode = rootSectionNodes.get(selection.root.id)
+    if (!targetNode || typeof window === 'undefined') {
+      await scrollContentIntoView()
+      return
+    }
+
+    const targetRect = targetNode.getBoundingClientRect()
+    const finalScroll = getHomeScrollTarget({
+      currentScroll: window.scrollY,
+      targetTop: targetRect.top,
+      windowHeight: window.innerHeight,
+      documentHeight: document.documentElement.scrollHeight,
+      desiredTopDistance: navigationScrollOffset,
+    })
+    window.scrollTo({ top: finalScroll, behavior: 'smooth' })
   }
+
+  function handleScopeSelect(rootId: number, categoryId: string | number): void {
+    setSelectedCategory(rootId, categoryId)
+    activeId = normalizeSectionId(categoryId)
+    scrollSpySuppressedUntil = performance.now() + 600
+  }
+
+  onMount(() => {
+    window.addEventListener('scroll', scheduleActiveRootUpdate, { passive: true })
+    scheduleActiveRootUpdate()
+  })
 
   onDestroy(() => {
     if (typeof window !== 'undefined' && searchFilterTimer) {
       window.clearTimeout(searchFilterTimer)
       searchFilterTimer = null
+    }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('scroll', scheduleActiveRootUpdate)
+      if (scrollFrame != null) window.cancelAnimationFrame(scrollFrame)
     }
   })
 </script>
@@ -225,7 +306,12 @@
             {#each visibleCategoryForest as category (category.id)}
               <section class="search-category-group" aria-labelledby={`search-category-${category.id}`}>
                 <header class="search-group-header">
-                  <h2 id={`search-category-${category.id}`}>{category.title}</h2>
+                  <div class="search-group-title">
+                    {#if category.icon}
+                      <CategoryIcon category={category} size={38} className="search-category-icon" />
+                    {/if}
+                    <h2 id={`search-category-${category.id}`}>{category.title}</h2>
+                  </div>
                   <span>{getCategoryTreeBookmarkCount(category, visibleCategoryBookmarks)} 个匹配站点</span>
                 </header>
 
@@ -280,83 +366,67 @@
         {:else}
           <HomeEmptyPanel {hasSearchQuery} />
         {/if}
-      {:else if activeRoot}
-        <HomeCategoryScope
-          rootId={activeRoot.id}
-          title={activeRoot.title}
-          totalCount={activeRootTotal}
-          children={activeScopeItems}
-          activeId={activeCategoryId}
-          onSelect={handleNavigate}
-        />
-
-        <div
-          id="home-category-panel"
-          class="scope-section-list"
-        >
-          {#if activeChild}
-            <CategorySection
-              category={activeChild}
-              bookmarks={activeChildBookmarks}
-              showEmpty={true}
-              canAddBookmark={isAuthenticated}
-              cardWidth={settings?.card_size?.width ?? 80}
-              cardHeight={settings?.card_size?.height ?? 60}
-              cardStyle={settings?.card_style ?? 'info'}
-              cardIconSize={settings?.card_icon_size ?? 60}
-              cardShowDescription={settings?.card_show_description ?? true}
-              cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
-              cardIconShowTitle={settings?.card_icon_show_title ?? true}
-              canSort={isAuthenticated}
-              onAddBookmark={onOpenCreateBookmark}
-              onEditBookmark={onEditBookmark}
-              onSortBookmarks={onSortBookmarksInCategory}
-            />
-          {:else}
-            {#if activeRootBookmarks.length > 0 || isAuthenticated || activeRoot.children.length === 0}
-              <CategorySection
-                category={activeRoot}
-                bookmarks={activeRootBookmarks}
-                level={2}
-                displayTitle={activeRoot.children.length > 0 ? '本分类' : '书签'}
-                showCategoryIcon={false}
-                showEmpty={activeRootBookmarks.length === 0}
-                canAddBookmark={isAuthenticated}
-                cardWidth={settings?.card_size?.width ?? 80}
-                cardHeight={settings?.card_size?.height ?? 60}
-                cardStyle={settings?.card_style ?? 'info'}
-                cardIconSize={settings?.card_icon_size ?? 60}
-                cardShowDescription={settings?.card_show_description ?? true}
-                cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
-                cardIconShowTitle={settings?.card_icon_show_title ?? true}
-                canSort={isAuthenticated}
-                onAddBookmark={onOpenCreateBookmark}
-                onEditBookmark={onEditBookmark}
-                onSortBookmarks={onSortBookmarksInCategory}
+      {:else if categoryGroups.length > 0}
+        <div class="root-category-list" aria-label="书签分类">
+          {#each categoryGroups as group (group.root.id)}
+            {@const category = group.root}
+            {@const selectedCategory = group.selected}
+            {@const selectedBookmarks = allCategoryBookmarks.get(selectedCategory.id) ?? []}
+            {@const panelId = `home-category-panel-${category.id}`}
+            <section
+              class="root-category-group"
+              data-home-root-id={category.id}
+              use:registerRootSection={category.id}
+              aria-labelledby={`home-category-heading-${category.id}`}
+            >
+              <HomeCategoryScope
+                rootId={category.id}
+                title={category.title}
+                icon={category.icon}
+                directCount={allCategoryBookmarks.get(category.id)?.length ?? 0}
+                totalCount={getCategoryTreeBookmarkCount(category, allCategoryBookmarks)}
+                children={category.children.map((child) => ({
+                  id: child.id,
+                  title: child.title,
+                  icon: child.icon,
+                  count: allCategoryBookmarks.get(child.id)?.length ?? 0,
+                }))}
+                activeId={selectedCategory.id}
+                {panelId}
+                onSelect={(id) => handleScopeSelect(category.id, id)}
               />
-            {/if}
 
-            {#each activeRoot.children as child (child.id)}
-              <CategorySection
-                category={child}
-                bookmarks={allCategoryBookmarks.get(child.id) ?? []}
-                level={2}
-                showEmpty={isAuthenticated}
-                canAddBookmark={isAuthenticated}
-                cardWidth={settings?.card_size?.width ?? 80}
-                cardHeight={settings?.card_size?.height ?? 60}
-                cardStyle={settings?.card_style ?? 'info'}
-                cardIconSize={settings?.card_icon_size ?? 60}
-                cardShowDescription={settings?.card_show_description ?? true}
-                cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
-                cardIconShowTitle={settings?.card_icon_show_title ?? true}
-                canSort={isAuthenticated}
-                onAddBookmark={onOpenCreateBookmark}
-                onEditBookmark={onEditBookmark}
-                onSortBookmarks={onSortBookmarksInCategory}
-              />
-            {/each}
-          {/if}
+              <div
+                id={panelId}
+                class="scope-section-list"
+                role={category.children.length > 0 ? 'tabpanel' : undefined}
+                aria-labelledby={category.children.length > 0 ? `home-category-tab-${selectedCategory.id}` : undefined}
+              >
+                <CategorySection
+                  category={selectedCategory}
+                  bookmarks={selectedBookmarks}
+                  level={2}
+                  displayTitle={selectedCategory.id === category.id
+                    ? (category.children.length > 0 ? '本分类' : '书签')
+                    : ''}
+                  showCategoryIcon={selectedCategory.id !== category.id}
+                  showEmpty={true}
+                  canAddBookmark={isAuthenticated}
+                  cardWidth={settings?.card_size?.width ?? 80}
+                  cardHeight={settings?.card_size?.height ?? 60}
+                  cardStyle={settings?.card_style ?? 'info'}
+                  cardIconSize={settings?.card_icon_size ?? 60}
+                  cardShowDescription={settings?.card_show_description ?? true}
+                  cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+                  cardIconShowTitle={settings?.card_icon_show_title ?? true}
+                  canSort={isAuthenticated}
+                  onAddBookmark={onOpenCreateBookmark}
+                  onEditBookmark={onEditBookmark}
+                  onSortBookmarks={onSortBookmarksInCategory}
+                />
+              </div>
+            </section>
+          {/each}
         </div>
       {:else}
         <HomeEmptyPanel />
@@ -452,8 +522,21 @@
     flex-direction: column;
   }
 
+  .root-category-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2.8rem;
+  }
+
+  .root-category-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1.45rem;
+    scroll-margin-top: 6rem;
+  }
+
   .scope-section-list {
-    gap: 1.7rem;
+    gap: 1.15rem;
     outline: none;
   }
 
@@ -503,6 +586,20 @@
     overflow-wrap: anywhere;
   }
 
+  .search-group-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+
+  .search-group-title :global(.search-category-icon) {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    border-radius: 9px;
+  }
+
   .search-group-header span {
     flex: 0 0 auto;
     font-size: 0.78rem;
@@ -530,7 +627,11 @@
     }
 
     .scope-section-list {
-      gap: 1.45rem;
+      gap: 1rem;
+    }
+
+    .root-category-list {
+      gap: 2.2rem;
     }
 
     .search-results {

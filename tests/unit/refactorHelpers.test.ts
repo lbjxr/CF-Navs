@@ -130,8 +130,8 @@ describe('refactored helper modules', () => {
     expect(bookmarkMatchesSearch(bookmarkA, normalizeSearchQuery('tools'), searchIndex)).toBe(true)
     expect(getVisibleCategoryIds([bookmarkB])).toEqual(new Set([2]))
     expect(getHomeSections(memo.getCategoryForest(sortedCategories), grouped)).toEqual([
-      { id: 'category-2', title: 'Docs', count: 1, children: [] },
-      { id: 'category-1', title: 'Tools', count: 1, children: [] },
+      { id: 'category-2', categoryId: 2, title: 'Docs', icon: null, count: 1, children: [] },
+      { id: 'category-1', categoryId: 1, title: 'Tools', icon: null, count: 1, children: [] },
     ])
   })
 

@@ -2,8 +2,8 @@
   import type { CardStyle, DescriptionDisplayMode, PublicBookmark, PublicCategory } from '../../shared/types'
   import { resolveBookmarkDescriptionMode } from '../lib/descriptionMode'
   import BookmarkCard from './BookmarkCard.svelte'
+  import CategoryIcon from './CategoryIcon.svelte'
   import { getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
-  import { createIconVersion } from '../lib/bookmarkIconDisplay'
   import { reorderByIds } from '../lib/reorder'
   import { sortableList } from '../lib/sortableList'
 
@@ -27,9 +27,6 @@
   export let onAddBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
   export let onEditBookmark: ((bookmark: PublicBookmark) => AsyncVoid) | undefined = undefined
   export let onSortBookmarks: ((categoryId: number, orderedIds: number[]) => AsyncVoid) | undefined = undefined
-
-  let categoryIconFailed = false
-  let categoryIconStateKey = ''
 
   // 排序模式：先点“排序”进入，拖拽只改本地快照，点“保存”才回写。
   let sortMode = false
@@ -69,32 +66,11 @@
 
   $: sectionId = `category-${category.id}`
   $: heading = displayTitle || category.title
-  $: categoryIconKey = `${category.id}:${category.icon ?? ''}:${category.title}`
-  $: categoryIconUrl = getCategoryIconUrl(category)
-  $: hasCategoryImageIcon = Boolean(categoryIconUrl) && !categoryIconFailed
   $: iconGridTrackWidth = getIconCardTrackWidth(cardIconSize, cardIconShowTitle)
   $: gridMinWidth = cardStyle === 'info' ? 200 : iconGridTrackWidth // Sun-Panel 标准值
   $: mobileGridMinWidth = cardStyle === 'info' ? 150 : iconGridTrackWidth
   $: gridGap = cardStyle === 'info' ? '18px' : '22px 24px'
   $: mobileGridGap = cardStyle === 'info' ? '1rem' : '14px 16px'
-  $: if (categoryIconKey !== categoryIconStateKey) {
-    categoryIconStateKey = categoryIconKey
-    categoryIconFailed = false
-  }
-
-  function getCategoryIconUrl(value: PublicCategory): string {
-    const icon = value.icon ?? ''
-    if (/^data:image\//i.test(icon)) return icon
-    if (/^https?:\/\//i.test(icon)) {
-      return `/api/category-icon/${value.id}?v=${createIconVersion(`${value.id}:${icon}:${value.title}`)}`
-    }
-    return ''
-  }
-
-  function handleCategoryIconError() {
-    categoryIconFailed = true
-  }
-
   async function handleAddBookmark() {
     await onAddBookmark?.(category.id)
   }
@@ -103,17 +79,8 @@
 <section class="category-section" class:child-category={level === 2} id={sectionId}>
   <header class="section-header">
     <div class="section-title-wrap">
-      {#if showCategoryIcon && hasCategoryImageIcon}
-        <img
-          class="section-icon"
-          src={categoryIconUrl}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          on:error={handleCategoryIconError}
-        />
-      {:else if showCategoryIcon && category.icon}
-        <span class="section-icon section-icon-text">{category.icon}</span>
+      {#if showCategoryIcon && category.icon}
+        <CategoryIcon category={category} size={level === 2 ? 34 : 42} className="section-icon" />
       {/if}
       <div>
         <div class="section-heading-row">
@@ -190,12 +157,6 @@
     font-size: 1.08rem;
   }
 
-  .category-section.child-category .section-icon {
-    width: 2.1rem;
-    height: 2.1rem;
-    border-radius: 0.65rem;
-  }
-
   .section-header {
     display: flex;
     align-items: center;
@@ -208,27 +169,6 @@
     align-items: center;
     gap: 0.85rem;
     min-width: 0;
-  }
-
-  .section-icon {
-    flex: 0 0 auto;
-    width: 2.6rem;
-    height: 2.6rem;
-    border-radius: 0.85rem;
-    object-fit: cover;
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(148, 163, 184, 0.18);
-  }
-
-  .section-icon-text {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: #0f172a;
-    font-size: 1.5rem;
-    font-weight: 700;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .section-title-wrap h3,
@@ -373,15 +313,6 @@
   }
 
   /* 暗色主题 */
-  :global([data-theme='dark']) .section-icon {
-    background: rgba(148, 163, 184, 0.16);
-    border-color: rgba(148, 163, 184, 0.22);
-  }
-
-  :global([data-theme='dark']) .section-icon-text {
-    color: #e5eefb;
-  }
-
   :global([data-theme='dark']) .add-link-button {
     border-color: rgba(148, 163, 184, 0.26);
     background:

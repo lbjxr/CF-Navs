@@ -10,7 +10,9 @@ import {
 
 export type HomeSection = {
   id: string
+  categoryId: number
   title: string
+  icon: string | null
   count: number
   children: HomeSection[]
 }
@@ -18,6 +20,11 @@ export type HomeSection = {
 export type HomeCategorySelection = {
   root: CategoryNode<PublicCategory> | null
   child: CategoryNode<PublicCategory> | null
+}
+
+export type HomeCategoryGroup = {
+  root: CategoryNode<PublicCategory>
+  selected: CategoryNode<PublicCategory>
 }
 
 export function clampTitleFontSize(value: number | undefined): number {
@@ -96,14 +103,18 @@ export function getHomeSections(
   return categories.map((category) => {
     const children = (category.children ?? []).map((child) => ({
       id: `category-${child.id}`,
+      categoryId: child.id,
       title: child.title,
+      icon: child.icon,
       count: categoryBookmarks.get(child.id)?.length ?? 0,
       children: [],
     }))
 
     return {
       id: `category-${category.id}`,
+      categoryId: category.id,
       title: category.title,
+      icon: category.icon,
       count: getCategoryTreeBookmarkCount(category, categoryBookmarks),
       children,
     }
@@ -133,6 +144,51 @@ export function resolveHomeCategorySelection(
   }
 
   return { root: forest[0] ?? null, child: null }
+}
+
+export function resolveHomeCategoryForRoot(
+  root: CategoryNode<PublicCategory>,
+  activeId: string | number | null | undefined,
+): CategoryNode<PublicCategory> {
+  const normalizedId = String(activeId ?? '')
+  if (normalizedId === String(root.id) || normalizedId === `category-${root.id}`) return root
+
+  return root.children.find((child) => (
+    normalizedId === String(child.id) || normalizedId === `category-${child.id}`
+  )) ?? root
+}
+
+export function getHomeCategoryGroups(
+  forest: CategoryNode<PublicCategory>[],
+  selectedCategoryIds: ReadonlyMap<number, number>,
+): HomeCategoryGroup[] {
+  return forest.map((root) => ({
+    root,
+    selected: resolveHomeCategoryForRoot(root, selectedCategoryIds.get(root.id)),
+  }))
+}
+
+export function resolveActiveHomeRootId(
+  sectionTops: Map<number, number>,
+  threshold: number,
+): number | null {
+  let passedRootId: number | null = null
+  let nearestRootId: number | null = null
+  let passedTop = Number.NEGATIVE_INFINITY
+  let nearestTop = Number.POSITIVE_INFINITY
+
+  for (const [rootId, top] of sectionTops) {
+    if (top <= threshold && top > passedTop) {
+      passedTop = top
+      passedRootId = rootId
+    }
+    if (top < nearestTop) {
+      nearestTop = top
+      nearestRootId = rootId
+    }
+  }
+
+  return passedRootId ?? nearestRootId
 }
 
 export function getVisibleCategoryForest(

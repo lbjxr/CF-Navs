@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('category hierarchy visibility markup', () => {
-  it('keeps home bookmark groups visible without category accordions', () => {
+  it('shows every root group with direct bookmarks and per-group child tabs', () => {
     const section = readFileSync('src/components/CategorySection.svelte', 'utf8')
     const home = readFileSync('src/views/Home.svelte', 'utf8')
     const scope = readFileSync('src/components/HomeCategoryScope.svelte', 'utf8')
@@ -12,9 +12,15 @@ describe('category hierarchy visibility markup', () => {
     expect(section).toContain('{#if bookmarks.length > 0}')
     expect(home).not.toContain('expandedCategoryIds')
     expect(home).toContain('<HomeCategoryScope')
-    expect(home).toContain('{#each activeRoot.children as child (child.id)}')
+    expect(home).toContain('$: categoryGroups = getHomeCategoryGroups(categoryForest, selectedCategoryIds)')
+    expect(home).toContain('{#each categoryGroups as group (group.root.id)}')
+    expect(home).toContain('{@const selectedCategory = group.selected}')
+    expect(home).toContain('bookmarks={selectedBookmarks}')
+    expect(home).toContain('children={category.children.map((child) => ({')
     expect(scope).toContain('$: rootActive = activeId == null || String(activeId) === String(rootId)')
     expect(scope).toContain('aria-selected={rootActive}')
+    expect(scope).toContain('<span>本分类</span>')
+    expect(scope).toContain('<CategoryIcon')
   })
 
   it('collapses selector and admin child categories behind independent arrows', () => {

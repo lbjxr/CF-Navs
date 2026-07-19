@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
   import type { NavigationSetting } from '../../shared/types'
+  import CategoryIcon from './CategoryIcon.svelte'
   import {
     getAnchoredOverlayPosition,
     getHorizontalNavigationMetrics,
@@ -10,7 +11,9 @@
 
   type NavigationItem = {
     id: string | number
+    categoryId: number
     title: string
+    icon: string | null
     count?: number
     children?: NavigationItem[]
   }
@@ -171,6 +174,14 @@
     onNavigate?.(id)
     closeTopMenu()
     if (isMobileView && !isTop) mobileSidebarOpen = false
+  }
+
+  function getCategoryIconValue(item: NavigationItem) {
+    return {
+      id: item.categoryId,
+      title: item.title,
+      icon: item.icon ?? null,
+    }
   }
 
   function toggleParent(item: NavigationItem, event?: MouseEvent): void {
@@ -418,6 +429,9 @@
             aria-current={String(activeId) === String(item.id) ? 'location' : undefined}
             on:click={() => handleItemClick(item.id)}
           >
+            {#if item.icon}
+              <CategoryIcon category={getCategoryIconValue(item)} size={22} className="top-category-icon" />
+            {/if}
             <span>{item.title}</span>
             {#if item.count != null}<small>{item.count}</small>{/if}
           </button>
@@ -468,7 +482,12 @@
               class:active={String(activeId) === String(child.id)}
               on:click={() => handleItemClick(child.id)}
             >
-              <span>{child.title}</span>
+              <span class="top-submenu-title">
+                {#if child.icon}
+                  <CategoryIcon category={getCategoryIconValue(child)} size={22} className="top-submenu-icon" />
+                {/if}
+                <span>{child.title}</span>
+              </span>
               {#if child.count != null}<small>{child.count}</small>{/if}
             </button>
           {/each}
@@ -531,7 +550,13 @@
               aria-current={String(activeId) === String(item.id) ? 'location' : undefined}
               on:click={() => handleItemClick(item.id)}
             >
-              <span class="toc-slip"></span>
+              {#if item.icon}
+                <span class="toc-icon-slot">
+                  <CategoryIcon category={getCategoryIconValue(item)} size={26} className="toc-category-icon" />
+                </span>
+              {:else}
+                <span class="toc-slip"></span>
+              {/if}
               <span class="toc-title">{item.title}</span>
               {#if item.count != null}<small>{item.count}</small>{/if}
             </button>
@@ -558,7 +583,12 @@
                   aria-current={String(activeId) === String(child.id) ? 'location' : undefined}
                   on:click={() => handleItemClick(child.id)}
                 >
-                  <span>{child.title}</span>
+                  <span class="toc-child-title">
+                    {#if child.icon}
+                      <CategoryIcon category={getCategoryIconValue(child)} size={21} className="toc-child-icon" />
+                    {/if}
+                    <span>{child.title}</span>
+                  </span>
                   {#if child.count != null}<small>{child.count}</small>{/if}
                 </button>
               {/each}
@@ -718,6 +748,14 @@
     font-size: 11px;
   }
 
+  .top-item :global(.top-category-icon),
+  .top-submenu-title :global(.top-submenu-icon) {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border-radius: 6px;
+  }
+
   .top-submenu-toggle {
     width: 30px;
     min-height: 32px;
@@ -783,7 +821,14 @@
     opacity: 0.64;
   }
 
-  .top-submenu button span {
+  .top-submenu-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .top-submenu-title > span:last-child {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1008,11 +1053,25 @@
     outline: none;
   }
 
-  .toc-child-item span {
+  .toc-child-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .toc-child-title > span:last-child {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .toc-child-title :global(.toc-child-icon) {
+    width: 21px;
+    height: 21px;
+    min-width: 21px;
+    border-radius: 6px;
   }
 
   .toc-child-item small {
@@ -1046,6 +1105,32 @@
 
   .toc-item.active .toc-slip {
     background: var(--toc-accent);
+  }
+
+  .toc-icon-slot {
+    width: 40px;
+    height: 34px;
+    flex: 0 0 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .toc-icon-slot :global(.toc-category-icon) {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    border-radius: 7px;
+    transition: border-color 0.18s ease, transform 0.18s ease;
+  }
+
+  .toc-item:hover .toc-icon-slot :global(.toc-category-icon),
+  .toc-item:focus-visible .toc-icon-slot :global(.toc-category-icon) {
+    transform: scale(1.04);
+  }
+
+  .toc-item.active .toc-icon-slot :global(.toc-category-icon) {
+    border-color: color-mix(in srgb, var(--toc-accent) 58%, transparent);
   }
 
   .toc-title {
