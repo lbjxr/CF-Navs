@@ -23,6 +23,7 @@ import {
 } from './appData'
 import {
   applySortOrder,
+  applyCategorySiblingSort,
   buildPublicDataAfterCategoryDelete,
   removeById,
   removeBookmarksByCategory,
@@ -298,14 +299,18 @@ export function refreshBookmarkIconCacheInBackground(bookmarkId: number): void {
   void refreshBookmarkIconCache(bookmarkId).catch(() => undefined)
 }
 
-export async function applyLocalCategorySort(ids: number[], refreshMissing = true): Promise<void> {
+export async function applyLocalCategorySort(
+  parentId: number | null,
+  ids: number[],
+  refreshMissing = true,
+): Promise<void> {
   await applyLocalDataMutation({
     updateAdmin: () => {
-      updateAdminCategoriesLocally((categories) => applySortOrder(categories, ids))
+      updateAdminCategoriesLocally((categories) => applyCategorySiblingSort(categories, parentId, ids))
     },
     updatePublic: (data) => ({
       ...data,
-      categories: applySortOrder(data.categories, ids),
+      categories: applyCategorySiblingSort(data.categories, parentId, ids),
     }),
     refreshMissing,
     persist: refreshMissing,

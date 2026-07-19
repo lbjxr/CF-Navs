@@ -59,6 +59,53 @@ export function filterAdminCategories(
   return categories.filter((category) => category.title.toLowerCase().includes(normalizedSearch))
 }
 
+export type AdminCategoryGroup = {
+  root: AdminCategorySummary
+  children: AdminCategorySummary[]
+}
+
+function compareAdminCategories(a: AdminCategorySummary, b: AdminCategorySummary): number {
+  return Number(a.sort ?? 0) - Number(b.sort ?? 0) || Number(a.id) - Number(b.id)
+}
+
+export function buildAdminCategoryGroups(categories: AdminCategorySummary[]): AdminCategoryGroup[] {
+  const roots = categories
+    .filter((category) => category.parent_id == null)
+    .sort(compareAdminCategories)
+  const childrenByParent = new Map<number, AdminCategorySummary[]>()
+
+  for (const category of categories) {
+    if (category.parent_id == null) continue
+    const parentId = Number(category.parent_id)
+    const children = childrenByParent.get(parentId) ?? []
+    children.push(category)
+    childrenByParent.set(parentId, children)
+  }
+
+  return roots.map((root) => ({
+    root,
+    children: (childrenByParent.get(Number(root.id)) ?? []).sort(compareAdminCategories),
+  }))
+}
+
+export function filterAdminCategoryGroups(
+  groups: AdminCategoryGroup[],
+  search: string,
+): AdminCategoryGroup[] {
+  const normalizedSearch = search.trim().toLowerCase()
+  if (!normalizedSearch) return groups
+
+  return groups.flatMap((group) => {
+    if (group.root.title.toLowerCase().includes(normalizedSearch)) return [group]
+    const children = group.children.filter((child) => child.title.toLowerCase().includes(normalizedSearch))
+    return children.length > 0 ? [{ root: group.root, children }] : []
+  })
+}
+
+export function flattenAdminCategoryGroups(groups: AdminCategoryGroup[]): AdminCategorySummary[] {
+  return groups.flatMap((group) => [group.root, ...group.children])
+}
+
 export function createAdminListPage<T>(
   items: T[],
   requestedPage: number,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 
 const appSource = readFileSync(new URL('../../src/App.svelte', import.meta.url), 'utf8')
+const confirmDialogSource = readFileSync(new URL('../../src/components/ConfirmDialog.svelte', import.meta.url), 'utf8')
 
 function extractFunctionBody(source: string, functionName: string): string {
   const marker = `async function ${functionName}`
@@ -31,9 +32,16 @@ describe('destructive action confirmation flow', () => {
   it('uses the shared ConfirmDialog flow for category deletion', () => {
     const body = extractFunctionBody(appSource, 'handleDeleteCategory')
 
-    expect(body).toContain('requestConfirmation(createDeleteCategoryConfirmation(category.title))')
+    expect(body).toContain('requestConfirmation(createDeleteCategoryConfirmation(')
+    expect(body).toContain('childCategoryCount')
     expect(body).toContain('if (!confirmed) return')
     expect(body).toContain('await api.categories.remove(categoryId)')
+  })
+
+  it('keeps cancel available while disabled confirmations block click and Enter paths', () => {
+    expect(confirmDialogSource).toContain('function handleCancel() {\n    if (loading) return')
+    expect(confirmDialogSource).toContain('function handleConfirm() {\n    if (loading || confirmDisabled) return')
+    expect(confirmDialogSource).toContain('disabled={loading || confirmDisabled}')
   })
 
   it('confirms import overwrite before entering importing state', () => {

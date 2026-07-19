@@ -110,7 +110,7 @@ const settings: Settings = {
   footer_html: '',
 }
 
-const category: Category = { id: 1, title: 'Tools', icon: null, sort: 0, created_at: 100 }
+const category: Category = { id: 1, parent_id: null, title: 'Tools', icon: null, sort: 0, created_at: 100 }
 
 const bookmark: Bookmark = {
   id: 10,
@@ -335,6 +335,7 @@ describe('dataService local mutations', () => {
     const publicCategory = get(publicStore).data?.categories.find((item) => item.id === nextCategory.id)
     expect(publicCategory).toEqual({
       id: nextCategory.id,
+      parent_id: nextCategory.parent_id,
       title: nextCategory.title,
       icon: nextCategory.icon,
       sort: nextCategory.sort,
@@ -373,17 +374,17 @@ describe('dataService local mutations', () => {
     publicStore.setData({
       ...makePublicData(),
       categories: [
-        { id: category.id, title: category.title, icon: category.icon, sort: category.sort },
-        { id: nextCategory.id, title: nextCategory.title, icon: nextCategory.icon, sort: nextCategory.sort },
+        { id: category.id, parent_id: category.parent_id, title: category.title, icon: category.icon, sort: category.sort },
+        { id: nextCategory.id, parent_id: nextCategory.parent_id, title: nextCategory.title, icon: nextCategory.icon, sort: nextCategory.sort },
       ],
       bookmarks: [makePublicBookmark(bookmark), makePublicBookmark(nextBookmark)],
     })
 
-    await applyLocalCategorySort([nextCategory.id, category.id], false)
+    await applyLocalCategorySort(null, [nextCategory.id, category.id], false)
     await applyLocalBookmarkSort([nextBookmark.id, bookmark.id], false)
 
-    expect(get(adminStore).data.categories.map((item) => [item.id, item.sort])).toEqual([[2, 0], [1, 1]])
-    expect(get(publicStore).data?.categories.map((item) => [item.id, item.sort])).toEqual([[2, 0], [1, 1]])
+    expect(get(adminStore).data.categories.map((item) => [item.id, item.sort])).toEqual([[1, 1], [2, 0]])
+    expect(get(publicStore).data?.categories.map((item) => [item.id, item.sort])).toEqual([[1, 1], [2, 0]])
     expect(get(adminStore).data.bookmarks.map((item) => [item.id, item.sort])).toEqual([[11, 0], [10, 1]])
     expect(get(publicStore).data?.bookmarks.map((item) => [item.id, item.sort])).toEqual([[11, 0], [10, 1]])
     expect(adminCache.writeCachedAdminData).not.toHaveBeenCalled()

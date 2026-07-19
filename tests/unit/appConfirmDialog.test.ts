@@ -18,17 +18,25 @@ describe('app confirmation dialog helpers', () => {
       confirmLabel: '确认',
       cancelLabel: '取消',
       variant: 'default',
+      confirmDisabled: false,
     })
   })
 
   it('builds category deletion confirmations', () => {
-    expect(createConfirmDialogState(createDeleteCategoryConfirmation('工具'))).toEqual({
+    expect(createConfirmDialogState(createDeleteCategoryConfirmation('工具', 3, 0))).toEqual({
       title: '删除分类',
-      message: '删除后该分类及其下所有书签都会从首页和后台列表中移除，此操作不可撤销。',
+      message: '删除后该分类及其 3 个直属书签都会从首页和后台列表中移除，此操作不可撤销。',
       itemTitle: '工具',
       confirmLabel: '确认删除',
       cancelLabel: '取消',
       variant: 'danger',
+      confirmDisabled: false,
+    })
+
+    expect(createConfirmDialogState(createDeleteCategoryConfirmation('工具', 3, 2))).toMatchObject({
+      message: '该分类有 3 个直属书签和 2 个子分类。请先移动或删除子分类，当前不能删除。',
+      confirmLabel: '存在子分类',
+      confirmDisabled: true,
     })
   })
 
@@ -40,6 +48,7 @@ describe('app confirmation dialog helpers', () => {
       confirmLabel: '确认删除',
       cancelLabel: '取消',
       variant: 'danger',
+      confirmDisabled: false,
     })
   })
 
@@ -55,6 +64,7 @@ describe('app confirmation dialog helpers', () => {
       confirmLabel: '确认导入',
       cancelLabel: '取消',
       variant: 'danger',
+      confirmDisabled: false,
     })
   })
 })

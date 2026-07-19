@@ -7,6 +7,7 @@ export type ConfirmDialogState = {
   confirmLabel: string
   cancelLabel: string
   variant: ConfirmDialogVariant
+  confirmDisabled: boolean
 }
 
 export type ConfirmDialogInput = {
@@ -16,6 +17,7 @@ export type ConfirmDialogInput = {
   confirmLabel?: string
   cancelLabel?: string
   variant?: ConfirmDialogVariant
+  confirmDisabled?: boolean
 }
 
 export function createConfirmDialogState(input: ConfirmDialogInput): ConfirmDialogState {
@@ -26,15 +28,24 @@ export function createConfirmDialogState(input: ConfirmDialogInput): ConfirmDial
     confirmLabel: input.confirmLabel ?? '确认',
     cancelLabel: input.cancelLabel ?? '取消',
     variant: input.variant ?? 'default',
+    confirmDisabled: input.confirmDisabled ?? false,
   }
 }
 
-export function createDeleteCategoryConfirmation(categoryTitle: string): ConfirmDialogInput {
+export function createDeleteCategoryConfirmation(
+  categoryTitle: string,
+  directBookmarkCount = 0,
+  childCategoryCount = 0,
+): ConfirmDialogInput {
+  const blocked = childCategoryCount > 0
   return {
     title: '删除分类',
-    message: '删除后该分类及其下所有书签都会从首页和后台列表中移除，此操作不可撤销。',
+    message: blocked
+      ? `该分类有 ${directBookmarkCount} 个直属书签和 ${childCategoryCount} 个子分类。请先移动或删除子分类，当前不能删除。`
+      : `删除后该分类及其 ${directBookmarkCount} 个直属书签都会从首页和后台列表中移除，此操作不可撤销。`,
     itemTitle: categoryTitle,
-    confirmLabel: '确认删除',
+    confirmLabel: blocked ? '存在子分类' : '确认删除',
+    confirmDisabled: blocked,
     variant: 'danger',
   }
 }
@@ -49,13 +60,22 @@ export function createDeleteBookmarkConfirmation(bookmarkTitle: string): Confirm
   }
 }
 
-export function createBatchDeleteConfirmation(kind: 'category' | 'bookmark', count: number, bookmarkCount = 0): ConfirmDialogInput {
+export function createBatchDeleteConfirmation(
+  kind: 'category' | 'bookmark',
+  count: number,
+  bookmarkCount = 0,
+  childCategoryCount = 0,
+): ConfirmDialogInput {
+  const blocked = kind === 'category' && childCategoryCount > 0
   return {
     title: `批量删除${kind === 'category' ? '分类' : '书签'}`,
     message: kind === 'category'
-      ? `将删除 ${count} 个分类及其下 ${bookmarkCount} 个书签，此操作不可撤销。`
+      ? blocked
+        ? `已选分类包含 ${bookmarkCount} 个直属书签和 ${childCategoryCount} 个子分类。请先移动或删除这些子分类，当前不能批量删除。`
+        : `将删除 ${count} 个分类及其 ${bookmarkCount} 个直属书签，此操作不可撤销。`
       : `将删除 ${count} 个书签，此操作不可撤销。`,
-    confirmLabel: '确认删除',
+    confirmLabel: blocked ? '存在子分类' : '确认删除',
+    confirmDisabled: blocked,
     variant: 'danger',
   }
 }

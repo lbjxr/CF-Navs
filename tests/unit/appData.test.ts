@@ -17,6 +17,7 @@ import {
 
 const categoryA: Category = {
   id: 1,
+  parent_id: null,
   title: 'Tools',
   icon: 'tool',
   sort: 0,
@@ -25,6 +26,7 @@ const categoryA: Category = {
 
 const categoryB: Category = {
   id: 2,
+  parent_id: null,
   title: 'Docs',
   icon: null,
   sort: 1,
@@ -100,8 +102,8 @@ const settings: Settings = {
 describe('app data adapters', () => {
   it('maps admin categories and bookmark display values', () => {
     expect(toAdminCategories([categoryA, categoryB], [bookmarkA, bookmarkB])).toEqual([
-      { id: 1, title: 'Tools', icon: 'tool', bookmarkCount: 2 },
-      { id: 2, title: 'Docs', icon: '', bookmarkCount: 0 },
+      { id: 1, parent_id: null, title: 'Tools', icon: 'tool', sort: 0, bookmarkCount: 2 },
+      { id: 2, parent_id: null, title: 'Docs', icon: '', sort: 1, bookmarkCount: 0 },
     ])
 
     expect(toAdminBookmarks([bookmarkA, bookmarkB])).toMatchObject([

@@ -7,6 +7,7 @@
   export let cancelLabel = '取消'
   export let loading = false
   export let variant: 'default' | 'danger' = 'default'
+  export let confirmDisabled = false
   export let onConfirm: (() => void | Promise<void>) | undefined = undefined
   export let onCancel: (() => void | Promise<void>) | undefined = undefined
 
@@ -18,7 +19,7 @@
   }
 
   function handleConfirm() {
-    if (loading) return
+    if (loading || confirmDisabled) return
     void onConfirm?.()
   }
 
@@ -79,7 +80,7 @@
         <button type="button" class="ghost-button" on:click={handleCancel} disabled={loading}>
           {cancelLabel}
         </button>
-        <button type="button" class="confirm-button" on:click={handleConfirm} disabled={loading}>
+        <button type="button" class="confirm-button" on:click={handleConfirm} disabled={loading || confirmDisabled}>
           {#if loading}处理中...{:else}{confirmLabel}{/if}
         </button>
       </div>

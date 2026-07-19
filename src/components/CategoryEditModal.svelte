@@ -69,6 +69,7 @@
 
   $: iconifyInput = deriveBookmarkIconifyInput(iconifyName)
   $: normalizedIconifyName = iconifyInput.normalizedIconifyName
+  $: categoryHasChildren = form.id != null && categories.some((category) => Number(category.parent_id) === Number(form.id))
   $: iconifyPreviewUrl = iconifyInput.iconifyPreviewUrl
   $: iconifySelected = isBookmarkIconifySelected({
     iconifyUseConfirmed,
@@ -213,10 +214,13 @@
           <span>上级分类</span>
           <select bind:value={form.parent_id}>
             <option value={null}>无上级（一级分类）</option>
-            {#each categories.filter((category) => category.parent_id == null && Number(category.id) !== Number(form.id)) as category (category.id)}
-              <option value={category.id}>{category.title}</option>
-            {/each}
+            {#if !categoryHasChildren}
+              {#each categories.filter((category) => category.parent_id == null && Number(category.id) !== Number(form.id)) as category (category.id)}
+                <option value={category.id}>{category.title}</option>
+              {/each}
+            {/if}
           </select>
+          {#if categoryHasChildren}<small>该分类包含子分类，需先移动或删除子分类后才能设置上级分类。</small>{/if}
         </label>
 
         <label>

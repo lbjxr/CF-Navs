@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { AdminBookmarkSummary, AdminCategorySummary } from '../../src/lib/appData'
 import {
   clampAdminListPage,
+  buildAdminCategoryGroups,
   createAdminListPage,
   createAdminSortDraft,
   filterAdminBookmarks,
+  filterAdminCategoryGroups,
   filterAdminCategories,
   getAdminCategoryBookmarkCount,
   getAdminCategoryTitle,
@@ -14,8 +16,9 @@ import {
 } from '../../src/lib/adminListState'
 
 const categories: AdminCategorySummary[] = [
-  { id: 1, title: 'Tools', icon: 'tool', bookmarkCount: 8 },
-  { id: 'docs', title: 'Documentation', icon: 'book' },
+  { id: 1, parent_id: null, title: 'Tools', icon: 'tool', sort: 1, bookmarkCount: 8 },
+  { id: 2, parent_id: null, title: 'Documentation', icon: 'book', sort: 0 },
+  { id: 3, parent_id: 1, title: 'Frontend', icon: 'code', sort: 0 },
 ]
 
 const bookmarks: AdminBookmarkSummary[] = [
@@ -28,7 +31,7 @@ const bookmarks: AdminBookmarkSummary[] = [
   },
   {
     id: 11,
-    category_id: 'docs',
+    category_id: 2,
     title: 'Svelte',
     url: 'https://svelte.dev/docs',
     description: 'Framework docs',
@@ -66,6 +69,18 @@ describe('admin list state helpers', () => {
 
     expect(getAdminCategoryBookmarkCount(categories[0], bookmarks)).toBe(8)
     expect(getAdminCategoryBookmarkCount(categories[1], bookmarks)).toBe(1)
+  })
+
+  it('groups roots with children and keeps ancestors during category search', () => {
+    const groups = buildAdminCategoryGroups(categories)
+    expect(groups.map((group) => group.root.id)).toEqual([2, 1])
+    expect(groups[1].children.map((category) => category.id)).toEqual([3])
+    expect(filterAdminCategoryGroups(groups, 'frontend')).toEqual([
+      { root: categories[0], children: [categories[2]] },
+    ])
+    expect(filterAdminCategoryGroups(groups, 'tools')).toEqual([
+      { root: categories[0], children: [categories[2]] },
+    ])
   })
 
   it('creates a clamped page view with display range metadata', () => {

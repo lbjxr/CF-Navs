@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Bookmark, Category, PublicBookmark, PublicCategory } from '../../shared/types'
 import {
   applySortOrder,
+  applyCategorySiblingSort,
   buildOrderedBookmarkIdsForCategory,
   buildPublicDataAfterCategoryDelete,
   removeBookmarksByCategory,
@@ -14,9 +15,9 @@ import {
   upsertPublicCategory,
 } from '../../src/lib/appLocalData'
 
-const categoryA: Category = { id: 1, title: 'Tools', icon: null, sort: 0, created_at: 100 }
-const categoryB: Category = { id: 2, title: 'Docs', icon: 'book', sort: 1, created_at: 101 }
-const categoryC: Category = { id: 3, title: 'Media', icon: null, sort: 2, created_at: 102 }
+const categoryA: Category = { id: 1, parent_id: null, title: 'Tools', icon: null, sort: 0, created_at: 100 }
+const categoryB: Category = { id: 2, parent_id: null, title: 'Docs', icon: 'book', sort: 1, created_at: 101 }
+const categoryC: Category = { id: 3, parent_id: 1, title: 'Media', icon: null, sort: 0, created_at: 102 }
 
 const bookmarkA: Bookmark = {
   id: 10,
@@ -46,12 +47,14 @@ const bookmarkB: Bookmark = {
 
 const publicCategoryA: PublicCategory = {
   id: categoryA.id,
+  parent_id: categoryA.parent_id,
   title: categoryA.title,
   icon: categoryA.icon,
   sort: categoryA.sort,
 }
 const publicCategoryB: PublicCategory = {
   id: categoryB.id,
+  parent_id: categoryB.parent_id,
   title: categoryB.title,
   icon: categoryB.icon,
   sort: categoryB.sort,
@@ -123,6 +126,18 @@ describe('appLocalData sort helpers', () => {
     ]
 
     expect(buildOrderedBookmarkIdsForCategory(bookmarks, 1, [11, 10])).toEqual([11, 20, 10, 21])
+  })
+
+  it('updates sort only inside the selected category sibling scope', () => {
+    const otherChild = { ...categoryC, id: 4, sort: 1 }
+    const result = applyCategorySiblingSort([categoryA, categoryB, categoryC, otherChild], 1, [4, 3])
+
+    expect(result.map((category) => [category.id, category.sort])).toEqual([
+      [1, 0],
+      [2, 1],
+      [3, 1],
+      [4, 0],
+    ])
   })
 })
 

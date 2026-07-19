@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { ChangePasswordReq } from '../../../shared/types'
   import type { AdminBookmarkSummary, AdminCategorySummary, SettingsFormValue } from '../../lib/appData'
-  import type { AdminTab } from '../../lib/adminTypes'
+  import type { AdminTab, CategorySortHandler } from '../../lib/adminTypes'
   import type { ImportSource } from '../../lib/importData'
   import type { SortHandler } from '../../lib/sortableList'
   import BackupPanel from '../BackupPanel.svelte'
@@ -42,7 +42,7 @@
   export let onBatchDeleteBookmarks: ((ids: number[]) => AsyncVoid) | undefined = undefined
   export let onSubmitSettings: ((payload: SettingsFormValue) => AsyncVoid) | undefined = undefined
   export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
-  export let onSortCategories: SortHandler | undefined = undefined
+  export let onSortCategories: CategorySortHandler | undefined = undefined
   export let onSortBookmarks: SortHandler | undefined = undefined
   export let onExportData: (() => AsyncVoid) | undefined = undefined
   export let onImportData: ((file: File, source: ImportSource, mode: 'replace' | 'merge') => AsyncVoid) | undefined = undefined

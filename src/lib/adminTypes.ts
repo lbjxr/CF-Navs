@@ -1,5 +1,10 @@
 export type AdminTab = 'categories' | 'bookmarks' | 'settings' | 'backup'
 
+export type CategorySortHandler = (
+  parentId: number | null,
+  orderedIds: Array<string | number>,
+) => void | Promise<void>
+
 export type CategoryFormValue = {
   id?: string | number
   parent_id: string | number | null

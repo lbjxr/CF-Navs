@@ -603,14 +603,20 @@
   }
 
   async function handleDeleteCategory(category: { id: string | number; title: string }): Promise<void> {
-    const confirmed = await requestConfirmation(createDeleteCategoryConfirmation(category.title))
+    const categoryId = Number(category.id)
+    const directBookmarkCount = adminData.bookmarks.filter((bookmark) => bookmark.category_id === categoryId).length
+    const childCategoryCount = adminData.categories.filter((item) => item.parent_id === categoryId).length
+    const confirmed = await requestConfirmation(createDeleteCategoryConfirmation(
+      category.title,
+      directBookmarkCount,
+      childCategoryCount,
+    ))
     if (!confirmed) return
 
     deletingCategoryId = Number(category.id)
     categoryError = ''
 
     try {
-     const categoryId = Number(category.id)
      await api.categories.remove(categoryId)
      await applyLocalCategoryDelete(categoryId)
       await refreshAdminDataAfterMutation()
@@ -731,7 +737,10 @@
   async function handleBatchDeleteCategories(ids: number[]): Promise<void> {
     if (ids.length === 0) return
     const bookmarkCount = adminData.bookmarks.filter((bookmark) => ids.includes(bookmark.category_id)).length
-    if (!await requestConfirmation(createBatchDeleteConfirmation('category', ids.length, bookmarkCount))) return
+    const childCategoryCount = adminData.categories.filter((category) => (
+      category.parent_id != null && ids.includes(category.parent_id)
+    )).length
+    if (!await requestConfirmation(createBatchDeleteConfirmation('category', ids.length, bookmarkCount, childCategoryCount))) return
     try {
       const result = await api.categories.batchDelete(ids)
       if (result.deleted > 0 || result.deleted_bookmarks > 0) await refreshAdminDataAfterMutation()
@@ -772,12 +781,12 @@
     currentView = 'login'
   }
 
-  async function handleSortCategories(ids: Array<string | number>): Promise<void> {
+  async function handleSortCategories(parentId: number | null, ids: Array<string | number>): Promise<void> {
     categoryError = ''
 
     await runOptimisticSort(categorySortState, ids, {
-      applyLocalSort: (sortedIds) => applyLocalCategorySort(sortedIds, false),
-      saveRemoteSort: (sortedIds) => api.categories.sort(null, sortedIds),
+      applyLocalSort: (sortedIds) => applyLocalCategorySort(parentId, sortedIds, false),
+      saveRemoteSort: (sortedIds) => api.categories.sort(parentId, sortedIds),
       persist: persistCurrentAdminData,
       onSuccess: refreshAdminDataAfterMutation,
       restoreOnError: () => refreshLoggedInData(true),
@@ -1023,6 +1032,7 @@
       confirmLabel={confirmDialog?.confirmLabel ?? '确认'}
       cancelLabel={confirmDialog?.cancelLabel ?? '取消'}
       variant={confirmDialog?.variant ?? 'default'}
+      confirmDisabled={confirmDialog?.confirmDisabled ?? false}
       onConfirm={handleConfirmDialogConfirm}
       onCancel={handleConfirmDialogCancel}
     />
