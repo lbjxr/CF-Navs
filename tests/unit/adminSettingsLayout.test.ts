@@ -35,9 +35,10 @@ describe('admin settings layout', () => {
     const sectionOrder = [
       '<BasicSettingsSection',
       '<BackgroundSettingsSection',
+      '<CardSettingsSection',
+      '<AdvancedSettingsSection',
       '<NavigationSettingsSection',
       '<HeroSettingsSection',
-      '<CardSettingsSection',
       '<SearchEngineSettingsSection',
       '<FooterSettingsSection',
       '<PasswordChangePanel',
@@ -64,6 +65,7 @@ describe('admin settings layout', () => {
     const card = readFileSync('src/components/settings/CardSettingsSection.svelte', 'utf8')
     const search = readFileSync('src/components/settings/SearchEngineSettingsSection.svelte', 'utf8')
     const appearance = readFileSync('src/components/settings/BackgroundSettingsSection.svelte', 'utf8')
+    const advanced = readFileSync('src/components/settings/AdvancedSettingsSection.svelte', 'utf8')
 
     expect(layout).toContain('bind:value={form.content_layout.max_width}')
     expect(card).not.toContain('form.content_layout')
@@ -72,7 +74,7 @@ describe('admin settings layout', () => {
     expect(search).not.toContain('form.search_box_show')
     expect(basic).toContain('bind:group={form.theme}')
     expect(basic).not.toContain('form.image_host_url')
-    expect(appearance).toContain('bind:value={form.image_host_url}')
+    expect(advanced).toContain('bind:value={form.image_host_url}')
     expect(appearance).not.toContain('bind:group={form.theme}')
     expect(card).not.toContain('旧版')
     expect(hero).not.toContain('标题与搜索')
@@ -103,12 +105,25 @@ describe('admin settings layout', () => {
     const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
     const appearance = readFileSync('src/components/settings/BackgroundSettingsSection.svelte', 'utf8')
     const card = readFileSync('src/components/settings/CardSettingsSection.svelte', 'utf8')
+    const advanced = readFileSync('src/components/settings/AdvancedSettingsSection.svelte', 'utf8')
     const backgroundCard = readFileSync('src/components/settings/ThemeBackgroundCard.svelte', 'utf8')
 
     expect(panel).toContain('appearanceAdvancedOpen = shouldAutoExpandAppearanceAdvanced(initialForm)')
-    expect(appearance).toContain('data-testid="appearance-advanced-toggle"')
-    expect(appearance).toContain('{#if advancedOpen}')
-    expect(card).toContain('{#if advancedOpen}')
+    expect(advanced).toContain('data-testid="appearance-advanced-toggle"')
+    expect(advanced).toContain('{#if advancedOpen}')
+    expect(advanced).toContain('<legend>高级设置</legend>')
+    expect(advanced).toContain('<h3>尺寸与密度</h3>')
+    expect(advanced).toContain('<h3>卡片表面</h3>')
+    expect(appearance).not.toContain('{#if advancedOpen}')
+    expect(card).not.toContain('{#if advancedOpen}')
+    expect(card).not.toContain('<h3>尺寸与密度</h3>')
+    expect(card).not.toContain('<h3>卡片表面</h3>')
+    const appearanceBranch = panel.slice(
+      panel.indexOf("{:else if activeSectionId === 'appearance'}"),
+      panel.indexOf("{:else if activeSectionId === 'layout'}"),
+    )
+    expect(appearanceBranch.indexOf('<BackgroundSettingsSection')).toBeLessThan(appearanceBranch.indexOf('<CardSettingsSection'))
+    expect(appearanceBranch.indexOf('<CardSettingsSection')).toBeLessThan(appearanceBranch.indexOf('<AdvancedSettingsSection'))
     expect(backgroundCard.indexOf('<span>背景值</span>')).toBeLessThan(backgroundCard.indexOf('<span>遮罩颜色</span>'))
     expect(backgroundCard.indexOf('<span>遮罩颜色</span>')).toBeLessThan(backgroundCard.indexOf('<div class="background-range-grid">'))
   })
@@ -118,6 +133,7 @@ describe('admin settings layout', () => {
     const backgroundCard = readFileSync('src/components/settings/ThemeBackgroundCard.svelte', 'utf8')
     const gradientInput = readFileSync('src/components/GradientBackgroundInput.svelte', 'utf8')
     const card = readFileSync('src/components/settings/CardSettingsSection.svelte', 'utf8')
+    const advanced = readFileSync('src/components/settings/AdvancedSettingsSection.svelte', 'utf8')
     const preview = readFileSync('src/components/settings/SettingsHomePreview.svelte', 'utf8')
 
     expect(presets).toContain('data-testid="gradient-preset-toggle"')
@@ -128,8 +144,8 @@ describe('admin settings layout', () => {
     expect(backgroundCard).not.toContain('完整渐变值')
     expect(gradientInput).not.toContain('gradient-manual-field')
     expect(card).toContain('{#if form.card_style === \'info\'}')
-    expect(card).toContain('disabled={form.card_style !== \'info\'}')
-    expect(card).toContain('disabled={form.card_style !== \'icon\'}')
+    expect(advanced).toContain('disabled={form.card_style !== \'info\'}')
+    expect(advanced).toContain('disabled={form.card_style !== \'icon\'}')
     expect(preview).toContain('data-card-description-mode=')
     expect(preview).toContain('showDescription={previewSettings.card_style === \'info\' && showDescription}')
   })

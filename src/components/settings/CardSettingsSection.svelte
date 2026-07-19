@@ -1,11 +1,9 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import { cloneSettingsForm, type SettingsFormModel } from '../../lib/settingsForm'
-  import ColorAlphaInput from '../ColorAlphaInput.svelte'
 
   export let form: SettingsFormModel
   export let saving = false
-  export let advancedOpen = false
 
   $: form.card_show_description = form.card_description_mode === 'always'
 
@@ -69,69 +67,6 @@
     </div>
   {/if}
 
-  {#if advancedOpen}
-    <div id="settings-card-advanced" class="card-advanced" data-testid="card-advanced-settings">
-      <div class="settings-subsection">
-        <h3>尺寸与密度</h3>
-        <div class="settings-grid card-size-grid">
-          <label class="field field-number">
-            <span>卡片最小宽度 (px)</span>
-            <input bind:value={form.card_size.width} type="number" min="80" max="400" step="10" />
-            <small>数值越小，每行可排列的卡片越多。</small>
-          </label>
-          <label class="field field-number" class:disabled={form.card_style !== 'info'}>
-            <span>详情卡片最小高度 (px)</span>
-            <input bind:value={form.card_size.height} type="number" min="0" max="300" step="10" disabled={form.card_style !== 'info'} />
-            <small>仅影响详情风格；设置为 0 时由内容决定高度。</small>
-          </label>
-          <label class="field field-number" class:disabled={form.card_style !== 'icon'}>
-            <span>极简卡片图标大小 (px)</span>
-            <input bind:value={form.card_icon_size} type="number" min="40" max="100" step="5" disabled={form.card_style !== 'icon'} />
-            <small>控制极简风格中图标卡片的边长。</small>
-          </label>
-        </div>
-      </div>
-
-      <div class="settings-subsection">
-        <h3>卡片表面</h3>
-        <div class="settings-grid card-appearance-grid">
-          <div class="field field-color">
-            <span>卡片表面颜色</span>
-            <ColorAlphaInput
-              bind:value={form.card_background_color}
-              bind:alpha={form.card_background_opacity}
-              on:change={() => void syncForm()}
-              placeholder="#ffffff"
-              inputLabel="卡片表面颜色值"
-              swatchTitle="选择卡片表面颜色"
-              alphaText="卡片表面透明度"
-            />
-            <small>作为卡片的基础色；内置方案会提供一组匹配值。</small>
-          </div>
-
-          <label class="field field-range">
-            <span>卡片不透明度 <em>{form.card_background_opacity.toFixed(2)}</em></span>
-            <input bind:value={form.card_background_opacity} type="range" min="0" max="1" step="0.05" />
-            <small>数值越低越通透，背景内容会更明显。</small>
-          </label>
-
-          <div class="field field-color">
-            <span>卡片文字颜色</span>
-            <ColorAlphaInput
-              bind:value={form.card_text_color}
-              on:change={() => void syncForm()}
-              placeholder="留空则跟随主题"
-              inputLabel="卡片文字颜色值"
-              swatchTitle="选择卡片文字颜色"
-              alphaText="卡片文字透明度"
-            />
-            <small>留空时分别使用适合浅色和深色模式的高对比文字。</small>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  {/if}
 </fieldset>
 
 <style>
@@ -194,27 +129,8 @@
     line-height: 1.5;
   }
 
-  .field.disabled {
-    opacity: 0.58;
-  }
-
   .description-mode-field small {
     color: var(--sp-muted);
-  }
-
-  .card-advanced {
-    display: grid;
-    gap: 18px;
-    border-top: 1px solid var(--sp-subsection-border);
-    padding-top: 18px;
-  }
-
-  .field-number,
-  .card-size-grid .field-number,
-  .field-color,
-  .card-appearance-grid .field-color,
-  .card-appearance-grid .field-range {
-    grid-column: span 4;
   }
 
   .icon-title-toggle {
@@ -222,29 +138,9 @@
     box-sizing: border-box;
   }
 
-  @media (max-width: 960px) {
-    .field-number,
-    .field-color,
-    .card-size-grid .field-number,
-    .card-appearance-grid .field-color,
-    .card-appearance-grid .field-range {
-      grid-column: 1 / -1;
-    }
-  }
-
   @media (max-width: 620px) {
     .radio-group.compact {
       grid-template-columns: 1fr;
-    }
-  }
-
-  @container settings-editor (max-width: 640px) {
-    .field-number,
-    .field-color,
-    .card-size-grid .field-number,
-    .card-appearance-grid .field-color,
-    .card-appearance-grid .field-range {
-      grid-column: 1 / -1;
     }
   }
 

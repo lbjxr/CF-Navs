@@ -9,6 +9,7 @@
     type SettingsFormModel,
   } from '../lib/settingsForm'
   import './settings/settingsSections.css'
+  import AdvancedSettingsSection from './settings/AdvancedSettingsSection.svelte'
   import BackgroundSettingsSection from './settings/BackgroundSettingsSection.svelte'
   import BasicSettingsSection from './settings/BasicSettingsSection.svelte'
   import CardSettingsSection from './settings/CardSettingsSection.svelte'
@@ -147,6 +148,12 @@
             <BackgroundSettingsSection
               bind:form
               {saving}
+              onAdvancedChange={handleAppearanceAdvancedChange}
+            />
+            <CardSettingsSection bind:form {saving} />
+            <AdvancedSettingsSection
+              bind:form
+              {saving}
               advancedOpen={appearanceAdvancedOpen}
               onAdvancedChange={handleAppearanceAdvancedChange}
             />
@@ -156,9 +163,7 @@
             <HeroSettingsSection bind:form {saving} />
           {/if}
 
-          {#if activeSectionId === 'appearance'}
-            <CardSettingsSection bind:form {saving} advancedOpen={appearanceAdvancedOpen} />
-          {:else if activeSectionId === 'search'}
+          {#if activeSectionId === 'search'}
             <SearchEngineSettingsSection bind:form {saving} {enginesValid} />
           {:else if activeSectionId === 'footer'}
             <FooterSettingsSection bind:form {saving} />

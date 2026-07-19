@@ -27,6 +27,7 @@
 
 .settings-panel .group-background,
 .settings-panel .group-card,
+.settings-panel .group-advanced,
 .settings-panel .group-search {
   background: var(--sp-group-bg-strong);
 }
