@@ -103,8 +103,8 @@
             on:change={() => void syncBackground()}
             defaultStart={gradientDefaults.start}
             defaultEnd={gradientDefaults.end}
-            startLabel={`${title}起始颜色`}
-            endLabel={`${title}结束颜色`}
+            startLabel="起始颜色"
+            endLabel="结束颜色"
           />
         {:else}
           <div class="inline-input">

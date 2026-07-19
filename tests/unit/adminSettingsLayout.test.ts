@@ -124,7 +124,9 @@ describe('admin settings layout', () => {
     )
     expect(appearanceBranch.indexOf('<BackgroundSettingsSection')).toBeLessThan(appearanceBranch.indexOf('<CardSettingsSection'))
     expect(appearanceBranch.indexOf('<CardSettingsSection')).toBeLessThan(appearanceBranch.indexOf('<AdvancedSettingsSection'))
-    expect(backgroundCard.indexOf('<span>背景值</span>')).toBeLessThan(backgroundCard.indexOf('<span>遮罩颜色</span>'))
+    expect(backgroundCard.indexOf('<span>背景值</span>')).toBeLessThan(backgroundCard.indexOf('startLabel="起始颜色"'))
+    expect(backgroundCard.indexOf('startLabel="起始颜色"')).toBeLessThan(backgroundCard.indexOf('endLabel="结束颜色"'))
+    expect(backgroundCard.indexOf('endLabel="结束颜色"')).toBeLessThan(backgroundCard.indexOf('<span>遮罩颜色</span>'))
     expect(backgroundCard.indexOf('<span>遮罩颜色</span>')).toBeLessThan(backgroundCard.indexOf('<div class="background-range-grid">'))
   })
 
