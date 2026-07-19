@@ -108,7 +108,7 @@ categoriesRoutes.put('/:id', async (c) => {
     const category = await updateCategory(c.env.DB, id, {
       title: body.title.trim(),
       icon: body.icon ?? null,
-      parent_id: parentId ?? null,
+      parent_id: body.parent_id === undefined ? undefined : parentId,
     })
     if (!category) return c.json(fail(ErrCode.NOT_FOUND, 'category not found'))
     await touchDataVersion(c.env.DB)

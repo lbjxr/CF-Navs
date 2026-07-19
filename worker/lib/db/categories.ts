@@ -72,7 +72,7 @@ export async function updateCategory(
   const current = await getCategory(db, id)
   if (!current) return null
 
-  const parentId = req.parent_id ?? null
+  const parentId = req.parent_id === undefined ? current.parent_id : req.parent_id
   if (parentId !== current.parent_id) await validateCategoryParent(db, parentId, id)
 
   if (parentId === current.parent_id) {

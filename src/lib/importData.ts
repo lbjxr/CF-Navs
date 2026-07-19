@@ -313,6 +313,22 @@ export function prepareBrowserBookmarkHtml(text: string): PreparedImport {
     })
   }
 
+  function effectiveCategoryPath(categoryPath: string[]): string[] {
+    const first = categoryPath[0]?.trim().toLowerCase() ?? ''
+    const exportContainers = new Set([
+      'bookmarks bar',
+      'bookmarks toolbar',
+      'bookmarks menu',
+      'other bookmarks',
+      'favorites bar',
+      '收藏夹栏',
+      '书签栏',
+      '书签工具栏',
+      '其他书签',
+    ])
+    return exportContainers.has(first) ? categoryPath.slice(1) : categoryPath
+  }
+
   const tokens = text.match(/<\/?(?:DL|H3|A|DD|DT)\b[^>]*>|[^<]+/gi) ?? []
   type DlContext = { categoryPath: string[] }
   const dlStack: DlContext[] = []
@@ -347,9 +363,7 @@ export function prepareBrowserBookmarkHtml(text: string): PreparedImport {
     if (/^<\/A/i.test(token)) {
       captureLink = false
       const categoryPath = dlStack[dlStack.length - 1]?.categoryPath ?? []
-      // 浏览器导出通常会用第一层 H3（如“收藏夹栏”）包住整个目录树；
-      // 该层只是导出容器，不作为业务分类，后续层级整体上移一级。
-      parseLink(linkTag, linkText, categoryPath.slice(1))
+      parseLink(linkTag, linkText, effectiveCategoryPath(categoryPath))
       continue
     }
     if (/^<DD\b/i.test(token)) { captureDescription = true; descriptionText = ''; continue }

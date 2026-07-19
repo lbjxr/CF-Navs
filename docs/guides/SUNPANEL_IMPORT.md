@@ -47,6 +47,7 @@ node scripts/convert-sunpanel.cjs SunPanel-Data.json cf-navs-import.json
 |---------------|-------------|------|
 | icons[].title | categories.title | 分类名称 |
 | icons[].sort | categories.sort | 分类排序 |
+| - | categories.parent_id | 固定为 `null`，Sun-Panel 分类导入为一级分类 |
 | children[].title | bookmarks.title | 书签标题 |
 | children[].url | bookmarks.url | 书签URL |
 | children[].description | bookmarks.description | 书签描述 |

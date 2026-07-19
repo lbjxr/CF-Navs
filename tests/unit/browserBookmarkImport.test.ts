@@ -20,6 +20,10 @@ describe('browser bookmark import', () => {
     expect(result.payload.bookmarks[0].description).toBe('Example description')
     expect(result.payload.bookmarks[0].icon_blob).toMatch(/^data:image\//)
     expect(result.payload.bookmarks[0].created_at).toBe(1700000000000)
+    expect(result.payload.categories.map((category) => ({ title: category.title, parent_id: category.parent_id }))).toEqual([
+      { title: 'Work', parent_id: null },
+      { title: 'Nested', parent_id: 1 },
+    ])
   })
 
   it('uses every H3 folder as a path-qualified category', () => {
@@ -52,8 +56,8 @@ describe('browser bookmark import', () => {
 </DL><p>`
 
     const result = prepareBrowserBookmarkHtml(exportedHtml)
-    expect(result.payload.categories.map(category => category.title)).toEqual(['浏览器书签'])
-    expect(result.payload.bookmarks.map(bookmark => bookmark.category_id)).toEqual([1, 1])
+    expect(result.payload.categories.map(category => category.title)).toEqual(['浏览器书签', 'Folder'])
+    expect(result.payload.bookmarks.map(bookmark => bookmark.category_id)).toEqual([1, 2])
   })
 
   it('maps two levels and flattens deeper folders with a distinct separator', () => {

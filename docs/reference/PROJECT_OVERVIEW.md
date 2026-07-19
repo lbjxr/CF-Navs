@@ -13,12 +13,12 @@
 
 ### 用户功能
 - ✅ 响应式导航界面：后台可选择左侧或顶部布局
-- ✅ 分类和书签浏览
+- ✅ 两层分类和书签浏览；一级、二级分类均可直接保存书签
 - ✅ 左侧导航支持桌面悬停展开或常显、手动收缩偏好记忆；移动端始终使用按钮和抽屉
 - ✅ 顶部导航固定悬浮，受内容区域最大宽度约束；桌面支持箭头和鼠标拖动，移动端支持触摸横向滑动
 - ✅ 首页标题独立展示，支持颜色和文字大小配置
 - ✅ 多搜索引擎快速切换
-- ✅ 首页搜索框直接筛选分类书签区域，匹配标题、URL、描述和分类名称
+- ✅ 首页搜索框按完整分类路径筛选，搜索父级名称可命中后代并保留祖先结构
 - ✅ 两种卡片风格（详情/极简）
 - ✅ 详情卡片描述支持始终显示、悬停提示和隐藏，单个书签可覆盖全局策略
 - ✅ 自定义背景（浅色/深色主题分别配置纯色/渐变/图片），并内置 13 组毛玻璃渐变与 9 组护眼纯色方案；护眼方案使用综合色相更明确的浅色前台背景、同色系卡片和可调透明度
@@ -31,12 +31,12 @@
 
 ### 管理功能
 - ✅ 单管理员登录系统
-- ✅ 分类 CRUD 操作
+- ✅ 两层分类 CRUD、编辑移动、含子分类删除保护
 - ✅ 书签 CRUD 操作
 - ✅ 前台右键编辑书签，编辑入口以卡片浮层显示
 - ✅ 新增/编辑书签弹窗内部滚动，保存按钮保持可见
-- ✅ 拖拽排序（分类和书签；排序模式显示全量列表，避免跨页排序错乱）
-- ✅ 后台分类和书签列表每页 10 条分页，列表面板按当前页内容收紧高度，减少底部空白
+- ✅ 同级拖拽排序；分类排序请求必须提交指定父级下的完整兄弟集合
+- ✅ 分类列表按每页 10 个一级分类分页并携带全部子分类；书签列表每页 10 条
 - ✅ 多种方式获取图标（Favicon.im / 完整标题文字图标 / Google / Iconify / 自定义 URL、文字或表情）
 - ✅ 文字图标读取完整标题，长标题最多自动换行 4 行，并支持新增/编辑书签时选择 logo.surf 风格配色
 - ✅ 图标代理缓存与本地缓存优先读取（Worker + D1 + Cloudflare edge cache + 浏览器本地缓存）
@@ -118,7 +118,7 @@ worker/
 settings (key TEXT PRIMARY KEY, value TEXT)
 
 -- 分类表
-categories (id, title, icon, sort, created_at)
+categories (id, parent_id, title, icon, sort, created_at)
 
 -- 书签表
 bookmarks (id, category_id, title, url, icon, icon_source, icon_blob,
@@ -250,8 +250,8 @@ SESSION_TTL = "604800"             # 会话有效期（7天）
 - `/api/admin/data` 合并后台进入时的数据读取，分类、书签和 settings 使用 D1 batch 读取，并随响应携带当前数据版本；请求带 no-cache 指令时会绕过 Worker isolate 内的短 TTL 运行时聚合缓存
 - `/api/public/data` 确认公开后用一次 D1 batch 合并公开 settings、分类和书签读取，并只读取首页公开字段；书签公开字段保留 `icon_blob` 以支持本地优先图标展示，但不返回 `created_at` 等管理字段；同请求内刚从 D1 读取过的 `site_title/public_mode` 会合并进公开 settings，避免第二次 settings 查询重复读取这两行
 - 后台设置面板提交完整 `Settings` 字段时，`PUT /api/settings` 写入 D1 后直接由提交 payload 合成响应；只有兼容性部分更新请求才写后回读完整 settings
-- 分类和书签新增用单条 `INSERT ... SELECT ... RETURNING` 合并末尾排序计算和返回值，书签新增还会在同一语句中判断分类是否存在；分类和书签更新使用 `UPDATE ... RETURNING` 直接返回更新后的完整行，避免更新前额外读取旧记录；书签更新在 SQL 内只于图标变化时清空 `icon_blob`
-- 分类删除使用删除语句 `changes` 判断是否存在，避免删除前额外读取分类
+- 分类新增用 `INSERT ... SELECT ... RETURNING` 在目标父级作用域计算末尾排序；分类更新先读取当前父级和子分类状态，再用 `UPDATE ... RETURNING` 完成合法移动。书签新增仍在单条语句中判断分类是否存在；书签更新在 SQL 内只于图标变化时清空 `icon_blob`
+- 分类删除先查询子分类数量执行保护，无子分类时再按删除语句 `changes` 判断目标是否存在，并显式删除直属书签
 - 公开聚合、后台聚合、书签列表和图标详情等读取路径跳过预检查式 schema 迁移，仅在旧库缺列错误时迁移并重试一次
 - `/api/icon/:id`、`/api/category-icon/:id` 与 `/api/iconify/:set/:name.svg` 统一提供图标代理能力，普通书签图标 cache miss 时一次 D1 查询同时读取地址和 `icon_blob`，外站抓取成功后直接返回图片字节；首页普通书签卡片优先读取聚合数据中的 `icon_blob`，没有内嵌图标时才读浏览器本地图标缓存，仍缺失时回退保存的 HTTP(S) 图标 URL，避免 favicon.im 等浏览器可直连图标保存后显示文字；首页不把 `/api/icon/:id` 作为普通浏览路径，后台列表仍可使用代理预览；Iconify 图标和 icon-sets 页面链接不写 `icon_blob`，后台预览通过稳定 `/api/iconify/*` 共享 edge cache，首页展示复用浏览器 HTTP 缓存的 Iconify SVG；Service Worker 不缓存跨域 `opaque` 图标响应，后台已有 `icon_blob` 预览不再复制写入本地图标缓存；普通 HTTP(S) 书签图标代理抓取失败时返回错误，图标缺失、非 HTTP(S) 值、分类图标或 Iconify 失败时仍使用短 TTL 临时 SVG fallback
 - 静态资源 CDN

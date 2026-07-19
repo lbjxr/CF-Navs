@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   CategoryConflictError,
   CategoryValidationError,
+  batchDeleteCategories,
   createCategory,
   deleteCategory,
   sortCategories,
+  updateCategory,
 } from '../../worker/lib/db/categories'
 
 type StatementHandler = {
@@ -102,6 +104,65 @@ describe('category database hierarchy rules', () => {
     }))
 
     await expect(deleteCategory(fake.db, 1)).rejects.toBeInstanceOf(CategoryConflictError)
+    expect(fake.batchCalls).toBe(0)
+  })
+
+  it('preserves the existing parent when legacy update payloads omit parent_id', async () => {
+    const fake = createDb((sql) => ({
+      first: () => {
+        if (sql.startsWith('SELECT id, parent_id')) {
+          return { id: 3, parent_id: 1, title: 'Child', icon: null, sort: 0, created_at: 100 }
+        }
+        if (sql.startsWith('UPDATE categories SET title')) {
+          return { id: 3, parent_id: 1, title: 'Updated', icon: null, sort: 0, created_at: 100 }
+        }
+        return null
+      },
+    }))
+
+    await expect(updateCategory(fake.db, 3, { title: 'Updated', icon: null })).resolves.toMatchObject({
+      id: 3,
+      parent_id: 1,
+    })
+    expect(fake.prepared.find((entry) => entry.sql.startsWith('UPDATE categories SET title'))?.params).toEqual(['Updated', null, 3])
+  })
+
+  it('rejects using a second-level category as a parent', async () => {
+    const fake = createDb((sql) => ({
+      first: () => sql.startsWith('SELECT id, parent_id')
+        ? { id: 2, parent_id: 1, title: 'Child', icon: null, sort: 0, created_at: 100 }
+        : null,
+    }))
+
+    await expect(createCategory(fake.db, { title: 'Grandchild', parent_id: 2 }))
+      .rejects.toBeInstanceOf(CategoryValidationError)
+    expect(fake.prepared.some((entry) => entry.sql.startsWith('INSERT INTO categories'))).toBe(false)
+  })
+
+  it('rejects moving a root category that still has children', async () => {
+    const fake = createDb((sql) => ({
+      first: (params) => {
+        if (sql.startsWith('SELECT id, parent_id')) {
+          return Number(params[0]) === 3
+            ? { id: 3, parent_id: null, title: 'Root', icon: null, sort: 0, created_at: 100 }
+            : { id: 1, parent_id: null, title: 'Target', icon: null, sort: 0, created_at: 100 }
+        }
+        if (sql.startsWith('SELECT id FROM categories WHERE parent_id')) return { id: 4 }
+        return null
+      },
+    }))
+
+    await expect(updateCategory(fake.db, 3, { title: 'Root', parent_id: 1 }))
+      .rejects.toBeInstanceOf(CategoryValidationError)
+    expect(fake.prepared.some((entry) => entry.sql.startsWith('UPDATE categories'))).toBe(false)
+  })
+
+  it('rejects the entire category batch delete when any selected root has children', async () => {
+    const fake = createDb((sql) => ({
+      all: () => sql.startsWith('SELECT parent_id, COUNT(*)') ? [{ parent_id: 1, count: 1 }] : [],
+    }))
+
+    await expect(batchDeleteCategories(fake.db, [1, 2])).rejects.toBeInstanceOf(CategoryConflictError)
     expect(fake.batchCalls).toBe(0)
   })
 })
