@@ -60,10 +60,11 @@ describe('navigation layout helpers', () => {
 
     expect(getAnchoredOverlayPosition({
       anchorLeft: 1100,
+      anchorRight: 1160,
       anchorBottom: 64,
       overlayWidth: 220,
       viewportWidth: 1200,
-    })).toEqual({ left: 972, top: 72 })
+    })).toEqual({ left: 940, top: 72 })
 
     expect(getAnchoredOverlayPosition({
       anchorLeft: -20,

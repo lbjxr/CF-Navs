@@ -199,11 +199,12 @@
     const navigationRect = navigationRoot.getBoundingClientRect()
     const position = getAnchoredOverlayPosition({
       anchorLeft: anchorRect.left,
+      anchorRight: anchorRect.right,
       anchorBottom: anchorRect.bottom,
       overlayWidth: TOP_SUBMENU_WIDTH,
       viewportWidth: window.innerWidth,
     })
-    topMenuStyle = `top: ${position.top - navigationRect.top}px; left: ${position.left - navigationRect.left}px;`
+    topMenuStyle = `top: ${position.top - navigationRect.top - navigationRoot.clientTop}px; left: ${position.left - navigationRect.left - navigationRoot.clientLeft}px;`
   }
 
   function handleTopTrackScroll(): void {
@@ -693,6 +694,7 @@
   .top-submenu {
     position: absolute;
     z-index: 80;
+    box-sizing: border-box;
     width: 220px;
     max-height: min(360px, calc(100vh - 80px));
     display: grid;

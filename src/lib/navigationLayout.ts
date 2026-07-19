@@ -10,6 +10,7 @@ export interface HorizontalNavigationMetrics {
 
 export interface AnchoredOverlayPositionInput {
   anchorLeft: number
+  anchorRight?: number
   anchorBottom: number
   overlayWidth: number
   viewportWidth: number
@@ -71,6 +72,7 @@ export function getHorizontalNavigationMetrics(input: {
 
 export function getAnchoredOverlayPosition({
   anchorLeft,
+  anchorRight,
   anchorBottom,
   overlayWidth,
   viewportWidth,
@@ -78,9 +80,12 @@ export function getAnchoredOverlayPosition({
   viewportMargin = 8,
 }: AnchoredOverlayPositionInput): AnchoredOverlayPosition {
   const maximumLeft = Math.max(viewportMargin, viewportWidth - overlayWidth - viewportMargin)
+  const preferredLeft = anchorLeft + overlayWidth <= viewportWidth - viewportMargin
+    ? anchorLeft
+    : (anchorRight ?? anchorLeft) - overlayWidth
 
   return {
-    left: Math.min(Math.max(anchorLeft, viewportMargin), maximumLeft),
+    left: Math.min(Math.max(preferredLeft, viewportMargin), maximumLeft),
     top: anchorBottom + gap,
   }
 }
