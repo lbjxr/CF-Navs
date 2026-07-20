@@ -156,6 +156,7 @@
       class="bookmark-grid"
       class:is-sorting={sortMode}
       class:is-icon-grid={cardStyle !== 'info'}
+      class:is-info-grid={cardStyle === 'info'}
       style="--card-min-width: {gridMinWidth}px; --mobile-card-min-width: {mobileGridMinWidth}px; --bookmark-grid-gap: {gridGap}; --mobile-bookmark-grid-gap: {mobileGridGap};"
       use:sortableList={{
         enabled: sortMode,
@@ -412,6 +413,10 @@
     .bookmark-grid {
       grid-template-columns: repeat(auto-fill, minmax(var(--mobile-card-min-width, 150px), 1fr));
       gap: var(--mobile-bookmark-grid-gap, 1rem);
+    }
+
+    .bookmark-grid.is-info-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .bookmark-grid.is-icon-grid {

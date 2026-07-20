@@ -394,6 +394,7 @@
                 }))}
                 activeId={selectedCategory.id}
                 {panelId}
+                reserveActions={isAuthenticated}
                 onSelect={(id) => handleScopeSelect(category.id, id)}
               />
 
@@ -535,10 +536,6 @@
     scroll-margin-top: 6rem;
   }
 
-  .root-category-group.has-inline-actions :global(.scope-title-row) {
-    padding-right: 12rem;
-  }
-
   .scope-section-list {
     gap: 0.95rem;
     outline: none;
@@ -636,10 +633,6 @@
 
     .root-category-list {
       gap: 1.8rem;
-    }
-
-    .root-category-group.has-inline-actions :global(.scope-title-row) {
-      padding-right: 4.6rem;
     }
 
     .search-results {

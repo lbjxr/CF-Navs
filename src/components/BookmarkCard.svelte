@@ -97,7 +97,7 @@
   $: tooltipText = bookmark.description ? `${bookmark.title}\n${bookmark.description}` : bookmark.title
   $: cardShellStyle =
     style === 'info'
-      ? `min-width: ${width}px; ${height > 0 ? `height: ${height}px;` : ''}`
+      ? `--card-configured-min-width: ${Math.max(0, width)}px; ${height > 0 ? `height: ${height}px;` : ''}`
       : `width: ${compactShellWidth}px;`
   $: cardLinkStyle = height > 0 ? `height: ${height}px;` : ''
   $: if (nextIconStateKey !== iconStateKey) {
@@ -331,6 +331,7 @@
 
   .bookmark-card-shell.is-info {
     width: 100%;
+    min-width: var(--card-configured-min-width, 200px);
   }
 
   .bookmark-card-shell.is-icon {
@@ -338,6 +339,12 @@
     flex-direction: column;
     align-items: center;
     flex: 0 0 auto;
+  }
+
+  @media (max-width: 500px) {
+    .bookmark-card-shell.is-info {
+      min-width: 0;
+    }
   }
 
 </style>

@@ -18,6 +18,7 @@
   export let children: HomeCategoryScopeItem[] = []
   export let activeId: number | null = null
   export let panelId = ''
+  export let reserveActions = false
   export let onSelect: ((id: number) => AsyncVoid) | undefined = undefined
 
   let tabList: HTMLElement | null = null
@@ -49,7 +50,7 @@
   }
 </script>
 
-<section class="category-scope" class:has-children={children.length > 0} data-home-category-scope={rootId} aria-labelledby={`home-category-heading-${rootId}`}>
+<section class="category-scope" class:has-children={children.length > 0} class:has-actions={reserveActions} data-home-category-scope={rootId} aria-labelledby={`home-category-heading-${rootId}`}>
   <div class="scope-heading">
     <CategoryIcon category={{ id: rootId, title, icon }} size={40} className="scope-icon" />
     <div class="scope-accent" aria-hidden="true"></div>
@@ -151,6 +152,11 @@
     gap: 0.7rem;
   }
 
+  .category-scope.has-actions .scope-title-row {
+    box-sizing: border-box;
+    padding-right: 12rem;
+  }
+
   .scope-copy h2 {
     margin: 0;
   }
@@ -170,7 +176,8 @@
   }
 
   .category-scope.has-children .scope-copy h2 {
-    max-width: min(32%, 18rem);
+    flex-shrink: 0;
+    max-width: min(52%, 24rem);
   }
 
   .scope-total-count {
@@ -277,9 +284,22 @@
       font-size: 1.16rem;
     }
 
+    .category-scope.has-children .scope-copy h2 {
+      max-width: 100%;
+    }
+
+    .category-scope.has-actions .scope-copy h2 {
+      max-width: calc(100% - 4.6rem);
+    }
+
     .scope-title-row {
       flex-wrap: wrap;
       gap: 0.46rem 0.58rem;
+    }
+
+    .category-scope.has-actions .scope-title-row {
+      padding-right: 0;
+      row-gap: 0.75rem;
     }
 
     .scope-tabs {
