@@ -620,7 +620,7 @@
 
   @media (max-width: 720px) {
     .home-shell {
-      padding: 1rem max(1rem, var(--content-margin-x, 0px)) var(--content-margin-bottom, 0%);
+      padding: 1rem 1rem var(--content-margin-bottom, 0%);
     }
 
     .home-shell.top-navigation-layout {

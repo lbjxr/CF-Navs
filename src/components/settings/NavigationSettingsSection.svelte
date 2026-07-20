@@ -87,7 +87,7 @@
       </label>
 
       <label class="field field-range">
-        <span>左右边距 <em>{form.content_layout.margin_x}px</em></span>
+        <span>桌面左右边距 <em>{form.content_layout.margin_x}px</em></span>
         <input
           bind:value={form.content_layout.margin_x}
           type="range"
