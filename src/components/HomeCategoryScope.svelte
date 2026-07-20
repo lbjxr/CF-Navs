@@ -49,73 +49,70 @@
   }
 </script>
 
-<section class="category-scope" data-home-category-scope={rootId} aria-labelledby={`home-category-heading-${rootId}`}>
+<section class="category-scope" class:has-children={children.length > 0} data-home-category-scope={rootId} aria-labelledby={`home-category-heading-${rootId}`}>
   <div class="scope-heading">
     <CategoryIcon category={{ id: rootId, title, icon }} size={40} className="scope-icon" />
     <div class="scope-accent" aria-hidden="true"></div>
     <div class="scope-copy">
       <div class="scope-title-row">
         <h2 id={`home-category-heading-${rootId}`} title={title}>{title}</h2>
+        {#if children.length > 0}
+          <div
+            class="scope-tabs"
+            role="tablist"
+            aria-label={`${title} 分类范围`}
+            tabindex="-1"
+            bind:this={tabList}
+            on:keydown={handleTabKeyDown}
+          >
+            <button
+              id={rootTabId}
+              type="button"
+              role="tab"
+              aria-selected={rootActive}
+              aria-controls={resolvedPanelId}
+              tabindex={rootActive ? 0 : -1}
+              class:active={rootActive}
+              on:click={() => select(rootId)}
+            >
+              <span>本分类</span>
+              <small>{directCount}</small>
+            </button>
+
+            {#each children as child (child.id)}
+              {@const childActive = String(activeId) === String(child.id)}
+              <button
+                id={`home-category-tab-${child.id}`}
+                type="button"
+                role="tab"
+                aria-selected={childActive}
+                aria-controls={resolvedPanelId}
+                tabindex={childActive ? 0 : -1}
+                class:active={childActive}
+                title={child.title}
+                on:click={() => select(child.id)}
+              >
+                {#if child.icon}
+                  <CategoryIcon category={{ id: child.id, title: child.title, icon: child.icon }} size={22} className="scope-tab-icon" />
+                {/if}
+                <span>{child.title}</span>
+                <small>{child.count}</small>
+              </button>
+            {/each}
+          </div>
+        {/if}
         <div class="scope-meta">
           <span>{totalCount} 个站点</span>
-          {#if children.length > 0}<span>{children.length} 个子分类</span>{/if}
         </div>
       </div>
     </div>
   </div>
-
-  {#if children.length > 0}
-    <div
-      class="scope-tabs"
-      role="tablist"
-      aria-label={`${title} 分类范围`}
-      tabindex="-1"
-      bind:this={tabList}
-      on:keydown={handleTabKeyDown}
-    >
-      <button
-        id={rootTabId}
-        type="button"
-        role="tab"
-        aria-selected={rootActive}
-        aria-controls={resolvedPanelId}
-        tabindex={rootActive ? 0 : -1}
-        class:active={rootActive}
-        on:click={() => select(rootId)}
-      >
-        <span>本分类</span>
-        <small>{directCount}</small>
-      </button>
-
-      {#each children as child (child.id)}
-        {@const childActive = String(activeId) === String(child.id)}
-        <button
-          id={`home-category-tab-${child.id}`}
-          type="button"
-          role="tab"
-          aria-selected={childActive}
-          aria-controls={resolvedPanelId}
-          tabindex={childActive ? 0 : -1}
-          class:active={childActive}
-          title={child.title}
-          on:click={() => select(child.id)}
-        >
-          {#if child.icon}
-            <CategoryIcon category={{ id: child.id, title: child.title, icon: child.icon }} size={22} className="scope-tab-icon" />
-          {/if}
-          <span>{child.title}</span>
-          <small>{child.count}</small>
-        </button>
-      {/each}
-    </div>
-  {/if}
 </section>
 
 <style>
   .category-scope {
     display: flex;
     flex-direction: column;
-    gap: 0.78rem;
     padding: 0.15rem 0 0.78rem;
     border-bottom: 1px solid color-mix(in srgb, var(--home-text-color) 14%, transparent);
     scroll-margin-top: 6rem;
@@ -143,17 +140,16 @@
   }
 
   .scope-copy {
+    flex: 1 1 auto;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.18rem;
   }
 
   .scope-title-row {
+    width: 100%;
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 0.55rem;
+    gap: 0.7rem;
   }
 
   .scope-copy h2 {
@@ -161,12 +157,13 @@
   }
 
   .scope-copy h2 {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
+    max-width: 100%;
     color: var(--home-text-color);
-    font-size: 1.22rem;
+    font-size: 1.35rem;
     font-weight: 700;
-    line-height: 1.12;
+    line-height: 1.15;
     letter-spacing: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -178,8 +175,11 @@
     display: inline-flex;
     align-items: center;
     gap: 0.34rem;
-    margin-left: auto;
     max-width: 100%;
+  }
+
+  .category-scope.has-children .scope-copy h2 {
+    max-width: min(32%, 18rem);
   }
 
   .scope-meta span {
@@ -201,9 +201,10 @@
 
   .scope-tabs {
     display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
     align-items: center;
     gap: 0.28rem;
-    max-width: 100%;
     overflow-x: auto;
     padding: 0.02rem 0 0.16rem;
     scrollbar-width: none;
@@ -217,17 +218,17 @@
   .scope-tabs button {
     position: relative;
     display: inline-flex;
-    min-height: 32px;
+    min-height: 34px;
     flex: 0 0 auto;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.3rem 0.58rem;
+    padding: 0.34rem 0.62rem;
     border: 1px solid transparent;
     border-radius: 6px;
     background: transparent;
     color: var(--home-text-color);
     font: inherit;
-    font-size: 0.78rem;
+    font-size: 0.82rem;
     font-weight: 600;
     white-space: nowrap;
     cursor: pointer;
@@ -281,7 +282,6 @@
 
   @media (max-width: 720px) {
     .category-scope {
-      gap: 0.66rem;
       padding-bottom: 0.68rem;
     }
 
@@ -291,18 +291,30 @@
     }
 
     .scope-copy h2 {
-      font-size: 1.08rem;
+      max-width: calc(100% - 5.5rem);
+      font-size: 1.16rem;
+    }
+
+    .scope-title-row {
+      flex-wrap: wrap;
+      gap: 0.46rem 0.58rem;
     }
 
     .scope-tabs {
+      order: 3;
+      flex-basis: 100%;
       margin-right: -1rem;
       padding-right: 1rem;
     }
 
     .scope-tabs button {
-      min-height: 30px;
-      padding: 0.24rem 0.52rem;
-      font-size: 0.74rem;
+      min-height: 32px;
+      padding: 0.28rem 0.56rem;
+      font-size: 0.78rem;
+    }
+
+    .scope-meta {
+      margin-left: auto;
     }
 
     .scope-meta span {

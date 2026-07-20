@@ -406,10 +406,7 @@
                   category={selectedCategory}
                   bookmarks={selectedBookmarks}
                   level={2}
-                  displayTitle={selectedCategory.id === category.id
-                    ? (category.children.length > 0 ? '本分类' : '书签')
-                    : ''}
-                  showCategoryIcon={selectedCategory.id !== category.id}
+                  showHeading={false}
                   showEmpty={true}
                   canAddBookmark={isAuthenticated}
                   cardWidth={settings?.card_size?.width ?? 80}

@@ -14,6 +14,7 @@
   export let level: 1 | 2 = 1
   export let showEmpty = true
   export let displayTitle = ''
+  export let showHeading = true
   export let showCategoryIcon = true
   export let canAddBookmark = false
   export let canSort = false
@@ -34,6 +35,7 @@
   let savingSort = false
 
   $: displayBookmarks = sortMode ? localBookmarks : bookmarks
+  $: showActions = sortMode || canAddBookmark || (canSort && bookmarks.length > 1)
 
   function enterSort() {
     localBookmarks = [...bookmarks]
@@ -77,70 +79,76 @@
 </script>
 
 <section class="category-section" class:child-category={level === 2} class:has-display-title={Boolean(displayTitle)} id={sectionId}>
-  <header class="section-header">
-    <div class="section-title-wrap">
-      {#if showCategoryIcon && category.icon}
-        <CategoryIcon category={category} size={level === 2 ? 30 : 38} className="section-icon" />
-      {/if}
-      <div class="section-copy">
-        <div class="section-heading-row">
-          <h3 title={heading}>{heading}</h3>
-          <span class="section-count">共 {bookmarks.length} 个站点</span>
+  {#if showHeading || showActions}
+    <header class="section-header" class:no-heading={!showHeading}>
+      {#if showHeading}
+        <div class="section-title-wrap">
+          {#if showCategoryIcon && category.icon}
+            <CategoryIcon category={category} size={level === 2 ? 30 : 38} className="section-icon" />
+          {/if}
+          <div class="section-copy">
+            <div class="section-heading-row">
+              <h3 title={heading}>{heading}</h3>
+              <span class="section-count">共 {bookmarks.length} 个站点</span>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-    <div class="section-actions" role="group" aria-label={`${heading} 操作`}>
-      {#if sortMode}
-        <button
-          type="button"
-          class="add-link-button ghost"
-          on:click={cancelSort}
-          disabled={savingSort}
-          aria-label="取消排序"
-          title="取消排序"
-        >
-          <span aria-hidden="true" class="action-symbol">×</span>
-          <span class="sr-only">取消排序</span>
-        </button>
-        <button
-          type="button"
-          class="add-link-button"
-          on:click={saveSort}
-          disabled={savingSort}
-          aria-label="保存排序"
-          title="保存排序"
-        >
-          <span aria-hidden="true" class="action-symbol">{savingSort ? '…' : '✓'}</span>
-          <span class="sr-only">{savingSort ? '保存中' : '保存排序'}</span>
-        </button>
-      {:else}
-        {#if canAddBookmark}
-          <button
-            type="button"
-            class="add-link-button"
-            on:click={handleAddBookmark}
-            aria-label="新增链接"
-            title="新增链接"
-          >
-            <span aria-hidden="true" class="action-symbol">＋</span>
-            <span class="sr-only">新增链接</span>
-          </button>
-        {/if}
-        {#if canSort && bookmarks.length > 1}
-          <button
-            type="button"
-            class="add-link-button ghost"
-            on:click={enterSort}
-            aria-label="排序"
-            title="排序"
-          >
-            <span aria-hidden="true" class="action-symbol">↕</span>
-            <span class="sr-only">排序</span>
-          </button>
-        {/if}
       {/if}
-    </div>
-  </header>
+      {#if showActions}
+        <div class="section-actions" role="group" aria-label={`${heading} 操作`}>
+          {#if sortMode}
+            <button
+              type="button"
+              class="add-link-button ghost"
+              on:click={cancelSort}
+              disabled={savingSort}
+              aria-label="取消排序"
+              title="取消排序"
+            >
+              <span aria-hidden="true" class="action-symbol">×</span>
+              <span class="action-label">取消排序</span>
+            </button>
+            <button
+              type="button"
+              class="add-link-button"
+              on:click={saveSort}
+              disabled={savingSort}
+              aria-label="保存排序"
+              title="保存排序"
+            >
+              <span aria-hidden="true" class="action-symbol">{savingSort ? '…' : '✓'}</span>
+              <span class="action-label">{savingSort ? '保存中' : '保存排序'}</span>
+            </button>
+          {:else}
+            {#if canAddBookmark}
+              <button
+                type="button"
+                class="add-link-button"
+                on:click={handleAddBookmark}
+                aria-label="新增书签"
+                title="新增书签"
+              >
+                <span aria-hidden="true" class="action-symbol">＋</span>
+                <span class="action-label">新增书签</span>
+              </button>
+            {/if}
+            {#if canSort && bookmarks.length > 1}
+              <button
+                type="button"
+                class="add-link-button ghost"
+                on:click={enterSort}
+                aria-label="排序"
+                title="排序"
+              >
+                <span aria-hidden="true" class="action-symbol">↕</span>
+                <span class="action-label">排序</span>
+              </button>
+            {/if}
+          {/if}
+        </div>
+      {/if}
+    </header>
+  {/if}
 
   {#if bookmarks.length > 0}
     <div
@@ -205,6 +213,11 @@
     gap: 0.6rem 0.75rem;
   }
 
+  .section-header.no-heading {
+    display: flex;
+    justify-content: flex-end;
+  }
+
   .section-title-wrap {
     display: flex;
     align-items: center;
@@ -264,25 +277,17 @@
     flex: 0 0 auto;
   }
 
-  .section-actions :global(.sr-only) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
   .section-actions .action-symbol {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 700;
     line-height: 1;
+  }
+
+  .section-actions .action-label {
+    white-space: nowrap;
   }
 
   .section-title-wrap :global(.section-icon) {
@@ -306,9 +311,8 @@
   .add-link-button {
     border: 1px solid rgba(255, 255, 255, 0.55);
     border-radius: 0.65rem;
-    width: 2rem;
-    height: 2rem;
-    padding: 0;
+    min-height: 2.1rem;
+    padding: 0.36rem 0.68rem;
     background:
       linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.72)), rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.34))),
       rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.44));
@@ -322,6 +326,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.34rem;
     transition:
       transform 0.16s ease,
       border-color 0.16s ease;
@@ -475,7 +480,13 @@
     .add-link-button {
       width: 1.9rem;
       height: 1.9rem;
+      min-height: 1.9rem;
+      padding: 0;
       border-radius: 0.58rem;
+    }
+
+    .section-actions .action-label {
+      display: none;
     }
 
     .section-actions {
