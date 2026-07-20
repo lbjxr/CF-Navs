@@ -9,7 +9,7 @@ Read `docs/reference/PERFORMANCE_CONTRACT.md` before changing data freshness, ic
 
 ## Chrome Setup
 
-Start Chrome with a DevTools endpoint, or reuse an existing Chrome that already exposes one.
+Start a dedicated Chrome with a DevTools endpoint. By default `regression:chrome` starts an isolated temporary profile and fails if the configured port is already occupied. Reuse of an existing browser is opt-in only and must target a browser dedicated to this test.
 
 Default endpoint:
 
@@ -39,11 +39,18 @@ $env:ADMIN_PASS = '<admin password>'
 npm run regression:chrome
 ```
 
-If no Chrome is already exposing the configured DevTools port, `regression:chrome` starts a temporary headless Chrome profile under `D:\tmp\cf-navs-chrome-profile-<port>`. Its `finally` cleanup closes the test-owned browser, stops only Chrome processes matching that exact profile, verifies the remaining process count is zero, and then removes the profile.
+By default `regression:chrome` starts a temporary Chrome profile under `D:\tmp\cf-navs-chrome-profile-<port>`. Its `finally` cleanup closes the test-owned browser, stops only Chrome processes matching that exact profile, verifies the remaining process count is zero, and then removes the profile.
 
-When Chrome is already running with a dynamic DevTools port, the script can also read Chrome's `DevToolsActivePort` file from the default profile and connect through the browser websocket directly. This handles Chrome instances where `/json/version` is not exposed on `9222` but the profile contains the active port and `/devtools/browser/...` websocket path. In that mode the JSON output reports `chromeConnectionMode: "devtools-active-port"` and does not start a temporary Chrome process.
+When Chrome is already running with a dynamic DevTools port, the script can connect through the browser websocket only if `REGRESSION_ALLOW_EXISTING_CHROME=1` and `CHROME_DEVTOOLS_ACTIVE_PORT_FILE` are set for a browser dedicated to this test. In that mode the JSON output reports `browserConnectionMode: "dedicated-existing-browser"` and does not start a temporary Chrome process. The helper `scripts/discover-devtools.ps1` never scans the default Chrome profile; existing-browser discovery requires an explicit active-port file and opt-in switch.
 
-Existing Chrome and every visible/headed Chrome are user-owned. Both scripts create and close only their dedicated test target. They must never call `Browser.close` or terminate a Chrome process in those modes.
+Explicit existing-browser opt-in:
+
+```powershell
+$env:REGRESSION_ALLOW_EXISTING_CHROME = '1'
+$env:CHROME_DEVTOOLS_ACTIVE_PORT_FILE = 'D:\path\to\dedicated-test-profile\DevToolsActivePort'
+```
+
+Existing Chrome and every visible/headed Chrome are user-owned unless current-task authorization says otherwise. Both scripts create and close only their dedicated test target. They must never call `Browser.close` or terminate a Chrome process in those modes.
 
 For unattended runs where an existing Chrome profile must not be used, force a temporary headless profile and choose a free port:
 
@@ -56,7 +63,7 @@ npm run regression:chrome
 
 With `REGRESSION_FORCE_TEMP_CHROME=1`, the regression script skips `DevToolsActivePort`. If the configured port is already in use, it fails instead of attaching to an existing browser.
 
-For safety, `CHROME_USER_DATA_DIR` must end with `cf-navs-chrome-profile-<unique-id>`. The script refuses arbitrary profile paths so it can never delete a normal Chrome profile during cleanup.
+For safety, `CHROME_USER_DATA_DIR` must end with `cf-navs-chrome-profile-<unique-id>`. The script refuses arbitrary profile paths so it can never delete a normal Chrome profile during cleanup. `REGRESSION_CLEAR_ORIGIN_DATA=1` is rejected when the run reuses an existing browser.
 
 Never clean up with `taskkill /IM chrome.exe`, `Get-Process chrome | Stop-Process`, or another process-name-wide command. If exact-profile process cleanup fails, treat the regression run as failed and report the remaining process count.
 
@@ -89,6 +96,8 @@ $env:REGRESSION_MIN_CATEGORIES = '1'
 $env:REGRESSION_MIN_BOOKMARKS = '1'
 $env:REGRESSION_CLEAR_ORIGIN_DATA = '1'
 ```
+
+Use these regression diagnostics with the default isolated browser. The script rejects origin-level cleanup when it is attached to an existing browser.
 
 ## Covered Scenarios
 

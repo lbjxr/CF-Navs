@@ -8,17 +8,17 @@
 //   CHROME_DEBUG_PORT=9228
 //   CHROME_EXE="C:\Program Files\Google\Chrome\Application\chrome.exe"
 //   CHROME_USER_DATA_DIR=D:\tmp\cf-navs-chrome-profile-9228
+//   REGRESSION_ALLOW_EXISTING_CHROME=1  # opt in only for a dedicated existing test browser
 //   REGRESSION_FORCE_TEMP_CHROME=1
 //   REGRESSION_ALLOW_FAILURES=1
 //   REGRESSION_MIN_BOOKMARK_CARDS=1
 //   REGRESSION_MIN_CATEGORIES=1
 //   REGRESSION_MIN_BOOKMARKS=1
-//   REGRESSION_CLEAR_ORIGIN_DATA=1
+//   REGRESSION_CLEAR_ORIGIN_DATA=1   # only for an isolated browser started by this run
 
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { rm } from 'node:fs/promises'
+import { mkdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import WebSocket from 'ws'
 
@@ -30,6 +30,7 @@ const CHROME_USER_DATA_DIR =
 const SAFE_TEMP_PROFILE = /^cf-navs-chrome-profile-[a-z0-9_-]+$/i.test(path.basename(path.resolve(CHROME_USER_DATA_DIR)))
 const ADMIN_USER = process.env.ADMIN_USER || ''
 const ADMIN_PASS = process.env.ADMIN_PASS || ''
+const ALLOW_EXISTING_CHROME = process.env.REGRESSION_ALLOW_EXISTING_CHROME === '1'
 const FORCE_TEMP_CHROME = process.env.REGRESSION_FORCE_TEMP_CHROME === '1'
 const ALLOW_FAILURES = process.env.REGRESSION_ALLOW_FAILURES === '1'
 const MIN_BOOKMARK_CARDS = readIntegerEnv('REGRESSION_MIN_BOOKMARK_CARDS', 1)
@@ -39,19 +40,20 @@ const CLEAR_ORIGIN_DATA = process.env.REGRESSION_CLEAR_ORIGIN_DATA === '1'
 
 const TARGET_ORIGIN = new URL(BASE_URL).origin
 const TARGET_URL = `${TARGET_ORIGIN}/`
-const DEBUG_ENDPOINT = `http://127.0.0.1:${CHROME_DEBUG_PORT}`
+let debugPort = CHROME_DEBUG_PORT
+let debugEndpoint = `http://127.0.0.1:${debugPort}`
 
 let nextId = 0
 let ws = null
-let chromeProcess = null
-let startedChrome = false
+let browserProcess = null
+let browserStartedByTest = false
 let browserSessionMode = false
 let browserSessionId = null
 let browserTargetId = null
 let pageTargetId = null
 let pageTargetCreatedByTest = false
-let chromeConnectionMode = 'debug-port'
-let chromeConnectedPort = CHROME_DEBUG_PORT
+let browserConnectionMode = 'isolated-temp-browser'
+let browserConnectedPort = debugPort
 const pending = new Map()
 const events = []
 const network = new Map()
@@ -87,7 +89,7 @@ async function fetchJson(url, options) {
 
 async function isChromeDebugPortReady() {
   try {
-    const version = await fetchJson(`${DEBUG_ENDPOINT}/json/version`, { signal: AbortSignal.timeout(1200) })
+    const version = await fetchJson(`${debugEndpoint}/json/version`, { signal: AbortSignal.timeout(1200) })
     return Boolean(version.webSocketDebuggerUrl || version.Browser)
   } catch {
     return false
@@ -95,19 +97,25 @@ async function isChromeDebugPortReady() {
 }
 
 async function ensureChrome() {
-  if (await isChromeDebugPortReady()) {
-    if (FORCE_TEMP_CHROME) {
+  const debugPortReady = await isChromeDebugPortReady()
+  if (debugPortReady) {
+    if (FORCE_TEMP_CHROME || !ALLOW_EXISTING_CHROME) {
       throw new Error(
-        `REGRESSION_FORCE_TEMP_CHROME=1 but ${DEBUG_ENDPOINT} is already in use. ` +
-          'Choose a free CHROME_DEBUG_PORT so the regression run cannot attach to an existing browser.',
+        `Chrome debug port ${debugEndpoint} is already in use. ` +
+          'This regression script starts an isolated browser by default. ' +
+          'Set REGRESSION_ALLOW_EXISTING_CHROME=1 only for a browser dedicated to this test, or choose a free CHROME_DEBUG_PORT.',
       )
     }
+    browserConnectionMode = 'dedicated-existing-browser'
     return
   }
 
-  if (!FORCE_TEMP_CHROME) {
+  if (ALLOW_EXISTING_CHROME && !FORCE_TEMP_CHROME) {
     const active = await readDevToolsActivePort()
-    if (active) return
+    if (active) {
+      browserConnectionMode = 'dedicated-existing-browser'
+      return
+    }
   }
 
   if (!existsSync(CHROME_EXE)) {
@@ -120,10 +128,17 @@ async function ensureChrome() {
     )
   }
 
-  chromeProcess = spawn(CHROME_EXE, [
+  if (existsSync(CHROME_USER_DATA_DIR)) {
+    throw new Error(`Refusing to use an existing Chrome profile path; choose a new temporary path: ${CHROME_USER_DATA_DIR}`)
+  }
+  await mkdir(CHROME_USER_DATA_DIR)
+  browserStartedByTest = true
+  browserConnectionMode = 'isolated-temp-browser'
+
+  browserProcess = spawn(CHROME_EXE, [
     '--headless=new',
     '--disable-gpu',
-    `--remote-debugging-port=${CHROME_DEBUG_PORT}`,
+    '--remote-debugging-port=0',
     '--remote-allow-origins=*',
     `--user-data-dir=${CHROME_USER_DATA_DIR}`,
     'about:blank',
@@ -132,44 +147,48 @@ async function ensureChrome() {
     stdio: 'ignore',
     windowsHide: true,
   })
-  startedChrome = true
-
   const startedAt = Date.now()
   while (Date.now() - startedAt < 15000) {
-    if (await isChromeDebugPortReady()) return
+    const active = await readDevToolsActivePortFile(path.join(CHROME_USER_DATA_DIR, 'DevToolsActivePort'))
+    if (active) {
+      debugPort = active.port
+      debugEndpoint = `http://127.0.0.1:${debugPort}`
+      browserConnectedPort = debugPort
+      return
+    }
     await sleep(250)
   }
 
-  throw new Error(`Chrome did not expose CDP on ${DEBUG_ENDPOINT}`)
+  throw new Error(`Chrome did not expose CDP from its owned profile ${CHROME_USER_DATA_DIR}`)
 }
 
 async function readDevToolsActivePort() {
-  const candidates = [
-    process.env.CHROME_DEVTOOLS_ACTIVE_PORT_FILE,
-    process.env.LOCALAPPDATA
-      ? `${process.env.LOCALAPPDATA}\\Google\\Chrome\\User Data\\DevToolsActivePort`
-      : '',
-  ].filter(Boolean)
+  const candidates = [process.env.CHROME_DEVTOOLS_ACTIVE_PORT_FILE].filter(Boolean)
 
   for (const filePath of candidates) {
-    try {
-      const [port, browserPath] = (await readFile(filePath, 'utf8')).trim().split(/\r?\n/)
-      if (!port || !browserPath) continue
-      return {
-        port,
-        browserPath,
-        webSocketDebuggerUrl: `ws://127.0.0.1:${port}${browserPath}`,
-      }
-    } catch {
-      // Try the next possible profile path.
-    }
+    const active = await readDevToolsActivePortFile(filePath)
+    if (active) return active
   }
 
   return null
 }
 
+async function readDevToolsActivePortFile(filePath) {
+  try {
+    const [port, browserPath] = (await readFile(filePath, 'utf8')).trim().split(/\r?\n/)
+    if (!port || !browserPath || !/^\d+$/.test(port) || !browserPath.startsWith('/devtools/browser/')) return null
+    return {
+      port,
+      browserPath,
+      webSocketDebuggerUrl: `ws://127.0.0.1:${port}${browserPath}`,
+    }
+  } catch {
+    return null
+  }
+}
+
 async function getPageTarget() {
-  const created = await fetchJson(`${DEBUG_ENDPOINT}/json/new?${encodeURIComponent(TARGET_URL)}`, { method: 'PUT' })
+  const created = await fetchJson(`${debugEndpoint}/json/new?${encodeURIComponent(TARGET_URL)}`, { method: 'PUT' })
   if (!created.webSocketDebuggerUrl) {
     throw new Error('Chrome target was created without webSocketDebuggerUrl.')
   }
@@ -212,8 +231,8 @@ function connect(target) {
 async function connectBrowserSession(target) {
   await connect(target)
   browserSessionMode = true
-  chromeConnectionMode = 'devtools-active-port'
-  chromeConnectedPort = target.port
+  browserConnectionMode = 'dedicated-existing-browser'
+  browserConnectedPort = target.port
 
   const created = await sendBrowserCommand('Target.createTarget', { url: TARGET_URL })
   browserTargetId = created.targetId
@@ -336,7 +355,13 @@ async function pageFunction(fn, ...args) {
 }
 
 async function clearBrowserState() {
-  if (CLEAR_ORIGIN_DATA || startedChrome) {
+  if (CLEAR_ORIGIN_DATA && !browserStartedByTest) {
+    throw new Error(
+      'REGRESSION_CLEAR_ORIGIN_DATA is only allowed for an isolated browser started by this regression run.',
+    )
+  }
+
+  if (browserStartedByTest) {
     try {
       await send('Storage.clearDataForOrigin', {
         origin: TARGET_ORIGIN,
@@ -1044,7 +1069,7 @@ async function cleanup() {
     // Best effort.
   }
 
-  if (startedChrome) {
+  if (browserStartedByTest) {
     try {
       await send('Browser.close', {}, 3000)
     } catch {
@@ -1061,7 +1086,7 @@ async function cleanup() {
       await send('Page.close', {}, 3000)
     } catch {
       if (pageTargetId) {
-        await fetch(`${DEBUG_ENDPOINT}/json/close/${pageTargetId}`).catch(() => undefined)
+        await fetch(`${debugEndpoint}/json/close/${pageTargetId}`).catch(() => undefined)
       }
     }
   }
@@ -1072,7 +1097,7 @@ async function cleanup() {
     // Best effort.
   }
 
-  if (startedChrome) {
+  if (browserStartedByTest) {
     await stopTemporaryChromeProcesses()
     await rm(CHROME_USER_DATA_DIR, { recursive: true, force: true })
   }
@@ -1082,15 +1107,28 @@ async function stopTemporaryChromeProcesses() {
   await sleep(800)
 
   if (process.platform === 'win32') {
-    const script = [
-      "$profile = $env:CF_NAVS_TEST_CHROME_PROFILE",
-      "$matches = @(Get-CimInstance Win32_Process -Filter \"Name = 'chrome.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($profile, [System.StringComparison]::OrdinalIgnoreCase) })",
-      'foreach ($process in $matches) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }',
-      'Start-Sleep -Milliseconds 500',
-      "$remaining = @(Get-CimInstance Win32_Process -Filter \"Name = 'chrome.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($profile, [System.StringComparison]::OrdinalIgnoreCase) })",
-      'Write-Output $remaining.Count',
-      'if ($remaining.Count -ne 0) { exit 1 }',
-    ].join('; ')
+    const script = String.raw`
+$profile = [IO.Path]::GetFullPath($env:CF_NAVS_TEST_CHROME_PROFILE).TrimEnd('\')
+function Get-ProfileArgument([string] $commandLine) {
+  if (-not $commandLine) { return $null }
+  $match = [regex]::Match($commandLine, '(?i)(?:^|\s)--user-data-dir=(?:"([^"]+)"|([^\s]+))')
+  if (-not $match.Success) { return $null }
+  $value = if ($match.Groups[1].Success) { $match.Groups[1].Value } else { $match.Groups[2].Value }
+  try { return [IO.Path]::GetFullPath($value).TrimEnd('\') } catch { return $null }
+}
+function Get-OwnedProcesses {
+  @(Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" | Where-Object {
+    $candidate = Get-ProfileArgument $_.CommandLine
+    $candidate -and $candidate.Equals($profile, [StringComparison]::OrdinalIgnoreCase)
+  })
+}
+$matches = Get-OwnedProcesses
+foreach ($process in $matches) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Milliseconds 500
+$remaining = Get-OwnedProcesses
+Write-Output $remaining.Count
+if ($remaining.Count -ne 0) { exit 1 }
+`
     const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
       encoding: 'utf8',
       env: {
@@ -1109,26 +1147,29 @@ async function stopTemporaryChromeProcesses() {
     return
   }
 
-  if (chromeProcess && chromeProcess.exitCode === null) {
-    chromeProcess.kill('SIGTERM')
+  if (browserProcess && browserProcess.exitCode === null) {
+    browserProcess.kill('SIGTERM')
     await sleep(800)
   }
-  if (chromeProcess && chromeProcess.exitCode === null) {
-    chromeProcess.kill('SIGKILL')
+  if (browserProcess && browserProcess.exitCode === null) {
+    browserProcess.kill('SIGKILL')
     await sleep(300)
   }
-  if (chromeProcess && chromeProcess.exitCode === null) {
-    throw new Error(`Temporary Chrome process ${chromeProcess.pid} did not exit.`)
+  if (browserProcess && browserProcess.exitCode === null) {
+    throw new Error(`Temporary Chrome process ${browserProcess.pid} did not exit.`)
   }
 }
 
 async function main() {
   const startedAt = new Date().toISOString()
   await ensureChrome()
-  const activeTarget = FORCE_TEMP_CHROME ? null : await readDevToolsActivePort()
-  if (activeTarget && !(await isChromeDebugPortReady())) {
+  const activeTarget = ALLOW_EXISTING_CHROME ? await readDevToolsActivePort() : null
+  if (ALLOW_EXISTING_CHROME && activeTarget && !(await isChromeDebugPortReady())) {
+    browserConnectionMode = 'dedicated-existing-browser'
+    browserConnectedPort = activeTarget.port
     await connectBrowserSession(activeTarget)
   } else {
+    browserConnectionMode = browserStartedByTest ? 'isolated-temp-browser' : 'dedicated-existing-browser'
     const target = await getPageTarget()
     await connect(target)
   }
@@ -1164,10 +1205,10 @@ async function main() {
     const result = {
       startedAt,
       target: TARGET_URL,
-      chromeDebugPort: CHROME_DEBUG_PORT,
-      chromeConnectionMode,
-      chromeConnectedPort,
-      startedChrome,
+      chromeDebugPort: debugPort,
+      browserConnectionMode,
+      browserConnectedPort,
+      browserStartedByTest,
       forceTempChrome: FORCE_TEMP_CHROME,
       api,
       home,

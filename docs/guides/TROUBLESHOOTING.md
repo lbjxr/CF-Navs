@@ -194,14 +194,15 @@ npx wrangler d1 execute cf-navs-db --remote --command "SELECT key, value FROM se
 
 ## 线上 Chrome 验证异常
 
-如果 Codex/自动化环境中没有暴露 Chrome 插件要求的 Node REPL 工具，可以启动独立 Chrome 调试端口后直接使用 CDP 验证线上站点。
+如果 Codex/自动化环境中没有暴露 Chrome 插件要求的 Node REPL 工具，启动带唯一 `--user-data-dir` 的独立 Chrome 调试端口后直接使用 CDP 验证线上站点。不要连接宿主机日常使用的 Chrome 或默认 profile。
 
 关键注意点：
 
+- 复用已有 DevTools 端点只适用于当前任务明确授权的专用测试浏览器；结束时只关闭测试 target，不能调用 `Browser.close`。
 - `Chrome /json/new` 在新版本中使用 `PUT`，不要用 `GET`。
 - `curl` 在 PowerShell 中拼 JSON 登录体容易引号转义失败，建议用 Node `fetch` 或页面上下文 `fetch`。
 - 右键菜单验证使用 CDP `Input.dispatchMouseEvent` 的 right button 事件，比直接 `dispatchEvent` 更接近真实操作。
-- 验证完成后关闭带 `--user-data-dir=D:\tmp\cf-navs-chrome-profile-*` 的 Chrome 进程，避免残留测试 profile。
+- 验证完成后只清理本次启动并记录了精确 profile 的 Chrome 进程。不要使用按进程名关闭全部 Chrome 的命令。
 
 常规验收项：
 
