@@ -76,31 +76,69 @@
   }
 </script>
 
-<section class="category-section" class:child-category={level === 2} id={sectionId}>
+<section class="category-section" class:child-category={level === 2} class:has-display-title={Boolean(displayTitle)} id={sectionId}>
   <header class="section-header">
     <div class="section-title-wrap">
       {#if showCategoryIcon && category.icon}
-        <CategoryIcon category={category} size={level === 2 ? 34 : 42} className="section-icon" />
+        <CategoryIcon category={category} size={level === 2 ? 30 : 38} className="section-icon" />
       {/if}
-      <div>
+      <div class="section-copy">
         <div class="section-heading-row">
-          <h3>{heading}</h3>
-          {#if sortMode}
-            <button type="button" class="add-link-button ghost" on:click={cancelSort} disabled={savingSort}>取消</button>
-            <button type="button" class="add-link-button" on:click={saveSort} disabled={savingSort}>
-              {#if savingSort}保存中...{:else}保存排序{/if}
-            </button>
-          {:else}
-            {#if canAddBookmark}
-              <button type="button" class="add-link-button" on:click={handleAddBookmark}>新增链接</button>
-            {/if}
-            {#if canSort && bookmarks.length > 1}
-              <button type="button" class="add-link-button ghost" on:click={enterSort}>排序</button>
-            {/if}
-          {/if}
+          <h3 title={heading}>{heading}</h3>
+          <span class="section-count">共 {bookmarks.length} 个站点</span>
         </div>
-        <p>共 {bookmarks.length} 个站点</p>
       </div>
+    </div>
+    <div class="section-actions" role="group" aria-label={`${heading} 操作`}>
+      {#if sortMode}
+        <button
+          type="button"
+          class="add-link-button ghost"
+          on:click={cancelSort}
+          disabled={savingSort}
+          aria-label="取消排序"
+          title="取消排序"
+        >
+          <span aria-hidden="true" class="action-symbol">×</span>
+          <span class="sr-only">取消排序</span>
+        </button>
+        <button
+          type="button"
+          class="add-link-button"
+          on:click={saveSort}
+          disabled={savingSort}
+          aria-label="保存排序"
+          title="保存排序"
+        >
+          <span aria-hidden="true" class="action-symbol">{savingSort ? '…' : '✓'}</span>
+          <span class="sr-only">{savingSort ? '保存中' : '保存排序'}</span>
+        </button>
+      {:else}
+        {#if canAddBookmark}
+          <button
+            type="button"
+            class="add-link-button"
+            on:click={handleAddBookmark}
+            aria-label="新增链接"
+            title="新增链接"
+          >
+            <span aria-hidden="true" class="action-symbol">＋</span>
+            <span class="sr-only">新增链接</span>
+          </button>
+        {/if}
+        {#if canSort && bookmarks.length > 1}
+          <button
+            type="button"
+            class="add-link-button ghost"
+            on:click={enterSort}
+            aria-label="排序"
+            title="排序"
+          >
+            <span aria-hidden="true" class="action-symbol">↕</span>
+            <span class="sr-only">排序</span>
+          </button>
+        {/if}
+      {/if}
     </div>
   </header>
 
@@ -145,62 +183,145 @@
   .category-section {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.82rem;
     scroll-margin-top: 1.5rem;
   }
 
   .category-section.child-category {
-    gap: 0.85rem;
+    gap: 0.68rem;
   }
 
-  .category-section.child-category .section-title-wrap h3 {
-    font-size: 1.08rem;
+  .category-section.has-display-title .section-heading-row h3 {
+    font-size: 0.92rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
   }
 
   .section-header {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 0.6rem 0.75rem;
   }
 
   .section-title-wrap {
     display: flex;
     align-items: center;
-    gap: 0.85rem;
+    gap: 0.68rem;
     min-width: 0;
   }
 
-  .section-title-wrap h3,
-  .section-title-wrap p {
+  .section-copy {
+    min-width: 0;
+  }
+
+  .section-title-wrap h3 {
     margin: 0;
   }
 
   .section-heading-row {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 0.75rem;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .section-heading-row h3 {
+    min-width: 0;
+    flex: 1 1 auto;
+    color: var(--home-text-color, currentColor);
+    font-size: 1.02rem;
+    font-weight: 650;
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .section-count {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    min-height: 1.2rem;
+    padding: 0.12rem 0.42rem;
+    border: 1px solid var(--home-stat-border, rgba(148, 163, 184, 0.24));
+    border-radius: 999px;
+    background: var(--home-stat-chip-bg, rgba(255, 255, 255, 0.34));
+    color: var(--home-text-color, currentColor);
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    opacity: var(--home-muted-opacity, 0.72);
+    white-space: nowrap;
+  }
+
+  .section-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.32rem;
+    flex: 0 0 auto;
+  }
+
+  .section-actions :global(.sr-only) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .section-actions .action-symbol {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .section-title-wrap :global(.section-icon) {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    border-radius: 10px;
+  }
+
+  .category-section.child-category .section-title-wrap :global(.section-icon) {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border-radius: 8px;
   }
 
   .section-title-wrap h3 {
-    font-size: 1.28rem;
+    margin: 0;
   }
 
   .add-link-button {
     border: 1px solid rgba(255, 255, 255, 0.55);
-    border-radius: 999px;
-    padding: 0.45rem 0.8rem;
+    border-radius: 0.65rem;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
     background:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.72)), rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.3))),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.42));
+      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.72)), rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.34))),
+      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.44));
     color: var(--card-text-color, currentColor);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.5),
       0 2px 8px rgba(15, 23, 42, 0.07);
     font-size: 0.86rem;
-    font-weight: 600;
+    font-weight: 700;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transition:
       transform 0.16s ease,
       border-color 0.16s ease;
@@ -208,8 +329,8 @@
 
   .add-link-button.ghost {
     background:
-      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.48)), rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.18))),
-      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.3));
+      linear-gradient(135deg, rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.48)), rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.2))),
+      rgb(var(--card-bg-rgb, 255 255 255) / calc(var(--card-bg-opacity, 0.9) * 0.32));
     color: var(--card-text-color, currentColor);
   }
 
@@ -224,24 +345,6 @@
   .add-link-button:disabled {
     cursor: not-allowed;
     opacity: 0.6;
-  }
-
-  .section-title-wrap p {
-    margin-top: 0.25rem;
-    display: inline-flex;
-    width: fit-content;
-    align-items: center;
-    min-height: 1.55rem;
-    padding: 0.16rem 0.46rem;
-    border: 1px solid var(--home-stat-border, rgba(148, 163, 184, 0.24));
-    border-radius: 0.55rem;
-    background: var(--home-stat-chip-bg, rgba(255, 255, 255, 0.34));
-    color: var(--home-text-color, currentColor);
-    font-size: 0.9rem;
-    font-weight: 600;
-    line-height: 1.25;
-    font-variant-numeric: tabular-nums;
-    opacity: var(--home-muted-opacity, 0.72);
   }
 
   .sort-hint {
@@ -337,10 +440,9 @@
       0 6px 16px rgba(0, 0, 0, 0.28);
   }
 
-  :global([data-theme='dark']) .section-title-wrap p {
+  :global([data-theme='dark']) .section-count {
     color: var(--home-text-color, #e5eefb);
   }
-
 
   :global([data-theme='dark']) .empty-card {
     border-color: rgba(148, 163, 184, 0.32);
@@ -350,12 +452,34 @@
 
   @media (max-width: 640px) {
     .section-header {
-      align-items: flex-start;
-      flex-direction: column;
+      gap: 0.5rem 0.65rem;
+    }
+
+    .section-title-wrap {
+      gap: 0.56rem;
     }
 
     .section-heading-row {
-      align-items: flex-start;
+      gap: 0.38rem;
+    }
+
+    .section-heading-row h3 {
+      font-size: 0.96rem;
+    }
+
+    .section-count {
+      padding: 0.1rem 0.34rem;
+      font-size: 0.64rem;
+    }
+
+    .add-link-button {
+      width: 1.9rem;
+      height: 1.9rem;
+      border-radius: 0.58rem;
+    }
+
+    .section-actions {
+      gap: 0.28rem;
     }
   }
 </style>
