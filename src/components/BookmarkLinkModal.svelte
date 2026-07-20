@@ -5,12 +5,22 @@
   export let url = ''
   export let onClose: (() => AsyncVoid) | undefined = undefined
 
+  function mountToBody(node: HTMLElement) {
+    document.body.appendChild(node)
+
+    return {
+      destroy() {
+        node.remove()
+      },
+    }
+  }
+
   function handleClose() {
     void onClose?.()
   }
 </script>
 
-<div class="link-modal-backdrop" role="dialog" aria-modal="true" aria-label={title}>
+<div use:mountToBody class="link-modal-backdrop" role="dialog" aria-modal="true" aria-label={title}>
   <div class="link-modal">
     <div class="link-modal-header">
       <strong>{title}</strong>
