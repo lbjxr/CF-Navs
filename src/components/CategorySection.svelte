@@ -15,6 +15,7 @@
   export let showEmpty = true
   export let displayTitle = ''
   export let showHeading = true
+  export let inlineActions = false
   export let showCategoryIcon = true
   export let canAddBookmark = false
   export let canSort = false
@@ -80,7 +81,7 @@
 
 <section class="category-section" class:child-category={level === 2} class:has-display-title={Boolean(displayTitle)} id={sectionId}>
   {#if showHeading || showActions}
-    <header class="section-header" class:no-heading={!showHeading}>
+    <header class="section-header" class:no-heading={!showHeading} class:inline-actions={inlineActions && !showHeading}>
       {#if showHeading}
         <div class="section-title-wrap">
           {#if showCategoryIcon && category.icon}
@@ -216,6 +217,13 @@
   .section-header.no-heading {
     display: flex;
     justify-content: flex-end;
+  }
+
+  .section-header.no-heading.inline-actions {
+    position: absolute;
+    top: 0.12rem;
+    right: 0;
+    z-index: 2;
   }
 
   .section-title-wrap {
@@ -455,7 +463,7 @@
     background: rgba(30, 41, 59, 0.5);
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 720px) {
     .section-header {
       gap: 0.5rem 0.65rem;
     }

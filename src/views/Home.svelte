@@ -375,6 +375,7 @@
             {@const panelId = `home-category-panel-${category.id}`}
             <section
               class="root-category-group"
+              class:has-inline-actions={isAuthenticated}
               data-home-root-id={category.id}
               use:registerRootSection={category.id}
               aria-labelledby={`home-category-heading-${category.id}`}
@@ -407,6 +408,7 @@
                   bookmarks={selectedBookmarks}
                   level={2}
                   showHeading={false}
+                  inlineActions={true}
                   showEmpty={true}
                   canAddBookmark={isAuthenticated}
                   cardWidth={settings?.card_size?.width ?? 80}
@@ -526,10 +528,15 @@
   }
 
   .root-category-group {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 1rem;
     scroll-margin-top: 6rem;
+  }
+
+  .root-category-group.has-inline-actions :global(.scope-title-row) {
+    padding-right: 12rem;
   }
 
   .scope-section-list {
@@ -629,6 +636,10 @@
 
     .root-category-list {
       gap: 1.8rem;
+    }
+
+    .root-category-group.has-inline-actions :global(.scope-title-row) {
+      padding-right: 4.6rem;
     }
 
     .search-results {

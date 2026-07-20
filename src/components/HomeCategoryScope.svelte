@@ -55,7 +55,9 @@
     <div class="scope-accent" aria-hidden="true"></div>
     <div class="scope-copy">
       <div class="scope-title-row">
-        <h2 id={`home-category-heading-${rootId}`} title={title}>{title}</h2>
+        <h2 id={`home-category-heading-${rootId}`} title={title}>
+          {title}<span class="scope-total-count">（{totalCount}）</span>
+        </h2>
         {#if children.length > 0}
           <div
             class="scope-tabs"
@@ -101,9 +103,6 @@
             {/each}
           </div>
         {/if}
-        <div class="scope-meta">
-          <span>{totalCount} 个站点</span>
-        </div>
       </div>
     </div>
   </div>
@@ -170,33 +169,16 @@
     white-space: nowrap;
   }
 
-  .scope-meta {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.34rem;
-    max-width: 100%;
-  }
-
   .category-scope.has-children .scope-copy h2 {
     max-width: min(32%, 18rem);
   }
 
-  .scope-meta span {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.25rem;
-    padding: 0.12rem 0.42rem;
-    border: 1px solid var(--home-stat-border);
-    border-radius: 999px;
-    background: var(--home-stat-chip-bg);
-    color: var(--home-text-color);
-    font-size: 0.68rem;
+  .scope-total-count {
+    margin-left: 0.16rem;
+    font-size: 0.72em;
     font-weight: 600;
-    line-height: 1.1;
     font-variant-numeric: tabular-nums;
     opacity: var(--home-muted-opacity);
-    white-space: nowrap;
   }
 
   .scope-tabs {
@@ -313,13 +295,5 @@
       font-size: 0.78rem;
     }
 
-    .scope-meta {
-      margin-left: auto;
-    }
-
-    .scope-meta span {
-      padding: 0.1rem 0.34rem;
-      font-size: 0.64rem;
-    }
   }
 </style>
