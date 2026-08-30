@@ -32,6 +32,17 @@
     void onSelect?.(id)
   }
 
+  function handleTabWheel(event: WheelEvent): void {
+    const element = event.currentTarget as HTMLElement
+    if (element.scrollWidth <= element.clientWidth) return
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+    if (delta === 0) return
+    const maxScrollLeft = element.scrollWidth - element.clientWidth
+    const nextScrollLeft = Math.min(maxScrollLeft, Math.max(0, element.scrollLeft + delta))
+    if (nextScrollLeft === element.scrollLeft) return
+    event.preventDefault()
+    element.scrollLeft = nextScrollLeft
+  }
   function handleTabKeyDown(event: KeyboardEvent): void {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
 
@@ -69,7 +80,7 @@
             on:click={() => void onCreateSubcategory?.()}
           >
             <span class="scope-action-label">新建子分类</span>
-            <span aria-hidden="true">＋</span>
+            <span aria-hidden="true" class="scope-action-icon">＋</span>
           </button>
         {/if}
         {#if children.length > 0}
@@ -80,6 +91,7 @@
             tabindex="-1"
             bind:this={tabList}
             on:keydown={handleTabKeyDown}
+            on:wheel={handleTabWheel}
           >
             <button
               id={rootTabId}
@@ -222,6 +234,11 @@
     cursor: pointer;
   }
 
+  .scope-action-icon {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
   .scope-action:hover,
   .scope-action:focus-visible {
     outline: none;
@@ -237,13 +254,24 @@
     gap: 0.28rem;
     overflow-x: auto;
     padding: 0.02rem 0 0.16rem;
-    scrollbar-width: none;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--home-text-color) 34%, transparent) transparent;
     overscroll-behavior-inline: contain;
   }
 
   .scope-tabs::-webkit-scrollbar {
-    display: none;
+    height: 6px;
   }
+
+  .scope-tabs::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--home-text-color) 34%, transparent);
+  }
+
+  .scope-tabs::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
 
   .scope-tabs button {
     position: relative;
@@ -345,6 +373,11 @@
       flex-basis: 100%;
       margin-right: -1rem;
       padding-right: 1rem;
+      scrollbar-width: none;
+    }
+
+    .scope-tabs::-webkit-scrollbar {
+      display: none;
     }
 
     .scope-tabs button {

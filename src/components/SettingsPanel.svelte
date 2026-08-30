@@ -18,7 +18,6 @@
   import NavigationSettingsSection from './settings/NavigationSettingsSection.svelte'
   import SearchEngineSettingsSection from './settings/SearchEngineSettingsSection.svelte'
   import SettingsHomePreview from './settings/SettingsHomePreview.svelte'
-  import CategoryDisplaySettingsSection from './settings/CategoryDisplaySettingsSection.svelte'
   import PasswordChangePanel from './PasswordChangePanel.svelte'
 
   type SettingsPanelValue = SettingsFormModel
@@ -158,7 +157,6 @@
               advancedOpen={appearanceAdvancedOpen}
               onAdvancedChange={handleAppearanceAdvancedChange}
             />
-            <CategoryDisplaySettingsSection bind:form {saving} />
           {:else if activeSectionId === 'layout'}
             <NavigationSettingsSection bind:form {saving} />
           {:else if activeSectionId === 'search'}

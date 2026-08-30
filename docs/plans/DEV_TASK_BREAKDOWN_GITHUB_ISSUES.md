@@ -1,6 +1,6 @@
 # 开发任务规划：Open Issue 需求实现（R-01 ～ R-08）
 
-> **文档状态：本地实现与集成验收通过；T9 外部同步未完成，云端 Issue 仍 Open，R-08 部署/原作者预期待同步。**
+> **文档状态：本地实现与验收反馈修复通过；T9 外部同步未完成，云端 Issue 仍 Open，R-08 部署/原作者预期待同步。**
 >
 > 本文基于 `docs/reference/GITHUB_ISSUES_REQUIREMENTS.md` 的 R-01～R-08，负责把需求整理成可执行、可并行、可验收的开发任务。本文不修改源码、数据库、API 或云端 Issue，不把 Open Issue 自动视为已完成。
 >
@@ -627,8 +627,8 @@ graph TD
 | T8-R06 分类视觉设置 | 4 | 已完成 | `shared/types.ts`、`shared/settings.ts`、`src/lib/settingsForm.ts`、`src/lib/appData.ts`、`worker/lib/settingsData.ts`、`worker/routes/settings.ts`、`schema.sql`、`src/components/settings/CategoryDisplaySettingsSection.svelte`、`src/components/SettingsPanel.svelte`、`src/components/settings/SettingsHomePreview.svelte`、`src/views/Home.svelte`、`src/components/CategoryIcon.svelte`、`src/components/CategorySection.svelte`、`src/components/HomeCategoryScope.svelte`、`src/components/Sidebar.svelte`、`tests/unit/adminSettingsLayout.test.ts` | `npx vitest run tests/unit/adminSettingsLayout.test.ts tests/unit/settingsForm.test.ts tests/unit/settingsData.test.ts tests/unit/settings.test.ts tests/unit/appData.test.ts` → 46 passed；`npm run type-check` → 0 errors/0 warnings；独立 Chrome 设置页四个滑块/预览渲染；Home 自定义 22/19px desktop 生效，390px 实际为 19.36/16.72px（0.88），desktop/mobile 无横溢出；精确 profile 进程数 0 | R-06 已回写按层级全局设置、外观页位置、CSS 变量、预览、PC/移动端 0.88 证据；Issue #9/#12 仍保持 Open，未执行云端同步 | 未提交 | 当前分类表格保持紧凑固定尺寸，未引入单分类覆盖 |
 | T8-R07 卡片宽度阈值 | 4 | 已完成 | `src/lib/settingsForm.ts`、`src/lib/bookmarkCardLayout.ts`、`shared/settings.ts`、`worker/lib/settingsData.ts`、`worker/routes/settings.ts`、`src/components/settings/AdvancedSettingsSection.svelte`、`src/components/SettingsPanel.svelte`、`src/components/BookmarkCard.svelte`、`src/components/CategorySection.svelte`、`tests/unit/settingsForm.test.ts`、`tests/unit/settingsData.test.ts`、`tests/unit/adminSettingsLayout.test.ts`、`tests/unit/bookmarkCardLayout.test.ts`、`tests/unit/categoryCollapseMarkup.test.ts` | `npx vitest run tests/unit/bookmarkCardLayout.test.ts tests/unit/categoryCollapseMarkup.test.ts tests/unit/homeResponsiveLayout.test.ts tests/unit/adminSettingsLayout.test.ts` → 25 passed；`npm run type-check` → 0 errors/0 warnings；`npm run build` 成功；独立 Chrome 1440px：width=44 的 info Grid 轨道约 46px、width=80 约 83.5px、width=400 两列约 591px；390px：width=44 使用 150px 移动端安全下限并双列，width=200/400 单列 358px；所有场景 document.scrollWidth=viewportWidth；console errors/page exceptions/failed requests 均为 0；精确 profile 进程数 0 | R-07 已回写 44px 硬阈值、44–80 提示、极简宽度置灰、API/旧数据/实际 PC/移动端 Grid 轨道证据；Issue #9/#13 仍保持 Open，未执行云端同步 | 未提交 | 详情 Grid 轨道由归一化宽度驱动；移动端保留 150px 可读性安全下限并以 `min(..., 100%)` 防止 400px 在窄屏横溢出 |
 | T9 R-08 既有部分导出核对 | 1～5 | 部分完成（本地核对；部署/原作者未核对） | `src/components/BackupPanel.svelte`、`src/lib/appBackup.ts`、`src/lib/appImportExport.ts`、`docs/reference/GITHUB_ISSUES_REQUIREMENTS.md` | `npx vitest run tests/unit/appBackup.test.ts tests/unit/appImportExport.test.ts` → 8 passed；独立 Chrome PC 二级子集下载消息 `已导出 2 个分类、1 个书签`（父分类补全）；隔离 D1 `replace` 回导 2 分类/2 书签、父子关系和书签归属正确，settings.site_title 生效；隔离 D1 `merge` 回导后 4 分类/4 书签，复用 2/新建 2 分类，新增书签归属正确，settings.site_title 保持原值；部署版本与原作者预期未核对 | R-08 已回写源码、PC/移动端、replace/merge 与 T9b 结果；保留“部署/原作者预期待同步”，Issue #9 未更新 | 未提交 | 既有导出数据逻辑未重写；云端同步需另行授权 |
-| T9b R-08 移动端导出按钮布局 | 3 | 已完成 | `src/components/BackupPanel.svelte`、`tests/unit/adminBackupLayout.test.ts` | `npx vitest run tests/unit/adminBackupLayout.test.ts tests/unit/appBackup.test.ts tests/unit/appImportExport.test.ts` → 11 passed；`npm run type-check` → 0 errors/0 warnings；`npm run build` 成功；独立 Chrome 390×844：CTA `position=fixed`、left=12/right=363/bottom=832、完全在视口内，分类树 overflow=auto；精确 profile 进程数 0 | R-08 已回写移动端固定 CTA 证据；仍待部署/原作者预期同步 | 未提交 | 只改布局样式，不改导出数据契约 |
-| T10 集成验收与收尾 | 5 | 已完成 | `docs/plans/DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md`、`docs/reference/GITHUB_ISSUES_REQUIREMENTS.md`、`docs/reference/API_CONTRACT.md`、`docs/reference/PROJECT_OVERVIEW.md`、`CHANGELOG.md` | `npm test` → 99 files / 668 passed；`npm run type-check` → 0 errors/0 warnings；`npm run build` 成功；`git diff --check` 通过；干净临时 D1 `scripts/smoke-test.mjs` → 75/75；隔离 D1 T9 replace/merge 回导核对通过；独立临时 Chrome `scripts/chrome-regression.mjs` → 25/25；R-07 修复后独立 Chrome Grid 边界回归通过；console errors=0、page exceptions=0、failed requests=0；安全探针 401 均为预期；所有测试进程/临时 profile 已清理 | R-01～R-07 本地实现证据、R-08 源码/PC/移动端/replace/merge 核对已回写；Issue #9～#13 保持 Open，未执行云端 Issue/Project 写操作 | 未提交 | R-08 部署版本和原作者预期尚未获得可验证证据；T9 状态明确为外部同步未完成，不声称云端 Issue 已关闭
+| T9b R-08 移动端导出按钮布局 | 3 | 已完成 | `src/components/BackupPanel.svelte`、`tests/unit/adminBackupLayout.test.ts` | `npx vitest run tests/unit/adminBackupLayout.test.ts tests/unit/appBackup.test.ts tests/unit/appImportExport.test.ts` → 11 passed；`npm run type-check` → 0 errors/0 warnings；`npm run build` 成功；独立 Chrome 390×844：CTA `position=fixed`、left=12/right=363/top=733/bottom=772，后台底部导航 top=784，完全在视口内；精确 profile 进程数 0 | R-08 已回写移动端固定 CTA 避开后台底部导航证据；仍待部署/原作者预期同步 | 未提交 | 只改布局样式，不改导出数据契约 |
+| T10 集成验收与收尾 | 5 | 已完成 | `docs/plans/DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md`、`docs/reference/GITHUB_ISSUES_REQUIREMENTS.md`、`docs/reference/API_CONTRACT.md`、`docs/reference/PROJECT_OVERVIEW.md`、`CHANGELOG.md` | `npm test` → 100 files / 673 passed；`npm run type-check` → 0 errors/0 warnings；`npm run build` 成功；`git diff --check` 通过；干净临时 D1 `scripts/smoke-test.mjs` → 75/75；隔离 D1 T9 replace/merge 回导核对通过；独立 Chrome 反馈修复回归覆盖 390×844/700px/701px/1440px，所有目标行为通过；干净首页导航复核 console errors=0、page exceptions=0、failed requests=0；所有测试进程/临时 profile 已清理 | R-01～R-08 本地实现、反馈修复与验证证据已回写；Issue #9～#13 保持 Open，未执行云端 Issue/Project 写操作 | 未提交 | R-08 部署版本和原作者预期尚未获得可验证证据；不声称云端 Issue 已关闭
 
 ---
 
@@ -663,5 +663,22 @@ graph TD
 | T8-R07 | R-07 | #9、#13 | 记录 44 px 硬阈值、警告带、极简置灰和布局证据 |
 | T9 | R-08 | #9 | 只记录既有能力核对；部署/原作者预期不足时保持待同步 |
 | T9b | R-08 | #9 | 只记录移动端 CTA 布局修复和实际下载证据；部署/原作者预期不足时保持待同步 |
+
+## 11. 部署后验收反馈修复批次（2026-08-30）
+
+> 来源：用户对 `develop` 部署版本执行 `docs/guides/TEST_CASES.md` 后的反馈。每项先修复，再以定向测试和真实 `390×844` / PC 浏览器场景验收；未完成浏览器回归前不标记为最终通过。
+
+| 反馈项 | 处理范围 | 状态 | 验收证据 |
+| --- | --- | --- | --- |
+| TC-R01-03 移动端移动菜单默认显示 | `BookmarkCard` / `BookmarkContextMenu` / 交互守卫；普通状态隐藏移动项，排序状态开放移动入口 | 已完成 | 隔离 Chrome 390×844：普通状态菜单 `移动到分类` 不可见、编辑可见；点击排序后显示 15 个移动入口，打开后只显示移动项；定向交互测试通过 |
+| TC-R01-03 移动端排序浮窗 | `Home.svelte` `.home-sort-bar`；移动端左右安全区自适应，说明与按钮分两行 | 已完成 | 隔离 Chrome 390×844：浮窗 left=12、right=363、width=351；说明位于第一行，取消/保存同处第二行（top=788）；响应式测试通过 |
+| TC-R02-01 新建子分类图标 | `HomeCategoryScope.svelte` 移动端加号图标可见性 | 已完成 | 隔离 Chrome 390×844：加号文本 `＋` 可见，图标实际 16×16、font-size=16px；分类层级测试通过 |
+| R-05 PC 批量工具栏遮挡 | `BookmarkListPanel.svelte` 将工具栏与列表滚动容器拆分为独立网格行 | 已完成 | 隔离 Chrome 1440px：工具栏 bottom=263 与列表 scroll top=263 对齐，滚动列表不覆盖按钮；新增 admin layout 测试通过 |
+| R-05 移动端批量工具栏遮挡 | `BookmarkListPanel.svelte` 为固定工具栏预留内容空间并抬高至后台底部导航上方 | 已完成 | 隔离 Chrome 390×844：工具栏 bottom=772，后台底部导航 top=784，z-index=1001，无遮挡；新增移动端安全区测试通过 |
+| TC-R06-01 PC 二级分类不可滚动 | `HomeCategoryScope.svelte` 增加鼠标滚轮横向转换、可见桌面滚动条和键盘保留 | 已完成 | 隔离 Chrome 1440px、大字号/大图标：tabs scrollWidth=2642、clientWidth=733；真实鼠标滚轮 scrollLeft 由 0→700→1909，末项可见；分类层级测试通过 |
+| TC-R06-01 分类视觉设置位置 | `AdvancedSettingsSection.svelte` 内嵌 `CategoryDisplaySettingsSection`，设置模型和保存契约不变 | 已完成 | 隔离 Chrome：高级设置收起时分类卡片不渲染，展开后卡片位于 `.advanced-content` 内且标题正确；`adminSettingsLayout` 测试通过 |
+| R-08 移动端导出按钮遮挡 | `BackupPanel.svelte` CTA 避开后台底部导航并预留安全空间 | 已完成 | 隔离 Chrome 390×844：CTA left=12、right=363、top=733、bottom=772，后台导航 top=784、z-index=1001；701px 无底部导航时为 static，700px 时 fixed；导出布局测试通过 |
+
+> 当前批次未改变 API/数据库契约；若浏览器回归发现新增问题，需在本节追加反馈，不覆盖原始证据。
 
 > GitHub Issue 的状态变化、评论补充和关闭动作不属于本任务默认授权。若后续获得明确授权，必须先按仓库规则检查远端、API 身份和目标 Issue，再执行云端操作，并把实际结果回写本文及需求文档。

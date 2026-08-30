@@ -8,6 +8,7 @@
   export let currentCategoryId: string | number | null = null
   export let onEdit: (() => AsyncVoid) | undefined = undefined
   export let onMoveBookmark: ((categoryId: number) => AsyncVoid) | undefined = undefined
+  export let canMove = false
 
   let movePickerOpen = false
   let moveCategoryId: string | number | null = currentCategoryId
@@ -45,8 +46,10 @@
 </script>
 
 <div class="bookmark-context-menu" role="menu" tabindex="-1" on:click|stopPropagation on:keydown|stopPropagation>
-  <button type="button" data-testid="bookmark-context-edit" on:click={handleEditClick}>编辑</button>
-  {#if onMoveBookmark && categories.length > 0}
+  {#if onEdit}
+    <button type="button" data-testid="bookmark-context-edit" on:click={handleEditClick}>编辑</button>
+  {/if}
+  {#if canMove && onMoveBookmark && categories.length > 0}
     <button type="button" data-testid="bookmark-context-move" on:click={openMovePicker}>移动到分类</button>
   {/if}
   {#if movePickerOpen}

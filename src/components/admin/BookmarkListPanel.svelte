@@ -262,16 +262,18 @@
         </button>
       </div>
     </div>
-    {#if selectedIds.size > 0}
-      <div class="batch-selection-toolbar" role="toolbar" aria-label="批量书签操作">
-        <span>已选 {selectedIds.size} 项{selectionPageSummary}</span>
-        <button type="button" class="admin-primary-button" on:click={openMoveModal} disabled={!isAuthenticated || moveCategoryOptions.length === 0}>移动到分类</button>
-        <button type="button" class="admin-danger-button" on:click={() => onBatchDeleteBookmarks?.([...selectedIds])} disabled={!isAuthenticated}>删除已选 ({selectedIds.size})</button>
-        <button type="button" class="admin-ghost-button" on:click={() => selectedIds = new Set()}>清除选择</button>
-      </div>
-    {/if}
+    <div class="admin-bookmark-list-content" class:has-batch-selection={selectedIds.size > 0}>
+      {#if selectedIds.size > 0}
+        <div class="batch-selection-toolbar" role="toolbar" aria-label="批量书签操作">
+          <span>已选 {selectedIds.size} 项{selectionPageSummary}</span>
+          <button type="button" class="admin-primary-button" on:click={openMoveModal} disabled={!isAuthenticated || moveCategoryOptions.length === 0}>移动到分类</button>
+          <button type="button" class="admin-danger-button" on:click={() => onBatchDeleteBookmarks?.([...selectedIds])} disabled={!isAuthenticated}>删除已选 ({selectedIds.size})</button>
+          <button type="button" class="admin-ghost-button" on:click={() => selectedIds = new Set()}>清除选择</button>
+        </div>
+      {/if}
 
-    <div class="admin-panel-scroll-body admin-table-scroll-body">
+      <div class="admin-panel-scroll-body admin-table-scroll-body">
+
       {#if bookmarksLoading}
         <div class="admin-empty-state">
           <span class="admin-empty-state-icon">📑</span>
@@ -431,6 +433,7 @@
         </div>
       {/if}
     </div>
+      </div>
 
     {#if bookmarks.length > 0}
       <div class="admin-panel-footer">
@@ -505,6 +508,12 @@
     grid-template-rows: auto minmax(0, 1fr) auto;
     min-width: 0;
   }
+  .admin-bookmark-list-content {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+    overflow: hidden;
+  }
 
   .admin-title-row { display: flex; align-items: center; gap: 14px; }
 
@@ -526,6 +535,9 @@
     border-radius: 12px;
     background: var(--admin-surface-strong);
     color: var(--admin-text);
+  }
+  .batch-selection-toolbar {
+    min-width: 0;
   }
 
   .batch-selection-toolbar > span {
@@ -715,11 +727,15 @@
       width: 100%;
       overflow: hidden;
     }
+    .admin-bookmark-list-content.has-batch-selection {
+      padding-bottom: 112px;
+    }
+
     .batch-selection-toolbar {
       position: fixed;
-      z-index: 180;
+      z-index: 1001;
       right: 12px;
-      bottom: max(12px, env(safe-area-inset-bottom));
+      bottom: calc(60px + max(12px, env(safe-area-inset-bottom)));
       left: 12px;
       justify-content: flex-end;
       padding: 10px;

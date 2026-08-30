@@ -174,18 +174,28 @@
   }
 
   function handleContextMenu(event: MouseEvent) {
-    if (shouldBlockCardNavigation(sortMode)) {
+    if (shouldBlockCardNavigation(sortMode) && !onMoveBookmark) {
       event.preventDefault()
       return
     }
-    if (!canOpenBookmarkContextMenu({ sortMode, canEdit, hasEditHandler: Boolean(onEdit) })) return
+    if (!canOpenBookmarkContextMenu({
+      sortMode,
+      canEdit,
+      hasEditHandler: Boolean(onEdit),
+      hasMoveHandler: Boolean(onMoveBookmark),
+    })) return
     event.preventDefault()
     event.stopPropagation()
     notifyContextMenuOpen()
     contextMenuOpen = true
   }
   function handleMobileMenuClick() {
-    if (!canOpenBookmarkContextMenu({ sortMode, canEdit, hasEditHandler: Boolean(onEdit) })) return
+    if (!canOpenBookmarkContextMenu({
+      sortMode,
+      canEdit,
+      hasEditHandler: Boolean(onEdit),
+      hasMoveHandler: Boolean(onMoveBookmark),
+    })) return
     notifyContextMenuOpen()
     contextMenuOpen = true
   }
@@ -333,12 +343,12 @@
     />
   {/if}
 
-  {#if canEdit && !sortMode}
+  {#if (canEdit && !sortMode) || (sortMode && onMoveBookmark)}
     <button
       type="button"
       class="bookmark-mobile-menu-trigger"
-      aria-label={`打开「${bookmark.title}」操作菜单`}
-      title="更多操作"
+      aria-label={sortMode ? `移动「${bookmark.title}」到其他分类` : `打开「${bookmark.title}」操作菜单`}
+      title={sortMode ? '移动到分类' : '更多操作'}
       on:click|stopPropagation={handleMobileMenuClick}
     >
       <span aria-hidden="true">⋯</span>
@@ -349,7 +359,8 @@
     <BookmarkContextMenu
       categories={moveCategories}
       currentCategoryId={bookmark.category_id}
-      onEdit={handleEditClick}
+      canMove={sortMode}
+      onEdit={sortMode ? undefined : handleEditClick}
       onMoveBookmark={onMoveBookmark ? handleMoveBookmark : undefined}
     />
   {/if}

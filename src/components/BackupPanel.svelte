@@ -576,16 +576,19 @@
       white-space: nowrap;
     }
 
+  }
+  @media (max-width: 700px) {
+  /* Keep this offset aligned with AdminSidebar's 60px mobile navigation. */
     .export-operation {
-      padding-bottom: calc(72px + env(safe-area-inset-bottom));
+      padding-bottom: calc(132px + env(safe-area-inset-bottom));
     }
 
     .export-operation > .primary-button {
       position: fixed;
-      left: max(12px, env(safe-area-inset-left));
       right: max(12px, env(safe-area-inset-right));
-      bottom: max(12px, env(safe-area-inset-bottom));
-      z-index: 100;
+      bottom: calc(60px + max(12px, env(safe-area-inset-bottom)));
+      left: max(12px, env(safe-area-inset-left));
+      z-index: 1001;
       width: auto;
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.24);
     }

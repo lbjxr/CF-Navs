@@ -639,12 +639,12 @@
   </div>
 
   {#if homeSortMode || homeSortError}
-    <div class="home-sort-bar" role="toolbar" aria-label="跨分类排序操作">
+    <div class="home-sort-bar" class:error-state={Boolean(homeSortError)} role="toolbar" aria-label="跨分类排序操作">
       {#if homeSortError}
-        <span class="home-sort-error" role="alert">保存排序失败：{homeSortError}</span>
+        <span class="home-sort-message home-sort-error" role="alert">保存排序失败：{homeSortError}</span>
         <button type="button" class="home-sort-cancel" on:click={cancelHomeSort}>关闭</button>
       {:else}
-        <span>正在排序：可将书签拖到其他分类，完成后保存。</span>
+        <span class="home-sort-message">正在排序：可将书签拖到其他分类，完成后保存。</span>
         <button type="button" class="home-sort-cancel" on:click={cancelHomeSort} disabled={homeSortSaving}>取消</button>
         <button type="button" class="home-sort-save" on:click={saveHomeSort} disabled={homeSortSaving}>
           {homeSortSaving ? '保存中…' : '保存排序'}
@@ -855,6 +855,9 @@
     font-size: 0.84rem;
     font-weight: 650;
   }
+  .home-sort-message {
+    min-width: 0;
+  }
 
   .home-sort-bar button {
     min-height: 2rem;
@@ -928,6 +931,42 @@
       align-items: flex-start;
       flex-direction: column;
       gap: 0.3rem;
+    }
+    .home-sort-bar {
+      right: max(12px, env(safe-area-inset-right));
+      bottom: max(12px, env(safe-area-inset-bottom));
+      left: max(12px, env(safe-area-inset-left));
+      transform: none;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: 'message message' 'cancel save';
+      width: auto;
+      max-width: none;
+      box-sizing: border-box;
+      gap: 0.55rem 0.7rem;
+      padding: 0.7rem 0.75rem;
+    }
+
+    .home-sort-message {
+      grid-area: message;
+      width: 100%;
+      white-space: normal;
+      line-height: 1.35;
+    }
+
+    .home-sort-cancel {
+      grid-area: cancel;
+      justify-self: start;
+    }
+
+    .home-sort-save {
+      grid-area: save;
+      justify-self: end;
+    }
+
+    .home-sort-bar.error-state .home-sort-cancel {
+      grid-column: 1 / -1;
+      justify-self: end;
     }
   }
 </style>

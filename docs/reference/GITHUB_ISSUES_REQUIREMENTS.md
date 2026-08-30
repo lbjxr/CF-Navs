@@ -1,6 +1,6 @@
 # Open GitHub Issues 需求与 PC / 移动端规划
 
-> **文档状态：本地实现与集成验收完成；云端 Issue 仍 Open，R-08 部署/原作者预期待同步。**
+> **文档状态：本地实现与验收反馈修复完成；云端 Issue 仍 Open，R-08 部署/原作者预期待同步。**
 >
 > **数据快照：** 2026-08-30（GitHub 时间统一按 UTC 记录）
 > **查询范围：** `lbjxr/CF-Navs` 仓库 `state=open` 的 Issue，不包含 Pull Request 及 Closed Issue
@@ -81,12 +81,12 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 
 | 编号 | 需求 / 问题 | 类型 | 当前状态 | 来源 |
 | --- | --- | --- | --- | --- |
-| R-01 | 修复一级分类到二级分类的书签移动与排序 | Bug | 云端 Open；T2 实现与本地 PC/移动端回归完成，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#10](https://github.com/lbjxr/CF-Navs/issues/10) |
-| R-02 | 登录态首页增加“新建子分类”入口 | Enhancement | 云端 Open；T6 实现与 PC/移动端回归完成，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#11](https://github.com/lbjxr/CF-Navs/issues/11) |
+| R-01 | 修复一级分类到二级分类的书签移动与排序 | Bug | 云端 Open；T2 与验收反馈修复已完成本地 PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#10](https://github.com/lbjxr/CF-Navs/issues/10) |
+| R-02 | 登录态首页增加“新建子分类”入口 | Enhancement | 云端 Open；T6 与验收反馈修复已完成本地 PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#11](https://github.com/lbjxr/CF-Navs/issues/11) |
 | R-03 | 登录态首页增加“新增主分类”入口 | Enhancement，原反馈标为可选 | 云端 Open；T7 实现与 PC/移动端回归完成，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#11](https://github.com/lbjxr/CF-Navs/issues/11) |
 | R-04 | 首页编辑书签时分类选择器定位当前分类 | Enhancement | 云端 Open；T3 实现与本地回归完成，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#11](https://github.com/lbjxr/CF-Navs/issues/11) |
-| R-05 | 后台批量移动书签 | Enhancement | 云端 Open；T4 后端与 T5 PC/移动端 UI、跨页选择和结果回归完成，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
-| R-06 | 调整一级/二级分类字体和图标大小 | Enhancement | 云端 Open；T8-R06 实现与 PC/移动端设置/预览/显示回归完成，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
+| R-05 | 后台批量移动书签 | Enhancement | 云端 Open；T4/T5 与验收反馈修复已完成本地 PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
+| R-06 | 调整一级/二级分类字体和图标大小 | Enhancement | 云端 Open；T8-R06 与验收反馈修复已完成本地设置/PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
 | R-07 | 评估卡片最小宽度下限是否可下调 | Enhancement | 云端 Open；T8-R07 实现与 API/设置/PC/移动端 44px 布局回归完成，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#13](https://github.com/lbjxr/CF-Navs/issues/13) |
 | R-08 | 部分导出备份，便于多个项目同步维护 | Enhancement | 云端 Open；T9/T9b 本地源码、PC/移动端核对完成，部署与原作者预期待同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9) |
 
@@ -117,9 +117,9 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 - 分类树可滚动、可关闭，目标分类路径和当前选择清晰；保存成功或失败均有反馈。
 - 若支持触控拖动，不能遮挡滚动和点击书签，也不能移除“移动到分类”替代入口。
 
-**已确认决策**：移动端首版只提供书签操作菜单中的“移动到分类”，复用同一分类树和保存规则；不做触控拖动，但入口和数据契约必须为后续扩展“菜单 + 触控拖动”预留空间。T2 已完成 PC 一级→二级、空目标、取消恢复、保存持久化和移动端 390×844 菜单/树展开/保存场景回归。
+**已确认决策**：移动端首版只提供书签操作菜单中的“移动到分类”，复用同一分类树和保存规则；普通浏览状态隐藏该菜单项，只有进入排序模式后才开放移动入口；不做触控拖动，但入口和数据契约必须为后续扩展“菜单 + 触控拖动”预留空间。验收反馈修复已完成 PC/移动端排序浮窗两行布局和移动菜单状态回归。
 
-**实现证据**：`src/lib/homeSort.ts` 负责移动草稿与完整分类顺序；T2 定向单测 14/14、`npm run type-check` 0 errors/0 warnings、`npm run build` 成功；独立 Chrome profile 已验证桌面排序目标和移动端菜单，测试进程已清理。
+**实现证据**：`src/lib/homeSort.ts` 负责移动草稿与完整分类顺序；T2 定向单测 14/14，验收反馈定向交互/响应式测试通过；隔离 Chrome 390×844 已验证普通状态移动项隐藏、排序状态移动项显示，排序浮窗 left=12/right=363 且按钮第二行；测试进程已清理。
 
 ### R-02：首页新建子分类入口
 
@@ -141,7 +141,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 
 **已确认决策**：入口预填当前一级分类为 `parent_id`，但允许用户在弹层中改选父分类；创建成功后自动滚动到新子分类并高亮，方便继续添加书签。
 
-**T6 实现证据**：首页一级分类标题提供“新建子分类”入口；全局分类 modal 保持首页上下文，默认预填当前一级分类且可改选；创建成功后刷新数据、回首页并选中新分类 tab。定向测试 12/12、type-check 0 errors/0 warnings、build 成功；独立 Chrome 已验证 PC 和 390×844 移动端入口/父级预填/成功选中。
+**T6 实现证据**：首页一级分类标题提供“新建子分类”入口；全局分类 modal 保持首页上下文，默认预填当前一级分类且可改选；移动端按钮加号图标可见；创建成功后刷新数据、回首页并选中新分类 tab。定向测试 12/12、type-check 0 errors/0 warnings、build 成功；独立 Chrome 已验证 PC 和 390×844 移动端入口/父级预填/成功选中。
 
 ### R-03：首页新增主分类入口
 
@@ -209,7 +209,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 **已确认决策**：首版保留跨页选择；目标分类内提供“追加到末尾 / 插入到顶部”两个位置选项，默认追加到末尾（任意精确插入位置作为后续增强，不进首版）；集合校验失败时整体原子回滚，不产生部分成功；私密书签和私密分类继续遵循管理员权限，目标树中越权/非法目标禁用并说明原因。
 
 **T4 实现证据**：新增 `POST /api/bookmarks/batch-move`，请求使用 `BookmarkBatchMoveReq` 的 `ids/category_id/position/expected`；服务端校验目标分类、选中集合和 `category_id/sort` 快照，并通过一次 D1 batch 更新归属与全局顺序。追加末尾、插入顶部成功，过期快照返回 `CONFLICT=1006` 且无写入；后台 UI 仍由 T5 实现。
-**T5 实现证据**：后台列表保留跨页选择，selection toolbar 在 PC 顶部、移动端底部固定；确认弹层显示 11 项和目标路径，支持追加末尾/插入顶部；成功后清空选择并刷新，后端冲突时保留选择。独立 Chrome 390×844 已验证 toolbar 和弹层在视口内。
+**T5 实现证据**：后台列表保留跨页选择，selection toolbar 与列表滚动容器分离；PC 滚动列表不会覆盖工具栏，移动端工具栏固定在后台底部导航上方；确认弹层显示 11 项和目标路径，支持追加末尾/插入顶部；成功后清空选择并刷新，后端冲突时保留选择。独立 Chrome 390×844 已验证 toolbar 和弹层在视口内。
 
 **前端交互最佳实践说明（建议实现规范）**
 
@@ -243,9 +243,9 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 
 **已确认决策**：采用按层级全局设置——一级分类标题字体/图标尺寸一组、二级分类标题字体/图标尺寸一组；不引入每个分类独立覆盖，一级不继承二级。
 
-**T8-R06 实现证据**：`CategoryDisplaySettingsSection.svelte` 在“外观与卡片”中提供一级/二级字号与图标滑块；Home/Sidebar/CategorySection/Search/Preview 通过 CSS 变量消费，移动端统一 0.88 派生。独立 Chrome 验证自定义 22/19px desktop 生效，390px 为 19.36/16.72px，无横溢出；定向测试 46/46、type-check 0/0。
+**T8-R06 实现证据**：`CategoryDisplaySettingsSection.svelte` 已移动到“外观与卡片”的“高级设置”中，提供一级/二级字号与图标滑块；Home/Sidebar/CategorySection/Search/Preview 通过 CSS 变量消费，移动端统一 0.88 派生。验收反馈修复后，PC 大字号二级分类可通过滚轮/横向滚动条访问完整列表；独立 Chrome 验证设置卡片收起时不渲染、展开后位于 `.advanced-content` 内；定向测试和 type-check 通过。
 
-**菜单位置（建议）**：放入现有设置面板“外观与卡片”标签页（`activeSectionId === 'appearance'`），在卡片设置区下新增“分类标题字体与图标”子分区。理由：该组控制分类标题/图标的视觉呈现，与卡片外观同属外观范畴；`site_title_font_size` 已在“站点设置”，分类级设置与它区分开更清晰，避免“布局与导航”页承载视觉尺寸。子分区用两组（一级 / 二级）字号 + 图标尺寸滑块，右侧复用 `SettingsHomePreview` 实时预览。
+**菜单位置（已确认）**：放入现有设置面板“外观与卡片”标签页的“高级设置”折叠区；该组控制分类标题/图标的视觉呈现，与卡片外观同属外观范畴，收起高级设置时不占用常规区域。
 
 **建议默认值与区间（px，step=1，实时预览）**：参照现有分类标题 CSS（一级约 16px、二级约 15px）、`site_title_font_size` 16–72 滑块和 `card_icon_size` 40–100 归一化范围，给出更贴合分类场景的收敛区间：
 
@@ -300,7 +300,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 - PC 采用可展开分类树、全选/清空和导出反馈；移动端采用可滚动树和固定底部导出按钮，导出前显示汇总数量。
 - 在确认源码行为、部署版本和 Issue 原作者预期一致后，维护者可在云端补充说明并决定关闭或继续保留 #9 的该项内容。
 
-**T9/T9b 核对证据**：既有导出单测 8/8；独立 Chrome PC 选择二级分类实际下载显示“已导出 2 个分类、1 个书签”，证明父分类补全；390×844 移动端分类树可滚动，导出 CTA 已修复为 `position: fixed`（视口内 left=12、right=363、bottom=832）。隔离 D1 `replace` 回导得到 2 分类/2 书签，父子关系、书签归属和 settings.site_title 生效；随后 `merge` 回导得到 4 分类/4 书签，复用 2 个分类、新建 2 个分类，新增书签归属正确且保留原 settings。导出数据组装与 replace/merge 逻辑未重写；部署版本和原作者预期仍待同步。
+**T9/T9b 核对证据**：既有导出单测 8/8；独立 Chrome PC 选择二级分类实际下载显示“已导出 2 个分类、1 个书签”，证明父分类补全；390×844 移动端分类树可滚动，导出 CTA 已修复为 `position: fixed`，并在后台底部导航上方保持视口内（left=12、right=363、top=733、bottom=772，导航 top=784）。隔离 D1 `replace`/`merge` 回导和层级/归属/设置核对通过；导出数据组装与 replace/merge 逻辑未重写；部署版本和原作者预期仍待同步。
 
 **已确认决策**：R-08 以现有“按分类选择导出”能力作为完成结果处理。核对当前部署版本与源码行为、确认与原作者预期一致后，在 #9 云端补充说明并标记该项完成，不重复实现已有能力。
 

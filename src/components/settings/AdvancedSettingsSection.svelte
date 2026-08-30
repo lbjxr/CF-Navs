@@ -9,6 +9,7 @@
   } from '../../lib/settingsForm'
   import ColorAlphaInput from '../ColorAlphaInput.svelte'
   import ThemeBackgroundCard from './ThemeBackgroundCard.svelte'
+  import CategoryDisplaySettingsSection from './CategoryDisplaySettingsSection.svelte'
   import InputGroup from '../ui/InputGroup.svelte'
   import Slider from '../ui/Slider.svelte'
   import Tooltip from '../ui/Tooltip.svelte'
@@ -66,7 +67,7 @@
   >
     <span>
       <strong>{advancedOpen ? '收起高级设置' : '展开高级设置'}</strong>
-      <small>背景、尺寸与卡片表面</small>
+      <small>背景、尺寸、卡片与分类视觉</small>
     </span>
     <span class="advanced-chevron" class:open={advancedOpen} aria-hidden="true">›</span>
   </button>
@@ -204,6 +205,8 @@
           </div>
         </div>
       </div>
+
+      <CategoryDisplaySettingsSection bind:form {saving} />
     </div>
   {/if}
 </fieldset>

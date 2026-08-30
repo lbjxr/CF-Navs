@@ -52,6 +52,14 @@ describe('category hierarchy visibility markup', () => {
     expect(scope).toContain('aria-selected={rootActive}')
     expect(scope).toContain('<span>本分类</span>')
     expect(scope).toContain('<CategoryIcon')
+    expect(scope).toContain('on:wheel={handleTabWheel}')
+    expect(scope).toContain('class="scope-action-icon"')
+    expect(card).toContain('canMove={sortMode}')
+    expect(card).toContain('(sortMode && onMoveBookmark)')
+    expect(card).toContain('onEdit={sortMode ? undefined : handleEditClick}')
+    const contextMenu = readFileSync('src/components/BookmarkContextMenu.svelte', 'utf8')
+    expect(contextMenu).toContain('export let canMove = false')
+    expect(contextMenu).toContain('{#if canMove && onMoveBookmark && categories.length > 0}')
   })
 
   it('collapses selector and admin child categories behind independent arrows', () => {
