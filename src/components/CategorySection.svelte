@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { CardStyle, DescriptionDisplayMode, PublicBookmark, PublicCategory } from '../../shared/types'
+  import type { CategoryTreeOption } from '../lib/categorySelect'
   import { resolveBookmarkDescriptionMode } from '../lib/descriptionMode'
   import BookmarkCard from './BookmarkCard.svelte'
   import CategoryIcon from './CategoryIcon.svelte'
-  import { getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
+  import { getInfoCardMobileTrackWidth, getInfoCardTrackWidth, getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
   import { sortableList, type SortTransfer } from '../lib/sortableList'
 
   type AsyncVoid<T = void> = T | Promise<T>
@@ -30,6 +31,8 @@
   export let cardShowDescription = true
   export let cardDescriptionMode: DescriptionDisplayMode = cardShowDescription ? 'always' : 'hidden'
   export let cardIconShowTitle = true
+  export let moveCategories: CategoryTreeOption[] = []
+  export let onMoveBookmark: ((bookmark: PublicBookmark, categoryId: number) => AsyncVoid) | undefined = undefined
   export let onAddBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
   export let onEditBookmark: ((bookmark: PublicBookmark) => AsyncVoid) | undefined = undefined
   export let onRequestSort: (() => AsyncVoid) | undefined = undefined
@@ -66,8 +69,9 @@
   $: sectionId = `category-${category.id}`
   $: heading = displayTitle || category.title
   $: iconGridTrackWidth = getIconCardTrackWidth(cardIconSize, cardIconShowTitle)
-  $: gridMinWidth = cardStyle === 'info' ? 200 : iconGridTrackWidth // Sun-Panel 标准值
-  $: mobileGridMinWidth = cardStyle === 'info' ? 150 : iconGridTrackWidth
+  $: infoCardTrackWidth = getInfoCardTrackWidth(cardWidth)
+  $: gridMinWidth = cardStyle === 'info' ? infoCardTrackWidth : iconGridTrackWidth
+  $: mobileGridMinWidth = cardStyle === 'info' ? getInfoCardMobileTrackWidth(cardWidth) : iconGridTrackWidth
   $: gridGap = cardStyle === 'info' ? '18px' : '22px 24px'
   $: mobileGridGap = cardStyle === 'info' ? '1rem' : '14px 16px'
   async function handleAddBookmark() {
@@ -81,7 +85,7 @@
       {#if showHeading}
         <div class="section-title-wrap">
           {#if showCategoryIcon && category.icon}
-            <CategoryIcon category={category} size={level === 2 ? 30 : 38} className="section-icon" />
+            <CategoryIcon category={category} size={level === 2 ? 'var(--category-child-icon-size, 30px)' : 'var(--category-root-icon-size, 38px)'} className="section-icon" />
           {/if}
           <div class="section-copy">
             <div class="section-heading-row">
@@ -177,7 +181,9 @@
             height={cardHeight}
             canEdit={Boolean(onEditBookmark)}
             sortMode={activeSortMode}
+            moveCategories={moveCategories}
             onEdit={onEditBookmark}
+            onMoveBookmark={onMoveBookmark}
           />
         </div>
       {/each}
@@ -205,8 +211,9 @@
     gap: 0.68rem;
   }
 
+  .category-section.child-category .section-heading-row h3,
   .category-section.has-display-title .section-heading-row h3 {
-    font-size: 0.92rem;
+    font-size: var(--category-child-font-size, 0.92rem);
     font-weight: 600;
     letter-spacing: 0.01em;
   }
@@ -257,7 +264,7 @@
     min-width: 0;
     flex: 1 1 auto;
     color: var(--home-text-color, currentColor);
-    font-size: 1.02rem;
+    font-size: var(--category-root-font-size, 1.02rem);
     font-weight: 650;
     line-height: 1.15;
     overflow: hidden;
@@ -304,16 +311,15 @@
   }
 
   .section-title-wrap :global(.section-icon) {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    border-radius: 10px;
+    width: var(--category-root-icon-size, 38px);
+    height: var(--category-root-icon-size, 38px);
+    min-width: var(--category-root-icon-size, 38px);
   }
 
   .category-section.child-category .section-title-wrap :global(.section-icon) {
-    width: 30px;
-    height: 30px;
-    min-width: 30px;
+    width: var(--category-child-icon-size, 30px);
+    height: var(--category-child-icon-size, 30px);
+    min-width: var(--category-child-icon-size, 30px);
     border-radius: 8px;
   }
 
@@ -433,12 +439,8 @@
   /* 移动端响应式 */
   @media (max-width: 500px) {
     .bookmark-grid {
-      grid-template-columns: repeat(auto-fill, minmax(var(--mobile-card-min-width, 150px), 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(var(--mobile-card-min-width, 150px), 100%), 1fr));
       gap: var(--mobile-bookmark-grid-gap, 1rem);
-    }
-
-    .bookmark-grid.is-info-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .bookmark-grid.is-icon-grid {

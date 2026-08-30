@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import { fade } from 'svelte/transition'
   import {
     type Bookmark,
+    type BookmarkBatchMoveReq,
     type BookmarkReorganizeReq,
     type Category,
     type ChangePasswordReq,
@@ -114,6 +115,7 @@
   let AdminComponent: typeof import('./views/Admin.svelte').default | null = null
   let LoginModalComponent: typeof import('./components/LoginModal.svelte').default | null = null
   let BookmarkEditModalComponent: typeof import('./components/BookmarkEditModal.svelte').default | null = null
+  let CategoryEditModalComponent: typeof import('./components/CategoryEditModal.svelte').default | null = null
   let confirmDialog: ConfirmDialogState | null = null
   let confirmDialogResolver: ((confirmed: boolean) => void) | null = null
 
@@ -140,10 +142,19 @@
       BookmarkEditModalComponent = component
     },
   })
+  const ensureCategoryEditModalComponent = createLazyComponentLoader({
+    load: () => import('./components/CategoryEditModal.svelte'),
+    getCurrent: () => CategoryEditModalComponent,
+    setCurrent: (component) => {
+      CategoryEditModalComponent = component
+    },
+  })
 
   let loginModalOpen = false
   let categoryModalOpen = false
   let bookmarkModalOpen = false
+  let categoryCreateReturnToHome = false
+  let homeFocusCategoryId: number | null = null
 
   let categoryModalMode: 'create' | 'edit' = 'create'
   let bookmarkModalMode: 'create' | 'edit' = 'create'
@@ -515,6 +526,7 @@
     activeCategory = null
     categoryError = ''
     savingCategory = false
+    categoryCreateReturnToHome = false
   }
 
   function resetSettingsState(): void {
@@ -612,7 +624,7 @@
     }
   }
 
-  async function handleOpenCreateCategory(): Promise<void> {
+  async function handleOpenCreateCategory(parentId: string | number | null = null, returnToHomeOverride: boolean | undefined = undefined): Promise<void> {
     if (!isLoggedIn()) {
       await handleOpenLogin()
       return
@@ -622,11 +634,17 @@
     if (!await ensureLoggedInDataLoaded()) {
       return
     }
-    await ensureAdminComponent()
+    const returnToHome = returnToHomeOverride ?? parentId != null
+    if (returnToHome) await ensureCategoryEditModalComponent()
+    else await ensureAdminComponent()
+    categoryCreateReturnToHome = returnToHome
     categoryModalMode = 'create'
-    activeCategory = createCategoryDraft()
+    activeCategory = createCategoryDraft(parentId)
     categoryModalOpen = true
-    currentView = 'admin'
+    if (!returnToHome) currentView = 'admin'
+  }
+  async function handleOpenCreateRootCategory(): Promise<void> {
+    await handleOpenCreateCategory(null, true)
   }
 
   async function handleEditCategory(category: { id: string | number }): Promise<void> {
@@ -644,6 +662,7 @@
   }
 
   async function handleSubmitCategory(form: CategoryFormValue): Promise<void> {
+    const returnToHome = categoryCreateReturnToHome
     savingCategory = true
     categoryError = ''
 
@@ -655,15 +674,23 @@
         category = await api.categories.create(toCategoryPayload(form))
       }
 
-     resetCategoryState()
-     await applyLocalCategoryUpsert(category)
+      resetCategoryState()
+      await applyLocalCategoryUpsert(category)
       await refreshAdminDataAfterMutation()
+      if (returnToHome) {
+        currentView = 'home'
+        homeFocusCategoryId = null
+        await tick()
+        homeFocusCategoryId = category.id
+        await tick()
+        document.getElementById(`home-category-tab-${category.id}`)?.click()
+      }
       toastStore.addToast(
         categoryModalMode === 'edit' ? `分类「${category.title}」已更新` : `分类「${category.title}」已创建`,
         'success',
       )
-   } catch (error) {
-     categoryError = getErrorMessage(error)
+    } catch (error) {
+      categoryError = getErrorMessage(error)
     } finally {
       savingCategory = false
     }
@@ -798,6 +825,17 @@
       toastStore.addToast(`已删除 ${result.deleted} 个书签`, 'success')
     } catch (error) {
       bookmarkError = getErrorMessage(error)
+    }
+  }
+  async function handleBatchMoveBookmarks(payload: BookmarkBatchMoveReq): Promise<void> {
+    bookmarkError = ''
+    try {
+      const result = await api.bookmarks.batchMove(payload)
+      await refreshAdminDataAfterMutation()
+      toastStore.addToast(`已移动 ${result.moved} 个书签`, 'success')
+    } catch (error) {
+      bookmarkError = getErrorMessage(error)
+      throw error
     }
   }
 
@@ -996,6 +1034,9 @@
           title={homeTitle}
           isAuthenticated={$isAuthenticated}
           authLoading={$authStore.loading}
+          onOpenCreateCategory={handleOpenCreateCategory}
+          onOpenCreateRootCategory={handleOpenCreateRootCategory}
+          focusCategoryId={homeFocusCategoryId}
           onOpenCreateBookmark={handleOpenCreateBookmark}
           onEditBookmark={handleEditBookmark}
           onReorganizeBookmarks={handleReorganizeBookmarks}
@@ -1062,6 +1103,7 @@
         onEditBookmark={handleEditBookmark}
         onDeleteBookmark={handleDeleteBookmark}
         onBatchDeleteBookmarks={handleBatchDeleteBookmarks}
+        onBatchMoveBookmarks={handleBatchMoveBookmarks}
         onSubmitSettings={handleSubmitSettings}
         onChangePassword={handleChangePassword}
         onSortCategories={handleSortCategories}
@@ -1133,6 +1175,21 @@
         imageHostUrl={adminData.settings?.image_host_url ?? ''}
       />
     {/if}
+    {#if CategoryEditModalComponent && categoryCreateReturnToHome}
+      <svelte:component
+        this={CategoryEditModalComponent}
+        open={categoryModalOpen}
+        loading={savingCategory}
+        error={categoryError}
+        mode={categoryModalMode}
+        value={activeCategory}
+        categories={adminCategories}
+        onSubmit={handleSubmitCategory}
+        onCancel={handleCloseCategoryModal}
+        imageHostUrl={adminData.settings?.image_host_url ?? ''}
+      />
+    {/if}
+
 
     <ConfirmDialog
       open={Boolean(confirmDialog)}

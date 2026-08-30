@@ -576,6 +576,18 @@
       white-space: nowrap;
     }
 
-    .primary-button { align-self: flex-start; }
+    .export-operation {
+      padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    }
+
+    .export-operation > .primary-button {
+      position: fixed;
+      left: max(12px, env(safe-area-inset-left));
+      right: max(12px, env(safe-area-inset-right));
+      bottom: max(12px, env(safe-area-inset-bottom));
+      z-index: 100;
+      width: auto;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.24);
+    }
   }
 </style>

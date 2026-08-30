@@ -26,6 +26,7 @@ export {
   batchDeleteBookmarks,
   sortBookmarks,
   reorganizeBookmarks,
+  batchMoveBookmarks,
   BookmarkReorganizeError,
   setIconBlob,
   incrementBookmarkClick,

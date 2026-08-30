@@ -127,6 +127,27 @@ describe('worker settings data helpers', () => {
     ]).navigation).toEqual({ position: 'top', always_expanded: false, top_layout: 'scroll' })
   })
 
+  it('normalizes category display and card size boundaries from persisted settings', () => {
+    expect(settingsFromRows([]).category_display).toEqual({
+      root_font_size: 16,
+      root_icon_size: 20,
+      child_font_size: 14,
+      child_icon_size: 18,
+    })
+    expect(settingsFromRows([
+      {
+        key: 'category_display',
+        value: JSON.stringify({ root_font_size: 40, root_icon_size: 8, child_font_size: 'bad', child_icon_size: 40 }),
+      },
+      { key: 'card_size', value: JSON.stringify({ width: 20, height: 500 }) },
+      { key: 'card_icon_size', value: JSON.stringify(20) },
+    ])).toMatchObject({
+      category_display: { root_font_size: 28, root_icon_size: 14, child_font_size: 14, child_icon_size: 32 },
+      card_size: { width: 44, height: 300 },
+      card_icon_size: 40,
+    })
+  })
+
   it('validates complete navigation payloads for settings updates', () => {
     expect(isValidNavigationSetting({ position: 'left', always_expanded: false })).toBe(true)
     expect(isValidNavigationSetting({ position: 'top', always_expanded: true })).toBe(true)

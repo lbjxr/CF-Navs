@@ -13,6 +13,7 @@
   export let onSwitchToAdmin: (() => AsyncVoid) | undefined = undefined
   export let onLogout: (() => AsyncVoid) | undefined = undefined
   export let onOpenLogin: (() => AsyncVoid) | undefined = undefined
+  export let onOpenCreateRootCategory: (() => AsyncVoid) | undefined = undefined
   export let topNavigation = false
 
   let showBackToTop = false
@@ -38,6 +39,9 @@
     void onLogout?.()
   }
 
+  function handleOpenCreateRootCategory() {
+    void onOpenCreateRootCategory?.()
+  }
   function handleOpenLogin() {
     void onOpenLogin?.()
   }
@@ -82,6 +86,16 @@
       aria-label="管理后台"
     >
       &#9881;
+    </button>
+    <button
+      type="button"
+      class="icon-button create-category-button"
+      data-testid="home-create-root-category"
+      on:click={handleOpenCreateRootCategory}
+      title="新增主分类"
+      aria-label="新增主分类"
+    >
+      ＋
     </button>
     <button
       type="button"
@@ -239,6 +253,11 @@
       width: 2.2rem;
       height: 2.2rem;
       font-size: 1rem;
+    }
+
+    .create-category-button {
+      min-width: 36px;
+      min-height: 36px;
     }
 
     .back-to-top-button {

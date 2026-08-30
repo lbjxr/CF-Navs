@@ -12,7 +12,7 @@
 </script>
 
 <script lang="ts">
-  import type { ChangePasswordReq } from '../../shared/types'
+  import type { BookmarkBatchMoveReq, ChangePasswordReq } from '../../shared/types'
   import AdminSidebar from '../components/AdminSidebar.svelte'
   import AdminPageHeader from '../components/admin/AdminPageHeader.svelte'
   import AdminTabContent from '../components/admin/AdminTabContent.svelte'
@@ -90,6 +90,7 @@
   export let onEditBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
   export let onDeleteBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
   export let onBatchDeleteBookmarks: ((ids: number[]) => AsyncVoid) | undefined = undefined
+  export let onBatchMoveBookmarks: ((payload: BookmarkBatchMoveReq) => AsyncVoid) | undefined = undefined
   export let onSubmitSettings: ((payload: SettingsFormValue) => AsyncVoid) | undefined = undefined
   export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
   export let onSortCategories: CategorySortHandler | undefined = undefined
@@ -165,6 +166,7 @@
       {onEditBookmark}
       {onDeleteBookmark}
       {onBatchDeleteBookmarks}
+      {onBatchMoveBookmarks}
       {onSubmitSettings}
       {onChangePassword}
       {onSortCategories}

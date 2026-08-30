@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import type { CardStyle, DescriptionDisplayMode, PublicBookmark } from '../../shared/types'
+  import type { CategoryTreeOption } from '../lib/categorySelect'
   import BookmarkCardCompact from './BookmarkCardCompact.svelte'
   import { publicStore } from '../lib/stores'
   import { api } from '../lib/api'
   import BookmarkCardInfo from './BookmarkCardInfo.svelte'
   import BookmarkContextMenu from './BookmarkContextMenu.svelte'
   import BookmarkLinkModal from './BookmarkLinkModal.svelte'
-  import { getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
+  import { getInfoCardTrackWidth, getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
   import { buildIconStyle } from '../lib/bookmarkIconDisplay'
   import {
     BOOKMARK_CONTEXT_MENU_OPEN_EVENT,
@@ -43,6 +44,8 @@
   export let preview = false
   export let themeOverride: 'light' | 'dark' | null = null
   export let onEdit: ((bookmark: PublicBookmark) => AsyncVoid) | undefined = undefined
+  export let moveCategories: CategoryTreeOption[] = []
+  export let onMoveBookmark: ((bookmark: PublicBookmark, categoryId: number) => AsyncVoid) | undefined = undefined
 
   let cachedIconFailed = false
   let fallbackFailed = false
@@ -85,8 +88,9 @@
   $: iconUrl = iconUrlState.iconUrl
   $: hasRenderableIcon = iconUrlState.hasRenderableIcon
   $: infoCardHeight = height > 0 ? height : 70
+  $: safeInfoCardWidth = getInfoCardTrackWidth(width)
   $: infoIconInset = infoCardHeight <= 56 ? 6 : 8
-  $: infoIconSize = Math.max(32, Math.min(infoCardHeight - infoIconInset * 2, width - infoIconInset * 2))
+  $: infoIconSize = Math.max(32, Math.min(infoCardHeight - infoIconInset * 2, safeInfoCardWidth - infoIconInset * 2))
   $: compactIconSize = Math.max(0, iconSize)
   $: compactShellWidth = getIconCardTrackWidth(compactIconSize, showIconTitle)
   $: iconBackgroundColor = bookmark.icon_background_color || ''
@@ -99,7 +103,7 @@
   $: tooltipText = bookmark.description ? `${bookmark.title}\n${bookmark.description}` : bookmark.title
   $: cardShellStyle =
     style === 'info'
-      ? `--card-configured-min-width: ${Math.max(0, width)}px; ${height > 0 ? `height: ${height}px;` : ''}`
+      ? `--card-configured-min-width: ${safeInfoCardWidth}px; ${height > 0 ? `height: ${height}px;` : ''}`
       : `width: ${compactShellWidth}px;`
   $: cardLinkStyle = height > 0 ? `height: ${height}px;` : ''
   $: if (nextIconStateKey !== iconStateKey) {
@@ -180,10 +184,19 @@
     notifyContextMenuOpen()
     contextMenuOpen = true
   }
+  function handleMobileMenuClick() {
+    if (!canOpenBookmarkContextMenu({ sortMode, canEdit, hasEditHandler: Boolean(onEdit) })) return
+    notifyContextMenuOpen()
+    contextMenuOpen = true
+  }
 
   async function handleEditClick() {
     closeContextMenu()
     await onEdit?.(bookmark)
+  }
+  async function handleMoveBookmark(categoryId: number): Promise<void> {
+    closeContextMenu()
+    await onMoveBookmark?.(bookmark, categoryId)
   }
 
   function handleLinkClick(event: MouseEvent) {
@@ -320,8 +333,25 @@
     />
   {/if}
 
+  {#if canEdit && !sortMode}
+    <button
+      type="button"
+      class="bookmark-mobile-menu-trigger"
+      aria-label={`打开「${bookmark.title}」操作菜单`}
+      title="更多操作"
+      on:click|stopPropagation={handleMobileMenuClick}
+    >
+      <span aria-hidden="true">⋯</span>
+    </button>
+  {/if}
+
   {#if contextMenuOpen}
-    <BookmarkContextMenu onEdit={handleEditClick} />
+    <BookmarkContextMenu
+      categories={moveCategories}
+      currentCategoryId={bookmark.category_id}
+      onEdit={handleEditClick}
+      onMoveBookmark={onMoveBookmark ? handleMoveBookmark : undefined}
+    />
   {/if}
 
   {#if modalOpen}
@@ -335,6 +365,37 @@
     z-index: 0;
     min-width: 0;
     contain: layout style;
+  }
+  .bookmark-mobile-menu-trigger {
+    display: none;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 3;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 10px;
+    background: rgb(var(--card-bg-rgb, 255 255 255) / 0.86);
+    color: var(--card-text-color, currentColor);
+    cursor: pointer;
+    font-size: 22px;
+    line-height: 1;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  }
+
+  .bookmark-mobile-menu-trigger:focus-visible {
+    outline: 3px solid rgb(var(--theme-accent-rgb, 37 99 235) / 0.32);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 799px) {
+    .bookmark-mobile-menu-trigger {
+      display: inline-flex;
+    }
   }
 
   .bookmark-card-shell:hover,

@@ -229,6 +229,23 @@ describe('admin settings layout', () => {
     expect(backgroundCard.indexOf('endLabel="结束颜色"')).toBeLessThan(backgroundCard.indexOf('<div class="background-range-grid">'))
     expect(backgroundCard.indexOf('<div class="background-range-grid">')).toBeLessThan(backgroundCard.indexOf('遮罩颜色'))
   })
+  it('exposes category-level visual controls and the 44px card width contract', () => {
+    const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
+    const categoryDisplay = readFileSync('src/components/settings/CategoryDisplaySettingsSection.svelte', 'utf8')
+    const advanced = readFileSync('src/components/settings/AdvancedSettingsSection.svelte', 'utf8')
+    const home = readFileSync('src/views/Home.svelte', 'utf8')
+
+    expect(panel).toContain('<CategoryDisplaySettingsSection bind:form {saving} />')
+    expect(categoryDisplay).toContain('一级分类标题字号')
+    expect(categoryDisplay).toContain('二级分类标题字号')
+    expect(categoryDisplay).toContain('min={12}')
+    expect(categoryDisplay).toContain('min={11}')
+    expect(advanced).toContain('min={44}')
+    expect(advanced).toContain('disabled={form.card_style !== \'info\'}')
+    expect(advanced).toContain('可能无法保证页面美观')
+    expect(home).toContain('--category-root-font-size-base')
+    expect(home).toContain('* 0.88')
+  })
 
   it('collapses built-in presets, removes manual gradient values, and binds card controls to style', () => {
     const presets = readFileSync('src/components/settings/GradientPresetSelector.svelte', 'utf8')

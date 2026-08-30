@@ -2,7 +2,14 @@ import {
   BUILTIN_BACKGROUND_PRESET_IDS,
   type Settings,
 } from '../../shared/types'
-import { SETTINGS_KEYS } from '../../shared/settings'
+import {
+  SETTINGS_KEYS,
+  CARD_SIZE_DEFAULTS,
+  CATEGORY_DISPLAY_DEFAULTS,
+  normalizeCardIconSize,
+  normalizeCardSizeSetting,
+  normalizeCategoryDisplaySetting,
+} from '../../shared/settings'
 
 // Keep these defaults aligned with schema.sql seed settings.
 export const DEFAULT_SETTINGS: Settings = {
@@ -46,9 +53,10 @@ export const DEFAULT_SETTINGS: Settings = {
       { name: 'Bing', icon: '', url_template: 'https://www.bing.com/search?q={q}' },
     ],
   },
-  card_size: { width: 80, height: 60 },
+  card_size: { ...CARD_SIZE_DEFAULTS },
   card_style: 'info',
   card_icon_size: 60,
+  category_display: { ...CATEGORY_DISPLAY_DEFAULTS },
   card_show_description: true,
   card_description_mode: 'always',
   card_background_color: '#ffffff',
@@ -156,6 +164,9 @@ export function settingsFromRawMap(raw: Map<string, unknown>): Settings {
     : rawLegacy === false ? 'hidden' : 'always'
   out.card_show_description = out.card_description_mode === 'always'
   out.background = normalizeBackgroundSetting(out.background, DEFAULT_SETTINGS.background)
+  out.card_size = normalizeCardSizeSetting(raw.get('card_size'))
+  out.card_icon_size = normalizeCardIconSize(raw.get('card_icon_size'))
+  out.category_display = normalizeCategoryDisplaySetting(raw.get('category_display'))
   out.backgrounds = normalizeThemeBackgroundSettings(raw.get('backgrounds'), out.background)
   out.navigation = normalizeNavigationSetting(raw.get('navigation'))
   out.most_visited_count = Math.min(20, Math.max(0, Math.round(Number(out.most_visited_count) || 0)))

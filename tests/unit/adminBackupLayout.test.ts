@@ -20,4 +20,11 @@ describe('admin backup layout', () => {
     expect(source).toContain('function rootSelectionState(root: CategoryOption, selectedIds: Set<number>)')
     expect(source.match(/rootSelectionState\(root, selectedCategoryIds\)/g)).toHaveLength(2)
   })
+  it('keeps the mobile export action fixed and within the viewport', () => {
+    const source = readFileSync('src/components/BackupPanel.svelte', 'utf8')
+
+    expect(source).toContain('.export-operation > .primary-button')
+    expect(source).toContain('position: fixed;')
+    expect(source).toContain('padding-bottom: calc(72px + env(safe-area-inset-bottom));')
+  })
 })

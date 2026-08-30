@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ChangePasswordReq } from '../../../shared/types'
+  import type { BookmarkBatchMoveReq, ChangePasswordReq } from '../../../shared/types'
   import BackupPanel from '../BackupPanel.svelte'
   import BookmarkListPanel from './BookmarkListPanel.svelte'
   import CategoryListPanel from './CategoryListPanel.svelte'
@@ -43,6 +43,7 @@
   export let onEditBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
   export let onDeleteBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
   export let onBatchDeleteBookmarks: ((ids: number[]) => AsyncVoid) | undefined = undefined
+  export let onBatchMoveBookmarks: ((payload: BookmarkBatchMoveReq) => AsyncVoid) | undefined = undefined
   export let onSubmitSettings: ((payload: SettingsFormValue) => AsyncVoid) | undefined = undefined
   export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
   export let onSortCategories: CategorySortHandler | undefined = undefined
@@ -79,6 +80,7 @@
       {onEditBookmark}
       {onDeleteBookmark}
       {onBatchDeleteBookmarks}
+      {onBatchMoveBookmarks}
       {onSortBookmarks}
     />
   {:else if activeTab === 'analytics'}

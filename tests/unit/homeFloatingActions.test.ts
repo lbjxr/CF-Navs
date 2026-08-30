@@ -21,4 +21,9 @@ describe('home floating actions', () => {
     expect(source).toContain('right: max(1rem, env(safe-area-inset-right));')
     expect(source).toContain('bottom: max(1rem, env(safe-area-inset-bottom));')
   })
+  it('provides an authenticated root-category creation action', () => {
+    expect(source).toContain('data-testid="home-create-root-category"')
+    expect(source).toContain('aria-label="新增主分类"')
+    expect(source).toContain('on:click={handleOpenCreateRootCategory}')
+  })
 })

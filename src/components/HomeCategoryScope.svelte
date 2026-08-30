@@ -20,6 +20,8 @@
   export let panelId = ''
   export let reserveActions = false
   export let onSelect: ((id: number) => AsyncVoid) | undefined = undefined
+  export let onCreateSubcategory: (() => AsyncVoid) | undefined = undefined
+  export let highlightedId: number | null = null
 
   let tabList: HTMLElement | null = null
 
@@ -49,16 +51,27 @@
     tabs[nextIndex]?.click()
   }
 </script>
-
-<section class="category-scope" class:has-children={children.length > 0} class:has-actions={reserveActions} data-home-category-scope={rootId} aria-labelledby={`home-category-heading-${rootId}`}>
+<section class="category-scope" class:has-children={children.length > 0} class:has-actions={reserveActions} class:highlighted={highlightedId === rootId} data-home-category-scope={rootId} aria-labelledby={`home-category-heading-${rootId}`}>
   <div class="scope-heading">
-    <CategoryIcon category={{ id: rootId, title, icon }} size={40} className="scope-icon" />
+    <CategoryIcon category={{ id: rootId, title, icon }} size="var(--category-root-icon-size, 40px)" className="scope-icon" />
     <div class="scope-accent" aria-hidden="true"></div>
     <div class="scope-copy">
       <div class="scope-title-row">
         <h2 id={`home-category-heading-${rootId}`} title={title}>
           {title}<span class="scope-total-count">（{totalCount}）</span>
         </h2>
+        {#if reserveActions && onCreateSubcategory}
+          <button
+            type="button"
+            class="scope-action"
+            aria-label="新建子分类"
+            title="新建子分类"
+            on:click={() => void onCreateSubcategory?.()}
+          >
+            <span class="scope-action-label">新建子分类</span>
+            <span aria-hidden="true">＋</span>
+          </button>
+        {/if}
         {#if children.length > 0}
           <div
             class="scope-tabs"
@@ -86,7 +99,6 @@
               {@const childActive = String(activeId) === String(child.id)}
               <button
                 id={`home-category-tab-${child.id}`}
-                type="button"
                 role="tab"
                 aria-selected={childActive}
                 aria-controls={resolvedPanelId}
@@ -96,7 +108,7 @@
                 on:click={() => select(child.id)}
               >
                 {#if child.icon}
-                  <CategoryIcon category={{ id: child.id, title: child.title, icon: child.icon }} size={22} className="scope-tab-icon" />
+                  <CategoryIcon category={{ id: child.id, title: child.title, icon: child.icon }} size="var(--category-child-icon-size, 22px)" className="scope-tab-icon" />
                 {/if}
                 <span>{child.title}</span>
                 <small>{child.count}</small>
@@ -126,8 +138,8 @@
   }
 
   .scope-heading :global(.scope-icon) {
-    width: 40px;
-    height: 40px;
+    width: var(--category-root-icon-size, 40px);
+    height: var(--category-root-icon-size, 40px);
     border-radius: 11px;
   }
 
@@ -161,12 +173,17 @@
     margin: 0;
   }
 
+  .category-scope.highlighted {
+    outline: 2px solid color-mix(in srgb, var(--home-accent-color) 68%, transparent);
+    outline-offset: 7px;
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--home-accent-color) 12%, transparent);
+  }
   .scope-copy h2 {
     flex: 0 1 auto;
     min-width: 0;
     max-width: 100%;
     color: var(--home-text-color);
-    font-size: 1.35rem;
+    font-size: var(--category-root-font-size, 1.35rem);
     font-weight: 700;
     line-height: 1.15;
     letter-spacing: 0;
@@ -186,6 +203,30 @@
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     opacity: var(--home-muted-opacity);
+  }
+  .scope-action {
+    display: inline-flex;
+    flex: 0 0 auto;
+    min-height: 34px;
+    align-items: center;
+    gap: 4px;
+    padding: 0.34rem 0.62rem;
+    border: 1px solid var(--home-stat-border);
+    border-radius: 7px;
+    background: var(--home-stat-bg);
+    color: var(--home-text-color);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .scope-action:hover,
+  .scope-action:focus-visible {
+    outline: none;
+    border-color: var(--home-accent-color);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--home-accent-color) 20%, transparent);
   }
 
   .scope-tabs {
@@ -215,9 +256,8 @@
     border: 1px solid transparent;
     border-radius: 6px;
     background: transparent;
-    color: var(--home-text-color);
     font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--category-child-font-size, 0.82rem);
     font-weight: 600;
     white-space: nowrap;
     cursor: pointer;
@@ -235,11 +275,9 @@
     outline: 2px solid color-mix(in srgb, var(--home-accent-color) 58%, transparent);
     outline-offset: 2px;
   }
-
   .scope-tabs button.active {
     border-color: color-mix(in srgb, var(--home-accent-color) 34%, var(--home-stat-border));
     background: var(--home-stat-bg);
-    opacity: 1;
   }
 
   .scope-tabs button.active::after {
@@ -254,9 +292,9 @@
   }
 
   .scope-tabs :global(.scope-tab-icon) {
-    width: 18px;
-    height: 18px;
-    min-width: 18px;
+    width: var(--category-child-icon-size, 18px);
+    height: var(--category-child-icon-size, 18px);
+    min-width: var(--category-child-icon-size, 18px);
     border-radius: 5px;
   }
 
@@ -275,13 +313,13 @@
     }
 
     .scope-heading :global(.scope-icon) {
-      width: 36px;
-      height: 36px;
+      width: var(--category-root-icon-size, 36px);
+      height: var(--category-root-icon-size, 36px);
     }
 
     .scope-copy h2 {
       max-width: calc(100% - 5.5rem);
-      font-size: 1.16rem;
+      font-size: var(--category-root-font-size, 1.16rem);
     }
 
     .category-scope.has-children .scope-copy h2 {
@@ -312,8 +350,19 @@
     .scope-tabs button {
       min-height: 32px;
       padding: 0.28rem 0.56rem;
-      font-size: 0.78rem;
+      font-size: var(--category-child-font-size, 0.78rem);
     }
 
+    .scope-action {
+      width: 36px;
+      min-height: 36px;
+      justify-content: center;
+      padding: 0;
+      font-size: 0;
+    }
+
+    .scope-action-label {
+      display: none;
+    }
   }
 </style>

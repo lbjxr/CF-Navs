@@ -18,6 +18,7 @@
   import NavigationSettingsSection from './settings/NavigationSettingsSection.svelte'
   import SearchEngineSettingsSection from './settings/SearchEngineSettingsSection.svelte'
   import SettingsHomePreview from './settings/SettingsHomePreview.svelte'
+  import CategoryDisplaySettingsSection from './settings/CategoryDisplaySettingsSection.svelte'
   import PasswordChangePanel from './PasswordChangePanel.svelte'
 
   type SettingsPanelValue = SettingsFormModel
@@ -68,7 +69,7 @@
   $: backgroundValid = lightBackgroundValid && darkBackgroundValid
   $: cardSizeValid =
     Number.isFinite(normalizedForm.card_size.width) &&
-    normalizedForm.card_size.width >= 80 &&
+    normalizedForm.card_size.width >= 44 &&
     normalizedForm.card_size.width <= 400 &&
     Number.isFinite(normalizedForm.card_size.height) &&
     normalizedForm.card_size.height >= 0 &&
@@ -157,6 +158,7 @@
               advancedOpen={appearanceAdvancedOpen}
               onAdvancedChange={handleAppearanceAdvancedChange}
             />
+            <CategoryDisplaySettingsSection bind:form {saving} />
           {:else if activeSectionId === 'layout'}
             <NavigationSettingsSection bind:form {saving} />
           {:else if activeSectionId === 'search'}

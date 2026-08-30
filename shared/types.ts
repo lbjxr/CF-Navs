@@ -105,6 +105,13 @@ export interface CardSizeSetting {
   height: number // 卡片最小高度 (px)
 }
 
+export interface CategoryDisplaySetting {
+  root_font_size: number // 一级分类标题字号 (12-28px)
+  root_icon_size: number // 一级分类图标尺寸 (14-36px)
+  child_font_size: number // 二级分类标题字号 (11-24px)
+  child_icon_size: number // 二级分类图标尺寸 (12-32px)
+}
+
 export interface ContentLayoutSetting {
   max_width: number
   max_width_unit: 'px' | '%'
@@ -140,6 +147,7 @@ export interface Settings {
   card_size: CardSizeSetting
   card_style: CardStyle // 新增：卡片风格
   card_icon_size: number // 新增：图标尺寸 (px)
+  category_display: CategoryDisplaySetting
   card_show_description: boolean // 新增：是否显示描述（详情风格）
   card_description_mode: DescriptionDisplayMode
   card_background_color: string // 卡片背景颜色，例如 '#ffffff'
@@ -261,6 +269,7 @@ export interface PublicSettings {
   card_size: CardSizeSetting // 添加卡片尺寸
   card_style: CardStyle // 添加卡片风格
   card_icon_size: number // 添加图标尺寸
+  category_display: CategoryDisplaySetting
   card_show_description: boolean // 添加描述显示开关
   card_description_mode: DescriptionDisplayMode
   card_background_color: string
@@ -364,6 +373,28 @@ export interface BookmarkReorganizeReq {
     category_id: number
     ids: number[]
   }>
+}
+
+export type BookmarkBatchMovePosition = 'end' | 'start'
+
+export interface BookmarkBatchMoveExpected {
+  id: number
+  category_id: number
+  sort: number
+}
+
+/** POST /api/bookmarks/batch-move 的请求。expected 用于拒绝过期选择。 */
+export interface BookmarkBatchMoveReq {
+  ids: number[]
+  category_id: number
+  position: BookmarkBatchMovePosition
+  expected: BookmarkBatchMoveExpected[]
+}
+
+export interface BookmarkBatchMoveResp {
+  moved: number
+  category_id: number
+  position: BookmarkBatchMovePosition
 }
 
 export interface CategorySortReq extends SortReq {

@@ -27,8 +27,11 @@
     resolveHomeActiveSectionId,
     resolveHomeCategorySelection,
   } from '../lib/homeData'
+  import { CATEGORY_DISPLAY_DEFAULTS } from '../../shared/settings'
+  import { buildCategoryTreeOptions } from '../lib/categorySelect'
   import { getErrorMessage } from '../lib/api'
   import { reorderByIds } from '../lib/reorder'
+  import { buildHomeSortCategoryOrders, moveBookmarkToCategory } from '../lib/homeSort'
   import type { SortTransfer } from '../lib/sortableList'
 
   type AsyncVoid<T = void> = T | Promise<T>
@@ -53,7 +56,10 @@
   export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
   export let onEditBookmark: ((bookmark: PublicBookmark) => AsyncVoid) | undefined = undefined
   export let onReorganizeBookmarks: ((categoryOrders: BookmarkReorganizeReq['category_orders']) => AsyncVoid) | undefined = undefined
+  export let onOpenCreateCategory: ((parentId?: string | number | null) => AsyncVoid) | undefined = undefined
+  export let focusCategoryId: number | null = null
   export let onSwitchToAdmin: (() => AsyncVoid) | undefined = undefined
+  export let onOpenCreateRootCategory: (() => AsyncVoid) | undefined = undefined
   export let onLogout: (() => AsyncVoid) | undefined = undefined
   export let onOpenLogin: (() => AsyncVoid) | undefined = undefined
   export let activeTheme: 'light' | 'dark' = 'light'
@@ -74,6 +80,7 @@
   let homeSortSaving = false
   let homeSortDraft: PublicBookmark[] = []
   let homeSortError = ''
+  let lastFocusedCategoryId: number | null = null
 
   $: sortedCategories = homeData.getSortedCategories(categories)
   $: categoryForest = homeData.getCategoryForest(categories)
@@ -83,6 +90,14 @@
   $: navigationSections = getHomeSections(categoryForest, allCategoryBookmarks)
   $: categoryGroups = getHomeCategoryGroups(categoryForest, selectedCategoryIds)
   $: activeId = resolveHomeActiveSectionId(navigationSections, activeId)
+  $: if (
+    focusCategoryId != null &&
+    focusCategoryId !== lastFocusedCategoryId &&
+    sortedCategories.some((category) => category.id === focusCategoryId)
+  ) {
+    lastFocusedCategoryId = focusCategoryId
+    void focusCategory(focusCategoryId)
+  }
 
   $: if (searchQuery !== deferredSearchQuery) scheduleSearchFilterUpdate(searchQuery)
   $: normalizedSearchQuery = normalizeSearchQuery(deferredSearchQuery)
@@ -96,6 +111,7 @@
   $: visibleCategoryForest = getVisibleCategoryForest(categoryForest, visibleCategoryIds)
   $: visibleCategories = visibleCategoryForest.flatMap((category) => [category, ...category.children])
   $: visibleCategoryBookmarks = groupBookmarksByCategory(visibleBookmarks)
+  $: categoryTreeOptions = buildCategoryTreeOptions(sortedCategories)
   $: mostVisitedBookmarks = hasSearchQuery
     ? []
     : getMostVisitedBookmarks(sortedBookmarks, settings?.most_visited_count ?? 8)
@@ -116,6 +132,7 @@
   $: navigation = settings?.navigation ?? { position: 'left', always_expanded: false, top_layout: 'scroll' } satisfies NavigationSetting
   $: isTopNavigation = navigation.position === 'top'
   $: navigationScrollOffset = isTopNavigation ? TOP_NAV_SCROLL_TOP_OFFSET : LEFT_NAV_SCROLL_TOP_OFFSET
+  $: categoryDisplay = settings?.category_display ?? CATEGORY_DISPLAY_DEFAULTS
   $: cardTextColor = settings?.card_text_color?.trim() ?? ''
   let topNavHeight = 0
   // 顶部分行导航高度增长时，用实测高度驱动首页顶部留白（+ 12px 顶距 + 12px 余量）。
@@ -125,6 +142,10 @@
     `--content-margin-x: ${contentLayout.margin_x}px`,
     `--content-margin-top: ${contentLayout.margin_top}%`,
     `--content-margin-bottom: ${contentLayout.margin_bottom}%`,
+    `--category-root-font-size-base: ${categoryDisplay.root_font_size}px`,
+    `--category-root-icon-size-base: ${categoryDisplay.root_icon_size}px`,
+    `--category-child-font-size-base: ${categoryDisplay.child_font_size}px`,
+    `--category-child-icon-size-base: ${categoryDisplay.child_icon_size}px`,
     cardTextColor ? `--card-text-color: ${cardTextColor}` : '',
     topNavPadding ? `--top-nav-padding: ${topNavPadding}` : '',
   ].filter(Boolean).join('; ')
@@ -179,6 +200,17 @@
     nextDraft = replaceCategoryOrder(nextDraft, toCategoryId, transfer.targetIds)
     homeSortDraft = nextDraft
   }
+  function handleMoveBookmark(bookmark: PublicBookmark, targetCategoryId: number): void {
+    if (!isAuthenticated || homeSortSaving || !sortedCategories.some((category) => category.id === targetCategoryId)) return
+
+    const sourceDraft = homeSortMode ? homeSortDraft : sortedBookmarks
+    const nextDraft = moveBookmarkToCategory(sourceDraft, bookmark.id, targetCategoryId)
+    if (!nextDraft) return
+
+    homeSortError = ''
+    homeSortMode = true
+    homeSortDraft = nextDraft
+  }
 
   async function saveHomeSort(): Promise<void> {
     if (!onReorganizeBookmarks || !homeSortMode) {
@@ -189,11 +221,7 @@
     homeSortSaving = true
     homeSortError = ''
     try {
-      const grouped = groupBookmarksByCategory(homeSortDraft)
-      const categoryOrders: BookmarkReorganizeReq['category_orders'] = [...grouped].map(([categoryId, items]) => ({
-        category_id: categoryId,
-        ids: items.map((item) => item.id),
-      }))
+      const categoryOrders = buildHomeSortCategoryOrders(sortedCategories, homeSortDraft)
       await onReorganizeBookmarks(categoryOrders)
       cancelHomeSort()
     } catch (error) {
@@ -324,6 +352,25 @@
     })
     window.scrollTo({ top: finalScroll, behavior: 'smooth' })
   }
+  async function focusCategory(categoryId: number): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const currentForest = homeData.getCategoryForest(categories)
+      const selection = resolveHomeCategorySelection(currentForest, categoryId)
+      const isRoot = selection.root?.id === categoryId
+      const isChild = selection.child?.id === categoryId
+      if (selection.root && (isRoot || isChild)) {
+        setSelectedCategory(selection.root.id, categoryId)
+        activeId = `category-${categoryId}`
+        scrollSpySuppressedUntil = performance.now() + 900
+        await tick()
+        const tab = document.getElementById(`home-category-tab-${categoryId}`)
+        const target = tab ?? document.querySelector(`[data-home-category-scope="${categoryId}"]`)
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+  }
 
   function handleScopeSelect(rootId: number, categoryId: string | number): void {
     setSelectedCategory(rootId, categoryId)
@@ -365,6 +412,7 @@
     {activeTheme}
     {activeThemeMode}
     {onToggleTheme}
+    {onOpenCreateRootCategory}
     {onSwitchToAdmin}
     {onLogout}
     {onOpenLogin}
@@ -407,9 +455,9 @@
                 <header class="search-group-header">
                   <div class="search-group-title">
                     {#if category.icon}
-                      <CategoryIcon category={category} size={38} className="search-category-icon" />
+                      <CategoryIcon category={category} size="var(--category-root-icon-size, 38px)" className="search-category-icon" />
                     {/if}
-                    <h2 id={`search-category-${category.id}`}>{category.title}</h2>
+                    <h2 id={`search-category-${category.id}`} style={`font-size: var(--category-root-font-size, 1.28rem)`}>{category.title}</h2>
                   </div>
                   <span>{getCategoryTreeBookmarkCount(category, visibleCategoryBookmarks)} 个匹配站点</span>
                 </header>
@@ -507,8 +555,10 @@
                   count: allCategoryBookmarks.get(child.id)?.length ?? 0,
                 }))}
                 activeId={selectedCategory.id}
+                highlightedId={focusCategoryId}
                 {panelId}
                 reserveActions={isAuthenticated}
+                onCreateSubcategory={isAuthenticated && onOpenCreateCategory ? () => onOpenCreateCategory?.(category.id) : undefined}
                 onSelect={(id) => handleScopeSelect(category.id, id)}
               />
 
@@ -518,34 +568,65 @@
                 role={category.children.length > 0 ? 'tabpanel' : undefined}
                 aria-labelledby={category.children.length > 0 ? `home-category-tab-${selectedCategory.id}` : undefined}
               >
-                <CategorySection
-                  category={selectedCategory}
-                  bookmarks={selectedBookmarks}
-                  level={2}
-                  showHeading={false}
-                  inlineActions={true}
-                  showEmpty={true}
-                  canAddBookmark={isAuthenticated}
-                  cardWidth={settings?.card_size?.width ?? 80}
-                  cardHeight={settings?.card_size?.height ?? 60}
-                  cardStyle={settings?.card_style ?? 'info'}
-                  cardIconSize={settings?.card_icon_size ?? 60}
-                  cardShowDescription={settings?.card_show_description ?? true}
-                  cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
-                  cardIconShowTitle={settings?.card_icon_show_title ?? true}
-                  canSort={isAuthenticated}
-                  controlledSortMode={homeSortMode}
-                  sortGroup="home-bookmark-categories"
-                  sortCategoryId={selectedCategory.id}
-                  showSortActions={false}
-                  onAddBookmark={onOpenCreateBookmark}
-                  onEditBookmark={onEditBookmark}
-                  onRequestSort={startHomeSort}
-                  onCancelSortSession={cancelHomeSort}
-                  onSaveSortSession={saveHomeSort}
-                  onSortDraft={handleHomeSortDraft}
-                  onSortTransfer={handleHomeSortTransfer}
-                />
+                {#if homeSortMode}
+                  {#each [category, ...category.children] as sortableCategory (sortableCategory.id)}
+                    <CategorySection
+                      category={sortableCategory}
+                      bookmarks={displayCategoryBookmarks.get(sortableCategory.id) ?? []}
+                      level={sortableCategory.parent_id == null ? 1 : 2}
+                      showHeading={true}
+                      showEmpty={true}
+                      canAddBookmark={isAuthenticated}
+                      cardWidth={settings?.card_size?.width ?? 80}
+                      cardHeight={settings?.card_size?.height ?? 60}
+                      cardStyle={settings?.card_style ?? 'info'}
+                      cardIconSize={settings?.card_icon_size ?? 60}
+                      cardShowDescription={settings?.card_show_description ?? true}
+                      cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+                      cardIconShowTitle={settings?.card_icon_show_title ?? true}
+                      canSort={isAuthenticated}
+                      controlledSortMode={homeSortMode}
+                      sortGroup="home-bookmark-categories"
+                      sortCategoryId={sortableCategory.id}
+                      showSortActions={false}
+                      moveCategories={categoryTreeOptions}
+                      onMoveBookmark={handleMoveBookmark}
+                      onSortDraft={handleHomeSortDraft}
+                      onSortTransfer={handleHomeSortTransfer}
+                    />
+                  {/each}
+                {:else}
+                  <CategorySection
+                    category={selectedCategory}
+                    bookmarks={selectedBookmarks}
+                    level={2}
+                    showHeading={false}
+                    inlineActions={true}
+                    showEmpty={true}
+                    canAddBookmark={isAuthenticated}
+                    cardWidth={settings?.card_size?.width ?? 80}
+                    cardHeight={settings?.card_size?.height ?? 60}
+                    cardStyle={settings?.card_style ?? 'info'}
+                    cardIconSize={settings?.card_icon_size ?? 60}
+                    cardShowDescription={settings?.card_show_description ?? true}
+                    cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+                    cardIconShowTitle={settings?.card_icon_show_title ?? true}
+                    canSort={isAuthenticated}
+                    controlledSortMode={homeSortMode}
+                    sortGroup="home-bookmark-categories"
+                    sortCategoryId={selectedCategory.id}
+                    showSortActions={false}
+                    moveCategories={categoryTreeOptions}
+                    onMoveBookmark={handleMoveBookmark}
+                    onAddBookmark={onOpenCreateBookmark}
+                    onEditBookmark={onEditBookmark}
+                    onRequestSort={startHomeSort}
+                    onCancelSortSession={cancelHomeSort}
+                    onSaveSortSession={saveHomeSort}
+                    onSortDraft={handleHomeSortDraft}
+                    onSortTransfer={handleHomeSortTransfer}
+                  />
+                {/if}
               </div>
             </section>
             {/each}
@@ -591,6 +672,10 @@
     --home-stat-border: rgba(148, 163, 184, 0.24);
     --home-stat-shadow: 0 3px 10px rgba(15, 23, 42, 0.06);
     --home-accent-color: var(--theme-accent-color, #2563eb);
+    --category-root-font-size: var(--category-root-font-size-base, 16px);
+    --category-root-icon-size: var(--category-root-icon-size-base, 20px);
+    --category-child-font-size: var(--category-child-font-size-base, 14px);
+    --category-child-icon-size: var(--category-child-icon-size-base, 18px);
     --toc-expanded-width: 232px;
     color: var(--home-text-color);
     isolation: isolate;
@@ -733,9 +818,9 @@
   }
 
   .search-group-title :global(.search-category-icon) {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
+    width: var(--category-root-icon-size, 38px);
+    height: var(--category-root-icon-size, 38px);
+    min-width: var(--category-root-icon-size, 38px);
     border-radius: 9px;
   }
 
@@ -820,9 +905,11 @@
       padding: 1rem 1rem var(--content-margin-bottom, 0%);
     }
 
-    .home-shell.top-navigation-layout {
-      /* 移动端顶部导航固定 48px，不随桌面分行高度变化 */
-      padding-top: 4.5rem;
+    .home-shell {
+      --category-root-font-size: calc(var(--category-root-font-size-base, 16px) * 0.88);
+      --category-root-icon-size: calc(var(--category-root-icon-size-base, 20px) * 0.88);
+      --category-child-font-size: calc(var(--category-child-font-size-base, 14px) * 0.88);
+      --category-child-icon-size: calc(var(--category-child-icon-size-base, 18px) * 0.88);
     }
 
     .scope-section-list {

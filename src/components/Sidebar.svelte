@@ -456,7 +456,7 @@
             on:click={() => handleItemClick(item.id)}
           >
             {#if item.icon}
-              <CategoryIcon category={getCategoryIconValue(item)} size={22} className="top-category-icon" />
+              <CategoryIcon category={getCategoryIconValue(item)} size="var(--category-root-icon-size, 22px)" className="top-category-icon" />
             {/if}
             <span>{item.title}</span>
             {#if item.count != null}<small>{item.count}</small>{/if}
@@ -510,7 +510,7 @@
             >
               <span class="top-submenu-title">
                 {#if child.icon}
-                  <CategoryIcon category={getCategoryIconValue(child)} size={22} className="top-submenu-icon" />
+                  <CategoryIcon category={getCategoryIconValue(child)} size="var(--category-child-icon-size, 22px)" className="top-submenu-icon" />
                 {/if}
                 <span>{child.title}</span>
               </span>
@@ -578,7 +578,7 @@
             >
               {#if item.icon}
                 <span class="toc-icon-slot">
-                  <CategoryIcon category={getCategoryIconValue(item)} size={26} className="toc-category-icon" />
+                  <CategoryIcon category={getCategoryIconValue(item)} size="var(--category-root-icon-size, 26px)" className="toc-category-icon" />
                 </span>
               {:else}
                 <span class="toc-slip"></span>
@@ -611,7 +611,7 @@
                 >
                   <span class="toc-child-title">
                     {#if child.icon}
-                      <CategoryIcon category={getCategoryIconValue(child)} size={21} className="toc-child-icon" />
+                      <CategoryIcon category={getCategoryIconValue(child)} size="var(--category-child-icon-size, 21px)" className="toc-child-icon" />
                     {/if}
                     <span>{child.title}</span>
                   </span>
@@ -769,7 +769,7 @@
     background: transparent;
     color: var(--toc-text);
     font: inherit;
-    font-size: 14px;
+    font-size: var(--category-root-font-size, 14px);
     white-space: nowrap;
     cursor: pointer;
   }
@@ -793,10 +793,15 @@
 
   .top-item :global(.top-category-icon),
   .top-submenu-title :global(.top-submenu-icon) {
-    width: 22px;
-    height: 22px;
-    min-width: 22px;
+    width: var(--category-root-icon-size, 22px);
+    height: var(--category-root-icon-size, 22px);
+    min-width: var(--category-root-icon-size, 22px);
     border-radius: 6px;
+  }
+  .top-submenu-title :global(.top-submenu-icon) {
+    width: var(--category-child-icon-size, 22px);
+    height: var(--category-child-icon-size, 22px);
+    min-width: var(--category-child-icon-size, 22px);
   }
 
   .top-submenu-toggle {
@@ -847,7 +852,7 @@
     padding: 0 10px;
     background: transparent;
     color: var(--toc-text);
-    text-align: left;
+    font-size: var(--category-child-font-size, 14px);
     cursor: pointer;
   }
 
@@ -1087,7 +1092,7 @@
     border-radius: 6px;
     padding: 0 8px;
     background: transparent;
-    color: var(--toc-text);
+    font-size: var(--category-child-font-size, 14px);
     text-align: left;
     cursor: pointer;
   }
@@ -1116,9 +1121,9 @@
   }
 
   .toc-child-title :global(.toc-child-icon) {
-    width: 21px;
-    height: 21px;
-    min-width: 21px;
+    width: var(--category-child-icon-size, 21px);
+    height: var(--category-child-icon-size, 21px);
+    min-width: var(--category-child-icon-size, 21px);
     border-radius: 6px;
   }
 
@@ -1165,9 +1170,9 @@
   }
 
   .toc-icon-slot :global(.toc-category-icon) {
-    width: 26px;
-    height: 26px;
-    min-width: 26px;
+    width: var(--category-root-icon-size, 26px);
+    height: var(--category-root-icon-size, 26px);
+    min-width: var(--category-root-icon-size, 26px);
     border-radius: 7px;
     transition: border-color var(--transition-base), transform var(--transition-base);
   }

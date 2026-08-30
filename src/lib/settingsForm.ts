@@ -1,4 +1,11 @@
 import type { BackgroundPresetId, BackgroundSetting, SearchEngine, SearchEngineSetting, ThemeMode } from '../../shared/types'
+import {
+  CARD_SIZE_DEFAULTS,
+  normalizeCardIconSize,
+  normalizeCardSizeSetting,
+  CATEGORY_DISPLAY_DEFAULTS,
+  normalizeCategoryDisplaySetting,
+} from '../../shared/settings'
 import type { SettingsFormValue } from './appData'
 import { parseCssColor, splitCssColorAlpha } from './color'
 import {
@@ -68,9 +75,10 @@ export const emptySettingsForm: SettingsFormModel = {
     current: defaultSearchEngine.current,
     engines: defaultSearchEngine.engines.map((engine) => ({ ...engine })),
   },
-  card_size: { width: 80, height: 60 },
+  card_size: { ...CARD_SIZE_DEFAULTS },
   card_style: 'info',
   card_icon_size: 60,
+  category_display: { ...CATEGORY_DISPLAY_DEFAULTS },
   card_show_description: true,
   card_description_mode: 'always',
   card_background_color: '#ffffff',
@@ -110,6 +118,7 @@ export function cloneSettingsForm(source: SettingsFormModel): SettingsFormModel 
     card_size: { ...source.card_size },
     card_style: source.card_style,
     card_icon_size: source.card_icon_size,
+    category_display: { ...source.category_display },
     card_show_description: source.card_description_mode === 'always',
     card_description_mode: source.card_description_mode,
     card_background_color: source.card_background_color,
@@ -162,6 +171,7 @@ export function createSettingsFormState(
   const darkBackground = source?.backgrounds?.dark ?? background
   const searchEngine = source?.search_engine
   const cardSize = source?.card_size
+  const categoryDisplay = source?.category_display
   const contentLayout = source?.content_layout
   const navigation = source?.navigation
   return {
@@ -203,18 +213,16 @@ export function createSettingsFormState(
       engines:
         searchEngine?.engines && searchEngine.engines.length > 0
           ? searchEngine.engines.map((engine) => ({
-              name: engine.name ?? '',
-              icon: engine.icon ?? '',
-              url_template: engine.url_template ?? '',
-            }))
+            name: engine.name ?? '',
+            icon: engine.icon ?? '',
+            url_template: engine.url_template ?? '',
+          }))
           : defaultSearchEngine.engines.map((engine) => ({ ...engine })),
     },
-    card_size: {
-      width: typeof cardSize?.width === 'number' ? cardSize.width : 80,
-      height: typeof cardSize?.height === 'number' ? cardSize.height : 60,
-    },
+    card_size: normalizeCardSizeSetting(cardSize),
     card_style: source?.card_style ?? 'info',
-    card_icon_size: typeof source?.card_icon_size === 'number' ? source.card_icon_size : 60,
+    card_icon_size: normalizeCardIconSize(source?.card_icon_size),
+    category_display: normalizeCategoryDisplaySetting(categoryDisplay),
     card_show_description: source?.card_show_description ?? true,
     card_description_mode: source?.card_description_mode ?? (source?.card_show_description === false ? 'hidden' : 'always'),
     card_background_color: source?.card_background_color ?? '#ffffff',
@@ -289,12 +297,10 @@ export function normalizeSettingsForm(source: SettingsFormModel): SettingsFormMo
       dark: darkBackground,
     },
     search_engine: { current, engines },
-    card_size: {
-      width: clampNumber(source.card_size.width, 80, 400),
-      height: clampNumber(source.card_size.height, 0, 300),
-    },
+    card_size: normalizeCardSizeSetting(source.card_size),
     card_style: source.card_style === 'icon' ? 'icon' : 'info',
-    card_icon_size: clampNumber(source.card_icon_size, 40, 100),
+    card_icon_size: normalizeCardIconSize(source.card_icon_size),
+    category_display: normalizeCategoryDisplaySetting(source.category_display),
     card_show_description: source.card_description_mode === 'always',
     card_description_mode: source.card_description_mode,
     card_background_color: cardBackgroundColor.color,
