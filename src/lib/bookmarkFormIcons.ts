@@ -13,6 +13,7 @@ import {
 export const emptyBookmarkForm: BookmarkFormValue = {
   title: '',
   url: '',
+  internal_url: '',
   icon: '',
   icon_source: '',
   icon_background_color: '',
@@ -32,6 +33,7 @@ export function createBookmarkFormValue(
     category_id: value?.category_id ?? fallbackCategoryId,
     title: value?.title ?? '',
     url: value?.url ?? '',
+    internal_url: value?.internal_url ?? '',
     icon: value?.icon ?? '',
     icon_source: value?.icon_source ?? '',
     icon_background_color: value?.icon_background_color ?? '',
@@ -132,6 +134,7 @@ export function buildBookmarkSubmitPayload(form: BookmarkFormValue, iconifyName:
     ...form,
     title: form.title.trim(),
     url: form.url.trim(),
+    internal_url: (form.internal_url ?? '').trim(),
     icon: submitIcon,
     icon_source: submitIconSource,
     icon_background_color: form.icon_background_color.trim(),

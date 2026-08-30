@@ -38,17 +38,18 @@ export async function createBookmark(db: D1Database, req: BookmarkUpsertReq): Pr
   await db
    .prepare(
     `INSERT INTO bookmarks (
-           category_id, title, url, icon, icon_source, icon_background_color,
+           category_id, title, url, internal_url, icon, icon_source, icon_background_color,
            description, description_mode, open_method, is_private, sort, created_at
          )
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT MAX(sort) FROM bookmarks WHERE category_id = ?), -1) + 1, ?
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT MAX(sort) FROM bookmarks WHERE category_id = ?), -1) + 1, ?
          WHERE EXISTS (SELECT 1 FROM categories WHERE id = ?)
-         RETURNING id, category_id, title, url, icon, icon_source, icon_background_color, icon_blob, description, description_mode, open_method, is_private, sort, click_count, created_at`,
+         RETURNING id, category_id, title, url, internal_url, icon, icon_source, icon_background_color, icon_blob, description, description_mode, open_method, is_private, sort, click_count, created_at`,
    )
    .bind(
     req.category_id,
     req.title,
     req.url,
+    req.internal_url ?? null,
     req.icon ?? null,
     req.icon_source ?? null,
     req.icon_background_color ?? null,
@@ -81,6 +82,7 @@ export async function updateBookmark(
          SET category_id = ?,
              title = ?,
              url = ?,
+             internal_url = ?,
              icon_blob = CASE
                WHEN ((icon IS NULL AND ? IS NULL) OR icon = ?)
                 AND ((icon_source IS NULL AND ? IS NULL) OR icon_source = ?)
@@ -95,12 +97,13 @@ export async function updateBookmark(
              open_method = COALESCE(?, open_method),
              is_private = ?
          WHERE id = ? AND EXISTS (SELECT 1 FROM categories WHERE id = ?)
-         RETURNING id, category_id, title, url, icon, icon_source, icon_background_color, icon_blob, description, description_mode, open_method, is_private, sort, click_count, created_at`,
+         RETURNING id, category_id, title, url, internal_url, icon, icon_source, icon_background_color, icon_blob, description, description_mode, open_method, is_private, sort, click_count, created_at`,
    )
    .bind(
     req.category_id,
     req.title,
     req.url,
+    req.internal_url ?? null,
     nextIcon,
     nextIcon,
     nextIconSource,

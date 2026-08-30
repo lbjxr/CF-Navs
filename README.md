@@ -16,6 +16,7 @@
     <a href="#界面预览">界面预览</a> ·
     <a href="#快速部署">快速部署</a> ·
     <a href="#本地开发">本地开发</a> ·
+    <a href="CHANGELOG.md">更新日志</a> ·
     <a href="docs/README.md">项目文档</a>
   </p>
 

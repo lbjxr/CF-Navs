@@ -33,6 +33,7 @@ describe('bookmark upsert payload parsing', () => {
         icon_source: 'iconify',
         icon_background_color: '#fff',
         description: 'Code hosting',
+        internal_url: null,
         open_method: 1,
       },
     })
@@ -51,6 +52,7 @@ describe('bookmark upsert payload parsing', () => {
         icon_source: null,
         icon_background_color: null,
         description: null,
+        internal_url: null,
         open_method: undefined,
       },
     })
@@ -123,3 +125,4 @@ describe('bookmark route wiring', () => {
     expect(source).not.toContain('function isNonEmptyString')
   })
 })
+

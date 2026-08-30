@@ -14,6 +14,7 @@ export function createBookmarkDraft(categoryId: string | number | undefined): Pa
     category_id: categoryId,
     title: '',
     url: '',
+    internal_url: '',
     icon: '',
     icon_background_color: '',
     description: '',

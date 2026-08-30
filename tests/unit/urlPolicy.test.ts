@@ -98,6 +98,12 @@ describe('admin form url normalization', () => {
       .toBe('https://github.com/a?b=1')
   })
 
+  it('normalizes the optional internal url independently', () => {
+    expect(toBookmarkPayload({ ...baseForm, internal_url: 'http://192.168.100.111:5666/login' }).internal_url)
+      .toBe('http://192.168.100.111:5666/login')
+    expect(toBookmarkPayload({ ...baseForm, internal_url: '   ' }).internal_url).toBeNull()
+  })
+
   it('sends an unrescuable value through so the server owns the rejection', () => {
     // 前端不假装能修：补不了的原样提交，由服务端返回权威错误，
     // 避免前端悄悄改成一个用户没输入过的地址。

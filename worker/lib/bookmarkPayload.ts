@@ -15,6 +15,7 @@ export interface BookmarkWriteValue {
   category_id: number
   title: string
   url: string
+  internal_url: string | null
   icon: string | null
   icon_source: IconSource | null
   icon_background_color: string | null
@@ -35,6 +36,7 @@ export function parseBookmarkUpsertPayload(body: BookmarkUpsertReq | null): Book
     body.category_id <= 0 ||
     !isNonEmptyString(body.title) ||
     !isNonEmptyString(body.url) ||
+    (body.internal_url !== undefined && body.internal_url !== null && !isNonEmptyString(body.internal_url)) ||
     !isOptionalString(body.icon) ||
     !isOptionalString(body.icon_background_color) ||
     !isOptionalString(body.description) ||
@@ -55,12 +57,18 @@ export function parseBookmarkUpsertPayload(body: BookmarkUpsertReq | null): Book
     return { ok: false, message: 'bookmark url must start with http:// or https://' }
   }
 
+  const internalUrl = body.internal_url?.trim() || null
+  if (internalUrl !== null && !isAllowedBookmarkUrl(internalUrl)) {
+    return { ok: false, message: 'internal bookmark url must start with http:// or https://' }
+  }
+
   return {
     ok: true,
     value: {
       category_id: body.category_id,
       title: body.title.trim(),
       url,
+      internal_url: internalUrl,
       icon: body.icon ?? null,
       icon_source: body.icon_source ?? null,
       icon_background_color: body.icon_background_color?.trim() || null,

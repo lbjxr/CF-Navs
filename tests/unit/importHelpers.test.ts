@@ -80,6 +80,7 @@ describe('normalizeImportBookmark', () => {
     category_id: 10,
     title: 'GitHub',
     url: 'https://github.com',
+    internal_url: null,
     icon: 'https://favicon.im/github.com',
     icon_source: 'favicon_im' as const,
     icon_background_color: '#333',
@@ -179,3 +180,4 @@ describe('remapImportRecords', () => {
     expect(result.categoryIdMap).toEqual(new Map([[20, 1], [10, 2]]))
   })
 })
+

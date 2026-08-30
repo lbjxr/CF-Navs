@@ -40,6 +40,9 @@ export async function ensureSchema(db: D1Database, force = false): Promise<void>
   if (!bookmarkColNames.has("icon_source")) {
     stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN icon_source TEXT"))
   }
+  if (!bookmarkColNames.has("internal_url")) {
+    stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN internal_url TEXT"))
+  }
   if (!bookmarkColNames.has("icon_blob")) {
     stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN icon_blob TEXT"))
   }

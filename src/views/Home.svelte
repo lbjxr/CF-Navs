@@ -351,6 +351,7 @@
 
 <div
   class="home-shell"
+  data-cf-navs-site="1"
   class:top-navigation-layout={isTopNavigation}
   class:persistent-left-navigation={navigation.position === 'left' && navigation.always_expanded && persistentLeftExpanded}
   style={homeShellStyle}
@@ -513,34 +514,92 @@
                 role={category.children.length > 0 ? 'tabpanel' : undefined}
                 aria-labelledby={category.children.length > 0 ? `home-category-tab-${selectedCategory.id}` : undefined}
               >
-                <CategorySection
-                  category={selectedCategory}
-                  bookmarks={selectedBookmarks}
-                  level={2}
-                  showHeading={false}
-                  inlineActions={true}
-                  showEmpty={true}
-                  canAddBookmark={isAuthenticated}
-                  cardWidth={settings?.card_size?.width ?? 80}
-                  cardHeight={settings?.card_size?.height ?? 60}
-                  cardStyle={settings?.card_style ?? 'info'}
-                  cardIconSize={settings?.card_icon_size ?? 60}
-                  cardShowDescription={settings?.card_show_description ?? true}
-                  cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
-                  cardIconShowTitle={settings?.card_icon_show_title ?? true}
-                  canSort={isAuthenticated}
-                  controlledSortMode={homeSortMode}
-                  sortGroup="home-bookmark-categories"
-                  sortCategoryId={selectedCategory.id}
-                  showSortActions={false}
-                  onAddBookmark={onOpenCreateBookmark}
-                  onEditBookmark={onEditBookmark}
-                  onRequestSort={startHomeSort}
-                  onCancelSortSession={cancelHomeSort}
-                  onSaveSortSession={saveHomeSort}
-                  onSortDraft={handleHomeSortDraft}
-                  onSortTransfer={handleHomeSortTransfer}
-                />
+                {#if homeSortMode}
+                  <!-- 排序时展开同一主分类下的所有层级，主分类和子分类都成为独立投放区。 -->
+                  <div class="sort-category-list" aria-label={`${category.title} 下的分类排序`}>
+                    <CategorySection
+                      category={category}
+                      bookmarks={displayCategoryBookmarks.get(category.id) ?? []}
+                      level={1}
+                      showEmpty={true}
+                      canAddBookmark={false}
+                      cardWidth={settings?.card_size?.width ?? 80}
+                      cardHeight={settings?.card_size?.height ?? 60}
+                      cardStyle={settings?.card_style ?? 'info'}
+                      cardIconSize={settings?.card_icon_size ?? 60}
+                      cardShowDescription={settings?.card_show_description ?? true}
+                      cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+                      cardIconShowTitle={settings?.card_icon_show_title ?? true}
+                      canSort={false}
+                      controlledSortMode={homeSortMode}
+                      sortGroup="home-bookmark-categories"
+                      sortCategoryId={category.id}
+                      showSortActions={false}
+                      showSortSessionLabel={false}
+                      onEditBookmark={onEditBookmark}
+                      onCancelSortSession={cancelHomeSort}
+                      onSaveSortSession={saveHomeSort}
+                      onSortDraft={handleHomeSortDraft}
+                      onSortTransfer={handleHomeSortTransfer}
+                    />
+                    {#each category.children as child (child.id)}
+                      <CategorySection
+                        category={child}
+                        bookmarks={displayCategoryBookmarks.get(child.id) ?? []}
+                        level={2}
+                        showEmpty={true}
+                        canAddBookmark={false}
+                        cardWidth={settings?.card_size?.width ?? 80}
+                        cardHeight={settings?.card_size?.height ?? 60}
+                        cardStyle={settings?.card_style ?? 'info'}
+                        cardIconSize={settings?.card_icon_size ?? 60}
+                        cardShowDescription={settings?.card_show_description ?? true}
+                        cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+                        cardIconShowTitle={settings?.card_icon_show_title ?? true}
+                        canSort={false}
+                        controlledSortMode={homeSortMode}
+                        sortGroup="home-bookmark-categories"
+                        sortCategoryId={child.id}
+                        showSortActions={false}
+                        showSortSessionLabel={false}
+                        onEditBookmark={onEditBookmark}
+                        onCancelSortSession={cancelHomeSort}
+                        onSaveSortSession={saveHomeSort}
+                        onSortDraft={handleHomeSortDraft}
+                        onSortTransfer={handleHomeSortTransfer}
+                      />
+                    {/each}
+                  </div>
+                {:else}
+                  <CategorySection
+                    category={selectedCategory}
+                    bookmarks={selectedBookmarks}
+                    level={2}
+                    showHeading={false}
+                    inlineActions={true}
+                    showEmpty={true}
+                    canAddBookmark={isAuthenticated}
+                    cardWidth={settings?.card_size?.width ?? 80}
+                    cardHeight={settings?.card_size?.height ?? 60}
+                    cardStyle={settings?.card_style ?? 'info'}
+                    cardIconSize={settings?.card_icon_size ?? 60}
+                    cardShowDescription={settings?.card_show_description ?? true}
+                    cardDescriptionMode={settings?.card_description_mode ?? (settings?.card_show_description === false ? 'hidden' : 'always')}
+                    cardIconShowTitle={settings?.card_icon_show_title ?? true}
+                    canSort={isAuthenticated}
+                    controlledSortMode={homeSortMode}
+                    sortGroup="home-bookmark-categories"
+                    sortCategoryId={selectedCategory.id}
+                    showSortActions={false}
+                    onAddBookmark={onOpenCreateBookmark}
+                    onEditBookmark={onEditBookmark}
+                    onRequestSort={startHomeSort}
+                    onCancelSortSession={cancelHomeSort}
+                    onSaveSortSession={saveHomeSort}
+                    onSortDraft={handleHomeSortDraft}
+                    onSortTransfer={handleHomeSortTransfer}
+                  />
+                {/if}
               </div>
             </section>
             {/each}
@@ -672,6 +731,12 @@
   .scope-section-list {
     gap: 0.95rem;
     outline: none;
+  }
+
+  .sort-category-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.45rem;
   }
 
   .scope-section-list:focus-visible {

@@ -20,6 +20,7 @@ export type AdminBookmarkSummary = {
   category_id: string | number
   title: string
   url: string
+  internal_url?: string | null
   icon?: string
   icon_source?: string
   icon_background_color?: string
@@ -63,6 +64,7 @@ export function toAdminBookmarks(bookmarks: Bookmark[]): AdminBookmarkSummary[] 
     category_id: bookmark.category_id,
     title: bookmark.title,
     url: bookmark.url,
+    internal_url: bookmark.internal_url ?? '',
     icon: bookmark.icon ?? '',
     icon_source: bookmark.icon_source ?? '',
     icon_background_color: bookmark.icon_background_color ?? '',
@@ -82,6 +84,7 @@ export function toPublicBookmark(bookmark: Bookmark): PublicBookmark {
     category_id: bookmark.category_id,
     title: bookmark.title,
     url: bookmark.url,
+    internal_url: bookmark.internal_url,
     icon: bookmark.icon,
     icon_source: bookmark.icon_source,
     icon_background_color: bookmark.icon_background_color,

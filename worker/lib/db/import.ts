@@ -30,8 +30,8 @@ export async function importData(
   }
 
   for (const chunk of chunkImportRows(importedBookmarks, 7)) {
-    stmts.push(db.prepare(`INSERT INTO bookmarks (id, category_id, title, url, icon, icon_source, icon_background_color, icon_blob, description, description_mode, open_method, is_private, sort, created_at) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`)
-      .bind(...chunk.flatMap((bookmark) => [bookmark.id, bookmark.category_id, bookmark.title, bookmark.url, bookmark.icon, bookmark.icon_source, bookmark.icon_background_color, bookmark.icon_blob, bookmark.description, bookmark.description_mode ?? null, bookmark.open_method, bookmark.is_private === true || bookmark.is_private === 1 ? 1 : 0, bookmark.sort, bookmark.created_at])))
+    stmts.push(db.prepare(`INSERT INTO bookmarks (id, category_id, title, url, internal_url, icon, icon_source, icon_background_color, icon_blob, description, description_mode, open_method, is_private, sort, created_at) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`)
+      .bind(...chunk.flatMap((bookmark) => [bookmark.id, bookmark.category_id, bookmark.title, bookmark.url, bookmark.internal_url ?? null, bookmark.icon, bookmark.icon_source, bookmark.icon_background_color, bookmark.icon_blob, bookmark.description, bookmark.description_mode ?? null, bookmark.open_method, bookmark.is_private === true || bookmark.is_private === 1 ? 1 : 0, bookmark.sort, bookmark.created_at])))
   }
 
   // 设置（仅写入受支持的 key，绝不触碰 admin_* 等内部 key）

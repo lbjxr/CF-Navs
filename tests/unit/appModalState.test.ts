@@ -51,6 +51,7 @@ describe('app modal state helpers', () => {
       category_id: 3,
       title: '',
       url: '',
+      internal_url: '',
       icon: '',
       icon_background_color: '',
       description: '',

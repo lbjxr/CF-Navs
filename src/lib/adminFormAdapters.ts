@@ -25,6 +25,9 @@ export function toBookmarkPayload(form: BookmarkFormValue): BookmarkUpsertReq {
     // 直接敲 `example.com` 是常见输入习惯，这里补成 https 再提交，
     // 免得撞上服务端的协议校验。补不了的原样送出，由服务端给出权威错误。
     url: normalizeBookmarkUrl(form.url) ?? form.url.trim(),
+    internal_url: (form.internal_url ?? '').trim()
+      ? normalizeBookmarkUrl(form.internal_url ?? '') ?? (form.internal_url ?? '').trim()
+      : null,
     icon: form.icon.trim() || null,
     icon_source: (form.icon_source as IconSource) || null,
     icon_background_color: form.icon_background_color.trim() || null,
@@ -51,6 +54,7 @@ export function toBookmarkForm(bookmark: Bookmark | PublicBookmark): BookmarkFor
     category_id: bookmark.category_id,
     title: bookmark.title,
     url: bookmark.url,
+    internal_url: bookmark.internal_url ?? '',
     icon: bookmark.icon ?? '',
     icon_source: bookmark.icon_source ?? '',
     icon_background_color: bookmark.icon_background_color ?? '',

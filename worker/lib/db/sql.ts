@@ -9,15 +9,15 @@ const PUBLIC_DATA_SETTINGS_WITHOUT_SITE_CONFIG_KEYS = PUBLIC_DATA_SETTINGS_KEYS.
 export const CATEGORY_LIST_SQL =
   'SELECT id, parent_id, title, icon, is_private, sort, created_at FROM categories ORDER BY parent_id IS NOT NULL, parent_id ASC, sort ASC, id ASC'
 export const BOOKMARK_LIST_SQL =
-  'SELECT id, category_id, title, url, icon, icon_source, icon_background_color, icon_blob, description, description_mode, open_method, is_private, sort, click_count, created_at FROM bookmarks ORDER BY sort ASC, id ASC'
+  'SELECT id, category_id, title, url, internal_url, icon, icon_source, icon_background_color, icon_blob, description, description_mode, open_method, is_private, sort, click_count, created_at FROM bookmarks ORDER BY sort ASC, id ASC'
 export const BOOKMARK_AGGREGATE_LIST_SQL =
-  'SELECT id, category_id, title, url, icon, icon_source, icon_background_color, NULL AS icon_blob, CASE WHEN icon_blob IS NULL OR icon_blob = \'\' THEN 0 ELSE 1 END AS icon_cached, description, description_mode, open_method, is_private, sort, click_count, created_at FROM bookmarks ORDER BY sort ASC, id ASC'
+  'SELECT id, category_id, title, url, internal_url, icon, icon_source, icon_background_color, NULL AS icon_blob, CASE WHEN icon_blob IS NULL OR icon_blob = \'\' THEN 0 ELSE 1 END AS icon_cached, description, description_mode, open_method, is_private, sort, click_count, created_at FROM bookmarks ORDER BY sort ASC, id ASC'
 export const PUBLIC_CATEGORY_LIST_SQL =
   'SELECT id, parent_id, title, icon, is_private, sort FROM categories ORDER BY parent_id IS NOT NULL, parent_id ASC, sort ASC, id ASC'
 export const PUBLIC_BOOKMARK_LIST_SQL =
-  'SELECT id, category_id, title, url, icon, icon_source, icon_background_color, NULL AS icon_blob, CASE WHEN icon_blob IS NULL OR icon_blob = \'\' THEN 0 ELSE 1 END AS icon_cached, description, description_mode, open_method, is_private, sort, click_count FROM bookmarks WHERE is_private = 0 ORDER BY click_count DESC, sort ASC, id ASC'
+  'SELECT id, category_id, title, url, internal_url, icon, icon_source, icon_background_color, NULL AS icon_blob, CASE WHEN icon_blob IS NULL OR icon_blob = \'\' THEN 0 ELSE 1 END AS icon_cached, description, description_mode, open_method, is_private, sort, click_count FROM bookmarks WHERE is_private = 0 ORDER BY click_count DESC, sort ASC, id ASC'
 export const PRIVATE_BOOKMARK_LIST_SQL =
-  'SELECT id, category_id, title, url, icon, icon_source, icon_background_color, NULL AS icon_blob, CASE WHEN icon_blob IS NULL OR icon_blob = \'\' THEN 0 ELSE 1 END AS icon_cached, description, description_mode, open_method, is_private, sort, click_count FROM bookmarks ORDER BY click_count DESC, sort ASC, id ASC'
+  'SELECT id, category_id, title, url, internal_url, icon, icon_source, icon_background_color, NULL AS icon_blob, CASE WHEN icon_blob IS NULL OR icon_blob = \'\' THEN 0 ELSE 1 END AS icon_cached, description, description_mode, open_method, is_private, sort, click_count FROM bookmarks ORDER BY click_count DESC, sort ASC, id ASC'
 export const SETTINGS_LIST_SQL = 'SELECT key, value FROM settings'
 export const PUBLIC_DATA_SETTINGS_LIST_SQL = `SELECT key, value FROM settings WHERE key IN (${PUBLIC_DATA_SETTINGS_KEYS
   .map((key) => `'${key}'`)
