@@ -21,26 +21,14 @@ describe('admin backup layout', () => {
     expect(source.match(/rootSelectionState\(root, selectedCategoryIds\)/g)).toHaveLength(2)
   })
 
-  it('keeps the mobile export action above the admin bottom navigation', () => {
+  it('keeps the export button in normal flow without fixed positioning', () => {
     const source = readFileSync('src/components/BackupPanel.svelte', 'utf8')
 
+    expect(source).not.toContain('position: fixed;')
+    expect(source).not.toContain('padding-bottom: calc(132px + env(safe-area-inset-bottom));')
     expect(source).toContain('.export-operation > .primary-button')
-    expect(source).toContain('padding-bottom: calc(132px + env(safe-area-inset-bottom));')
-    expect(source).toContain('bottom: calc(60px + max(12px, env(safe-area-inset-bottom)));')
-    expect(source).toContain('z-index: 1001;')
-  })
-  it('only applies fixed export CTA rules where bottom navigation exists', () => {
-    const source = readFileSync('src/components/BackupPanel.svelte', 'utf8')
-    const tabletStylesStart = source.indexOf('@media (max-width: 760px)')
-    const mobileCtaStylesStart = source.indexOf('@media (max-width: 700px)', tabletStylesStart)
-    const tabletStyles = source.slice(tabletStylesStart, mobileCtaStylesStart)
-    const ctaStyles = source.slice(mobileCtaStylesStart)
-
-    expect(tabletStyles).not.toContain('.export-operation > .primary-button')
-    expect(tabletStyles).not.toContain('position: fixed;')
-    expect(ctaStyles).toContain('.export-operation > .primary-button')
-    expect(ctaStyles).toContain('position: fixed;')
-    expect(ctaStyles).toContain('bottom: calc(60px + max(12px, env(safe-area-inset-bottom)));')
-    expect(source).toContain('@media (max-width: 760px)')
+    const mobileStyles = source.slice(source.indexOf('@media (max-width: 760px)'))
+    expect(mobileStyles).toContain('.export-operation > .primary-button')
+    expect(mobileStyles).toContain('width: 100%;')
   })
 })

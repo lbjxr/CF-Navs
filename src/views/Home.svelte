@@ -417,6 +417,7 @@
     {onLogout}
     {onOpenLogin}
     topNavigation={isTopNavigation}
+    sortActive={homeSortMode || Boolean(homeSortError)}
   />
 
   <HomeHeroSearch

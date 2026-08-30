@@ -343,15 +343,17 @@
     />
   {/if}
 
-  {#if (canEdit && !sortMode) || (sortMode && onMoveBookmark)}
+  {#if sortMode && onMoveBookmark}
     <button
       type="button"
       class="bookmark-mobile-menu-trigger"
-      aria-label={sortMode ? `移动「${bookmark.title}」到其他分类` : `打开「${bookmark.title}」操作菜单`}
-      title={sortMode ? '移动到分类' : '更多操作'}
+      aria-label={`移动「${bookmark.title}」到其他分类`}
+      title="移动到分类"
       on:click|stopPropagation={handleMobileMenuClick}
     >
-      <span aria-hidden="true">⋯</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="bookmark-mobile-menu-icon">
+        <path d="M4 5h9M4 12h9M4 19h9M17 8l4 4-4 4M21 12h-8" />
+      </svg>
     </button>
   {/if}
 
@@ -396,6 +398,16 @@
     font-size: 22px;
     line-height: 1;
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  }
+
+  .bookmark-mobile-menu-icon {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .bookmark-mobile-menu-trigger:focus-visible {

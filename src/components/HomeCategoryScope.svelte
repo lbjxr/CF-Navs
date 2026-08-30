@@ -80,7 +80,11 @@
             on:click={() => void onCreateSubcategory?.()}
           >
             <span class="scope-action-label">新建子分类</span>
-            <span aria-hidden="true" class="scope-action-icon">＋</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="scope-action-icon">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v3" />
+              <path d="M3 7v10a2 2 0 0 0 2 2h6" />
+              <path d="M16 15h6M19 12v6" />
+            </svg>
           </button>
         {/if}
         {#if children.length > 0}
@@ -176,11 +180,6 @@
     gap: 0.7rem;
   }
 
-  .category-scope.has-actions .scope-title-row {
-    box-sizing: border-box;
-    padding-right: 12rem;
-  }
-
   .scope-copy h2 {
     margin: 0;
   }
@@ -235,8 +234,13 @@
   }
 
   .scope-action-icon {
-    font-size: 1rem;
-    line-height: 1;
+    width: 1.05rem;
+    height: 1.05rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .scope-action:hover,

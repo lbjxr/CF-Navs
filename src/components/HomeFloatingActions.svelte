@@ -15,6 +15,7 @@
   export let onOpenLogin: (() => AsyncVoid) | undefined = undefined
   export let onOpenCreateRootCategory: (() => AsyncVoid) | undefined = undefined
   export let topNavigation = false
+  export let sortActive = false
 
   let showBackToTop = false
 
@@ -126,6 +127,7 @@
   <button
     type="button"
     class="icon-button back-to-top-button"
+    class:above-sort-bar={sortActive}
     data-testid="home-back-to-top"
     on:click={handleBackToTop}
     title="回到顶部"
@@ -160,6 +162,10 @@
     z-index: 50;
     color: #2563eb;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  }
+
+  .back-to-top-button.above-sort-bar {
+    bottom: calc(max(1.25rem, env(safe-area-inset-bottom)) + 3.6rem);
   }
 
   .back-to-top-button svg {
@@ -263,6 +269,10 @@
     .back-to-top-button {
       right: max(1rem, env(safe-area-inset-right));
       bottom: max(1rem, env(safe-area-inset-bottom));
+    }
+
+    .back-to-top-button.above-sort-bar {
+      bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 4.4rem);
     }
   }
 </style>

@@ -55,7 +55,7 @@ describe('category hierarchy visibility markup', () => {
     expect(scope).toContain('on:wheel={handleTabWheel}')
     expect(scope).toContain('class="scope-action-icon"')
     expect(card).toContain('canMove={sortMode}')
-    expect(card).toContain('(sortMode && onMoveBookmark)')
+    expect(card).toContain('{#if sortMode && onMoveBookmark}')
     expect(card).toContain('onEdit={sortMode ? undefined : handleEditClick}')
     const contextMenu = readFileSync('src/components/BookmarkContextMenu.svelte', 'utf8')
     expect(contextMenu).toContain('export let canMove = false')
