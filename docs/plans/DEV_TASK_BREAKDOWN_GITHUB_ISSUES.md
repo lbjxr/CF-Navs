@@ -93,10 +93,10 @@
 | 首页跨分类排序 | `Home.svelte` 维护本地草稿，`CategorySection.svelte` 通过 `sortableList` 产生跨列表转移，保存到 `POST /api/bookmarks/reorganize` | R-01 必须修复真实缺陷而不是重建另一套排序语义 |
 | 重排接口 | 请求为完整 `category_orders`；冲突使用 `ErrCode.CONFLICT=1006`；D1 多语句更新通过 batch 执行 | R-01 移动端菜单和 R-05 批量移动必须保持冲突反馈和原子性语义 |
 | 分类层级 | 最多两层；`parent_id: null` 为一级，非空为二级 | R-02/R-03/R-04/R-05 不得产生三级或错误父级 |
-| 分类创建 | `CategoryEditModal` 与分类 API 已在后台使用；首页没有创建入口 | R-02/R-03 要复用既有表单和权限规则，新增首页接线 |
-| 分类选择器 | `CategoryTreeSelect` 已在打开时展开当前二级分类的父级，但没有完整滚动/高亮行为 | R-04 只增强定位，不改变选择值 |
-| 后台书签列表 | 已有搜索、分页、跨页选择和批量删除；没有批量移动操作 | R-05 复用选择状态，不破坏跨页/筛选行为 |
-| 设置模型 | `card_size.width` 当前前端有效范围 80–400 px；设置表单有基础归一化；服务端对这些卡片数字缺少完整范围校验 | R-06/R-07 必须同步 shared 类型、默认值、归一化、表单、预览和实际布局 |
+| 分类创建 | `CategoryEditModal` 与分类 API 已在后台使用；首页已有登录态新建子分类和新增主分类入口 | R-02/R-03 保持两层层级、权限和既有表单语义 |
+| 分类选择器 | `CategoryTreeSelect` 打开时展开当前二级分类父级，支持当前项滚动定位、选中状态和长树滚动 | R-04 只增强定位，不改变选择值 |
+| 后台书签列表 | 已有搜索、分页、跨页选择、批量删除和批量移动操作；批量移动复用 expected 快照与冲突语义 | R-05 不破坏跨页/筛选行为和原子性 |
+| 设置模型 | `card_size.width` 当前有效范围 44–400 px；`category_display` 已持久化并由 shared/client/Worker 统一归一化 | R-06/R-07 维护设置、预览、实际布局和窄屏安全约束 |
 | 部分导出 | `BackupPanel.svelte`、`appBackup.ts`、`appImportExport.ts` 已支持按分类导出及父分类补全 | R-08 只做行为/部署/预期核对 |
 
 ### 2.1 共同数据与交互原则
@@ -169,7 +169,7 @@ graph TD
 | `src/lib/batchMove.ts`、`tests/unit/batchMove.test.ts` | T5 | 组装选中书签的 expected 快照请求 | 只消费 T1 锁定的共享类型；单测覆盖跨页顺序和缺失 sort |
 | `src/components/SettingsPanel.svelte`、`src/components/settings/`、`SettingsHomePreview.svelte` | T8 | R-06/R-07 外观分区、预览、控件联动和卡片范围提示 | R-06/R-07 单 owner；不与其他设置任务并行 |
 | 分类显示消费文件：`CategorySection.svelte`、`HomeCategoryScope.svelte`、`Sidebar.svelte`、`Home.svelte` 的分类/搜索分组显示段 | T8 | CSS 变量、按层级字号/图标尺寸、移动端 0.88 派生 | 必须在 T7 完成后串行接入；不得复制硬编码比例 |
-| `src/components/BackupPanel.svelte` 的移动端导出 CTA 样式 | T9b | 固定底部按钮、窄屏可见性和不溢出 | 必须在 T9 核对发现缺口后串行修复，不改导出数据逻辑 |
+| `src/components/BackupPanel.svelte` 的移动端导出 CTA 样式 | T9b | 正常流式全宽按钮，位于分类树下方和导入卡片上方，不遮挡内容 | 必须在 T9 核对发现缺口后串行修复，不改导出数据逻辑 |
 | `src/components/BackupPanel.svelte`、`src/lib/appBackup.ts`、`src/lib/appImportExport.ts` | T9 | 仅核对现有行为，若发现缺陷必须先回写需求再另开实现任务 | 本轮禁止重复实现或改写导出逻辑 |
 | `tests/`、`scripts/`、`docs/reference/` 的测试/证据段 | 各自 owner | 任务专属测试和证据 | 不允许用无关全量结果替代任务门 |
 
@@ -515,7 +515,7 @@ graph TD
 - 核对：`src/components/BackupPanel.svelte`、`src/lib/appBackup.ts`、`src/lib/appImportExport.ts`
 - 参考：`docs/reference/API_CONTRACT.md`
 - 回写：`docs/reference/GITHUB_ISSUES_REQUIREMENTS.md` R-08 段落和本文 T9 台账
-**PC / 移动端核对范围**：PC 必须验证可展开分类树、全选/清空、实际下载和 replace/merge；移动端必须验证可滚动分类树、固定底部导出按钮、导出前汇总数量和窄屏不溢出。两端只核对现有能力，不新增导出实现。
+**PC / 移动端核对范围**：PC 必须验证可展开分类树、全选/清空、实际下载和 replace/merge；移动端必须验证可滚动分类树、位于分类树下方且在导入卡片上方的正常流式全宽导出按钮、导出前汇总数量和窄屏不溢出。两端只核对现有能力，不新增导出实现。
 
 **测试门**：
 
@@ -527,7 +527,7 @@ graph TD
 **完成回写**：只有源码、运行结果、部署版本和预期四项均有证据，才可将 R-08 标为“以既有能力完成、待云端同步”；云端 Issue 更新需要单独授权和身份检查。
 ## T9b：R-08 移动端导出按钮布局修复
 
-**目标**：只修复既有部分导出面板在移动端的固定底部导出入口，不改变导出数据组装、下载和导入逻辑。
+**目标**：只修复既有部分导出面板在移动端的正常流式全宽导出入口位置，不改变导出数据组装、下载和导入逻辑。
 
 **依赖**：T9 已完成源码/桌面下载核对并确认移动端 CTA 缺口；T9b 完成后才能重新判定 R-08 是否满足同步条件。
 
@@ -536,7 +536,7 @@ graph TD
 **验收与测试门**：
 
 - PC 导出行为保持不变；
-- 390×844 等移动断点下导出按钮固定/吸附在底部可见区域，分类树可滚动，按钮不遮挡关键选择反馈且不横向溢出；
+- 390×844 等移动断点下导出按钮位于分类树下方、导入卡片上方，保持正常流式全宽布局；分类树可滚动，按钮不遮挡关键选择反馈且不横向溢出；
 - 实际下载仍显示准确分类/书签数量；
 - 运行 BackupPanel/布局定向测试、`npm run type-check` 和独立 Chrome 移动断点场景。
 
@@ -586,7 +586,7 @@ graph TD
 | R-05 批量移动 | 跨页选择、目标树、位置选项、确认、冲突保留选择 | 底部工具栏不遮挡、弹层可返回、触控尺寸、错误反馈 |
 | R-06 分类视觉 | 长标题/图标/多子分类、导航/搜索同步、预览 | 0.88 派生、窄屏不换行溢出、导航和标签可读 |
 | R-07 卡片宽度 | info 44/44–80/400、长描述、列数、点击区域 | 最窄可用宽度、触控区域、文字/图标可读、无横溢出 |
-| R-08 部分导出 | 分类树、全选/清空、下载、replace/merge | 可滚动树、固定底部导出按钮、汇总数量 |
+| R-08 部分导出 | 分类树、全选/清空、下载、replace/merge | 可滚动树、正常流式全宽导出按钮位于导入卡片上方、汇总数量 |
 
 ---
 
@@ -627,7 +627,7 @@ graph TD
 | T8-R06 分类视觉设置 | 4 | 已完成 | `shared/types.ts`、`shared/settings.ts`、`src/lib/settingsForm.ts`、`src/lib/appData.ts`、`worker/lib/settingsData.ts`、`worker/routes/settings.ts`、`schema.sql`、`src/components/settings/CategoryDisplaySettingsSection.svelte`、`src/components/SettingsPanel.svelte`、`src/components/settings/SettingsHomePreview.svelte`、`src/views/Home.svelte`、`src/components/CategoryIcon.svelte`、`src/components/CategorySection.svelte`、`src/components/HomeCategoryScope.svelte`、`src/components/Sidebar.svelte`、`tests/unit/adminSettingsLayout.test.ts` | `npx vitest run tests/unit/adminSettingsLayout.test.ts tests/unit/settingsForm.test.ts tests/unit/settingsData.test.ts tests/unit/settings.test.ts tests/unit/appData.test.ts` → 46 passed；`npm run type-check` → 0 errors/0 warnings；独立 Chrome 设置页四个滑块/预览渲染；Home 自定义 22/19px desktop 生效，390px 实际为 19.36/16.72px（0.88），desktop/mobile 无横溢出；精确 profile 进程数 0 | R-06 已回写按层级全局设置、外观页位置、CSS 变量、预览、PC/移动端 0.88 证据；Issue #9/#12 仍保持 Open，未执行云端同步 | 未提交 | 当前分类表格保持紧凑固定尺寸，未引入单分类覆盖 |
 | T8-R07 卡片宽度阈值 | 4 | 已完成 | `src/lib/settingsForm.ts`、`src/lib/bookmarkCardLayout.ts`、`shared/settings.ts`、`worker/lib/settingsData.ts`、`worker/routes/settings.ts`、`src/components/settings/AdvancedSettingsSection.svelte`、`src/components/SettingsPanel.svelte`、`src/components/BookmarkCard.svelte`、`src/components/CategorySection.svelte`、`tests/unit/settingsForm.test.ts`、`tests/unit/settingsData.test.ts`、`tests/unit/adminSettingsLayout.test.ts`、`tests/unit/bookmarkCardLayout.test.ts`、`tests/unit/categoryCollapseMarkup.test.ts` | `npx vitest run tests/unit/bookmarkCardLayout.test.ts tests/unit/categoryCollapseMarkup.test.ts tests/unit/homeResponsiveLayout.test.ts tests/unit/adminSettingsLayout.test.ts` → 25 passed；`npm run type-check` → 0 errors/0 warnings；`npm run build` 成功；独立 Chrome 1440px：width=44 的 info Grid 轨道约 46px、width=80 约 83.5px、width=400 两列约 591px；390px：width=44 使用 150px 移动端安全下限并双列，width=200/400 单列 358px；所有场景 document.scrollWidth=viewportWidth；console errors/page exceptions/failed requests 均为 0；精确 profile 进程数 0 | R-07 已回写 44px 硬阈值、44–80 提示、极简宽度置灰、API/旧数据/实际 PC/移动端 Grid 轨道证据；Issue #9/#13 仍保持 Open，未执行云端同步 | 未提交 | 详情 Grid 轨道由归一化宽度驱动；移动端保留 150px 可读性安全下限并以 `min(..., 100%)` 防止 400px 在窄屏横溢出 |
 | T9 R-08 既有部分导出核对 | 1～5 | 部分完成（本地核对；部署/原作者未核对） | `src/components/BackupPanel.svelte`、`src/lib/appBackup.ts`、`src/lib/appImportExport.ts`、`docs/reference/GITHUB_ISSUES_REQUIREMENTS.md` | `npx vitest run tests/unit/appBackup.test.ts tests/unit/appImportExport.test.ts` → 8 passed；独立 Chrome PC 二级子集下载消息 `已导出 2 个分类、1 个书签`（父分类补全）；隔离 D1 `replace` 回导 2 分类/2 书签、父子关系和书签归属正确，settings.site_title 生效；隔离 D1 `merge` 回导后 4 分类/4 书签，复用 2/新建 2 分类，新增书签归属正确，settings.site_title 保持原值；部署版本与原作者预期未核对 | R-08 已回写源码、PC/移动端、replace/merge 与 T9b 结果；保留“部署/原作者预期待同步”，Issue #9 未更新 | 未提交 | 既有导出数据逻辑未重写；云端同步需另行授权 |
-| T9b R-08 移动端导出按钮布局 | 3 | 已完成 | `src/components/BackupPanel.svelte`、`tests/unit/adminBackupLayout.test.ts` | `npx vitest run tests/unit/adminBackupLayout.test.ts tests/unit/appBackup.test.ts tests/unit/appImportExport.test.ts` → 11 passed；`npm run type-check` → 0 errors/0 warnings；`npm run build` 成功；独立 Chrome 390×844：CTA `position=fixed`、left=12/right=363/top=733/bottom=772，后台底部导航 top=784，完全在视口内；精确 profile 进程数 0 | R-08 已回写移动端固定 CTA 避开后台底部导航证据；仍待部署/原作者预期同步 | 未提交 | 只改布局样式，不改导出数据契约 |
+| T9b R-08 移动端导出按钮布局 | 3 | 已完成 | `src/components/BackupPanel.svelte`、`tests/unit/adminBackupLayout.test.ts` | `npx vitest run tests/unit/adminBackupLayout.test.ts tests/unit/appBackup.test.ts tests/unit/appImportExport.test.ts` → 11 passed；`npm run type-check` → 0 errors/0 warnings；`npm run build` 成功；独立 Chrome 390×844：导出 CTA 位于分类树下方、导入卡片上方，采用正常流式全宽布局并随内容滚动，不遮挡树或导入卡片；精确 profile 进程数 0 | R-08 已回写移动端正常流式 CTA 和分类树可滚动证据；仍待部署/原作者预期同步 | 未提交 | 只改布局样式，不改导出数据契约 |
 | T10 集成验收与收尾 | 5 | 已完成 | `docs/plans/DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md`、`docs/reference/GITHUB_ISSUES_REQUIREMENTS.md`、`docs/reference/API_CONTRACT.md`、`docs/reference/PROJECT_OVERVIEW.md`、`CHANGELOG.md` | `npm test` → 100 files / 673 passed；`npm run type-check` → 0 errors/0 warnings；`npm run build` 成功；`git diff --check` 通过；干净临时 D1 `scripts/smoke-test.mjs` → 75/75；隔离 D1 T9 replace/merge 回导核对通过；独立 Chrome 反馈修复回归覆盖 390×844/700px/701px/1440px，所有目标行为通过；干净首页导航复核 console errors=0、page exceptions=0、failed requests=0；所有测试进程/临时 profile 已清理 | R-01～R-08 本地实现、反馈修复与验证证据已回写；Issue #9～#13 保持 Open，未执行云端 Issue/Project 写操作 | 未提交 | R-08 部署版本和原作者预期尚未获得可验证证据；不声称云端 Issue 已关闭
 | T11 第二轮验收反馈修复 | 5 | 已完成 | `src/components/BookmarkCard.svelte`、`src/components/HomeFloatingActions.svelte`、`src/views/Home.svelte`、`src/components/HomeCategoryScope.svelte`、`src/components/admin/BookmarkListPanel.svelte`、`src/components/BackupPanel.svelte`、`tests/unit/adminBookmarkLayout.test.ts`、`tests/unit/adminBackupLayout.test.ts`、`tests/unit/categoryCollapseMarkup.test.ts`、`docs/guides/TEST_CASES.md`、`CHANGELOG.md`、`docs/reference/GITHUB_ISSUES_REQUIREMENTS.md` | `npm test` → 100 files / 672 passed；`npm run type-check` → 0 errors/0 warnings；`npm run build` 成功；`git diff --check` 通过；隔离临时 D1 + relay Chrome：移动端普通态卡片无三点按钮/排序态显示移动图标入口、排序浮窗与回到顶部不重叠、子分类换文件夹加号图标；PC 1440px 批量栏 `position=fixed` 独立浮层不挤压列表、移动端 390px 浮层 bottom=72px 且 padding-bottom=112px 无空白；二级分类 12 项时 PC 滚轮/横向滚动条可达（scrollWidth 3078 > client 944）；分类字体图标卡在“外观与卡片→高级设置”内；移动端导出按钮 `position=static` 全宽位于导入卡片上方（btnBottom 707 < importTop 752）；首页复核 console errors=0、page exceptions=0、failed requests=0；临时 profile/Worker/D1 已清理 | R-01/R-02/R-05/R-06/R-08 已按第二轮反馈回写测试用例与验证证据；Issue #9～#13 保持 Open，未执行云端写操作 | 已提交待推送 develop | 仅调整交互/布局，未改 API/DB/导出数据契约 |
 | T12 第三轮验收反馈修复 | 5 | 已完成 | `src/components/admin/BookmarkListPanel.svelte`、`src/components/CategorySection.svelte`、`src/components/BookmarkCard.svelte`、`src/components/BookmarkContextMenu.svelte`、`src/components/HomeCategoryScope.svelte`、`src/components/Sidebar.svelte`、`tests/unit/adminBookmarkLayout.test.ts`、`CHANGELOG.md` | `npm test` → 100 files / 672 passed；`npm run type-check` → 0 errors/0 warnings；`npm run build` 成功；`git diff --check` 通过；relay Chrome 390px 批量浮层高度 77px、padding 8/10、bottom=774 不遮挡分页、内容 padding-bottom=84px 无底部空白；1440px 浮层不挤压列表；新增书签/排序改语义 SVG、移动菜单/文案统一“移动”；暗色首页“本分类”与二级标签文字 `rgb(229,238,251)` 白色；移动端亮色侧栏 `.toc-slip` 默认透明、仅当前锚点显灰标记；console errors=0、page exceptions=0、failed requests=0；临时 profile/Worker/D1 已清理 | R-01/R-02/R-05/R-06 已按第三轮反馈回写；Issue #9～#13 保持 Open，未执行云端写操作 | 已提交待推送 develop | 仅调整交互/布局/配色，未改 API/DB/导出数据契约 |
@@ -648,7 +648,7 @@ graph TD
 - [x] T8-R06 已覆盖分类视觉全部作用域、预览、移动端 0.88 派生和保存失败。
 - [x] T8-R07 已覆盖 44/43/44–80/400/401、info/icon 联动、实际卡片布局和触控可用性。
 - [x] T9 已区分“源码已有能力”“部署已核对”“原作者预期已确认”“云端已同步”，没有混写。
-- [x] T9b 已验证移动端 CTA 固定、分类树滚动、实际下载计数和窄屏可见性。
+- [x] T9b 已验证移动端 CTA 正常流式全宽、位于分类树下方和导入卡片上方、分类树滚动、实际下载计数和窄屏可见性。
 - [x] 每个任务都有单独测试证据和本文台账记录。
 - [x] `GITHUB_ISSUES_REQUIREMENTS.md` 的状态标签、验收证据、快照日期和 Issue 链接与实际一致。
 - [x] 最终全量检查、API 冒烟、真实 Chrome 回归和资源清理结果均已记录。
@@ -683,7 +683,7 @@ graph TD
 | R-05 移动端批量工具栏遮挡 | `BookmarkListPanel.svelte` 为固定工具栏预留内容空间并抬高至后台底部导航上方 | 已完成 | 隔离 Chrome 390×844：工具栏 bottom=772，后台底部导航 top=784，z-index=1001，无遮挡；新增移动端安全区测试通过 |
 | TC-R06-01 PC 二级分类不可滚动 | `HomeCategoryScope.svelte` 增加鼠标滚轮横向转换、可见桌面滚动条和键盘保留 | 已完成 | 隔离 Chrome 1440px、大字号/大图标：tabs scrollWidth=2642、clientWidth=733；真实鼠标滚轮 scrollLeft 由 0→700→1909，末项可见；分类层级测试通过 |
 | TC-R06-01 分类视觉设置位置 | `AdvancedSettingsSection.svelte` 内嵌 `CategoryDisplaySettingsSection`，设置模型和保存契约不变 | 已完成 | 隔离 Chrome：高级设置收起时分类卡片不渲染，展开后卡片位于 `.advanced-content` 内且标题正确；`adminSettingsLayout` 测试通过 |
-| R-08 移动端导出按钮遮挡 | `BackupPanel.svelte` CTA 避开后台底部导航并预留安全空间 | 已完成 | 隔离 Chrome 390×844：CTA left=12、right=363、top=733、bottom=772，后台导航 top=784、z-index=1001；701px 无底部导航时为 static，700px 时 fixed；导出布局测试通过 |
+| R-08 移动端导出按钮遮挡 | `BackupPanel.svelte` CTA 调整为分类树下方、导入卡片上方的正常流式全宽布局 | 已完成 | 隔离 Chrome 390×844：导出按钮位于分类树下方和导入卡片上方，随内容滚动，不遮挡树或导入卡片；无横向溢出；导出布局测试通过 |
 
 > 当前批次未改变 API/数据库契约；若浏览器回归发现新增问题，需在本节追加反馈，不覆盖原始证据。
 
