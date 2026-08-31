@@ -171,6 +171,8 @@
       use:sortableList={{
         enabled: activeSortMode,
         onSort: handleReorder,
+        filter: '.bookmark-context-menu, .category-tree-menu, .bookmark-mobile-menu-trigger',
+        preventOnFilter: false,
         group: sortGroup || undefined,
         onTransfer: handleTransfer,
       }}

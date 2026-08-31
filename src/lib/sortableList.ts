@@ -41,6 +41,10 @@ export type SortableListOptions = {
   onSort?: SortHandler
   /** 仅允许通过带该属性的元素发起拖拽，例如 "[data-drag-handle]"；不传则整项可拖 */
   handle?: string
+  /** 过滤不应启动拖拽的交互区域，例如菜单、输入控件 */
+  filter?: string
+  /** 过滤区域是否阻止浏览器默认行为；关闭以保留原生触摸滚动 */
+  preventOnFilter?: boolean
   /** 同一组的多个列表可以相互放置，适合跨分类移动书签 */
   group?: string
   /** 跨列表移动完成后的回调 */
@@ -114,6 +118,8 @@ export const sortableList = (
       easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
       draggable: '[data-sortable-item]',
       handle: options.handle,
+      filter: options.filter,
+      preventOnFilter: options.preventOnFilter ?? true,
       group: options.group ? { name: options.group, pull: true, put: true } : undefined,
       // 关键：不启用 fallbackOnBody，保持拖拽项留在原容器内。
       forceFallback: true,
@@ -162,6 +168,8 @@ export const sortableList = (
         nextOptions.enabled !== options.enabled ||
         nextOptions.onSort !== options.onSort ||
         nextOptions.handle !== options.handle ||
+        nextOptions.filter !== options.filter ||
+        nextOptions.preventOnFilter !== options.preventOnFilter ||
         nextOptions.group !== options.group ||
         nextOptions.onTransfer !== options.onTransfer
       options = nextOptions

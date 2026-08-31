@@ -422,6 +422,8 @@
       class="bookmark-mobile-menu-trigger"
       aria-label={`移动「${bookmark.title}」`}
       title="移动"
+      on:pointerdown|stopPropagation
+      on:touchstart|stopPropagation
       on:click|stopPropagation={handleMobileMenuClick}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" class="bookmark-mobile-menu-icon">

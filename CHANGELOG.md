@@ -1,4 +1,12 @@
 # 变更记录
+## 2026-08-31（移动端拖拽回归修复）
+### 分类树触摸滚动与书签拖拽冲突修复
+
+- 根因：首页排序态的 SortableJS 对整个 `[data-sortable-item]` 启用拖拽；分类菜单和移动按钮位于可拖拽卡片内部，仅靠 `z-index`、`overflow-y` 和 `touch-action` 无法阻止父级拖拽竞争。
+- `sortableList` 新增 `filter` 与 `preventOnFilter` 选项；首页排序过滤 `.bookmark-context-menu`、`.category-tree-menu` 和 `.bookmark-mobile-menu-trigger`，并关闭过滤区域的 `preventDefault`，保留浏览器原生触摸滚动。
+- 菜单和移动按钮阻断 pointer/touch 事件冒泡，避免打开菜单后再次触发卡片拖拽。
+- 验证：真实 Chrome CDP 触摸序列使分类树 `scrollTop` 从 0 增长到 199，页面 `window.scrollY=0`，`sortable-ghost=0`、`sortable-drag=0`；`npm test` 100 files / 672 passed；`npm run type-check` 0 errors/0 warnings；console errors/page exceptions/failed requests 均为 0。
+
 
 ## 2026-08-31（分类树滚动验收）
 ### 移动端排序分类树滚动穿透修复

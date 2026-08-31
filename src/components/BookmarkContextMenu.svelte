@@ -45,7 +45,7 @@
   }
 </script>
 
-<div class="bookmark-context-menu" role="menu" tabindex="-1" on:click|stopPropagation on:keydown|stopPropagation>
+<div class="bookmark-context-menu" role="menu" tabindex="-1" on:click|stopPropagation on:keydown|stopPropagation on:pointerdown|stopPropagation on:touchstart|stopPropagation on:touchmove|stopPropagation>
   {#if onEdit}
     <button type="button" data-testid="bookmark-context-edit" on:click={handleEditClick}>编辑</button>
   {/if}
