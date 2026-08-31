@@ -70,9 +70,10 @@
   .bookmark-context-menu {
     position: absolute;
     top: calc(100% - 6px);
+    left: 8px;
     right: 8px;
     z-index: 80;
-    min-width: 112px;
+    min-width: 0;
     padding: 6px;
     border: 1px solid rgba(148, 163, 184, 0.32);
     border-radius: 10px;
@@ -102,7 +103,7 @@
   .move-picker {
     display: grid;
     gap: 6px;
-    min-width: 210px;
+    min-width: 0;
     margin-top: 4px;
     padding-top: 4px;
     border-top: 1px solid rgba(148, 163, 184, 0.24);
