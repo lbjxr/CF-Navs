@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-08-31（第四轮验收反馈）
+### 部署后验收反馈修复（第四轮）
+
+- 移动端批量浮层不再遮挡分页：改为在 `.admin-panel-footer` 上追加 104px 底部间距，浮层固定于底部导航上方，分页按钮完整可见。
+- 恢复 PC 收缩侧栏的圆柱（slip）标记：`.toc-slip` 默认恢复 `--toc-slip` 底色；仅在展开态隐藏非当前项标记，收缩态所有分类保留圆柱指示。
+- 修复移动端长按书签无法弹出编辑/移动菜单且页面卡死：`BookmarkCard` 增加 `touchstart/touchmove/touchend` 长按（500ms）识别，长按打开菜单并抑制随后的误触点击；移动超过 10px 取消长按，卸载时清理计时器。
+- 验证：`npm test` 100 files / 672 passed；`npm run type-check` 0 errors/0 warnings；`npm run build` 成功；`git diff --check` 通过；relay Chrome 390px 长按触发菜单、点击空白关闭后页面仍可交互（分类切换/点位正常）、批量浮层不遮挡分页，console errors/page exceptions/failed requests 均为 0。
+
 ## 2026-08-31（第三轮验收反馈）
 ### 部署后验收反馈修复（第三轮）
 

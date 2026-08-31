@@ -740,8 +740,8 @@
       overflow: visible;
     }
 
-    .admin-bookmark-list-content.has-batch-selection {
-      padding-bottom: 84px;
+    .admin-bookmark-list-content.has-batch-selection ~ .admin-panel-footer {
+      margin-bottom: 104px;
     }
 
     .admin-table-scroll-body {

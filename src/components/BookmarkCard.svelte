@@ -61,6 +61,11 @@
   let iconStateKey = ''
   let windowListenersAttached = false
   let contextMenuInstanceId = Math.random().toString(36).slice(2)
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null
+  let suppressNextClick = false
+  let touchStartX = 0
+  let touchStartY = 0
+  const LONG_PRESS_MS = 500
 
   $: openInNewTab = bookmark.open_method === 1
   $: iconBaseState = deriveBookmarkCardIconBase({
@@ -200,6 +205,57 @@
     contextMenuOpen = true
   }
 
+  function clearLongPress() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer)
+      longPressTimer = null
+    }
+  }
+
+  function openContextMenuFromTouch() {
+    if (!canOpenBookmarkContextMenu({
+      sortMode,
+      canEdit,
+      hasEditHandler: Boolean(onEdit),
+      hasMoveHandler: Boolean(onMoveBookmark),
+    })) return
+    suppressNextClick = true
+    notifyContextMenuOpen()
+    contextMenuOpen = true
+  }
+
+  function handleTouchStart(event: TouchEvent) {
+    if (preview || contextMenuOpen) return
+    if (!canOpenBookmarkContextMenu({
+      sortMode,
+      canEdit,
+      hasEditHandler: Boolean(onEdit),
+      hasMoveHandler: Boolean(onMoveBookmark),
+    })) return
+    const touch = event.touches[0]
+    if (!touch) return
+    touchStartX = touch.clientX
+    touchStartY = touch.clientY
+    clearLongPress()
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null
+      openContextMenuFromTouch()
+    }, LONG_PRESS_MS)
+  }
+
+  function handleTouchMove(event: TouchEvent) {
+    if (!longPressTimer) return
+    const touch = event.touches[0]
+    if (!touch) return
+    if (Math.abs(touch.clientX - touchStartX) > 10 || Math.abs(touch.clientY - touchStartY) > 10) {
+      clearLongPress()
+    }
+  }
+
+  function handleTouchEnd() {
+    clearLongPress()
+  }
+
   async function handleEditClick() {
     closeContextMenu()
     await onEdit?.(bookmark)
@@ -210,6 +266,11 @@
   }
 
   function handleLinkClick(event: MouseEvent) {
+    if (suppressNextClick) {
+      suppressNextClick = false
+      event.preventDefault()
+      return
+    }
     if (preview) {
       event.preventDefault()
       return
@@ -290,6 +351,7 @@
     disconnectIconObserver()
     resetLocalCachedIconUrl()
     syncWindowListeners(false)
+    clearLongPress()
   })
 </script>
 
@@ -300,6 +362,10 @@
   class:sort-mode={sortMode}
   style={cardShellStyle}
   bind:this={shellElement}
+  on:touchstart={handleTouchStart}
+  on:touchmove={handleTouchMove}
+  on:touchend={handleTouchEnd}
+  on:touchcancel={handleTouchEnd}
 >
   {#if style === 'info'}
     <BookmarkCardInfo

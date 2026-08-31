@@ -1145,7 +1145,7 @@
     flex: 0 0 40px;
     margin: 12px 0;
     border-radius: 4px;
-    background: transparent;
+    background: var(--toc-slip);
     transform: scaleX(0.5);
     transform-origin: left center;
     transition: transform var(--transition-base), background var(--transition-base);
@@ -1154,6 +1154,10 @@
   .toc-item:hover .toc-slip,
   .toc-item:focus-visible .toc-slip {
     transform: scaleX(1);
+  }
+
+  .toc-sidebar.expanded .toc-item:not(.active) .toc-slip {
+    background: transparent;
   }
 
   .toc-item.active .toc-slip {
