@@ -69,15 +69,15 @@
 <style>
   .bookmark-context-menu {
     position: absolute;
-    top: 8px;
+    top: calc(100% - 6px);
     right: 8px;
     z-index: 80;
     min-width: 112px;
     padding: 6px;
     border: 1px solid rgba(148, 163, 184, 0.32);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.22);
     backdrop-filter: blur(10px);
   }
 
