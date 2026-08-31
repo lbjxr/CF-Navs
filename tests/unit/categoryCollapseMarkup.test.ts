@@ -60,9 +60,13 @@ describe('category hierarchy visibility markup', () => {
     expect(card).toContain('function handleTouchStart(event: TouchEvent)')
     expect(card).toContain('withinTouchGuard')
     expect(card).toContain('onEdit={sortMode ? undefined : handleEditClick}')
+    expect(card).toContain('class:context-menu-open={contextMenuOpen}')
     const contextMenu = readFileSync('src/components/BookmarkContextMenu.svelte', 'utf8')
-    expect(contextMenu).toContain('export let canMove = false')
-    expect(contextMenu).toContain('{#if canMove && onMoveBookmark && categories.length > 0}')
+    const treeSelect = readFileSync('src/components/CategoryTreeSelect.svelte', 'utf8')
+    expect(contextMenu).toContain('left: 8px;')
+    expect(contextMenu).toContain('right: 8px;')
+    expect(treeSelect).toContain('overscroll-behavior: contain;')
+    expect(treeSelect).toContain('touch-action: pan-y;')
   })
 
   it('collapses selector and admin child categories behind independent arrows', () => {

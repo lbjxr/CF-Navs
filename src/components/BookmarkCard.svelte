@@ -368,6 +368,7 @@
   class:sort-mode={sortMode}
   style={cardShellStyle}
   bind:this={shellElement}
+  class:context-menu-open={contextMenuOpen}
   on:touchstart={handleTouchStart}
   on:touchmove={handleTouchMove}
   on:touchend={handleTouchEnd}
@@ -450,6 +451,10 @@
     z-index: 0;
     min-width: 0;
     contain: layout style;
+  }
+
+  .bookmark-card-shell.context-menu-open {
+    z-index: 130;
   }
   .bookmark-mobile-menu-trigger {
     display: none;

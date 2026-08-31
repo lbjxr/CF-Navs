@@ -380,6 +380,9 @@
     max-height: min(320px, 45vh);
     box-sizing: border-box;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
     padding: 6px;
     border: 1px solid #dbe3ee;
     border-radius: 10px;
