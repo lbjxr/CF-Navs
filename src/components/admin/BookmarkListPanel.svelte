@@ -732,27 +732,51 @@
       width: 100%;
       overflow: hidden;
     }
+    .admin-bookmark-list-panel {
+      height: auto;
+    }
+
+    .admin-bookmark-list-content {
+      overflow: visible;
+    }
+
     .admin-bookmark-list-content.has-batch-selection {
-      padding-bottom: 112px;
+      padding-bottom: 84px;
+    }
+
+    .admin-table-scroll-body {
+      overflow: visible;
     }
 
     .batch-selection-toolbar {
       position: fixed;
       z-index: 1001;
       right: 12px;
-      bottom: calc(60px + max(12px, env(safe-area-inset-bottom)));
+      bottom: calc(60px + max(10px, env(safe-area-inset-bottom)));
       left: 12px;
       max-width: none;
       transform: none;
+      align-items: center;
       justify-content: flex-end;
-      padding: 10px;
-      border-radius: 14px;
-      box-shadow: 0 14px 34px rgba(15, 23, 42, 0.24);
+      gap: 6px 8px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.24);
     }
 
     .batch-selection-toolbar > span {
       width: 100%;
       margin-right: 0;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .batch-selection-toolbar .admin-primary-button,
+    .batch-selection-toolbar .admin-danger-button,
+    .batch-selection-toolbar .admin-ghost-button {
+      padding: 6px 10px;
+      font-size: 12px;
+      min-height: 32px;
     }
 
     .admin-bookmark-table {

@@ -129,7 +129,11 @@
                 aria-label="新增书签"
                 title="新增书签"
               >
-                <span aria-hidden="true" class="action-symbol">＋</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true" class="action-symbol action-icon">
+                  <path d="M6 4h8l4 4v3" />
+                  <path d="M6 4a1 1 0 0 0-1 1v15l7-4 3 1.7" />
+                  <path d="M17 15v6M14 18h6" />
+                </svg>
                 <span class="action-label">新增书签</span>
               </button>
             {/if}
@@ -141,7 +145,10 @@
                 aria-label="排序"
                 title="排序"
               >
-                <span aria-hidden="true" class="action-symbol">↕</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true" class="action-symbol action-icon">
+                  <path d="M8 4v16M8 4 5 7M8 4l3 3" />
+                  <path d="M16 20V4M16 20l-3-3M16 20l3-3" />
+                </svg>
                 <span class="action-label">排序</span>
               </button>
             {/if}
@@ -306,6 +313,16 @@
     line-height: 1;
   }
 
+
+  .section-actions .action-icon {
+    width: 1.05rem;
+    height: 1.05rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
   .section-actions .action-label {
     white-space: nowrap;
   }

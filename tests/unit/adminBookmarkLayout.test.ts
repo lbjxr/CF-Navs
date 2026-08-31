@@ -18,8 +18,8 @@ describe('admin bookmark selection toolbar layout', () => {
     const panel = readFileSync('src/components/admin/BookmarkListPanel.svelte', 'utf8')
 
     expect(panel).toContain('grid-template-rows: auto minmax(0, 1fr) auto;')
-    expect(panel).toContain('padding-bottom: 112px;')
-    expect(panel).toContain('bottom: calc(60px + max(12px, env(safe-area-inset-bottom)));')
+    expect(panel).toContain('padding-bottom: 84px;')
+    expect(panel).toContain('bottom: calc(60px + max(10px, env(safe-area-inset-bottom)));')
     expect(panel).toContain('z-index: 1001;')
   })
 })

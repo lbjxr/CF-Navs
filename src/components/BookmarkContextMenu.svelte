@@ -50,7 +50,7 @@
     <button type="button" data-testid="bookmark-context-edit" on:click={handleEditClick}>编辑</button>
   {/if}
   {#if canMove && onMoveBookmark && categories.length > 0}
-    <button type="button" data-testid="bookmark-context-move" on:click={openMovePicker}>移动到分类</button>
+    <button type="button" data-testid="bookmark-context-move" on:click={openMovePicker}>移动</button>
   {/if}
   {#if movePickerOpen}
     <div class="move-picker" data-testid="bookmark-context-move-picker">

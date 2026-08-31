@@ -288,6 +288,7 @@
     border: 1px solid transparent;
     border-radius: 6px;
     background: transparent;
+    color: var(--home-text-color, currentColor);
     font: inherit;
     font-size: var(--category-child-font-size, 0.82rem);
     font-weight: 600;

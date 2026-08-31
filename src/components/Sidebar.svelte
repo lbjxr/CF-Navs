@@ -1145,7 +1145,7 @@
     flex: 0 0 40px;
     margin: 12px 0;
     border-radius: 4px;
-    background: var(--toc-slip);
+    background: transparent;
     transform: scaleX(0.5);
     transform-origin: left center;
     transition: transform var(--transition-base), background var(--transition-base);
@@ -1157,7 +1157,7 @@
   }
 
   .toc-item.active .toc-slip {
-    background: var(--toc-accent);
+    background: var(--toc-slip);
   }
 
   .toc-icon-slot {

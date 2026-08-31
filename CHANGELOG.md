@@ -1,5 +1,16 @@
 # 变更记录
 
+## 2026-08-31（第三轮验收反馈）
+### 部署后验收反馈修复（第三轮）
+
+- 移动端书签批量浮层压缩高度与留白：字号 12px、按钮 padding 6/10、浮层 padding 8/10，避免遮挡分页按钮。
+- 移动端批量选中时列表底部空白修复：`≤700px` 下 `.admin-bookmark-list-panel` 改 `height:auto`、内容和滚动容器 `overflow:visible`，仅保留 `has-batch-selection` 的 84px 底部让位。
+- PC/移动端新增书签、排序按钮改用语义化 SVG（书签加号、上下双向箭头）。
+- 书签“移动到分类”文案与入口统一改为“移动”。
+- 暗色模式下首页“本分类”与二级分类标签文字改为跟随 `--home-text-color`（白色），不再显示黑色。
+- 移动端亮色侧边导航去除默认灰色蒙版（`.toc-slip` 默认透明），仅当前锚点分类显示灰色标记。
+- 验证：`npm test` 100 files / 672 passed；`npm run type-check` 0 errors/0 warnings；`npm run build` 成功；`git diff --check` 通过；relay Chrome 390px/1440px 复核浮层不遮挡分页、无底部空白、图标/文案/暗色标题/侧栏锚点标记均正确，console errors/page exceptions/failed requests 均为 0。
+
 ## 2026-08-31
 ### 部署后验收反馈修复（第二轮）
 

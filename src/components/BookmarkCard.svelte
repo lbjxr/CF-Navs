@@ -347,8 +347,8 @@
     <button
       type="button"
       class="bookmark-mobile-menu-trigger"
-      aria-label={`移动「${bookmark.title}」到其他分类`}
-      title="移动到分类"
+      aria-label={`移动「${bookmark.title}」`}
+      title="移动"
       on:click|stopPropagation={handleMobileMenuClick}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" class="bookmark-mobile-menu-icon">
