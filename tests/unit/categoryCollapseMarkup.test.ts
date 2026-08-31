@@ -58,7 +58,7 @@ describe('category hierarchy visibility markup', () => {
     expect(card).toContain('{#if sortMode && onMoveBookmark}')
     expect(card).toContain('on:touchstart={handleTouchStart}')
     expect(card).toContain('function handleTouchStart(event: TouchEvent)')
-    expect(card).toContain('suppressNextClick')
+    expect(card).toContain('withinTouchGuard')
     expect(card).toContain('onEdit={sortMode ? undefined : handleEditClick}')
     const contextMenu = readFileSync('src/components/BookmarkContextMenu.svelte', 'utf8')
     expect(contextMenu).toContain('export let canMove = false')

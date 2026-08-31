@@ -639,7 +639,7 @@
     --toc-text: var(--home-text-color, #0f172a);
     --toc-accent: var(--home-accent-color, #2563eb);
     --toc-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
-    --toc-slip: rgba(15, 23, 42, 0.72);
+    --toc-slip: rgba(248, 250, 252, 0.9);
   }
 
   :global([data-theme='dark']) .toc-mobile-btn,
@@ -1161,7 +1161,8 @@
   }
 
   .toc-item.active .toc-slip {
-    background: var(--toc-slip);
+    background: var(--toc-accent);
+    transform: scaleX(1);
   }
 
   .toc-icon-slot {

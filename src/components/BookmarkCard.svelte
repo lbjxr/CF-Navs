@@ -62,7 +62,8 @@
   let windowListenersAttached = false
   let contextMenuInstanceId = Math.random().toString(36).slice(2)
   let longPressTimer: ReturnType<typeof setTimeout> | null = null
-  let suppressNextClick = false
+  let contextMenuOpenedAt = 0
+  const TOUCH_CLICK_GUARD_MS = 700
   let touchStartX = 0
   let touchStartY = 0
   const LONG_PRESS_MS = 500
@@ -219,7 +220,7 @@
       hasEditHandler: Boolean(onEdit),
       hasMoveHandler: Boolean(onMoveBookmark),
     })) return
-    suppressNextClick = true
+    contextMenuOpenedAt = Date.now()
     notifyContextMenuOpen()
     contextMenuOpen = true
   }
@@ -265,9 +266,12 @@
     await onMoveBookmark?.(bookmark, categoryId)
   }
 
+  function withinTouchGuard(): boolean {
+    return contextMenuOpenedAt > 0 && Date.now() - contextMenuOpenedAt < TOUCH_CLICK_GUARD_MS
+  }
+
   function handleLinkClick(event: MouseEvent) {
-    if (suppressNextClick) {
-      suppressNextClick = false
+    if (withinTouchGuard()) {
       event.preventDefault()
       return
     }
@@ -294,7 +298,9 @@
   }
 
   function handleWindowClick() {
-    if (contextMenuOpen) closeContextMenu()
+    if (!contextMenuOpen) return
+    if (withinTouchGuard()) return
+    closeContextMenu()
   }
 
   function handleDocumentKeydown(event: KeyboardEvent) {
