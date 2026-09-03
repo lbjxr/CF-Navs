@@ -22,7 +22,7 @@ Issue #8 正文提出两条建议：
 
 （同一 Issue 中的「Chrome 展开子分类出现白色滚动条」已单独修复，不在本文范围。）
 
-### 1.2 部分导出：实施前现状（历史基线）
+### 1.2 部分导出：现状
 
 导出流程完全在浏览器端完成，**没有后端导出端点**：
 
@@ -54,9 +54,9 @@ interface BackupData {
 - 后台聚合导出的 `Bookmark.icon_blob` 恒为 `null`，另带 `icon_cached` 标志（`worker/lib/db/sql.ts` `BOOKMARK_AGGREGATE_LIST_SQL`）——导出只含图标引用，不含二进制图标。
 - 导入侧 `POST /api/import`（`worker/routes/data.ts:14-56`）已支持 `mode: 'replace' | 'merge'`，校验上限 `MAX_IMPORT_CATEGORIES = 2000`、`MAX_IMPORT_BOOKMARKS = 20000`（`worker/lib/importValidation.ts:16-17`），并做 ID / 引用 / 层级 / URL / settings 校验。
 
-### 1.3 顶部导航：实施前现状（历史基线）
+### 1.3 顶部导航：现状
 
-导航位置由 `Settings.navigation` 控制。以下接口是**实施前基线**：
+导航位置由 `Settings.navigation`（`shared/types.ts:116-119,151`）控制：
 
 ```ts
 interface NavigationSetting {
@@ -65,9 +65,7 @@ interface NavigationSetting {
 }
 ```
 
-实施后已增加 `top_layout: 'scroll' | 'wrap'`，默认 `scroll`；当前类型与归一化见 `shared/types.ts:123-127`、`worker/lib/settingsData.ts:75-79,128-135`、`src/lib/settingsForm.ts:91,242-244,324-326`。旧数据或非法值统一回退为 `scroll`，不应再将上面的两字段代码块当作当前完整契约。
-
-顶部导航的实施前渲染基线见下述条目；当前落地情况以本文件 §4 的勾选验收和 `DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md:333-344` 为准。
+默认值 `{ position: 'left', always_expanded: false }`（`schema.sql:80-82`、`worker/lib/settingsData.ts:67-70`）。
 
 顶部模式渲染（`src/components/Sidebar.svelte:398-497`）：
 
@@ -83,11 +81,13 @@ interface NavigationSetting {
 
 **单行结论的证据**：`.top-track` 是 flex 容器且未设 `flex-wrap`，子项 `flex:0 0 auto` + `white-space:nowrap`，容器固定 52px 高度并配横向滚动箭头/拖拽——共同保证内容只在一行内横向排列。
 
-### 1.4 顶部导航右上角按钮：实施前现状（历史基线）
+### 1.4 顶部导航右上角按钮：现状
 
-下列“下压到 `4.75rem`/`4rem`”是实施前问题记录，不是当前实现状态。当前 `.floating-actions` 已在 `HomeFloatingActions.svelte:143-156` 使用 `top:1.125rem` 和 `z-index:70`，顶部导航仍为 `Sidebar.svelte:682-703` 的 `top:12px`/52px；完整验收以 §4.3 和 `DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md:337-344` 为准。
+右上角主题切换 / 后台设置 / 退出等操作由 `src/components/HomeFloatingActions.svelte` 渲染，容器 `.floating-actions`（`HomeFloatingActions.svelte:62-109`）为 `position:fixed`，默认 `top:1.25rem; right:1.25rem`（`HomeFloatingActions.svelte:127-134`）。
 
-右上角操作由 `src/components/HomeFloatingActions.svelte` 渲染，实施前容器与位置证据保留如下：`.floating-actions` 为 `position:fixed`，默认 `top:1.25rem; right:1.25rem`（实施前行号 `:62-109`、`:127-134`）。
+顶部导航模式下，`Home.svelte:358-368` 以 `topNavigation={isTopNavigation}` 传入，组件据此加 `.below-top-navigation` 类（`HomeFloatingActions.svelte:62`），将 `top` 下压为 `4.75rem`（桌面，`:136-138`）/ `4rem`（≤720px，`:231-233`）。
+
+**问题**：`.top-navigation` 固定在 `top:12px`、高 `52px`（`Sidebar.svelte:657-665`），其右缘为 `max-width: var(--content-max-width)` 居中容器的右边界；而浮动按钮被下压到 `4.75rem`（约 76px），落在导航栏**下方一行**，与导航栏不在同一水平线上。图标按钮尺寸为 `2.5rem`（桌面）/ `2.2rem`（移动，`:159-161,235-238`），与导航栏 52px 高度也不一致。
 
 ---
 
@@ -111,10 +111,10 @@ interface NavigationSetting {
 
 ### 2.3 UI 需求
 
-- 在 `BackupPanel.svelte` 的导出区域（当前实现 `src/components/BackupPanel.svelte:141-210`）提供分类选择器，保持与现有 `.backup-operation` 布局风格一致。
+- 在 `BackupPanel.svelte` 的「导出当前数据」区域（`59-68` 行）增加分类选择器（如可折叠的分类树 + 复选框），保持与现有 `.backup-operation` 布局风格一致。
 - 选择器需体现两级层级：一级分类可展开显示其二级分类；勾选父级联动子级（三态复选框：全选 / 部分选 / 未选）。
-- 保留顶部“导出备份”主按钮语义；当处于“全选”时等价于当前的一键全量导出。
-- 需覆盖移动端布局（参考 `docs/plans/ADMIN_MOBILE_LAYOUT_PLAN.md` 的后台面板约束），选择器在窄屏不溢出、不依赖横向滚动；当前实现与验收见本文件 §4.1。
+- 保留顶部「导出备份」主按钮语义；当处于「全选」时等价于当前的一键全量导出。
+- 需覆盖移动端布局（参考 `docs/plans/ADMIN_MOBILE_LAYOUT_PLAN.md` 的后台面板约束），选择器在窄屏不溢出、不依赖横向滚动。
 
 ### 2.4 非功能需求
 
@@ -156,15 +156,15 @@ interface NavigationSetting {
 
 ### 3.3 UI / 交互需求
 
-- 在 `NavigationSettingsSection.svelte` 的顶部导航区域（实施前位置 `:18-58`，当前实现 `:76-86`）提供展示模式开关，仅在 `position = 'top'` 时可用。**控件形态以设置页 UI/UX 改造为准**：使用 Switch/segmented 组件，复用 `position` 条件置灰逻辑；**不再**沿用旧 `.toggle-field` 原生 checkbox。
-- 说明文案（“分行显示仅在桌面/宽屏生效，移动端仍为横向滑动”）由当前 Tooltip 组件承载（`NavigationSettingsSection.svelte:76-85`），与本分区其它说明风格统一。
+- 在 `NavigationSettingsSection.svelte:18-58` 顶部导航相关区域新增一个开关/单选（如「分类排布：横向滚动 / 分行显示」），仅在 `position = 'top'` 时可用。**控件形态以设置页 UI/UX 改造为准**：使用本轮新建的 Switch/segmented 组件（见 `SETTINGS_UI_UX_ADJUSTMENT_REQUIREMENTS.md` FR-0.1），复用 `position` 条件置灰逻辑；**不再**沿用旧 `.toggle-field` 原生 checkbox。
+- 说明文案（「分行显示仅在桌面/宽屏生效，移动端仍为横向滑动」）用新建的 Tooltip 组件承载（该文档 FR-0.2），与本分区其它说明风格统一。
 
 ### 3.4 数据模型 / 设置契约
 
-- 扩展导航设置以承载展示模式。新增字段而非复用 `always_expanded`（其语义为“左侧始终展开”，仅 left 生效，当前控件见 `NavigationSettingsSection.svelte:63-74`）：
-  - `NavigationSetting` 增加 `top_layout: 'scroll' | 'wrap'`，**默认 `'scroll'`** 以保持现状（`shared/types.ts:123-127`、`worker/lib/settingsData.ts:75-79`）。
-  - 已同步类型、默认值、归一化和 UI：`shared/types.ts:123-127`、`schema.sql:80-82`、`worker/lib/settingsData.ts:75-79,128-135`、`src/lib/settingsForm.ts:91,242-244,324-326`、`src/components/settings/NavigationSettingsSection.svelte:76-86`。
-  - `isValidNavigationSetting` 对缺失或非法 `top_layout` 归一化为 `'scroll'`，保证旧数据安全降级；当前实现见 `worker/lib/settingsData.ts:128-135`。
+- 扩展导航设置以承载展示模式。新增字段而非复用 `always_expanded`（其语义为「左侧始终展开」，仅 left 生效，`NavigationSettingsSection.svelte:46-49`）：
+  - `NavigationSetting` 增加 `top_layout: 'scroll' | 'wrap'`，**默认 `'scroll'`** 以保持现状。
+  - 需同步 6 处：`shared/types.ts:116-119`（类型）、`shared/settings.ts`（key 白名单/公开设置透传）、`schema.sql:80-82`（默认值）、`worker/lib/settingsData.ts:67-70,110-122`（默认 + `isValidNavigationSetting` 校验）、`src/lib/settingsForm.ts:233-236`（表单默认/归一化）、`src/components/settings/NavigationSettingsSection.svelte`（UI）。
+  - `isValidNavigationSetting`（`settingsData.ts:116-122`）需接受新字段并对非法值回退默认，保证旧数据（无该字段）安全降级为 `'scroll'`。
 
 ### 3.5 非功能需求
 

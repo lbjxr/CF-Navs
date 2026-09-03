@@ -63,14 +63,12 @@ npm run db:init:remote
 
 如果仍能登录后台，进入 **站点设置 → 账号安全**，输入当前密码后更新管理员密码。修改成功后，现有登录会话会失效，需要使用新密码重新登录。
 
-如果已经无法登录，以下 `INIT_ADMIN_*` 流程仅用于已完成初始化的旧数据库升级或凭据恢复，不适用于全新部署。修改 `INIT_ADMIN_USER` 和 `INIT_ADMIN_PASSWORD` 后重新部署，下一次登录会自动用新值覆盖 D1 中的管理员凭据。确认当前 Wrangler 指向正确的 Worker、D1 和账号后再执行；本地 CLI 场景优先使用项目脚本生成的 `wrangler.local.toml`：
+如果已经无法登录，以下 `INIT_ADMIN_*` 流程仅用于已完成初始化的旧数据库升级或凭据恢复，不适用于全新部署。修改 `INIT_ADMIN_USER` 和 `INIT_ADMIN_PASSWORD` 后重新部署，下一次登录会自动用新值覆盖 D1 中的管理员凭据。确认当前 Wrangler 指向正确的 Worker、D1 和账号后再执行：
 
 ```bash
-npm run wrangler -- secret put INIT_ADMIN_PASSWORD
-npm run deploy
+npx wrangler secret put INIT_ADMIN_PASSWORD
+npx wrangler deploy
 ```
-
-如果不使用项目脚本，必须显式传入包含真实 D1/KV ID 的本地配置（例如 `--config wrangler.local.toml`），不得用不带资源 ID 的公共 `wrangler.toml` 误部署。恢复变量修改后重新部署，成功登录并确认恢复后及时移除临时变量。
 
 升级前已经创建的旧数据库可能还没有初始化标记。此时再设置一个新的 `RESET_ADMIN_CREDENTIALS` 变量值，例如 `reset-2026-07-12`，重新部署并登录一次即可。成功登录后可以移除该变量；同一个标记不会重复重置，以后再次强制重置时请使用新的标记值。
 
@@ -158,7 +156,7 @@ https://icon-sets.iconify.design/mdi/home/
 常见原因：
 
 - 旧 Service Worker 仍在缓存跨域 `opaque` Iconify 响应，Chrome 会对这类响应按较大配额计入 Cache Storage。
-- 旧实现曾把完整后台聚合数据中的 `icon_blob` 又复制到浏览器本地图标缓存；当前聚合响应只提供 `icon_cached`，该条仅用于识别旧版本遗留数据。
+- 后台书签列表预览把聚合数据里的 `icon_blob` 又复制到浏览器本地图标缓存。
 - 多次登录留下旧 `AdminData` 快照。
 
 当前实现会跳过跨域 `opaque` 响应、限制图标响应写入体积、清理旧登录态快照，并在后台已有 `icon_blob` 时清理同 key 的本地图标副本。
@@ -191,9 +189,10 @@ https://icon-sets.iconify.design/mdi/home/
 npx wrangler tail
 npm run type-check
 npm run build
+npx wrangler d1 execute cf-navs-db --remote --command "SELECT key, value FROM settings LIMIT 20"
 ```
 
-不要直接查询并打印 `settings.value`。其中可能包含 `custom_js`、`footer_html`、`image_host_url` 等站点内容；如需确认配置是否存在，只查询非敏感元数据或键名，并先确认当前 Cloudflare 账号、Worker、D1 和 Wrangler 配置指向正确项目。
+涉及线上数据的命令请先确认当前 Cloudflare 账号和 Wrangler 配置指向正确项目。
 
 ## 线上 Chrome 验证异常
 

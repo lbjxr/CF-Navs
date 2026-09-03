@@ -34,21 +34,17 @@
 
 > **重要映射修正**：`UI_UX_Plan.md`「站点设置」表里的「公开模式/默认主题」在 `BasicSettingsSection`，而「显示站点标题/显示搜索框/显示引擎选择器/经常访问展示数」实际在 `HeroSettingsSection`（`SettingsPanel.svelte:145-146` 同屏渲染）。「高级设置」的背景字段不在 `BackgroundSettingsSection`，而在 `AdvancedSettingsSection` 展开后委托的 `ThemeBackgroundCard`。
 
-### 1.3 复用基线与缺失组件（实施前历史记录）
+### 1.3 复用基线与缺失组件（关键约束）
 
-以下调查结论描述的是本轮实施前的源码基线，不是当前状态。当前统一控件已存在于 `src/components/ui/`，并已在 `DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md:333-341` 记录实现和验证；本文后续 FR 仍保留为需求/验收依据，所引用的旧行号仅用于追溯实施前位置。
+调查确认仓库**没有**统一的 Switch / Tooltip / InputGroup / Slider 组件：
 
-实施前调查确认仓库**没有**统一的 Switch / Tooltip / InputGroup / Slider 组件：
-
-| 计划要求的组件 | 实施前现状 | 结论 |
+| 计划要求的组件 | 现状 | 结论 |
 | --- | --- | --- |
-| **Switch 开关** | 无 `Switch.svelte`；所有开关是原生 `checkbox` + `.toggle-field`/`.toggle-copy`（`settingsSections.css:189-220`，18px `accent-color`） | **需新建**统一 Switch 组件；当前已完成 |
-| **Tooltip `(?)`** | 无通用 `Tooltip.svelte`；仅 `bookmarkCardTooltip.css` 提供书签专用伪元素 | **需新建**通用 Tooltip；当前已完成 |
-| **InputGroup（数值+单位后缀）** | 无组件；现成模式为 `.inline-input` + number + unit `select`（`NavigationSettingsSection.svelte:76-103`） | **需新建**通用 InputGroup；当前已完成 |
-| **Slider 数值预览** | 无组件；数值在 label 内 `<em>` | **需新建** Slider 封装；当前已完成 |
-| **颜色选择器** | 已有可复用 `src/components/ColorAlphaInput.svelte` | **复用**，无需新建 |
-
-当前实现文件为 `src/components/ui/Switch.svelte`、`Tooltip.svelte`、`InputGroup.svelte`、`Slider.svelte`，公共辅助为 `src/lib/sliderFormat.ts`、`src/lib/tooltipStore.ts`；不要再根据上面的历史表判断这些组件缺失。
+| **Switch 开关** | 无 `Switch.svelte`；所有开关是原生 `checkbox` + `.toggle-field`/`.toggle-copy`（`settingsSections.css:189-220`，18px `accent-color`） | **需新建**统一 Switch 组件 |
+| **Tooltip `(?)`** | 无 `Tooltip.svelte`；仅 `bookmarkCardTooltip.css`（`.bookmark-tooltip-anchor` + `::after attr(data-tooltip)`，hover/focus-visible 显示，触屏隐藏）；其余为原生 `title` 属性 | **需新建**可访问的统一 Tooltip（现有 `title`/`data-tooltip` 不满足统一 `(?)` 图标交互） |
+| **InputGroup（数值+单位后缀）** | 无组件；现成模式为 `.inline-input` + number + unit `select`（`NavigationSettingsSection.svelte:76-103`，`settingsSections.css:162-186`，`unit-select` flex-basis 84px） | **需新建**通用 InputGroup（或抽象现有 `.inline-input`） |
+| **Slider 数值预览** | 无组件；数值在 label 内 `<em>`（如 `BasicSettingsSection` 字号、`NavigationSettingsSection` 边距）；计划要求数值移到滑块右侧 | **需新建** Slider 封装并迁移格式化策略（px / % / `0 隐藏`） |
+| **颜色选择器** | **已有可复用** `src/components/ColorAlphaInput.svelte`（文本框 + 38px 色块弹窗，含颜色/alpha；`ColorAlphaInput.svelte:92-125`，样式 `:133+`） | **复用**，无需新建 |
 
 `ColorAlphaInput` 现有调用点：`BasicSettingsSection.svelte:41`、`AdvancedSettingsSection.svelte:122,142`、`ThemeBackgroundCard.svelte:92,143`、`GradientBackgroundInput.svelte:113,125`、`BookmarkEditModal.svelte:362`。其 props：`value/alpha/placeholder/inputLabel/swatchTitle/alphaText`（`ColorAlphaInput.svelte:12-17`）。
 
