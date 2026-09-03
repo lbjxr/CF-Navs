@@ -1,5 +1,11 @@
 # 导航后台前端设置页面 UI/UX 改造规范
 
+> **文档状态：原始改造草案，已被取代。**
+>
+> - 本文已由 `SETTINGS_UI_UX_ADJUSTMENT_REQUIREMENTS.md` 转化为可执行、可验收的需求（见该文 `:5`），实现与验证记录在 `DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md` §12。
+> - 仅作历史来源保留，**不作为待办清单**。其中的条目若与 `SETTINGS_UI_UX_ADJUSTMENT_REQUIREMENTS.md` 的 FR 编号冲突，以后者为准。
+> - 本文与当前实现的已知偏差登记在 `PROBLEM_HANDLING_TASK_LIST.md` 的 PROB-04。
+
 > **核心设计原则**：
 > 1. **结构减负**：二级 Tab 改为顶部水平导航，释放横向宽度；浅色/深色背景配置采用内部 Tab 切换，避免纵向重复堆叠。
 > 2. **文案四级收敛**：直接删除同义反复废话；规则与格式内置至 Placeholder 或控件数值；系统逻辑与权限保留为 Tooltip (?)；大卡片 Checkbox 统一改为紧凑的 Switch 开关并建立置灰联动。

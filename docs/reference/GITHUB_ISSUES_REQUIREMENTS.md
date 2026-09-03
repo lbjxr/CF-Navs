@@ -2,9 +2,9 @@
 
 > **文档状态：本地实现与历轮验收反馈修复完成；云端 Issue 仍 Open，R-08 部署/原作者预期待同步。**
 >
-> **数据快照：** 2026-08-31（GitHub 时间统一按 UTC 记录）
+> **数据快照：** 2026-09-03（GitHub 时间统一按 UTC 记录）
 > **查询范围：** `lbjxr/CF-Navs` 仓库 `state=open` 的 Issue，不包含 Pull Request 及 Closed Issue
-> **当前 Open 数量：** 5 个，#9、#10、#11、#12、#13
+> **当前 Open 数量：** 6 个，#9、#10、#11、#12、#13、#15
 > **文档目的：** 将云端 Issue 的原始问题、重复关系和待确认信息整理为一份可执行的产品与 UI 规划，并明确 PC、移动端边界。
 
 本文不是实现承诺，也不替 Issue 做关闭或优先级决策。凡标注“建议方案”的内容，都是进入实现前可供确认的设计方案；凡标注“云端已明确”的内容，才是当前 Issue 的原始需求或问题。
@@ -20,8 +20,11 @@
 | [#11](https://github.com/lbjxr/CF-Navs/issues/11) | 首页新增分类按钮和跳转逻辑 | `enhancement` | `lbjxr` | 2026-08-30 01:35 | 2026-08-30 01:35 | 首页快捷入口与分类定位 |
 | [#12](https://github.com/lbjxr/CF-Navs/issues/12) | 管理后台书签和分类功能调整 | `enhancement` | `lbjxr` | 2026-08-30 01:38 | 2026-08-30 01:38 | 批量移动与分类视觉属性 |
 | [#13](https://github.com/lbjxr/CF-Navs/issues/13) | 后台管理卡片样式属性阈值调整 | `enhancement` | `lbjxr` | 2026-08-30 01:39 | 2026-08-30 01:39 | 卡片最小宽度评估 |
+| [#15](https://github.com/lbjxr/CF-Navs/issues/15) | [Feature]: 简短描述你的新功能想法 | `enhancement` | `wztx` | 2026-09-02 13:34 | 2026-09-02 14:24 | 部署平台兼容请求，范围待澄清 |
 
-GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表查询遗漏。本次 Open 查询返回的正式范围只有 #9—#13。
+GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表查询遗漏。本次 Open 查询返回的正式范围是 #9—#13 与 #15。
+
+#15 的标题仍是未替换的模板占位，正文实际诉求是「开发兼容 EdgeOne 部署版本」；维护者已于 2026-09-02 回复「目前没计划…下一个大版本纳入排期」，因此它**尚未获得实现承诺**，也没有分配 R 编号。兼容边界（Workers 运行时 API 差异、D1/KV 等价存储、部署配置、构建产物、CI、文档范围）需先向报告者澄清，未澄清前不进入 R-01～R-08 的正式需求清单；当前跟踪见 `docs/plans/PROBLEM_HANDLING_TASK_LIST.md` 的 PROB-25 与 `docs/plans/REQUIREMENT_DEVELOPMENT_TASK_LIST.md` 的 REQ-12。
 
 ### 1.2 明确排除的内容
 

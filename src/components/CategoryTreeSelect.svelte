@@ -238,15 +238,20 @@
               type="button"
               class="tree-option tree-root-option"
               class:selected={String(value) === String(item.id)}
+              class:has-notice={!!item.notice}
               data-tree-root-id={item.id}
               role="treeitem"
               aria-level="1"
               aria-expanded={item.children.length > 0 ? expandedRootIds.has(String(item.id)) : undefined}
               aria-selected={String(value) === String(item.id)}
+              aria-describedby={item.notice ? `category-tree-notice-${item.id}` : undefined}
               on:click={() => selectValue(item.id)}
             >
               <span class="tree-folder-mark" aria-hidden="true"></span>
               <span>{item.title}</span>
+              {#if item.notice}
+                <span class="tree-option-notice" id={`category-tree-notice-${item.id}`}>{item.notice}</span>
+              {/if}
             </button>
           </div>
 
@@ -257,14 +262,19 @@
                   type="button"
                   class="tree-option tree-child-option"
                   class:selected={String(value) === String(child.id)}
+                  class:has-notice={!!child.notice}
                   data-tree-parent-id={item.id}
                   role="treeitem"
                   aria-level="2"
                   aria-selected={String(value) === String(child.id)}
+                  aria-describedby={child.notice ? `category-tree-notice-${child.id}` : undefined}
                   on:click={() => selectValue(child.id)}
                 >
                   <span class="tree-branch-mark" aria-hidden="true"></span>
                   <span>{child.title}</span>
+                  {#if child.notice}
+                    <span class="tree-option-notice" id={`category-tree-notice-${child.id}`}>{child.notice}</span>
+                  {/if}
                 </button>
               {/each}
             </div>
@@ -478,6 +488,20 @@
     background: #eff6ff;
     color: #1d4ed8;
     font-weight: 600;
+  }
+
+  .tree-option.has-notice {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .tree-option-notice {
+    flex: 1 0 100%;
+    padding-left: 20px;
+    color: #b45309;
+    font-size: var(--font-size-xs);
+    font-weight: 400;
+    line-height: 1.4;
   }
 
   .tree-root-option {

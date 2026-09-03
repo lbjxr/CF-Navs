@@ -1,4 +1,31 @@
 # 变更记录
+## 2026-09-03（批量移动后果提示 / 毛玻璃强调色 / 文档核对）
+### 批量移动目标树逐项后果提示（R-05 验收补齐，PROB-01）
+
+- 核对发现 R-05 写的三个禁用理由在当前数据模型都不成立：`worker/routes/bookmarks.ts` 只校验 `category_id` 为正整数，`worker/lib/db/bookmarks.ts` 只校验「分类存在」；分类最多两层且两层都能挂书签，所以没有跨层级规则；管理员登录后可见全部分类，所以没有越权目标。
+- 真正需要提前告知的只有一条：把公开书签移进私密（或私密祖先下的）分类，会让它从公开首页消失（`worker/lib/db/aggregates.ts` 的 `getPublicCategoryIds` 按祖先链隐藏）。因此按「可选 + 逐项后果警告」实现，不硬禁用服务端允许的管理员操作。
+- `CategoryTreeOption` 新增 `notice`；`CategoryTreeSelect` 在一级/二级选项内渲染该文案并接入 `aria-describedby`，选项保持可选。
+- `getAdminBookmarkCategoryOptions` 改为接收当前选中书签，只在「选中集合含当前对匿名访客可见的公开书签」且目标分类会被隐藏时标注「移入后会从公开首页隐藏 N 个公开书签」；已经躺在私密分类里的公开书签换到另一个私密分类属于「保持隐藏」，不计入 N。新增 `getHiddenCategoryIds` 作为前端镜像。
+- 确认弹层重申一次后果，并说明私密书签不受影响、分类可改回公开。
+- 验证：`tests/unit/adminListState.test.ts` 覆盖私密根/私密后代/环形数据/计数/无需提示/已隐藏不重复计数等情形；`tests/unit/publicVisibility.test.ts` 交叉断言前端镜像与服务端 `getPublicCategoryIds` 逐项一致，防止两侧漂移；`tests/unit/adminBookmarkLayout.test.ts` 锁定逐项文案、无障碍描述与「不引入 `aria-disabled`」。
+
+### 13 套毛玻璃预设改为逐套强调色（REQ-08）
+
+- 此前 13 套 `glass` 预设共用硬编码 `accentColor: '#2563eb'` / `darkAccentColor: '#7dd3fc'`；9 套 `paper-*` 护眼预设各自已有调好的强调色，未做改动。
+- `GradientPresetStyle` 新增 `accent` / `darkAccent`，逐套按该预设主色相取深/浅档：清透蓝绿 `#155e75`、晨雾石青 `#0f766e`、珊瑚晴空 `#be123c`、鼠尾草石墨 `#3f6212`、琥珀晨光 `#92400e`、余烬夜航 `#b91c1c`、紫晶破晓 `#6d28d9`、深海蔚蓝 `#0369a1`、极光苔原 `#047857`、柑橘日落 `#9a3412`、玫瑰星轨 `#be185d`、靛蓝秘境 `#4338ca`、陶土沙丘 `#7c2d12`。浅色与深色强调色各 13 个取值互不重复。
+- 这是用户确认接受的视觉变动，不属于「引入 token 不改变视觉」的等值替换。
+- 验证：`tests/unit/settingsForm.test.ts` 断言浅色与深色强调色各自 13 个取值互不相同、无一残留旧的 `#2563eb`，并按**最坏可见区域合成后的卡片色**断言对比度 ≥ 4.5:1（最暗 linear stop → 叠最暗 radial 热区 → 叠遮罩层 → 按 `cardBackgroundOpacity` 合成半透明卡片）。实测最低浅色 4.58（极光苔原）、深色 9.26（靛蓝秘境）；阈值调到 5.0 即失败，证明断言走的是合成路径，而不是偏乐观的纯实底卡片色（后者最低 5.47）。
+
+### 文档核对与修正
+
+- 新增 `docs/plans/TODO.md`（扁平勾选清单，按「立即可做 / 需裁定 / 需运行环境 / 需澄清 / 未获批准」分组）、`docs/plans/PROBLEM_HANDLING_TASK_LIST.md`（PROB-01～PROB-30）与 `docs/plans/REQUIREMENT_DEVELOPMENT_TASK_LIST.md`（REQ-01～REQ-12），作为 `plans/` 中唯一按可执行任务组织的三份文档；`docs/README.md` 增设对应索引小节。
+- PROB-29、PROB-30 是实现 PROB-01 与 REQ-08 时新发现的条目：R-05 的「禁用非法目标」表述仍待改写；`src/lib/appData.ts:253-255` 在无预设时仍回退旧的共用冷蓝 `#2563eb`/`#7dd3fc`（本轮授权范围只含 13 套毛玻璃预设，未改）。
+- `docs/reference/API_CONTRACT.md` 书签端点表补上此前漏列的 `POST /api/bookmarks/reorganize`，并补齐其请求形状与 `CONFLICT=1006` 语义。
+- `docs/reference/GITHUB_ISSUES_REQUIREMENTS.md` 快照更新到 2026-09-03，Open 数量 5 → 6，补入 #15（EdgeOne 部署兼容请求，标题仍是模板占位，维护者已回复未排期），并说明它未获实现承诺、未分配 R 编号。
+- `docs/plans/UI_UX_Plan.md` 补文首状态块，明确它是已被 `SETTINGS_UI_UX_ADJUSTMENT_REQUIREMENTS.md` 取代的原始草案，不作为待办；`docs/README.md` 计划清单补上它与 `DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md`。
+- 验证：`npm run type-check` 0 errors / 0 warnings；`npm test` 100 files / 680 passed；`npm run build` 成功；`git diff --check` 通过。未运行部署、`smoke-test.mjs`、`chrome-regression.mjs` 与浏览器套件。
+
+
 ## 2026-08-31（移动端拖拽回归修复）
 ### 分类树触摸滚动与书签拖拽冲突修复
 

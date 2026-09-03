@@ -58,12 +58,12 @@ node scripts/convert-sunpanel.cjs SunPanel-Data.json cf-navs-import.json
 ### 特殊处理
 
 1. **图标转换**：
-   - HTTP/HTTPS 图标：直接使用
-   - Sun-Panel 上传的图标：可转换为 favicon.im 候选地址保存
-   - Iconify 图标：识别 `mdi:home`、`simple-icons:github`、`iconify:`、`@iconify-json/*`、`@iconify-icons/*` 和 `icon-sets.iconify.design/...`，保存为标准 Iconify URL；后台预览通过 `/api/iconify/*` 代理缓存加载，首页展示优先复用浏览器本地缓存
-   - 非图片图标：无法识别为 Iconify 时，导入后按现有图标候选逻辑处理
+   - HTTP/HTTPS 图标：转换为可访问的图标 URL；
+   - Sun-Panel 上传的图标：旧版转换脚本会尝试转换为 favicon.im 候选地址；
+   - Iconify 图标：**后台直接导入路径**可识别 `mdi:home`、`simple-icons:github`、`iconify:`、`@iconify-json/*`、`@iconify-icons/*` 和 `icon-sets.iconify.design/...`，保存为标准 Iconify URL；后台预览通过 `/api/iconify/*` 代理加载。旧版 `scripts/convert-sunpanel.cjs:54-112` 不负责 Iconify 解析，遇到这类值会置空并回退 favicon；
+   - 非图片图标：旧版转换脚本不保留文字/Iconify 值，按脚本规则回退 favicon；后台直接导入则按 `src/lib/importData.ts:46-94` 的 Iconify/文字图标转换处理。
 
-   运行时普通书签图标会优先读取聚合数据中的 `icon_blob`，没有内嵌图标时才读取浏览器本地图标缓存；缓存缺失时首页会回退使用已保存的普通 HTTP(S) 图标 URL。编辑弹窗打开后会在后台调用短超时刷新接口更新本地图标缓存，保存书签后也会显式刷新。HTTP(S) 分类图片通过 `/api/category-icon/:id` 代理读取，data URI、文字和表情分类图标直接渲染；一级标题、二级标签、搜索分组和折叠导航复用相同展示规则。Iconify 书签图标在后台预览走 `/api/iconify/*`，首页展示优先复用浏览器 HTTP 缓存。
+运行时聚合响应不携带 `icon_blob` 二进制，仅用 `icon_cached` 表示已有持久化缓存；首页根据该标志配合本地缓存、`/api/icon/:id` 兼容路径或已保存 URL 取图。编辑弹窗打开后会在后台调用短超时刷新接口更新完整实体缓存，保存书签后也会显式刷新。HTTP(S) 分类图片通过 `/api/category-icon/:id` 代理读取，data URI、文字和表情分类图标直接渲染；Iconify 书签后台预览走 `/api/iconify/*`，首页可复用浏览器 HTTP 缓存。
 
 2. **打开方式**：
    - Sun-Panel 的 `2`（新窗口）→ CF-Navs 的 `1`
@@ -144,7 +144,7 @@ node scripts/convert-sunpanel.cjs SunPanel-Data.json cf-navs-import.json
 **解决方法：**
 1. 编辑书签
 2. 选择文字图标、Google、Favicon.im 或 Iconify 候选
-3. 或使用图床上传图标后手动填写 URL；首页会优先使用聚合 `icon_blob` 和浏览器本地缓存展示，必要时回退到已保存的图标 URL
+3. 或使用图床上传图标后手动填写 URL；首页根据聚合返回的 `icon_cached` 标志选择本地缓存、兼容代理或已保存的图标 URL，不假设聚合响应携带 `icon_blob`。
 
 ### Q: 导入后排序不对？
 
@@ -203,13 +203,13 @@ sed -i 's/old-domain.com/new-domain.com/g' cf-navs-import.json
 ## 📊 转换统计
 
 转换脚本会显示：
-- ✅ 成功转换的分类数量
-- ✅ 成功转换的书签数量
-- ⚠️ 需要手动处理的图标数量
+- 成功转换的分类数量；
+- 成功转换的书签数量。
+脚本**不输出“需要手动处理的图标数量”**；如需核对 Iconify 或文字图标，请使用后台直接导入并在导入后检查图标来源。脚本实际输出的后续提示仍写作“数据管理 / 导入备份”（`scripts/convert-sunpanel.cjs:139-151`），当前后台界面对应“数据备份与导入 / 导入数据”，按当前界面名称操作。
 
 ## 🎉 完成
 
-导入完成后，你的 Sun-Panel 数据已成功迁移到 CF-Navs！
+导入完成后，请按“验证数据”步骤确认分类、书签、排序和图标来源；本指南不把未在当前环境执行的导入过程宣称为已验证成功。
 
 **下一步建议：**
 1. 检查所有书签是否正常

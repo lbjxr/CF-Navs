@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gradientPresets } from '../../src/lib/themePresets'
+import { gradientPresets, type ThemeGradientPreset } from '../../src/lib/themePresets'
 import {
   applyBackgroundPreset,
   applyCustomThemeBackground,
@@ -42,6 +42,47 @@ function contrastRatio(foreground: string, background: [number, number, number])
   const backgroundLuminance = relativeLuminance(background)
   return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
     / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+}
+
+/**
+ * 毛玻璃预设的强调色画在半透明卡片上，卡片底下是渐变背景。
+ * 最坏可读性出现在「最暗的可见背景区域」：先取 linear stop 中最暗的一档，
+ * 再让每个 radial 的 rgba 按自身 alpha 叠上去取最暗结果，然后叠遮罩层，
+ * 最后按 cardBackgroundOpacity 合成卡片色。
+ */
+function worstGlassCardColor(preset: ThemeGradientPreset, mode: 'light' | 'dark'): [number, number, number] {
+  const background = mode === 'light' ? preset.light : preset.dark
+  const maskColor = mode === 'light' ? '#ffffff' : '#000000'
+  const cardColor = mode === 'light' ? preset.cardBackgroundColor : preset.darkCardBackgroundColor
+
+  const stops = [...background.value.matchAll(/#([0-9a-f]{6})/g)].map((match) => hexToRgb(`#${match[1]}`))
+  const darkestStop = stops.reduce((darkest, stop) => (
+    relativeLuminance(stop) < relativeLuminance(darkest) ? stop : darkest
+  ))
+
+  const hotspots = [...background.value.matchAll(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/g)]
+    .map((match) => mixRgb(
+      [Number(match[1]), Number(match[2]), Number(match[3])],
+      darkestStop,
+      Number(match[4]),
+    ))
+
+  const darkestPage = [darkestStop, ...hotspots].reduce((darkest, candidate) => (
+    relativeLuminance(candidate) < relativeLuminance(darkest) ? candidate : darkest
+  ))
+
+  const maskedPage = mixRgb(hexToRgb(maskColor), darkestPage, background.mask)
+  return mixRgb(hexToRgb(cardColor), maskedPage, preset.cardBackgroundOpacity)
+}
+
+function mixRgb(
+  foreground: [number, number, number],
+  background: [number, number, number],
+  alpha: number,
+): [number, number, number] {
+  return foreground.map((channel, index) => (
+    Math.round(channel * alpha + background[index] * (1 - alpha))
+  )) as [number, number, number]
 }
 
 describe('settings form model', () => {
@@ -103,6 +144,22 @@ describe('settings form model', () => {
       expect(contrastRatio(preset.darkCardTitleColor, darkCard)).toBeGreaterThanOrEqual(7)
       expect(contrastRatio(preset.darkCardDescriptionColor, darkPage)).toBeGreaterThanOrEqual(4.5)
       expect(contrastRatio(preset.darkCardDescriptionColor, darkCard)).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it('gives every glass preset its own readable accent instead of one shared cold blue', () => {
+    const glassPresets = gradientPresets.filter((preset) => preset.surface === 'glass')
+
+    expect(glassPresets).toHaveLength(13)
+    // 回归护栏：13 套毛玻璃预设曾共用 accentColor '#2563eb' / darkAccentColor '#7dd3fc'。
+    expect(glassPresets.filter((preset) => preset.accentColor === '#2563eb')).toHaveLength(0)
+    expect(new Set(glassPresets.map((preset) => preset.accentColor)).size).toBe(glassPresets.length)
+    expect(new Set(glassPresets.map((preset) => preset.darkAccentColor)).size).toBe(glassPresets.length)
+
+    for (const preset of glassPresets) {
+      // 毛玻璃卡片是半透明的，纯实底卡片色只是最好情况；这里按最暗可见区域合成出最坏背景再断言。
+      expect(contrastRatio(preset.accentColor, worstGlassCardColor(preset, 'light'))).toBeGreaterThanOrEqual(4.5)
+      expect(contrastRatio(preset.darkAccentColor, worstGlassCardColor(preset, 'dark'))).toBeGreaterThanOrEqual(4.5)
     }
   })
 

@@ -18,6 +18,7 @@
     reorderAdminSortDraft,
   } from '../../lib/adminListState'
   import { getBookmarkFallbackIcon, getBookmarkIconUrl, hasBookmarkImageIcon } from '../../lib/bookmarkIconDisplay'
+  import { findCategoryTreeOption } from '../../lib/categorySelect'
   import CategoryTreeSelect from '../CategoryTreeSelect.svelte'
   import { truncateUnicodeText } from '../../lib/truncateUnicodeText'
   import { sortableList, type SortHandler } from '../../lib/sortableList'
@@ -63,9 +64,12 @@
   $: selectedIds = new Set([...selectedIds].filter((id) => bookmarks.some((bookmark) => Number(bookmark.id) === id)))
   $: pageIds = pagedBookmarks.map((bookmark) => Number(bookmark.id))
   $: pageSelectedCount = pageIds.filter((id) => selectedIds.has(id)).length
-  $: moveCategoryOptions = getAdminBookmarkCategoryOptions(categories)
+  $: moveCategoryOptions = getAdminBookmarkCategoryOptions(categories, selectedBookmarks)
   $: selectedBookmarks = bookmarks.filter((bookmark) => selectedIds.has(Number(bookmark.id)))
   $: moveTargetTitle = moveTargetId == null ? '未选择分类' : getCategoryTitle(moveTargetId)
+  $: moveTargetNotice = moveTargetId == null
+    ? ''
+    : findCategoryTreeOption(moveCategoryOptions, moveTargetId)?.notice ?? ''
   $: selectedPageCount = new Set(
     selectedBookmarks
       .map((bookmark) => {
@@ -478,6 +482,9 @@
         <p class="batch-move-error" role="alert">{moveError}</p>
       {/if}
       <p class="batch-move-summary">将移动 <strong>{selectedIds.size}</strong> 个书签到「{moveTargetTitle}」</p>
+      {#if moveTargetNotice}
+        <p class="batch-move-notice" role="status">{moveTargetNotice}。私密书签不受影响，可随时把分类改回公开。</p>
+      {/if}
       <div class="batch-move-field">
         <span id="batch-move-category-label">目标分类</span>
         <CategoryTreeSelect
@@ -959,6 +966,21 @@
   .batch-move-summary {
     margin: 18px 0;
     color: var(--admin-muted);
+  }
+
+  .batch-move-summary + .batch-move-notice {
+    margin-top: -10px;
+  }
+
+  .batch-move-notice {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--admin-warning-border, #fcd34d);
+    border-radius: var(--radius-md);
+    background: var(--admin-warning-soft, rgba(252, 211, 77, 0.14));
+    color: var(--admin-warning-text, #92400e);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
   }
 
   .batch-move-field,

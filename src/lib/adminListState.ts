@@ -117,10 +117,69 @@ export function flattenAdminCategoryGroups(groups: AdminCategoryGroup[]): AdminC
   return groups.flatMap((group) => [group.root, ...group.children])
 }
 
+/**
+ * 私密分类本身、以及任何私密分类的后代，都不会出现在匿名首页。
+ * 该规则与服务端 `worker/lib/db/aggregates.ts` 的 `getPublicCategoryIds` 必须保持一致，
+ * 由 `tests/unit/adminListState.test.ts` 的交叉断言防止两侧漂移。
+ */
+export function getHiddenCategoryIds(categories: AdminCategorySummary[]): Set<number> {
+  const byId = new Map(categories.map((category) => [Number(category.id), category]))
+  const hidden = new Set<number>()
+
+  for (const category of categories) {
+    const visited = new Set<number>()
+    let current: AdminCategorySummary | undefined = category
+
+    while (current) {
+      const currentId = Number(current.id)
+      if (visited.has(currentId)) {
+        hidden.add(Number(category.id))
+        break
+      }
+      visited.add(currentId)
+      if (current.is_private === true) {
+        hidden.add(Number(category.id))
+        break
+      }
+      current = current.parent_id == null ? undefined : byId.get(Number(current.parent_id))
+    }
+  }
+
+  return hidden
+}
+
+/**
+ * 构造批量移动的目标分类树。
+ *
+ * 服务端只校验「目标分类存在」（`worker/lib/db/bookmarks.ts`），因此不存在需要禁用的非法目标。
+ * 唯一需要提前告知的后果是：把公开书签移进私密（或私密祖先下的）分类，会让它从公开首页消失。
+ * 这类目标仍然可选，只逐项附上 `notice`。
+ */
 export function getAdminBookmarkCategoryOptions(
   categories: AdminCategorySummary[],
+  selectedBookmarks: AdminBookmarkSummary[] = [],
 ): CategoryTreeOption[] {
-  return buildCategoryTreeOptions(categories)
+  const options = buildCategoryTreeOptions(categories)
+  if (selectedBookmarks.length === 0) return options
+
+  const hidden = getHiddenCategoryIds(categories)
+  if (hidden.size === 0) return options
+
+  // 只统计「当前真的对匿名访客可见」的公开书签：已经躺在私密分类里的书签，
+  // 换到另一个私密分类是「保持隐藏」，不是「移入后隐藏」，不能计入提示。
+  const publicCount = selectedBookmarks.filter((bookmark) => (
+    bookmark.is_private !== true && !hidden.has(Number(bookmark.category_id))
+  )).length
+  if (publicCount === 0) return options
+
+  const notice = `移入后会从公开首页隐藏 ${publicCount} 个公开书签`
+  const annotate = (option: CategoryTreeOption): CategoryTreeOption => ({
+    ...option,
+    ...(hidden.has(Number(option.id)) ? { notice } : {}),
+    children: option.children.map(annotate),
+  })
+
+  return options.map(annotate)
 }
 
 export function createAdminListPage<T>(

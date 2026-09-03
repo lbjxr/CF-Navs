@@ -366,10 +366,10 @@ graph TD
   - T7：外观分区 5 文件——浅/深背景 segmented Tab（切换不丢值）、Slider/InputGroup/Tooltip 改造、保留 card_style 置灰与 FR-B4 极简替换交互。
   - T8：搜索分区——Favicon.im 内嵌为 InputGroup 后缀图标按钮、删除改垃圾桶图标、文案统一。
   - 集成修复：4 基础组件 transition 去掉硬编码时长回退（改用 `var(--transition-base)`）以过 designTokens 契约；同步更新 `settingsForm.test.ts`/`adminSettingsLayout.test.ts`/`adminBackupLayout.test.ts` 中因控件形态变化的断言（Switch/Slider/InputGroup、top_layout 字段、背景 Tab 顺序、favicon 内嵌）。
-  - 全量 `svelte-check` 0 error；`npx vitest run` 全量 648 passed（95 文件）。未运行 git/部署。真实浏览器验证留待批次 3 T-verify。
+  - 全量 `svelte-check` 0 error；`npx vitest run` 全量 648 passed（95 文件）。未运行 git/部署。**截至当时**真实浏览器验证留待批次 3 T-verify，后续已在 §9.2bis 补跑并通过。
 - **2026-08-29 批次 1 完成（T1 + T2-data + T9-export）**
   - T1：新建 4 个基础组件（`src/components/ui/` 下 Switch/Tooltip/InputGroup/Slider）+ 格式化助手 `src/lib/sliderFormat.ts` + 互斥 store `src/lib/tooltipStore.ts`；新增 `tests/unit/sliderFormat.test.ts`、`tests/unit/uiComponents.test.ts`（14 passed）。
   - T2-data：`NavigationSetting` 增 `top_layout: 'scroll'|'wrap'`，同步 `shared/types.ts`/`schema.sql`/`worker/lib/settingsData.ts`/`src/lib/settingsForm.ts`；`settingsData.test.ts` 8 passed。集成修正：`Sidebar.svelte`/`Home.svelte` 默认 navigation 字面量补 `top_layout:'scroll'`。
   - T9-export：`selectBackupSubset` 按分类子集导出并强制补父分类；`BackupPanel.svelte` 加三态分类树/settings 开关/全选清空/默认全选/空选禁用；接线经 `Admin.svelte`→`AdminTabContent.svelte`→`App.svelte`；`appBackup.test.ts` 6 passed。
   - 修复：子代理误删 `src/App.svelte` 的 `api/getErrorMessage/isUnauthorizedError` import，已恢复。
-  - 全量 `svelte-check` 0 error。未运行 git/部署。真实浏览器验证留待批次 3 T-verify。
+  - 全量 `svelte-check` 0 error。未运行 git/部署。**截至当时**真实浏览器验证留待批次 3 T-verify，后续已在 §9.2bis 补跑并通过。
