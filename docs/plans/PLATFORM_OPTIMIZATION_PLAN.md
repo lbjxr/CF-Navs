@@ -1,6 +1,6 @@
 # CF-Navs 平台优化开发计划
 
-审计基线：`develop` @ `c5b70ae`，`npm test` 483 passed / 78 files，`npm run type-check` 0 error / 0 warning。
+实施基线：`develop` @ `c5b70ae`（历史记录）；当前源码核对基线：`develop` @ `5a06fb3`。首轮 `npm test` 483 passed / 78 files 与 `npm run type-check` 0 error / 0 warning 仅作为历史验证记录，不代表当前测试计数。
 
 本文件是本轮优化的唯一执行依据。每条任务都必须写明**证据**（当前源码事实）、**做法**和**验收标准**；没有可验证验收标准的想法不进入本计划。完成一项后立即回本文件更新状态，再开始下一项。
 

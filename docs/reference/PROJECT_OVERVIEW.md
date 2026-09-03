@@ -81,7 +81,7 @@ src/
 │   ├── admin/          # 后台列表面板与样式
 │   ├── ...
 ├── lib/
-│   ├── api.ts          # API 客户端（只保留前端实际调用的接口）
+│   ├── api.ts          # API 客户端（按模块提供前台、后台与图标接口）
 │   ├── stores.ts       # Svelte stores（纯状态容器；取数在 dataService.ts）
 │   ├── dataService.ts  # 公开/后台聚合数据获取、版本确认与本地快照编排
 │   ├── customScript.ts # 自定义 JS 的 blob 注入与生命周期
@@ -256,7 +256,7 @@ SESSION_TTL = "2592000"             # wrangler.toml 默认会话有效期（30�
 - Service Worker 导航请求使用 stale-while-revalidate：先返回缓存的 `/index.html` 再后台更新，二访首屏不等网络；检测到 HTML 内容变化时通知页面弹出「已检测到新版本」提示，把版本滞后窗口从「下次打开」缩短到「现在刷新」
 - 页面在 `load` 后把本次实际加载的 `/assets/*` 清单 `postMessage` 给 Service Worker 预热。`/assets/*` 文件名带 hash 无法写进静态 `APP_SHELL`，而首次访问时 SW 尚未接管、拦不到当次的 JS/CSS 请求，不主动送清单的话第一次访问结束时 Cache Storage 里一个构建产物都没有
 - CSS 压缩
-- 首页普通书签图标优先读取聚合数据 `icon_blob`，没有内嵌图标时才读取浏览器本地图标缓存；仍缺失时回退已保存的普通 HTTP(S) 图标 URL，不主动挂载 `/api/icon/:id`；编辑弹窗先打开，再后台调用短超时刷新接口更新本地图标缓存，保存书签后也会显式刷新；首页图标接近视口后才设置 `src`，并继续使用原生懒加载与异步解码，降低首屏图标解码和请求压力
+- 首页普通书签图标通过聚合数据的 `icon_cached` 轻量标志判断是否存在持久化缓存；聚合响应不携带 `icon_blob` 二进制。前端再按本地缓存、兼容代理或已保存的普通 HTTP(S) 图标 URL 取图；编辑弹窗先打开，再后台调用短超时刷新接口更新完整实体缓存，保存书签后也会显式刷新。首页图标接近视口后才设置 `src`，并继续使用原生懒加载与异步解码，降低首屏图标解码和请求压力。
 - 前台右上角主题按钮使用浏览器本地偏好快速切换亮暗模式，不触发 Worker 请求；新增/编辑书签弹窗默认收起文字图标配色和 Iconify 输入区，选中对应图标类型后才展开
 - SunPanel 导入会识别 Iconify 图标名和 icon-sets 页面链接，导入后保存为标准 Iconify URL 并标记 `icon_source: iconify`；后台预览走 `/api/iconify/*` 代理，首页展示可直连 `api.iconify.design` 并复用浏览器 HTTP 缓存，避免按书签数量增加 Worker 请求
 - 首页搜索预计算书签索引；普通浏览只挂载各一级分组的直属书签，二级内容按标签切换挂载；搜索结果分组使用 `content-visibility: auto` 降低离屏渲染成本
@@ -283,12 +283,12 @@ SESSION_TTL = "2592000"             # wrangler.toml 默认会话有效期（30�
 - `/api/data/version` 使用一次 `settings` 查询同时读取 `site_title`、`public_mode` 和内部 `data_version` 做轻量变更确认；分类、书签、排序、设置、导入和实际变化的显式图标缓存刷新都会更新版本
 - 匿名 `/api/public/data` 未携带 no-cache 指令时使用 Cloudflare edge cache，命中时不读取 D1；cache miss 时优先复用 `/api/config` edge cache，没有命中才轻量读取 `site_title/public_mode` 并预热配置缓存，私有模式下的匿名 1005 响应也短时缓存到 edge，写入接口负责失效缓存
 - `/api/admin/data` 合并后台进入时的数据读取，分类、书签和 settings 使用 D1 batch 读取，并随响应携带当前数据版本；请求带 no-cache 指令时会绕过 Worker isolate 内的短 TTL 运行时聚合缓存
-- `/api/public/data` 确认公开后用一次 D1 batch 合并公开 settings、分类和书签读取，并只读取首页公开字段；书签公开字段保留 `icon_blob` 以支持本地优先图标展示，但不返回 `created_at` 等管理字段；同请求内刚从 D1 读取过的 `site_title/public_mode` 会合并进公开 settings，避免第二次 settings 查询重复读取这两行
+- `/api/public/data` 确认公开后用一次 D1 batch 合并公开 settings、分类和书签读取，并只读取首页公开字段；书签公开字段保留 `icon_cached` 轻量标志，不返回 `icon_blob` 二进制或 `created_at` 等管理字段；同请求内刚从 D1 读取过的 `site_title/public_mode` 会合并进公开 settings，避免第二次 settings 查询重复读取这两行。
 - 后台设置面板提交完整 `Settings` 字段时，`PUT /api/settings` 写入 D1 后直接由提交 payload 合成响应；只有兼容性部分更新请求才写后回读完整 settings
 - 分类新增用 `INSERT ... SELECT ... RETURNING` 在目标父级作用域计算末尾排序；分类更新先读取当前父级和子分类状态，再用 `UPDATE ... RETURNING` 完成合法移动。书签新增仍在单条语句中判断分类是否存在；书签更新在 SQL 内只于图标变化时清空 `icon_blob`
 - 分类删除先查询子分类数量执行保护，无子分类时再按删除语句 `changes` 判断目标是否存在，并显式删除直属书签
 - 公开聚合、后台聚合、书签列表和图标详情等读取路径跳过预检查式 schema 迁移，仅在旧库缺列错误时迁移并重试一次
-- `/api/icon/:id`、`/api/category-icon/:id` 与 `/api/iconify/:set/:name.svg` 统一提供图标代理能力，普通书签图标 cache miss 时一次 D1 查询同时读取地址和 `icon_blob`，外站抓取成功后直接返回图片字节；首页普通书签卡片优先读取聚合数据中的 `icon_blob`，没有内嵌图标时才读浏览器本地图标缓存，仍缺失时回退保存的 HTTP(S) 图标 URL，避免 favicon.im 等浏览器可直连图标保存后显示文字；首页不把 `/api/icon/:id` 作为普通浏览路径，后台列表仍可使用代理预览；Iconify 图标和 icon-sets 页面链接不写 `icon_blob`，后台预览通过稳定 `/api/iconify/*` 共享 edge cache，首页展示复用浏览器 HTTP 缓存的 Iconify SVG；Service Worker 不缓存跨域 `opaque` 图标响应，后台已有 `icon_blob` 预览不再复制写入本地图标缓存；普通 HTTP(S) 书签图标代理抓取失败时返回错误，图标缺失、非 HTTP(S) 值、分类图标或 Iconify 失败时仍使用短 TTL 临时 SVG fallback
+- `/api/icon/:id`、`/api/category-icon/:id` 与 `/api/iconify/:set/:name.svg` 统一提供图标代理能力，普通书签图标 cache miss 时一次 D1 查询同时读取地址和 `icon_blob`；外站抓取成功后直接返回图片字节。首页普通书签卡片不从聚合响应读取 `icon_blob`，而根据 `icon_cached` 选择本地缓存、已保存的 HTTP(S) 图标 URL 或兼容路径；Iconify 图标和 icon-sets 页面链接不写 `icon_blob`，后台预览通过稳定 `/api/iconify/*` 共享 edge cache，首页展示复用浏览器 HTTP 缓存的 Iconify SVG；Service Worker 不缓存跨域 `opaque` 图标响应，普通 HTTP(S) 书签图标代理抓取失败时按现有临时 SVG fallback 规则处理。
 - 静态资源 CDN
 
 ### 网络

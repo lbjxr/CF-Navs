@@ -209,7 +209,7 @@ README 的功能表与既有各行使用一致的 emoji 图标，不存在此前
 ## 8. 当前状态与后续范围
 
 - PR7 的 P0/P1 修复、私密数据过滤、跨分类排序、浏览器同步、默认 favicon.im 图标和 Issue #8 的 Chromium 侧边栏滚动条修复均已落地并通过测试。
-- 原始 Issue #8 正文中的“部分导出备份”和“顶部导航分行显示”仍是未实现的独立功能建议，不能因滚动条子问题已修复而宣称完成。
+- 原始 Issue #8 正文中的“部分导出备份”和“顶部导航分行显示”后来已分别在 `PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md` 与 `DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md:333-344` 完成本地实现和验收；Issue 的云端状态、部署状态与本地源码状态分开记录，不能仅凭本地实现宣称云端已关闭。
 - `/api/icon/:id` 与 `/api/category-icon/:id` 仍保留匿名兼容行为，按可枚举 ID 读取图标的风险见 P2-10；后续需签名 URL、会话 Cookie 或内联数据方案。
 - 是否将后续变更推送、合并或部署，按当前用户指令执行；本计划不替代现场 Git 状态。
 
@@ -218,4 +218,4 @@ README 的功能表与既有各行使用一致的 emoji 图标，不存在此前
 - PR #7 的核心功能由 @Helenvin 提交：私密书签、私密分类、首页跨分类排序和浏览器书签单向同步。
 - 这些功能经过安全审计、缺陷修复和回归验证后进入 `develop` 与 `main`；贡献者署名保留在集成提交和 PR 记录中。
 - 公开发布/变更说明见根目录 [`CHANGELOG.md`](../../CHANGELOG.md)。
-- Issue #8 的 Chrome 侧边栏白色滚动条问题已在后续修复中处理；Issue 正文中的部分导出和顶部导航分行建议仍未实现。
+- Issue #8 的 Chrome 侧边栏白色滚动条问题已在后续修复中处理；其中“部分导出备份”和“顶部导航分行显示”也已完成本地实现与回归，详见 `PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md` §4 和 `DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md` §12。Issue 云端状态仍按 `docs/reference/GITHUB_ISSUES_REQUIREMENTS.md` 记录。
