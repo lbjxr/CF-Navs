@@ -109,11 +109,11 @@
         <h3>尺寸与密度</h3>
         <div class="settings-grid card-size-grid">
           <label class="field field-number" class:disabled={form.card_style !== 'info'} for="settings-card-width">
-            <span>卡片最小宽度 <Tooltip text="控制一行能容纳的卡片数量，最小安全值为 44 px。" /></span>
+            <span>卡片最小宽度 <Tooltip text="控制一行能容纳的卡片数量，最小值为 40 px；低于 44 px 时点击区域会小于触控推荐尺寸。" /></span>
             <InputGroup
               inputId="settings-card-width"
               type="number"
-              min={44}
+              min={40}
               max={400}
               step={1}
               suffixUnit="px"
@@ -123,7 +123,7 @@
               ariaLabel="卡片最小宽度"
               on:input={() => void syncForm()}
             />
-            {#if form.card_style === 'info' && form.card_size.width >= 44 && form.card_size.width < 80}
+            {#if form.card_style === 'info' && form.card_size.width >= 40 && form.card_size.width < 80}
               <small class="warn">当前宽度低于 80 px，可能无法保证页面美观。</small>
             {:else if form.card_style === 'icon'}
               <small>极简风格下卡片大小由图标尺寸决定。</small>

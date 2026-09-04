@@ -231,7 +231,7 @@ describe('admin settings layout', () => {
     expect(backgroundCard.indexOf('endLabel="结束颜色"')).toBeLessThan(backgroundCard.indexOf('<div class="background-range-grid">'))
     expect(backgroundCard.indexOf('<div class="background-range-grid">')).toBeLessThan(backgroundCard.indexOf('遮罩颜色'))
   })
-  it('exposes category-level visual controls and the 44px card width contract', () => {
+  it('exposes category-level visual controls and the 40px card width contract', () => {
     const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
     const categoryDisplay = readFileSync('src/components/settings/CategoryDisplaySettingsSection.svelte', 'utf8')
     const advanced = readFileSync('src/components/settings/AdvancedSettingsSection.svelte', 'utf8')
@@ -244,7 +244,7 @@ describe('admin settings layout', () => {
     expect(categoryDisplay).toContain('二级分类标题字号')
     expect(categoryDisplay).toContain('min={12}')
     expect(categoryDisplay).toContain('min={11}')
-    expect(advanced).toContain('min={44}')
+    expect(advanced).toContain('min={40}')
     expect(advanced).toContain('disabled={form.card_style !== \'info\'}')
     expect(advanced).toContain('可能无法保证页面美观')
     expect(home).toContain('--category-root-font-size-base')

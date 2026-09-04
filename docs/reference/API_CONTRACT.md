@@ -212,7 +212,7 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 | `custom_js` | `string` | 长度 ≤ 65536 码位 | PUT 非字符串或超长拒绝；不做内容清洗 | `''` |
 | `image_host_url` | `string` | 长度 ≤ 2048 码位 | PUT 非字符串或超长拒绝；不校验 URL 语法 | `''` |
 | `search_engine` | `SearchEngineSetting` | 服务端不限引擎数量，也不限 `url_template` 形态 | PUT 只要求顶层是非数组对象，不校验 `engines` 元素与 `{q}` 占位符；读取不归一化 | Google 与 Bing 两条，见 `DEFAULT_SETTINGS.search_engine` |
-| `card_size` | `CardSizeSetting` | `width` 44–400、`height` 0–300，整数 | PUT 与读取都过 `normalizeCardSizeSetting`：非对象按空对象，非有限数回落默认，有限数四舍五入后钳制 | `{ width: 80, height: 60 }` |
+| `card_size` | `CardSizeSetting` | `width` 40–400、`height` 0–300，整数 | PUT 与读取都过 `normalizeCardSizeSetting`：非对象按空对象，非有限数回落默认，有限数四舍五入后钳制。`width` 下限 2026-09-04 由 44 降到 40（PROB-28 / #13），低于 44 px 时点击区域小于触控推荐尺寸，属已知取舍 | `{ width: 80, height: 60 }` |
 | `card_style` | `CardStyle` | `'info'` / `'icon'` | PUT 集合外拒绝 | `'info'` |
 | `card_icon_size` | `number` | 40–100，整数 | PUT 与读取都过 `normalizeCardIconSize`，规则同 `card_size` | `60` |
 | `category_display` | `CategoryDisplaySetting` | `root_font_size` 12–28、`root_icon_size` 14–36、`child_font_size` 11–24、`child_icon_size` 12–32，整数 | PUT 与读取都过 `normalizeCategoryDisplaySetting`，逐项回落默认后四舍五入并钳制 | `{ root_font_size: 16, root_icon_size: 20, child_font_size: 14, child_icon_size: 18 }` |

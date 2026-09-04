@@ -336,12 +336,17 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - 处理动作：裁定后按 PROB-03 的 a/b 分支执行
 - 裁定结果：用户 2026-09-04 定为**建议而非验收标准**。R-04 验收标准已明确写成「定位只保证当前项滚动可见，不要求当前项自动获得焦点」，实现不改。详见 PROB-03
 
-### PROB-28（P3）R-07 卡片最小宽度是否已满足诉求未确认
+### PROB-28（P3，已完成）R-07 卡片最小宽度是否已满足诉求未确认
 
 - 云端事实：#13 只问「最小宽度能否下调 / 为何限制 80」，**没给目标值**
 - 源码事实：`shared/settings.ts:33-51` 现为 `min 44 / max 400` 归一化；`src/lib/bookmarkCardLayout.ts:1-12` 另有移动端安全下限 150；`src/components/settings/AdvancedSettingsSection.svelte:121-130` 在低值时给出信息提示
 - 缺口：下限已从 80 降到 44，但原作者是否认为诉求已满足未确认。云端 #13 仍 Open
 - 处理动作：确认后决定是回帖说明现状还是继续下调。**回帖需单独授权**
+- 裁定结果：用户 2026-09-04 选**继续下调，最小值 40**。#13 原文只问「能否下调」、未给目标值，因此不回帖征询，直接按 40 落地
+- 处理结果：`shared/settings.ts` 的 `CARD_SIZE_LIMITS.width.min`、`src/lib/bookmarkCardLayout.ts` 的 `INFO_CARD_MIN_TRACK_WIDTH`、`AdvancedSettingsSection.svelte` 的控件 `min` 与 Tooltip 文案、低值提示的判定阈值全部由 44 改为 40。移动端网格的 150 px 安全下限**不变**。`shared/settings.ts` 就地加注释记录这是用户裁定值且低于 44 px 触控建议
+- 已知取舍（用户明示接受）：40 px 低于 44 px 触控目标建议值，点击区域小于无障碍推荐尺寸，换来更密的列数。Tooltip 与 API 契约都写明了这一点
+- 验证结果：`tests/unit/bookmarkCardLayout.test.ts` 断言 39→40、40→40、44→44、401→400 及移动端 40/44 仍回落 150；`settingsForm` / `settingsData` 归一化断言与 `adminSettingsLayout` 控件契约同步到 40。`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 695 passed；`npm run build` 成功。**40 px 下的真机卡片渲染、触控与列数未验证**，属 L3 欠账
+- 文档同步：`API_CONTRACT.md` 的 `card_size` 行、`GITHUB_ISSUES_REQUIREMENTS.md` 的 R-07 全段与汇总表、`guides/TEST_CASES.md` 的 TC-R07-01 边界值都已改到 40
 
 ### PROB-29（P2，已完成）R-05 的「禁用非法目标」表述与数据模型不符，尚未改写
 

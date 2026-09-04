@@ -143,7 +143,7 @@ describe('worker settings data helpers', () => {
       { key: 'card_icon_size', value: JSON.stringify(20) },
     ])).toMatchObject({
       category_display: { root_font_size: 28, root_icon_size: 14, child_font_size: 14, child_icon_size: 32 },
-      card_size: { width: 44, height: 300 },
+      card_size: { width: 40, height: 300 },
       card_icon_size: 40,
     })
   })

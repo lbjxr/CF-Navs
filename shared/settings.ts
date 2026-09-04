@@ -36,7 +36,9 @@ export const CARD_SIZE_DEFAULTS: CardSizeSetting = {
 }
 
 export const CARD_SIZE_LIMITS = {
- width: { min: 44, max: 400 },
+ // 40 px 是用户在 2026-09-04 裁定的下限（PROB-28 / #13）。它低于 44 px 触控目标建议值，
+ // 属于已知取舍：换来更密的列数，代价是点击区域小于无障碍推荐尺寸。
+ width: { min: 40, max: 400 },
  height: { min: 0, max: 300 },
 } as const
 

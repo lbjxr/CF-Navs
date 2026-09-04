@@ -90,7 +90,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 | R-04 | 首页编辑书签时分类选择器定位当前分类 | Enhancement | 云端 Open；T3 实现与本地回归完成，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#11](https://github.com/lbjxr/CF-Navs/issues/11) |
 | R-05 | 后台批量移动书签 | Enhancement | 云端 Open；T4/T5 与验收反馈修复已完成本地 PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
 | R-06 | 调整一级/二级分类字体和图标大小 | Enhancement | 云端 Open；T8-R06 与验收反馈修复已完成本地设置/PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
-| R-07 | 评估卡片最小宽度下限是否可下调 | Enhancement | 云端 Open；T8-R07 实现与 API/设置/PC/移动端 44px 布局回归完成，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#13](https://github.com/lbjxr/CF-Navs/issues/13) |
+| R-07 | 评估卡片最小宽度下限是否可下调 | Enhancement | 云端 Open；下限已于 2026-09-04 由 44 降到 40（PROB-28 裁定），L0 通过，40px 真机布局验收待部署 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#13](https://github.com/lbjxr/CF-Navs/issues/13) |
 | R-08 | 部分导出备份，便于多个项目同步维护 | Enhancement | 云端 Open；T9/T9b 本地源码、PC/移动端核对完成，部署与原作者预期待同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9) |
 
 ## 4. 详细需求与 UI 规划
@@ -265,7 +265,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 
 **云端已明确的问题**：当前后台卡片最小宽度下限为 80，Issue 询问是否可以继续下调，或该限制是否有设计依据。
 
-**当前实现基线**：设置表单、shared 归一化和 Worker 设置写入目前将 `card_size.width` 限制在 44—400 px；详情卡片网格与极简卡片网格还有各自的布局最小值，不能只修改一个数字后宣称所有卡片均可用。
+**当前实现基线**：设置表单、shared 归一化和 Worker 设置写入目前将 `card_size.width` 限制在 40—400 px；详情卡片网格与极简卡片网格还有各自的布局最小值（移动端安全下限 150 px 未随之下调），不能只修改一个数字后宣称所有卡片均可用。
 
 **建议 UI / 产品方案**
 
@@ -278,16 +278,18 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 **验收标准**
 
 - 控件、共享类型、归一化逻辑、预览和首页实际网格使用同一套已确认范围。
-- 详情风格下任何允许保存的宽度都能在 PC 和移动端渲染完整卡片；低于 44 px 硬阈值的值在输入、保存和旧数据读取时一致钳制到 44 px，介于 44–80 px 之间的值允许保存但给出美观提示。
+- 详情风格下任何允许保存的宽度都能在 PC 和移动端渲染完整卡片；低于 40 px 硬阈值的值在输入、保存和旧数据读取时一致钳制到 40 px，介于 40–80 px 之间的值允许保存但给出美观提示。
 - 详情风格的标题/描述、极简风格的图标/标题、点击区域和响应式列数均有回归截图或行为记录。
 
 **已确认决策**：
 
-- **详情风格（`card_style === 'info'`）**：允许下调卡片最小宽度下限；硬安全阈值定为 44 px（取 40–48 px 量级中值，对齐移动端触控点击区域最小尺寸）。输入值 ≥ 44 px 且 < 80 px 时不拦截保存，但在控件旁显示“可能无法保证页面美观”提示，保留实时预览；低于 44 px 的输入在输入、保存和旧数据读取时一致钳制到 44 px。控件 `min` 设 44、`max` 保持 400。
+- **详情风格（`card_style === 'info'`）**：允许下调卡片最小宽度下限。硬安全阈值 **2026-09-04 由 44 px 下调为 40 px**（PROB-28，用户裁定）——原先的 44 px 取自移动端触控点击区域建议值，40 px 低于该建议值，属于用户明示接受的取舍：换来更密的列数，代价是点击区域小于无障碍推荐尺寸。输入值 ≥ 40 px 且 < 80 px 时不拦截保存，但在控件旁显示“可能无法保证页面美观”提示，保留实时预览；低于 40 px 的输入在输入、保存和旧数据读取时一致钳制到 40 px。控件 `min` 设 40、`max` 保持 400。移动端网格的 150 px 安全下限不变。
 
 - **极简风格（`card_style === 'icon'`）**：卡片最小宽度控件置灰不可修改。极简卡片尺寸已由“极简卡片图标大小”（`card_icon_size`，现范围 40–100 px）动态决定，卡片宽度随图标尺寸联动，无需也不应再单独设最小宽度；置灰时给出说明“极简风格下卡片大小由图标尺寸决定”。
 
 **T8-R07 实现证据**：AdvancedSettingsSection 宽度控件 min=44/max=400，44–80 显示美观提示，icon 风格置灰并说明由图标尺寸决定；shared/client/Worker 保存和旧数据均归一化，API 非法值返回安全值。`CategorySection` 详情 Grid 轨道由归一化 `cardWidth` 驱动，桌面 width=44 轨道约 46px、width=80 约 83.5px、width=400 两列约 591px；390px 移动端 width=44 使用 150px 安全下限并双列，width=200/400 均单列 358px，均无横向溢出；定向测试 25/25、type-check 0/0、build 成功、console/page exception/failed request 均为 0。
+
+**2026-09-04 下限调整证据（PROB-28）**：`CARD_SIZE_LIMITS.width.min`、`bookmarkCardLayout` 的 `INFO_CARD_MIN_TRACK_WIDTH` 与设置控件 `min` 三处同步改为 40；`tests/unit/bookmarkCardLayout.test.ts` 断言 39→40、40→40、44→44、401→400，并锁定移动端 40/44 仍回落 150；`tests/unit/settingsForm.test.ts`、`tests/unit/settingsData.test.ts` 的归一化断言与 `tests/unit/adminSettingsLayout.test.ts` 的控件契约同步到 40。`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 695 passed；`npm run build` 成功。**40 px 下的实际卡片渲染、触控可用性与列数尚未真机验证**，属 L3 欠账。
 
 ### R-08：部分导出备份
 
@@ -350,7 +352,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 | R-04 | 定位=展开父级+滚动高亮，不改表单值；异常显示“当前分类不可用” | 已完成 T3：异常文案固定，PC/移动端当前项展开、滚动、高亮和不改值均有证据；仍待云端同步 |
 | R-05 | 跨页选择+默认追加末尾（可选插入顶部）+整体原子回滚；冲突复用 reorganize 的 `CONFLICT`(1006)；前端交互规范见 R-05 正文 | 已完成 T4/T5：`/api/bookmarks/batch-move` 契约、原子更新、跨页选择、PC/移动端 toolbar、位置选项、目标路径和冲突回写均有证据；仍待云端同步 |
 | R-06 | 按层级全局（一级/二级各一组），一级不继承二级；置于“外观与卡片”页新子分区；默认/区间见正文表；移动端缩放 0.88 | 已完成 T8-R06：设置模型、外观控件、CSS 变量、预览和 PC/移动端 0.88 回归；定向测试 46/46；仍待云端同步 |
-| R-07 | 详情风格允许下调、硬阈值 44px、44–80px 提示；极简风格宽度控件置灰（尺寸由 `card_icon_size` 决定） | 已完成 T8-R07：44px 归一化/API/旧数据、44–80 提示、icon 置灰和 PC/移动端实际卡片回归；定向测试 25/25；仍待云端同步 |
+| R-07 | 详情风格允许下调、硬阈值 40px（2026-09-04 由 44 下调）、40–80px 提示；极简风格宽度控件置灰（尺寸由 `card_icon_size` 决定） | T8-R07 已完成 44px 版本的归一化/API/旧数据与 PC/移动端回归；2026-09-04 下限改 40 并同步测试与契约，40px 真机布局待验证 |
 | R-08 | 以现有“按分类选择导出”能力标记完成 | T9/T9b 已完成本地源码、PC/移动端行为及隔离 replace/merge 核对；二级子集父分类补全、下载计数和移动端正常流式全宽 CTA 均有本地证据；部署版本与原作者预期尚未核对，保持待同步 |
 
 ## 8. 追溯与数据来源
