@@ -159,9 +159,18 @@ describe('POST /api/logout', () => {
     expect(await validateSession(env, session.token)).toBeNull()
   })
 
-  it('still succeeds when the session store is unavailable', async () => {
+  it('reports the revocation as done when the tombstone lands', async () => {
+    const env = createEnv()
+    const session = await createSession(env, 'admin')
+
+    const body = await (await logout(env, session.token)).json()
+    expect(body).toEqual({ code: 0, msg: 'ok', data: { revoked: true } })
+  })
+
+  it('still succeeds but reports the failure when the session store is unavailable', async () => {
     // KV 挂了不该让用户卡在登录态里退不出去：前端仍会清本地登录态，
-    // token 只是回到改动前的状态。
+    // token 只是回到改动前的状态。但接口不能谎称撤销成功——共享设备上的用户
+    // 会以为已经退出，而 token 还能用到 exp。
     const env = createEnv()
     const session = await createSession(env, 'admin')
     const broken = {
@@ -172,7 +181,26 @@ describe('POST /api/logout', () => {
       },
     } as unknown as Env
 
-    expect((await logout(broken, session.token)).status).toBe(200)
+    const response = await logout(broken, session.token)
+    expect(response.status).toBe(200)
+    expect((await response.json() as { data: unknown }).data).toEqual({
+      revoked: false,
+      reason: 'store_unavailable',
+    })
+  })
+
+  it('reports the missing binding when the deployment has no session store', async () => {
+    // 撤销被整体跳过，和「写失败」的后果一样但原因不同，前端要能分辨。
+    const env = createEnv()
+    const session = await createSession(env, 'admin')
+    const unbound = { DB: env.DB } as unknown as Env
+
+    const response = await logout(unbound, session.token)
+    expect(response.status).toBe(200)
+    expect((await response.json() as { data: unknown }).data).toEqual({
+      revoked: false,
+      reason: 'store_unconfigured',
+    })
   })
 
   it('rejects a logout without a valid token', async () => {

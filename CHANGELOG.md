@@ -10,6 +10,18 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 退出登录不再谎称撤销成功（PROB-19）
+
+- 会话是无状态 JWT，撤销名单是「退出登录」的**全部实质**。此前 `POST /api/logout` 无论 KV 写入成功、抛错，还是压根没有 `SESSION` 绑定，都一律返回 `data: null` 的纯成功——共享设备上的用户会以为已经退出，而 token 还能用到 `exp`（部署默认 30 天）。
+- 返回值改为 `LogoutResp` 判别联合：`{ revoked: true }`、`{ revoked: false, reason: 'store_unavailable' }`（KV 写入抛错）、`{ revoked: false, reason: 'store_unconfigured' }`（请求进来时没有 `SESSION` 绑定）。三种都保持 HTTP 200 + `code=0`：退出登录不能失败，返回错误反而会把用户留在登录态里；可辨识状态放在 `data` 而不是 `code`。
+- 前端消费而不只是接收：新增纯函数 `logoutRevocationWarning`（`src/lib/appAuthController.ts`）把结果映射成用户可读警告，并给出可执行补救动作——改密码走 `rotateJwtSecret`，一次性作废全部会话。`authStore.logout()` 现在返回 `LogoutResp | null`（`null` = 本地无会话可退或请求本身失败，此时无从判断服务端状态，不凭空警告），`App.svelte` 在视图切换后弹 12 秒 error Toast。
+- 顺带修掉一处静默兜底：logout 里 `if (token)` 的 else 分支原本返回成功，而 `authRequired` 已保证 token 存在——那条路径只可能在"什么都没做"时谎称成功，改为显式 401。
+- 实测（双实例探针，非推断）：① 有绑定时 `POST /api/logout` 返回 `{"revoked":true}`，同一 token 再调 `/api/me` 得 401。② 用去掉 `[[kv_namespaces]]` 但指向同一 D1 的临时配置起第二个实例（`jwt_secret` 相同，旧 token 仍验签），模拟「令牌签发后绑定被移除」：`/api/me` 先 200 → logout 返回 `{"revoked":false,"reason":"store_unconfigured"}` → 同一 token 再调 `/api/me` **仍是 200**。这条直接证明了静默失败的后果真实存在，且现在会被报告。③ 清空 D1 后 `node scripts/smoke-test.mjs` 仍 75/75，`登出 code=0` 未被返回值变更破坏。
+- 查实并登记为 PROB-31（本轮未修）：完全没有 `SESSION` 绑定的部署连登录都做不到——`loginRateLimit` 无条件读 `env.SESSION`，`POST /api/login` 实测返回 `code=1500`；而 `validateSession` 与 logout 把该绑定当可选，`Env.SESSION` 类型又是必填，三处口径不一致。这也是 `store_unconfigured` 只在「令牌签发后绑定被移除」时可达的原因。
+- 未做：缩短 token 有效期或引入 token 版本号校验（PROB-19 的 c 项，属架构决策）。未验证：跨 isolate 的 ≤15 秒撤销窗口与真实 KV 故障下的 `store_unavailable`，本地模拟 KV 不复现，已登记 PROB-19v。
+- 真实浏览器验证（L2，隔离临时 headless Chrome + 专用 profile，CDP 真实点击与键盘输入）：`SESSION` 在位时点「退出登录」**不弹**警告；同一浏览器会话不刷新、后端换成无绑定实例后点「退出登录」弹出 `toast-error`，文案含原因与补救动作，实测 380×107 完整在视口内。全程 console error 0 / pageException 0 / failedRequest 0。清理只关本次 target 与本次启动的浏览器，按命令行精确匹配确认进程数为 0 后删除临时 profile。
+- 验证：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 708 passed（`sessionRevocation.test.ts` 三态各一条、`appAuthController.test.ts` 5 条覆盖警告文案与未知 `reason`）；`npm run build` 成功；`node scripts/smoke-test.mjs` 75/75。
+
 ### L1 冒烟测试首次真实执行，S1 验收闭环（PROB-07）
 
 - `PLATFORM_OPTIMIZATION_PLAN.md` 长期同时声称同一条安全验证「未闭环」（S1 验收条要求确认「登出后 token 失效 → 401」现在通过）和「已全绿」（`DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md` 记 2026-08-30 已 75/75），无法据文档判断真实状态；引用的第 347 行也已漂移到别处代码。

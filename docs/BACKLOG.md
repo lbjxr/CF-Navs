@@ -15,6 +15,7 @@
 | CI-01 | 技术债 | P2 | 让 L1 验证进 CI | 在 CI 里起本地 D1（`npm run db:init`）与本地服务后跑 `scripts/smoke-test.mjs`。现在 CI 只跑 L0，导致「哪些验证做过」只能靠文档记 | 本条 |
 | PROB-18b | 技术债 | P2 | 24 个源码文本断言文件迁到组件层 | 增量做：每次迁一个文件，删掉被真实 DOM 断言取代的那几条 | PH PROB-18 |
 | PROB-24 | 技术债 | P3 | `src/App.svelte` 按 use case 收敛编排职责 | **只在后续修改认证 / CRUD / 弹窗流程时顺带做**，不单独开一轮重构 | PH PROB-24 |
+| PROB-31 | 缺陷 | P3 | `SESSION` 绑定的必选性三处口径不一致 | `worker/middleware/rateLimit.ts` 的 `loginRateLimit` 无条件读 `env.SESSION`（缺绑定时 `POST /api/login` 实测返回 `code=1500`），而 `validateSession` 与 logout 把它当可选，`worker/types.ts` 的 `Env.SESSION` 又是必填类型。定一个口径：要么让缺绑定返回可定位的错误码（对齐 `/install` 的 `bindings_missing`），要么三处都按必填处理 | PH PROB-19 |
 
 ## 2. 需要裁定
 
@@ -30,7 +31,7 @@
 
 | ID | 类型 | 优先 | 事项 | 详情 |
 | --- | --- | --- | --- | --- |
-| PROB-19 | 安全 | P1 | 跨 isolate 登出撤销的生效窗口与 KV 写失败静默，需真实环境故障注入；同时决定失败时是否还返回纯成功 | PH PROB-19 |
+| PROB-19v | 安全 | P1 | 登出撤销的跨 isolate 生效窗口（≤15 秒）与真实 KV 写入故障下的 `store_unavailable` 分支，需部署实例做故障注入。失败时的返回语义已定并落地（`LogoutResp` 三态 + 前端警告），此处只剩运行时验证 | PH PROB-19 |
 | PROB-13 | 验证欠账 | P1 | 部署后完成剩余 7 组真机验收（`L1`/`L3`/`L4`/`S3`/`S3 导入提示`/`S4`/`U1–U4`）。iOS 输入放大项必须真实 iOS Safari，隔离 Chrome 不能替代 | PH PROB-13 |
 | PROB-14 | 验证欠账 | P1 | 部署后在生产自定义域实测部分导出下载与 replace/merge 导入，再决定是否向 #9 征询原作者确认（**回帖需单独授权**） | PH PROB-14 |
 | PROB-15 | 验证欠账 | P1 | 隔离临时 Chrome 直接导航 `/admin`，确认首页不会短暂挂载，采集 console / pageException / failedRequests | PH PROB-15 |

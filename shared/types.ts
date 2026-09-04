@@ -211,6 +211,16 @@ export interface LoginResp {
   username: string
 }
 
+// POST /api/logout
+// 撤销名单是「退出登录」的全部实质：会话是无状态 JWT，不写名单就等于没退。
+// 因此写入失败必须能被调用方分辨，不能一律当成纯成功。
+export type LogoutRevocationFailure =
+  | 'store_unavailable' // SESSION KV 存在但写入抛错
+  | 'store_unconfigured' // 部署缺少 SESSION 绑定，撤销被整体跳过
+export type LogoutResp =
+  | { revoked: true }
+  | { revoked: false; reason: LogoutRevocationFailure }
+
 // GET /api/install/status
 export type InstallBinding = 'DB' | 'SESSION'
 export type InstallStatusResp =

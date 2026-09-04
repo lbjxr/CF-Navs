@@ -22,6 +22,7 @@ import {
   type InstallStatusResp,
   type LoginReq,
   type LoginResp,
+  type LogoutResp,
   type PublicData,
   type Settings,
   type SettingsUpdateReq,
@@ -353,7 +354,7 @@ export const adminApi = {
 export const authApi = {
   login: (payload: LoginReq) => jsonRequest<LoginResp>('/login', 'POST', payload),
   changePassword: (payload: ChangePasswordReq) => jsonRequest<null>('/password', 'POST', payload, true),
-  logout: () => jsonRequest<null>('/logout', 'POST', undefined, true),
+  logout: () => jsonRequest<LogoutResp>('/logout', 'POST', undefined, true),
 }
 
 export const categoriesApi = {

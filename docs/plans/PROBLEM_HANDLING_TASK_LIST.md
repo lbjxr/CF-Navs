@@ -259,13 +259,21 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 
 ## 5. D 类：安全与稳定性风险
 
-### PROB-19（P1）跨 isolate 登出撤销存在生效延迟与失败静默
+### PROB-19（P1，已完成 a/b，c 未开工）跨 isolate 登出撤销存在生效延迟与失败静默
 
-- 来源映射：`S1`；`docs/plans/PLATFORM_OPTIMIZATION_PLAN.md:231`、`:252-254`；`docs/guides/TROUBLESHOOTING.md:80-100`
-- 源码事实：`worker/routes/auth.ts:75-90` 登出写 KV 撤销；`worker/lib/bootstrap.ts:47-49` 把 `SESSION` KV 视为可选绑定
+- 来源映射：`S1`；`docs/plans/PLATFORM_OPTIMIZATION_PLAN.md` 的 S1 小节；`docs/guides/TROUBLESHOOTING.md` 的会话与登录小节
+- 源码事实：`worker/routes/auth.ts` 的 `authRoutes.post('/logout')` 写 KV 撤销；`worker/middleware/auth.ts` 的 `validateSession` 只在内存缓存未命中时查撤销名单；`worker/lib/bootstrap.ts` 的 `ensureAdminBootstrap` 不要求 `SESSION` 绑定
 - 残余语义：撤销最长约 15 秒才在其他 isolate 生效；KV 写失败时登出**仍返回成功**；JWT 在 `exp` 之前仍可验签
 - 处理动作：a) KV 写失败时不再返回纯成功，向调用方暴露可辨识状态；b) 在 `API_CONTRACT.md` 写明登出的最终一致语义与生效窗口；c) 缩短 token 有效期或引入版本号校验属架构决策，需单独评估
-- 验证：`scripts/smoke-test.mjs:363-365` 覆盖同 isolate 路径；跨 isolate 与 KV 故障注入需真实环境（与 PROB-07 合并执行）
+- 验证：`scripts/smoke-test.mjs` 的「登出」小节覆盖同 isolate 路径；跨 isolate 与真实 KV 故障注入需部署环境
+- 处理结果（a）：`POST /api/logout` 的返回从 `null` 改为 `shared/types.ts` 的 `LogoutResp` 判别联合 —— `{ revoked: true }`、`{ revoked: false, reason: 'store_unavailable' }`（KV 写入抛错）、`{ revoked: false, reason: 'store_unconfigured' }`（请求进来时没有 `SESSION` 绑定）。**三种都保持 HTTP 200 + `code=0`**：退出登录不能失败，返回错误会把用户留在登录态里，这与「暴露可辨识状态」并不冲突——状态放在 `data` 里而不是 `code` 里。同时把原先 `if (token)` 的静默兜底改成显式 401（`authRequired` 已保证 token 存在，静默成功会谎称做了撤销）
+- 处理结果（前端消费）：`src/lib/appAuthController.ts` 新增纯函数 `logoutRevocationWarning`，把 `LogoutResp` 映射成用户可读警告并给出可执行补救动作（改密码走 `rotateJwtSecret`，一次性作废全部会话）；`authStore.logout()` 现在返回 `LogoutResp | null`（`null` = 本地无会话可退或请求本身失败，此时无从判断服务端状态，不凭空警告）；`src/App.svelte` 的 `handleLogout` 在视图切换之后弹 12 秒 error Toast。不改 API client 的错误路径
+- 处理结果（b）：`API_CONTRACT.md` 的鉴权规则与认证接口两处改写 —— 端点表返回类型改 `LogoutResp`，新增三态表（含每种结果下 token 的实际状态）、`reason` 的可扩展约定、以及未知 `reason` 必须仍警告的客户端要求。原有的 15 秒窗口与 KV 写失败描述保留并指向新表
+- 未做（c）：缩短 token 有效期或引入 token 版本号校验属架构决策，未评估、未实现
+- 验证结果（实测，非推断）：本地隔离实例双实例探针。① 有 `SESSION` 绑定时 `POST /api/logout` 实际返回 `{"code":0,"msg":"ok","data":{"revoked":true}}`，随后同一 token 调 `/api/me` 得 401。② 用一份去掉 `[[kv_namespaces]]` 的临时配置、指向**同一个** D1（因此 `jwt_secret` 相同、旧 token 仍验签通过）启第二个实例，模拟「令牌签发后绑定被移除」：`/api/me` 先返回 200 证明 token 有效 → `POST /api/logout` 返回 `{"revoked":false,"reason":"store_unconfigured"}` → 同一 token 再调 `/api/me` **仍是 200**。这条直接证明了本条目所说的「静默失败」后果确实存在，且现在会被报告。③ 清空 D1 后 `node scripts/smoke-test.mjs` 仍 **75/75 全绿**，`登出 code=0` 未被返回值变更破坏。单测：`tests/unit/sessionRevocation.test.ts` 三态各一条（`store_unavailable` 用抛错的 KV 假实现，真实 KV 故障本地无法注入），`tests/unit/appAuthController.test.ts` 5 条覆盖 `logoutRevocationWarning`（含未知 `reason` 不退化成 `undefined` 文案）。`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 708 passed；`npm run build` 成功
+- 验证结果（L2 真实浏览器，隔离临时 Chrome）：headless Chrome + 独立 `cf-navs-chrome-profile-l2probe-*` profile，通过 CDP `Input.dispatchMouseEvent` / `Input.insertText` 做真实点击与键盘输入，不用 `dispatchEvent` 代替。① `SESSION` 在位时点「退出登录」→ 回到访客态，**不弹**任何撤销警告（Toast 容器为空）。② 同一浏览器会话不刷新、后端从有绑定实例换成无绑定实例（同端口、同 D1）后点「退出登录」→ 回到访客态并弹出 `toast-item toast-error`，文案为「已退出登录，但服务端未能作废旧的登录令牌（部署缺少 SESSION 绑定）。这台设备上的登录态已清除；如果担心令牌被别人复用，请修改密码——改密码会立即作废全部会话。」，实测尺寸 380×107 且完整在视口内（`getBoundingClientRect` 采样）。换后端后旧 token 调 `/api/me` 先返回 200，证明「令牌仍然有效」这一后果真实存在。全程 console error 0、pageException 0、failedRequest 0，唯一 4xx 是刻意探测无 token 的 `/api/me` 401。清理：只关本次创建的 target，`Browser.close` 仅对 manifest 标记 `browserStartedByTest=true` 的实例执行，按命令行精确匹配确认残留进程数为 0 后删除临时 profile，未按进程名批量清理、未触碰用户自有 Chrome
+- 顺带查实（未修，见 BACKLOG 新条目）：完全没有 `SESSION` 绑定的部署**连登录都做不到** —— `worker/middleware/rateLimit.ts` 的 `loginRateLimit` 无条件读 `env.SESSION`，实测 `POST /api/login` 返回 `code=1500`。而 `validateSession` 与 logout 都把该绑定当可选，`worker/types.ts` 的 `Env.SESSION` 却是必填类型，三处口径不一致。这也是为什么 `store_unconfigured` 只在「令牌签发后绑定被移除」时可达
+- 仍未验证：跨 isolate 的 ≤15 秒撤销窗口，以及真实 Cloudflare KV 写入故障下的 `store_unavailable`。本地 `wrangler dev` 的 KV 是单进程模拟，两者都需要部署实例，属 PROB-19v
 
 ### PROB-20（P1，已完成方案 1）图标代理匿名可枚举，私密对象存在信息泄漏面
 

@@ -21,6 +21,7 @@
   import { toastStore } from './lib/toast'
   import type { AdminTab, BookmarkFormValue, CategoryFormValue } from './lib/adminTypes'
   import { toBookmarkForm, toBookmarkPayload, toCategoryForm, toCategoryPayload } from './lib/adminFormAdapters'
+  import { logoutRevocationWarning } from './lib/appAuthController'
   import {
     createImportExportState,
     exportDataToFile,
@@ -600,7 +601,7 @@
     const previousSettings = get(adminStore).data.settings
 
     try {
-      await authStore.logout()
+      const revocationWarning = logoutRevocationWarning(await authStore.logout())
       resetCategoryState()
       resetSettingsState()
       resetBookmarkState()
@@ -619,6 +620,11 @@
       }
       loginModalOpen = homeGate.loginModalOpen
       currentView = homeGate.view
+      // 放在视图切换之后：Toast 是全局层，不受这次视图切换影响，而先切视图能让
+      // 「已退出」这件事先于警告可见。
+      if (revocationWarning) {
+        toastStore.addToast(revocationWarning, 'error', { duration: 12000 })
+      }
     } catch (error) {
       rootError = getErrorMessage(error)
     }

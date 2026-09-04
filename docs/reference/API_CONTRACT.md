@@ -14,7 +14,7 @@
 
 - `authRequired`：读取 Bearer token，用 `settings.jwt_secret` 校验 HS256 签名和 `exp`；在 `SESSION` 绑定存在时再查 KV 撤销名单。签名、过期或撤销不通过返回 401；KV 读取故障可能由全局错误处理返回服务端错误；缺少 `SESSION` 绑定时会跳过撤销检查，部署必须正确配置该绑定。
 - 会话是无状态 JWT，payload 为 `{ username, exp, jti }`。`jti` 保证同一毫秒内的两次登录也会签出不同 token，否则「退出这台设备」会连带撤销另一台。
-- `POST /api/logout` 把当前 token 的 SHA-256 摘要写入 KV `revoked:<sha256>`，TTL 为 `max(60 秒, token 剩余寿命)`，以满足 KV `expirationTtl` 的下限。用摘要而不是 token 本身做 key，避免 KV 被 dump 时泄露仍在有效期内的 token。其它 isolate 上最多 15 秒后才感知到撤销，这是内存缓存换来的固定窗口；logout 的 KV 写入失败时接口仍完成，但撤销未落库，token 会继续有效到 `exp`。
+- `POST /api/logout` 把当前 token 的 SHA-256 摘要写入 KV `revoked:<sha256>`，TTL 为 `max(60 秒, token 剩余寿命)`，以满足 KV `expirationTtl` 的下限。用摘要而不是 token 本身做 key，避免 KV 被 dump 时泄露仍在有效期内的 token。其它 isolate 上最多 15 秒后才感知到撤销，这是内存缓存换来的固定窗口。撤销名单是「退出登录」的**全部实质**，写不进去就等于没退，因此该接口用 `LogoutResp` 把结果显式告知调用方，不再一律返回纯成功——三种结果见「认证接口」小节。
 - 修改密码和凭据重置走 `rotateJwtSecret`，一次性作废全部会话。
 - KV `SESSION` 绑定当前只用于登录限流（`rl:login:*`）、点击计数限流（`rl:click:*`）和会话撤销名单（`revoked:*`），不再存储会话本身。
 - `/api/public/data`：匿名请求默认可查公开数据 edge cache；缓存未命中时先复用 `/api/config` edge cache，仍未命中才读取轻量 `site_title/public_mode`，公开模式关闭则要求有效 token，否则返回 `code=1005`，该轻量 1005 响应也会短时写入 edge cache。请求带 `Cache-Control: no-cache`、`Cache-Control: no-store`、`Cache-Control: max-age=0` 或 `Pragma: no-cache` 时，服务端必须绕过公开数据和站点配置 edge cache。
@@ -51,13 +51,25 @@
 | 方法 | 路径 | 请求 | 返回 |
 | --- | --- | --- | --- |
 | POST | `/api/login` | `LoginReq` | `LoginResp` |
-| POST | `/api/logout` | 无 | `null` |
+| POST | `/api/logout` | 无 | `LogoutResp` |
 | POST | `/api/password` | `ChangePasswordReq` | `null` |
 | GET | `/api/me` | 无 | `{ username: string }` |
 
 全新部署通过 `/install` 初始化管理员：`POST /api/install` 使用 `SETUP_TOKEN` 授权，并将管理员密码通过 WebCrypto PBKDF2 哈希后以 `salt:hash` 形式存入 `settings.admin_password`。`INIT_ADMIN_USER`、`INIT_ADMIN_PASSWORD` 和初始化凭据标记仅用于已有旧数据库的升级或凭据恢复：修改兼容变量后，下一次登录会同步更新 D1 中的管理员凭据；后台账号安全修改后的密码不会被未变化的初始化变量覆盖。旧数据库可通过新的 `RESET_ADMIN_CREDENTIALS` 标记执行一次强制重置。
 `LoginResp` 包含 `token`、`expires_at` 和 `username`，前端登录成功后直接使用返回的 `username` 更新登录态并停留/返回前台首页，不再额外请求 `/api/me` 或立即预加载后台分包。登录接口会在 bootstrap 初始化时用一次 settings 查询同时读取管理员账号和密码，并复用该结果进行密码校验，避免重复读取账号/密码设置。已有登录态刷新页面时会先恢复本地 session 和可能存在的 `AdminData` 快照，再请求 `/api/data/version` 确认远端版本；版本变化时才请求 `/api/admin/data`。只有显式刷新用户信息时才需要 `/api/me`。
-`POST /api/logout` 会尝试把当前 token 写入 KV 撤销名单，TTL 为 `max(60 秒, token 剩余寿命)`。KV 写入成功后，同一 isolate 会立即按撤销名单拒绝该 token，其它 isolate 可能因最多 15 秒的内存缓存延迟感知。若 logout 的 KV 写入失败，退出流程仍完成但 token 会继续有效到 `exp`；后续请求若 KV 读取也失败，鉴权可能返回错误。前端同时清除本地登录态。
+`POST /api/logout` 会尝试把当前 token 写入 KV 撤销名单，TTL 为 `max(60 秒, token 剩余寿命)`，并返回 `LogoutResp` 说明撤销是否真的落库。三种结果都是 HTTP 200 + `code=0`（退出登录不能失败：前端必须清掉本地登录态，返回错误反而会把用户留在登录态里）：
+
+| `data` | 含义 | token 的实际状态 |
+| --- | --- | --- |
+| `{ revoked: true }` | 撤销名单已写入 | 同一 isolate 立即失效；其它 isolate 最多 15 秒后失效 |
+| `{ revoked: false, reason: 'store_unavailable' }` | `SESSION` 绑定存在但 KV 写入抛错 | **仍然有效到 `exp`**（部署默认 30 天） |
+| `{ revoked: false, reason: 'store_unconfigured' }` | 请求进来时没有 `SESSION` 绑定，撤销被整体跳过 | **仍然有效到 `exp`** |
+
+后两种情况下前端照常清除本地登录态，但会额外提示「服务端未能作废旧的登录令牌」并给出可执行的补救动作——改密码走 `rotateJwtSecret`，一次性作废全部会话。这两种结果的**后果相同、原因不同**，因此用 `reason` 区分而不是合并成一个布尔值：`store_unconfigured` 是部署配置问题（照 `TROUBLESHOOTING.md` 补绑定），`store_unavailable` 是运行时故障（重试即可）。后续请求若 KV 读取也失败，鉴权可能返回错误。
+
+`store_unconfigured` 只在**令牌签发之后**绑定被移除时才可能出现：`loginRateLimit` 无条件读 `SESSION`，所以一开始就缺绑定的部署连 `POST /api/login` 都会返回 `code=1500`，根本拿不到 token（`/install` 也会先以 `bindings_missing` 拒绝安装）。已实测确认这一条。
+
+`reason` 是可扩展取值：客户端遇到不认识的 `reason` 时仍必须给出警告，只是不带原因说明，不能静默当成成功。
 
 ## 后台聚合接口
 
