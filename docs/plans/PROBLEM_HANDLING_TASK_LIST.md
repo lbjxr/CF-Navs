@@ -169,7 +169,7 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 | 处理动作 | 在 `:60-68` 补 `DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md`，并按 PROB-09 补 `UI_UX_Plan.md`。本文两份新清单已在 `docs/README.md:70-75` 单列小节，无需重复添加 |
 | 处理结果 | `docs/README.md` 计划清单已补「开发任务规划（R-01～R-08 Issue 需求）」指向 `plans/DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md`，并按 PROB-09 补入 `UI_UX_Plan.md`。两份新清单仍单列在「当前任务清单」小节，未重复添加 |
 
-### PROB-11（P2）R-02 首页新建子分类的移动端交互形态与计划 T6 不同
+### PROB-11（P2，已完成）R-02 首页新建子分类的移动端交互形态与计划 T6 不同
 
 | 项 | 内容 |
 | --- | --- |
@@ -177,6 +177,8 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 | 差异 | 计划要求移动端把分类操作收进「更多操作」菜单（对应 `GITHUB_ISSUES_REQUIREMENTS.md:72` 的端侧规划）；源码 `src/components/HomeCategoryScope.svelte:74-85` 是直接渲染的 scope-action 按钮 |
 | 定性 | 功能入口存在且满足「不依赖 hover/右键」，属交互形态偏差，非功能缺失 |
 | 处理动作 | 裁定后二选一：a) 移动端收进更多操作菜单；b) 在 R-02 段与 T6 台账写明「已改为直显图标按钮」并说明理由 |
+| 裁定与处理结果 | 用户 2026-09-04 选 a) **移动端收进「更多操作」菜单**。`HomeCategoryScope.svelte` 现在同时渲染桌面直显按钮（`.scope-action-direct`）与移动端「更多操作」触发器（`.scope-more-trigger`），由既有的 `max-width: 720px` 断点互斥显示——`display: none` 同时移出无障碍树，不会出现两个同名操作。菜单为 `role="menu"` + `role="menuitem"`，触发器带 `aria-haspopup="menu"` / `aria-expanded` / `aria-controls`；支持 Esc 关闭并把焦点还给触发器、`svelte:window` 上的 pointerdown 判定点击外部关闭；访客态（`reserveActions=false`）两个入口都不渲染。断点沿用组件既有的 720px，未改成全局的 799px，避免改动 721–799px 区间的桌面视觉 |
+| 验证结果 | 新增 `tests/unit/homeCategoryScopeActions.test.ts`（组件测试，jsdom）覆盖 6 条：disclosure 语义、`aria-controls` 指向真实菜单节点、点击菜单项执行回调并收起、Esc 关闭并归还焦点、点击外部关闭、访客态不渲染；断点互斥用源码断言锁定。`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 695 passed；`npm run build` 成功。**移动端实际可见性与触控仍需 L3 真机确认**（jsdom 不应用媒体查询） |
 
 ### PROB-12（P3，已完成）R-03 入口位置与建议方案不同
 

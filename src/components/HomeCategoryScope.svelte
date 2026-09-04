@@ -32,6 +32,38 @@
     void onSelect?.(id)
   }
 
+  // 移动端把分类操作收进「更多操作」菜单（计划 T6 / PROB-11）。桌面端仍是直显按钮，
+  // 两者都渲染，由 720px 断点的 CSS 决定谁可见——`display: none` 会同时移出无障碍树，
+  // 不会出现两个同名操作。
+  let moreTrigger: HTMLButtonElement | null = null
+  let moreMenu: HTMLElement | null = null
+  let moreOpen = false
+
+  $: moreMenuId = `home-category-more-${rootId}`
+
+  function closeMore(focusTrigger = false): void {
+    moreOpen = false
+    if (focusTrigger) moreTrigger?.focus()
+  }
+
+  function runCreateSubcategory(): void {
+    closeMore()
+    void onCreateSubcategory?.()
+  }
+
+  function handleWindowPointerDown(event: PointerEvent): void {
+    if (!moreOpen) return
+    const target = event.target as Node | null
+    if (target && (moreTrigger?.contains(target) || moreMenu?.contains(target))) return
+    closeMore()
+  }
+
+  function handleWindowKeyDown(event: KeyboardEvent): void {
+    if (!moreOpen || event.key !== 'Escape') return
+    event.preventDefault()
+    closeMore(true)
+  }
+
   function handleTabWheel(event: WheelEvent): void {
     const element = event.currentTarget as HTMLElement
     if (element.scrollWidth <= element.clientWidth) return
@@ -62,6 +94,8 @@
     tabs[nextIndex]?.click()
   }
 </script>
+
+<svelte:window on:pointerdown={handleWindowPointerDown} on:keydown={handleWindowKeyDown} />
 <section class="category-scope" class:has-children={children.length > 0} class:has-actions={reserveActions} class:highlighted={highlightedId === rootId} data-home-category-scope={rootId} aria-labelledby={`home-category-heading-${rootId}`}>
   <div class="scope-heading">
     <CategoryIcon category={{ id: rootId, title, icon }} size="var(--category-root-icon-size, 40px)" className="scope-icon" />
@@ -74,7 +108,7 @@
         {#if reserveActions && onCreateSubcategory}
           <button
             type="button"
-            class="scope-action"
+            class="scope-action scope-action-direct"
             aria-label="新建子分类"
             title="新建子分类"
             on:click={() => void onCreateSubcategory?.()}
@@ -86,6 +120,36 @@
               <path d="M16 15h6M19 12v6" />
             </svg>
           </button>
+          <div class="scope-more">
+            <button
+              type="button"
+              class="scope-action scope-more-trigger"
+              bind:this={moreTrigger}
+              aria-label={`${title || '分类'} 更多操作`}
+              title="更多操作"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              aria-controls={moreMenuId}
+              on:click={() => (moreOpen = !moreOpen)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="scope-action-icon">
+                <path d="M6 12h.01M12 12h.01M18 12h.01" />
+              </svg>
+            </button>
+            {#if moreOpen}
+              <div
+                class="scope-more-menu"
+                id={moreMenuId}
+                role="menu"
+                aria-label={`${title || '分类'} 更多操作`}
+                bind:this={moreMenu}
+              >
+                <button type="button" class="scope-more-item" role="menuitem" on:click={runCreateSubcategory}>
+                  新建子分类
+                </button>
+              </div>
+            {/if}
+          </div>
         {/if}
         {#if children.length > 0}
           <div
@@ -243,6 +307,53 @@
     stroke-linejoin: round;
   }
 
+  .scope-more {
+    position: relative;
+    display: none;
+    flex: 0 0 auto;
+  }
+
+  .scope-more-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 80;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 10rem;
+    max-width: min(16rem, calc(100vw - 2rem));
+    padding: 4px;
+    border: 1px solid var(--home-stat-border);
+    border-radius: 10px;
+    background: var(--home-stat-bg);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  }
+
+  .scope-more-item {
+    display: block;
+    width: 100%;
+    min-height: 40px;
+    padding: 0.42rem 0.62rem;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--home-text-color);
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .scope-more-item:hover,
+  .scope-more-item:focus-visible {
+    outline: none;
+    background: var(--home-stat-border);
+  }
+
   .scope-action:hover,
   .scope-action:focus-visible {
     outline: none;
@@ -397,6 +508,15 @@
       justify-content: center;
       padding: 0;
       font-size: 0;
+    }
+
+    /* 移动端只保留「更多操作」入口，直显按钮移出无障碍树 */
+    .scope-action-direct {
+      display: none;
+    }
+
+    .scope-more {
+      display: inline-flex;
     }
 
     .scope-action-label {
