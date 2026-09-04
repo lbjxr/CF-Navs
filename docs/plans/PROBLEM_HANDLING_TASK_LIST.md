@@ -412,7 +412,7 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 ### 7.4 验证与工程纪律
 
 - 常规本地检查：`npm run type-check`、`npm test`、`npm run build`、`git diff --check`。
-- API 端到端：`node scripts/smoke-test.mjs`（75 项）。真实浏览器回归：`node scripts/chrome-regression.mjs`（25 项）。性能：`npm run perf:audit`。
+- API 端到端：`npm run smoke`（75 项，脚本自管隔离实例与临时 D1；CI 已覆盖）。真实浏览器回归：`node scripts/chrome-regression.mjs`（25 项）。性能：`npm run perf:audit`。
 - 浏览器验证默认用专用临时 Chrome profile；只开专用 target，结束只关该 target 并清理该 profile；**禁止**按进程名清理，也不得关闭用户自有 Chrome。
 - 云端 Issue 状态只能由 GitHub 实时查询确认，不得由本地源码或提交推断（`docs/README.md:31`）。
 - 本清单的任何 GitHub 写操作（回帖、关闭、Project 卡片）与部署操作都需单独授权。

@@ -32,3 +32,10 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # L1：起一个隔离的本地 Worker 实例跑 API 端到端冒烟。放在 Build 之后，因为
+      # ASSETS 绑定要有 ./dist；脚本自己管临时 D1、空闲端口、一次性凭据与拆除。
+      - name: API smoke test (L1)
+        run: npm run smoke
+        env:
+          WRANGLER_SEND_METRICS: false

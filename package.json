@@ -8,6 +8,7 @@
     "build": "vite build",
     "type-check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
+    "smoke": "node scripts/smoke-local.mjs",
     "perf:audit": "node scripts/perf-audit.mjs",
     "regression:chrome": "node scripts/chrome-regression.mjs",
     "setup:wrangler": "node scripts/create-wrangler-local.mjs",

@@ -10,6 +10,15 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### L1 冒烟测试进 CI，并收敛成 `npm run smoke` 一条命令（CI-01）
+
+- CI 此前只跑 L0（type-check / test / build）。L1 需要「清 D1 → `db:init` → 起服务 → 跑测试 → 收拾」五步手工前置，所以从没进过 CI——`docs/BACKLOG.md` 的 CI-01 记的就是这个：「哪些验证做过」只能靠文档记。本轮做 PROB-07 时正好踩到该前置：忘了清库就跑，得到 5 条与代码无关的失败（`初始分类列表为空 — len=2` 等），因为 `smoke-test.mjs` 的第一条断言就假设数据库是空的。
+- 新增 `scripts/smoke-local.mjs`（`npm run smoke`）承担全部前置：删掉并重建**独立的** `.wrangler/state-smoke`（不碰开发者日常的 `.wrangler/state`）、由系统分配空闲端口（不与正在跑的 `npm run dev` 抢 8787）、每次现造一个随机管理员密码经 `--var` 注入（不落盘、不打印）、轮询 `/api/health` 等就绪、跑 `smoke-test.mjs`、最后按精确 PID 结束整棵进程树（`wrangler` 会派生 `workerd`，只杀父进程会留孤儿占端口）并删掉临时状态目录。
+- `.github/workflows/ci.yml` 在 Build 之后加「API smoke test (L1)」步骤。放在 Build 之后是因为 `ASSETS` 绑定要有 `./dist`；脚本对缺少 `dist/index.html` 给出明确报错而不是让 wrangler 报一个费解的错。
+- 已按 CI 的真实条件实测，不是推断：把 `.dev.vars` 移开、强制用公开的 `wrangler.toml`（CI 里没有 `wrangler.local.toml`）、`CI=true` 跑 `npm run smoke` → **75/75，exit 0**。这同时证明公开配置里省略 `database_id` / KV `id` 不影响 `--local` 模式，以及 `--var` 注入的凭据优先于 `.dev.vars`。
+- 隔离性与可重复性也已实测：连续跑两次都 75/75；跑完 `.wrangler/state/v3/d1`（日常开发数据）仍在，`.wrangler/state-smoke` 已删除，按命令行精确匹配确认无残留 wrangler 进程。
+- `CONTRIBUTING.md` 的验证分级表 L1 一行改为 `npm run smoke`，前置条件从「清空 D1 后 db:init 并启动本地服务」改为「先 `npm run build`」，并标注 CI 已覆盖。
+
 ### 退出登录不再谎称撤销成功（PROB-19）
 
 - 会话是无状态 JWT，撤销名单是「退出登录」的**全部实质**。此前 `POST /api/logout` 无论 KV 写入成功、抛错，还是压根没有 `SESSION` 绑定，都一律返回 `data: null` 的纯成功——共享设备上的用户会以为已经退出，而 token 还能用到 `exp`（部署默认 30 天）。

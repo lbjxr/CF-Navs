@@ -52,7 +52,7 @@
 | 级别 | 内容 | 命令 | 前置条件 |
 | --- | --- | --- | --- |
 | **L0** 静态 | 类型、单元测试、构建、空白字符 | `npm run type-check`、`npm test`、`npm run build`、`git diff --check` | 无。CI 已覆盖前三项 |
-| **L1** API 端到端 | 鉴权、CRUD、排序、设置、导入导出、登出失效 | `node scripts/smoke-test.mjs` | 需干净本地 D1（清空 `.wrangler/state/v3/d1` 后 `npm run db:init`）并启动本地服务 |
+| **L1** API 端到端 | 鉴权、CRUD、排序、设置、导入导出、登出失效 | `npm run smoke` | 需先 `npm run build`（`ASSETS` 绑定要 `./dist`）。脚本自己起隔离实例、造临时 D1 与一次性凭据并拆除，**CI 已覆盖** |
 | **L2** 浏览器 | 渲染、交互、后台流程 | `npm run regression:chrome`；组件测试随 `npm test` 一起跑 | 回归套件需可达目标地址与管理员凭据；组件测试无前置 |
 | **L3** 真机 / 部署后 | 视口数值、iOS Safari 输入放大、Service Worker 与缓存、性能预算 | 人工 CDP 验证 + `npm run perf:audit` | 需已部署实例；部分项必须真实 iOS Safari |
 

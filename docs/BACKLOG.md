@@ -12,7 +12,6 @@
 | ID | 类型 | 优先 | 事项 | 下一步 | 详情 |
 | --- | --- | --- | --- | --- | --- |
 | PROB-20b | 安全 | P1 | 签名 URL 恢复后台私密对象的图标预览 | 先定签名密钥与过期策略（建议 `exp` 与会话 `exp` 对齐，改密码触发 `rotateJwtSecret` 时顺带失效）；先验签再查缓存，私密响应改 `private, no-store` 并跳过 edge cache 与 Service Worker 的分类图标 cache-first 分支 | PH PROB-20 |
-| CI-01 | 技术债 | P2 | 让 L1 验证进 CI | 在 CI 里起本地 D1（`npm run db:init`）与本地服务后跑 `scripts/smoke-test.mjs`。现在 CI 只跑 L0，导致「哪些验证做过」只能靠文档记 | 本条 |
 | PROB-18b | 技术债 | P2 | 24 个源码文本断言文件迁到组件层 | 增量做：每次迁一个文件，删掉被真实 DOM 断言取代的那几条 | PH PROB-18 |
 | PROB-24 | 技术债 | P3 | `src/App.svelte` 按 use case 收敛编排职责 | **只在后续修改认证 / CRUD / 弹窗流程时顺带做**，不单独开一轮重构 | PH PROB-24 |
 | PROB-31 | 缺陷 | P3 | `SESSION` 绑定的必选性三处口径不一致 | `worker/middleware/rateLimit.ts` 的 `loginRateLimit` 无条件读 `env.SESSION`（缺绑定时 `POST /api/login` 实测返回 `code=1500`），而 `validateSession` 与 logout 把它当可选，`worker/types.ts` 的 `Env.SESSION` 又是必填类型。定一个口径：要么让缺绑定返回可定位的错误码（对齐 `/install` 的 `bindings_missing`），要么三处都按必填处理 | PH PROB-19 |
