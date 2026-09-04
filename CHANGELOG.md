@@ -10,6 +10,15 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 移动端「更多操作」菜单真实浏览器验证闭环（PROB-11v）
+
+- 上一轮把移动端分类操作收进三点菜单时，只有 jsdom 组件测试。jsdom 不应用媒体查询，所以「三项确实只在菜单里、主分类区确实不再直显、菜单确实不被遮挡」这三条当时无法证明。
+- 本轮用隔离临时 headless Chrome + `Emulation.setDeviceMetricsOverride`（390×844 / DPR 3 / `mobile: true`）+ 触控仿真验证，交互全部走 `Input.dispatchTouchEvent` 真实触控。六条验收项逐条通过：菜单项恰为 `新增书签 / 新建子分类 / 排序`；`.section-actions` 与 `.scope-action-direct` 的 computed `display` 都是 `none`；菜单 `z-index: 80` 高于同页固定层 `.floating-actions`(70) 与 `.toc-mobile-btn`(40)，三个菜单项中心点 `elementFromPoint` 全部命中自身；触控可开、菜单项 150×40；Esc 关闭并把焦点还给触发器、外部触摸同样关闭；排序会话中「拖动书签到其他分类」与「拖动卡片调整顺序…」两条提示都可见，且排序态菜单只剩「新建子分类」。
+- 断点两侧对照顺手纠正一个易错测法：只读 `.scope-more-trigger` 自身的 computed `display` 在桌面得到 `inline-flex`，会误判成「桌面也显示三点按钮」；真正被 `max-width: 720px` 隐藏的是外层 `.scope-more`（桌面下触发器 `getBoundingClientRect` 为 0×0、`offsetParent` 为 `null`）。断点互斥的原结论成立。
+- 如实记录未推到极限的一项：矮视口（390×420）下触发器 `top=212`、菜单 `254–388`，余量 32px 仍在视口内；但本次种子数据只有 2 个一级分类，页面已滚到底，无法把触发器推得更贴底。组件没有翻转定位逻辑，更长内容下的贴底行为未测。
+- 观察但不改：菜单项高 40px、触发器 36×36，低于 44px 触控建议值——36×36 是项目既有的移动端触控下限约定。全程 console error / pageException / failedRequest / 4xx-5xx 全为 0。
+- 本条只做验证，未改任何运行代码。
+
 ### 直达 `/admin` 不会闪一下首页：真实浏览器实测闭环（PROB-15）
 
 - `PROJECT_OVERVIEW.md` 的维护待办「为直接刷新 `/admin` 增加真实 Chrome 回归：确认首页不会短暂挂载」一直没闭环，因为事后查 DOM 证明不了「短暂」。
