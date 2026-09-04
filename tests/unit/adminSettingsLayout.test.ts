@@ -246,7 +246,6 @@ describe('admin settings layout', () => {
     expect(categoryDisplay).toContain('min={11}')
     expect(advanced).toContain('min={40}')
     expect(advanced).toContain('disabled={form.card_style !== \'info\'}')
-    expect(advanced).toContain('可能无法保证页面美观')
     expect(home).toContain('--category-root-font-size-base')
     expect(home).toContain('* 0.88')
   })

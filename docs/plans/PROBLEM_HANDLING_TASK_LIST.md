@@ -369,6 +369,16 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - 已知取舍（用户明示接受）：40 px 低于 44 px 触控目标建议值，点击区域小于无障碍推荐尺寸，换来更密的列数。Tooltip 与 API 契约都写明了这一点
 - 验证结果：`tests/unit/bookmarkCardLayout.test.ts` 断言 39→40、40→40、44→44、401→400 及移动端 40/44 仍回落 150；`settingsForm` / `settingsData` 归一化断言与 `adminSettingsLayout` 控件契约同步到 40。`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 695 passed；`npm run build` 成功。**40 px 下的真机卡片渲染、触控与列数未验证**，属 L3 欠账
 - 文档同步：`API_CONTRACT.md` 的 `card_size` 行、`GITHUB_ISSUES_REQUIREMENTS.md` 的 R-07 全段与汇总表、`guides/TEST_CASES.md` 的 TC-R07-01 边界值都已改到 40
+- PROB-28v 真实浏览器验证（2026-09-05，已闭环）：隔离临时 headless Chrome，`card_style='info'`、`card_show_description=true`、`card_size.width=40`，两轮实测。
+  - **桌面 1280×900**：`grid-template-columns` 实测被求解成 21 个 `40px` 轨道，但**实际每行只放 3 张卡**（种子数据一行 3 张 + 一张换行），卡片盒 40×60。横向溢出 `scrollWidth - clientWidth = 0`。
+  - **可读性（这是本条真正的发现）**：40 px 下详情卡**只剩图标**——`.bookmark-text` / `.bookmark-title` / `.bookmark-description` 的 `clientWidth` 全是 **0**，标题 `scrollWidth=52`、描述 `scrollWidth=92`，即文字节点存在但可用宽度为零，一个字都看不到。截图确认桌面只显示 `G` / `M` / `C` 三个圆形图标。
+  - **阈值扫描**（在同一页面上逐档改写 `--card-min-width` 后读 computed 值）：≤68 px 时标题/描述 `clientWidth` 恒为 0；72 px 起 `clientWidth=5`；80 px 时 12；96 px 时 33；**120 px 时 `titleClientW=63 === titleScrollW=63`，标题才首次完整显示**（本例标题 `GitHub`）。描述到 150 px 仍被截断（`clientW=85 < scrollW=92`）。
+  - **移动端 390×844**：`--mobile-card-min-width` 实测为 `150px`，`grid-template-columns` 求解为 `171px 171px`（每行 2 张），卡片盒 171×60，标题与描述都完整显示且未截断，横向溢出 0。即 `INFO_CARD_MOBILE_SAFE_MIN_TRACK_WIDTH = 150` 的安全下限真的生效，移动端不受 40 影响。
+  - **触控**：移动端点击区域 171×60，满足 44 px；桌面 40×60 的**宽度方向 40 < 44**，与已接受的取舍一致。
+  - console error 0、pageException 0、failedRequest 0、4xx/5xx 0。
+- 由该验证产生的修正（本轮已改）：原提示「当前宽度低于 80 px，可能无法保证页面美观」把「文字完全消失」说成了「可能不美观」，与实测严重不符。改为两档：`40–68 px` → 「当前宽度下详情卡只显示图标：标题与描述的可用宽度为 0。标题约需 120 px 才完整显示。移动端仍按 150 px 安全下限渲染。」；`69–79 px` → 「当前宽度低于 80 px，标题与描述会被截断，只显示开头几个字符。」Tooltip 同步补入实测阈值与「移动端另有 150 px 安全下限」。分档已在真实后台逐档输入验证：40/68 命中第一档，69/72/79 命中第二档，80/120 无提示
+- 顺带退役一条测试断言：`tests/unit/adminSettingsLayout.test.ts` 里 `expect(advanced).toContain('可能无法保证页面美观')` 钉的是提示文案字面量，属 `CONTRIBUTING.md` 第 4 节禁止的「源码文本断言当行为证明」。文案本轮被证明是错的，重新钉新文案只会重复同一个错误，故删除；控件契约仍由同用例的 `min={40}` 与 `disabled={form.card_style !== 'info'}` 覆盖
+- 未做：40 px 下「只显示图标」是否应当直接改用极简卡片风格（或在该档自动切换），属产品决策，未擅自改行为
 
 ### PROB-29（P2，已完成）R-05 的「禁用非法目标」表述与数据模型不符，尚未改写
 

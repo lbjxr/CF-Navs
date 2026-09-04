@@ -109,7 +109,7 @@
         <h3>尺寸与密度</h3>
         <div class="settings-grid card-size-grid">
           <label class="field field-number" class:disabled={form.card_style !== 'info'} for="settings-card-width">
-            <span>卡片最小宽度 <Tooltip text="控制一行能容纳的卡片数量，最小值为 40 px；低于 44 px 时点击区域会小于触控推荐尺寸。" /></span>
+            <span>卡片最小宽度 <Tooltip text="控制一行能容纳的卡片数量，最小值为 40 px。实测：约 68 px 以下详情卡只显示图标，标题与描述的可用宽度为 0；标题要到约 120 px 才完整显示。低于 44 px 时点击区域也会小于触控推荐尺寸。移动端另有 150 px 安全下限，不受此值影响。" /></span>
             <InputGroup
               inputId="settings-card-width"
               type="number"
@@ -123,8 +123,10 @@
               ariaLabel="卡片最小宽度"
               on:input={() => void syncForm()}
             />
-            {#if form.card_style === 'info' && form.card_size.width >= 40 && form.card_size.width < 80}
-              <small class="warn">当前宽度低于 80 px，可能无法保证页面美观。</small>
+            {#if form.card_style === 'info' && form.card_size.width >= 40 && form.card_size.width <= 68}
+              <small class="warn">当前宽度下详情卡只显示图标：标题与描述的可用宽度为 0。标题约需 120 px 才完整显示。移动端仍按 150 px 安全下限渲染。</small>
+            {:else if form.card_style === 'info' && form.card_size.width < 80}
+              <small class="warn">当前宽度低于 80 px，标题与描述会被截断，只显示开头几个字符。</small>
             {:else if form.card_style === 'icon'}
               <small>极简风格下卡片大小由图标尺寸决定。</small>
             {/if}

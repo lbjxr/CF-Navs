@@ -54,7 +54,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 - 跨分类整理通过统一草稿保存，后端接口为 `/api/bookmarks/reorganize`；状态冲突会返回冲突错误并要求刷新。
 - 后台已有书签搜索、按页展示、跨页批量选择、批量删除和不落盘排序。
 - 备份页已有按分类选择导出，选择二级分类时会补齐必要的一级父分类；导入支持追加合并和覆盖。
-- 卡片尺寸设置当前 `card_size.width` 的有效范围为 44—400 px；详情卡片和极简卡片在网格中还有各自的布局最小值与响应式安全下限。
+- 卡片尺寸设置当前 `card_size.width` 的有效范围为 40—400 px；详情卡片和极简卡片在网格中还有各自的布局最小值与响应式安全下限（详情卡移动端安全下限 150 px）。
 - 分类层级显示设置已通过 `category_display` 持久化，分别控制一级/二级标题字号和图标尺寸；首页、导航、搜索分组和预览消费统一派生值，移动端使用统一缩放。
 
 相关源码参考：`src/views/Home.svelte`、`src/components/CategorySection.svelte`、`src/components/HomeCategoryScope.svelte`、`src/components/admin/BookmarkListPanel.svelte`、`src/components/BackupPanel.svelte`、`src/lib/sortableList.ts`、`worker/routes/bookmarks.ts`、`shared/types.ts`。
@@ -278,18 +278,20 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 **验收标准**
 
 - 控件、共享类型、归一化逻辑、预览和首页实际网格使用同一套已确认范围。
-- 详情风格下任何允许保存的宽度都能在 PC 和移动端渲染完整卡片；低于 40 px 硬阈值的值在输入、保存和旧数据读取时一致钳制到 40 px，介于 40–80 px 之间的值允许保存但给出美观提示。
+- 低于 40 px 硬阈值的值在输入、保存和旧数据读取时一致钳制到 40 px。**「任何允许保存的宽度都能在 PC 和移动端渲染完整卡片」这条原验收标准已被实测推翻**（见下方 2026-09-05 证据）：桌面 40–68 px 档详情卡只显示图标，标题与描述可用宽度为 0。改为：40–79 px 允许保存但必须给出**如实描述后果**的提示，且移动端必须由 150 px 安全下限兜住可读性。
 - 详情风格的标题/描述、极简风格的图标/标题、点击区域和响应式列数均有回归截图或行为记录。
 
 **已确认决策**：
 
-- **详情风格（`card_style === 'info'`）**：允许下调卡片最小宽度下限。硬安全阈值 **2026-09-04 由 44 px 下调为 40 px**（PROB-28，用户裁定）——原先的 44 px 取自移动端触控点击区域建议值，40 px 低于该建议值，属于用户明示接受的取舍：换来更密的列数，代价是点击区域小于无障碍推荐尺寸。输入值 ≥ 40 px 且 < 80 px 时不拦截保存，但在控件旁显示“可能无法保证页面美观”提示，保留实时预览；低于 40 px 的输入在输入、保存和旧数据读取时一致钳制到 40 px。控件 `min` 设 40、`max` 保持 400。移动端网格的 150 px 安全下限不变。
+- **详情风格（`card_style === 'info'`）**：允许下调卡片最小宽度下限。硬安全阈值 **2026-09-04 由 44 px 下调为 40 px**（PROB-28，用户裁定）——原先的 44 px 取自移动端触控点击区域建议值，40 px 低于该建议值，属于用户明示接受的取舍：换来更密的列数，代价是点击区域小于无障碍推荐尺寸。输入值 ≥ 40 px 且 < 80 px 时不拦截保存，但必须给出如实提示（**2026-09-05 起分两档**：40–68 px 说明「只显示图标，标题与描述可用宽度为 0」，69–79 px 说明「标题与描述会被截断」），保留实时预览；低于 40 px 的输入在输入、保存和旧数据读取时一致钳制到 40 px。控件 `min` 设 40、`max` 保持 400。移动端网格的 150 px 安全下限不变。
 
 - **极简风格（`card_style === 'icon'`）**：卡片最小宽度控件置灰不可修改。极简卡片尺寸已由“极简卡片图标大小”（`card_icon_size`，现范围 40–100 px）动态决定，卡片宽度随图标尺寸联动，无需也不应再单独设最小宽度；置灰时给出说明“极简风格下卡片大小由图标尺寸决定”。
 
 **T8-R07 实现证据**：AdvancedSettingsSection 宽度控件 min=44/max=400，44–80 显示美观提示，icon 风格置灰并说明由图标尺寸决定；shared/client/Worker 保存和旧数据均归一化，API 非法值返回安全值。`CategorySection` 详情 Grid 轨道由归一化 `cardWidth` 驱动，桌面 width=44 轨道约 46px、width=80 约 83.5px、width=400 两列约 591px；390px 移动端 width=44 使用 150px 安全下限并双列，width=200/400 均单列 358px，均无横向溢出；定向测试 25/25、type-check 0/0、build 成功、console/page exception/failed request 均为 0。
 
 **2026-09-04 下限调整证据（PROB-28）**：`CARD_SIZE_LIMITS.width.min`、`bookmarkCardLayout` 的 `INFO_CARD_MIN_TRACK_WIDTH` 与设置控件 `min` 三处同步改为 40；`tests/unit/bookmarkCardLayout.test.ts` 断言 39→40、40→40、44→44、401→400，并锁定移动端 40/44 仍回落 150；`tests/unit/settingsForm.test.ts`、`tests/unit/settingsData.test.ts` 的归一化断言与 `tests/unit/adminSettingsLayout.test.ts` 的控件契约同步到 40。`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 695 passed；`npm run build` 成功。**40 px 下的实际卡片渲染、触控可用性与列数尚未真机验证**，属 L3 欠账。
+
+**2026-09-05 真机验证与提示修正（PROB-28v）**：隔离临时 headless Chrome 实测 `width=40` + `card_style='info'` + 显示描述。桌面 1280×900：卡片盒 40×60，`.bookmark-title` / `.bookmark-description` 的 `clientWidth` 均为 **0**（`scrollWidth` 分别 52 / 92），即**只显示图标**；横向溢出 0。阈值扫描：≤68 px 文字可用宽度恒为 0，72 px 起为 5 px，80 px 为 12 px，**120 px 标题首次完整显示**，描述到 150 px 仍被截断。移动端 390×844：`--mobile-card-min-width` 实测 `150px`、每行 2 张、卡片 171×60，标题与描述完整显示、无横向溢出、点击区域满足 44 px。据此把原提示「可能无法保证页面美观」改为两档如实文案（40–68 / 69–79），Tooltip 补入实测阈值与移动端安全下限说明；分档已在真实后台逐档输入验证（40、68 → 第一档；69、72、79 → 第二档；80、120 → 无提示）。console error / pageException / failedRequest / 4xx-5xx 全为 0。**未做**：40 px 档是否应自动切换为极简卡片风格属产品决策，未擅自改行为。
 
 ### R-08：部分导出备份
 
