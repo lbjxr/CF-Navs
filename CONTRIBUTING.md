@@ -6,10 +6,13 @@
 
 | 分支 | 角色 | 规则 |
 | --- | --- | --- |
-| `develop` | 集成分支，默认工作分支 | 所有开发在这里落地；提交前必须通过 L0 验证 |
-| `main` | 发布分支，代表"应该在线上的代码" | **只接受来自 `develop` 的合并**，禁止直接提交、禁止在 main 上改文件 |
+| `develop` | 集成分支、默认工作分支，**也是发版与部署来源** | 所有开发在这里落地；提交前必须通过 L0 验证；版本 tag 打在这里的对应提交上 |
+| `main` | 已审阅归档快照 | **只接受来自 `develop` 的合并**，禁止直接提交、禁止在 main 上改文件；**只在维护者明确要求时才合并**，不作为部署来源 |
 
 - 开始任何改动前确认当前分支是 `develop`。
+- 部署来自 `develop`，因此 `main` 不代表线上代码；「线上是哪个版本」看 `develop` 上最新的版本 tag，不看 `main`。
+- 合并 `develop` → `main` 是一个独立的归档动作，需要维护者主动要求；不要为了发版而自动合并。
+- 因为 `main` 是默认分支而部署走 `develop`，**推送到 `develop` 的关闭关键字不会关闭 Issue**。Issue 需要在部署验证通过后手动关闭，并在评论里引用对应的版本 tag。
 - `main` 上出现过只存在于 main 的内容（如 Issue 模板），这类单向缺失会让 `develop` 不再是 `main` 的超集，后续合并必然冲突。**发现 main 独有内容时，先回流到 `develop`，再继续开发。**
 - 禁止 `git push --force` / `--force-with-lease` / `reset --hard` / 分支删除，除非明确针对某次事故且已确认要覆盖哪些提交。
 
@@ -29,7 +32,7 @@
   ```
 
 - `type` 取 `fix` / `feat` / `docs` / `chore` / `refactor` / `test` / `perf`。
-- Issue 关联：Bug 用 `fixes #N`，功能用 `closes #N`，仅引用用 `refs #N`。**关闭关键字只有在提交进入 `main` 后才生效**，推到 `develop` 不会关闭 Issue，不要据此宣称已关闭。
+- Issue 关联：Bug 用 `fixes #N`，功能用 `closes #N`，仅引用用 `refs #N`。**关闭关键字只有在提交进入默认分支 `main` 后才生效**；由于部署走 `develop`、`main` 只在维护者要求时才合并，日常提交请一律用 `refs #N`，把实际关闭留到部署验证之后手动执行，不要据此宣称已关闭。
 - 一个改动同时牵涉多个 Issue 且没有单一主责 Issue 时，用 `refs`，不要用关闭关键字。
 
 ## 3. 证据引用不写裸行号
@@ -89,13 +92,13 @@
 2. 把 `[Unreleased]` 改成 `## v0.x.y — YYYY-MM-DD`，在其上留一个新的空 `[Unreleased]`。
 3. 同步 `package.json` 的 `version`。
 4. 提交 `chore(release): v0.x.y`。
-5. 合并到 `main`：`git checkout main && git merge --no-ff develop -m "merge: promote develop to main"`。
-6. 在 `main` 上打 tag：`git tag -a v0.x.y -m "v0.x.y"`，推送分支与 tag。
-7. 部署（`npm run deploy`），随后验证**生产自定义域**而不只是默认域名。
-8. 执行该版本的 L3 清单，结果回写到 `CHANGELOG.md` 对应版本段或 `docs/BACKLOG.md`。
-9. 确认带关闭关键字的提交已进入 `main` 后，再核对 Issue 是否真的关闭。
+5. 在 `develop` 的该提交上打 tag：`git tag -a v0.x.y -m "v0.x.y"`，推送分支与 tag。
+6. 部署（`npm run deploy`），随后验证**生产自定义域**而不只是默认域名。
+7. 执行该版本的 L3 清单，结果回写到 `CHANGELOG.md` 对应版本段或 `docs/BACKLOG.md`。
+8. L3 通过后，手动关闭该版本闭环的 Issue，并在评论里写明版本 tag。关闭前先 `gh auth status` 确认活动账号；**写 Issue 需要单独授权**。
+9. （可选，需维护者主动要求）把该版本合并到 `main` 归档：`git checkout main && git merge --no-ff v0.x.y -m "merge: archive v0.x.y into main"`。
 
-这样"线上是哪个版本"= `main` 上最新的 tag；"某个修复上线了吗"= `git tag --contains <sha>`。
+这样「线上是哪个版本」= `develop` 上最新的版本 tag；「某个修复上线了吗」= `git tag --contains <sha>`。每一步都需要单独授权：打 tag、推送、部署、关闭 Issue、合并 `main` 都不由一次「发版」指令一并授权。
 
 ## 7. 提交前的安全边界
 
