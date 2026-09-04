@@ -10,6 +10,14 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 直达 `/admin` 不会闪一下首页：真实浏览器实测闭环（PROB-15）
+
+- `PROJECT_OVERVIEW.md` 的维护待办「为直接刷新 `/admin` 增加真实 Chrome 回归：确认首页不会短暂挂载」一直没闭环，因为事后查 DOM 证明不了「短暂」。
+- 仪器换成能证明它的那一种：`Page.addScriptToEvaluateOnNewDocument` 在任何应用代码执行前装 `MutationObserver`（observe `document`，`childList + subtree`），记录 `.app-splash` / `.home-shell` / `.admin-page` 各自**首次进入 DOM** 的时刻与顺序。每次导航是新 document，探针自动重置。
+- 结论（隔离临时 headless Chrome + 本地隔离实例）：登录态直达 `/admin` 的挂载顺序恒为 `app-splash → admin-page`，**`home-shell` 一次都没有进入过 DOM**。首次导航 17ms/89ms，5 次 `ignoreCache` 硬刷新 37/86、25/56、28/61、36/74、24/55 ms，再加 `public_mode=false` 私有站点一次 32ms/101ms —— 共 7 次全部无 `home-shell`，且每次 console error / pageException / failedRequest / 4xx-5xx 全为 0。
+- 顺带记录（不是缺陷）：**匿名**直达 `/admin` 会落在首页（`app-splash → home-shell`），这是公开模式下 `createHomeGateState` 的既定行为，不要误读成回归。
+- 本条只做验证，未改任何运行代码。`PROJECT_OVERVIEW.md` 的该条维护待办按「只记录未完成事项」的约定删除，证据留在 `PROBLEM_HANDLING_TASK_LIST.md` 的 PROB-15。
+
 ### L1 冒烟测试进 CI，并收敛成 `npm run smoke` 一条命令（CI-01）
 
 - CI 此前只跑 L0（type-check / test / build）。L1 需要「清 D1 → `db:init` → 起服务 → 跑测试 → 收拾」五步手工前置，所以从没进过 CI——`docs/BACKLOG.md` 的 CI-01 记的就是这个：「哪些验证做过」只能靠文档记。本轮做 PROB-07 时正好踩到该前置：忘了清库就跑，得到 5 条与代码无关的失败（`初始分类列表为空 — len=2` 等），因为 `smoke-test.mjs` 的第一条断言就假设数据库是空的。

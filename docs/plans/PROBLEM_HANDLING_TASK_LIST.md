@@ -222,12 +222,17 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - 欠账：部署版本是否已含该功能、Issue #9 原作者是否认可该形态，均未验证。云端 #9 仍 Open
 - 处理动作：部署后在生产自定义域实测一次导出下载与 replace/merge 导入，再决定是否向 #9 回帖征询原作者确认。**GitHub 写操作需单独授权**
 
-### PROB-15（P1）直接刷新 `/admin` 的真实 Chrome 回归待办未闭环
+### PROB-15（P1，已完成）直接刷新 `/admin` 的真实 Chrome 回归待办未闭环
 
-- 来源映射：`docs/reference/PROJECT_OVERVIEW.md:363`
+- 来源映射：`docs/reference/PROJECT_OVERVIEW.md` 的维护待办「直接刷新 `/admin` 的真实 Chrome 回归」
 - 待办原文：确认首页不会短暂挂载，并记录控制台错误、页面异常和失败请求
 - 源码事实：`src/App.svelte` 有 `isAdminPath` 判定与 Admin 懒加载路径，但「不短暂挂载首页」需运行观测
 - 处理动作：隔离临时 Chrome 直接导航 `/admin`，采集 console / pageException / failedRequests 与首页 shell 出现帧；按本地 `real-chrome-cdp-testing` 流程只开专用 target 并清理
+- 仪器（2026-09-04）：**不是**靠事后查 DOM——那证明不了「短暂挂载」。用 `Page.addScriptToEvaluateOnNewDocument` 在任何应用代码执行前装一个 `MutationObserver`（observe `document`，`childList + subtree`），记录 `.app-splash` / `.home-shell` / `.admin-page` 三个标志节点各自**首次进入 DOM** 的时刻与顺序。每次导航都是新 document，`window.__probe` 自动重置，不会串场
+- 验证结果（登录态直达 `/admin`，本地隔离实例 + 隔离临时 headless Chrome）：挂载顺序恒为 `app-splash → admin-page`，**`home-shell` 从未进入 DOM**。首次导航 `app-splash` 17ms / `admin-page` 89ms；随后 5 次 `ignoreCache` 硬刷新分别为 37/86、25/56、28/61、36/74、24/55 ms，6 次全部无 `home-shell`。`public_mode=false`（私有站点，走另一条 gate 分支）再测一次：`app-splash` 32ms / `admin-page` 101ms，同样无 `home-shell`。每次 console error 0、pageException 0、failedRequest 0、4xx/5xx 0。`document.title` 为「管理后台」，`.admin-page` 首屏标题「导航内容管理」，`location.pathname` 保持 `/admin`
+- 顺带记录（不是缺陷）：**匿名**直达 `/admin` 时挂载顺序是 `app-splash → home-shell`（18–24ms / 52–136ms）且停在首页。这是公开模式下 `createHomeGateState` 的既定行为——未登录时 `/admin` 落回首页，不是「短暂挂载」。读本条时不要把它当成回归
+- 一次性异常（未复现）：最早一次匿名导航记录到 1 条 `net::ERR_FAILED`，但当时未记 requestId → URL 映射；补上映射后重跑该场景 0 失败，后续 7 次导航也都是 0。判定为 `about:blank` → 首个 `/admin` 请求切换时的一次性取消，不作为缺陷登记
+- 清理：只关本次创建的 target；`Browser.close` 仅对 manifest 标记 `browserStartedByTest=true` 的实例执行；按命令行精确匹配确认残留进程为 0 后删除 `cf-navs-chrome-profile-probe15-*` 临时 profile。未按进程名批量清理，未触碰用户自有 Chrome
 
 ### PROB-16（P2，已完成）设置页/导航/导出的关键交互数值未进可复跑回归套件
 
