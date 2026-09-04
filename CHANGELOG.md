@@ -10,6 +10,21 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 后台恢复私密对象的图标预览：签名授权 + 缓存隔离（PROB-20b）
+
+- PROB-20 方案 1 关掉了图标端点的匿名枚举，代价是后台预览私密书签/私密分类时也只剩兜底图标。`<img>` 不发 `Authorization` 头，所以恢复预览必须有一条能放进 URL 的凭据。
+- 新增 `GET /api/icon-access`（需登录）签发短期授权，`worker/lib/iconSignature.ts` 负责签发与校验。密钥直接复用 `settings.jwt_secret`——**改密码触发的 `rotateJwtSecret` 会顺带作废全部授权**，不必再造一条失效通道；签名内容带域分隔前缀 `icon-access:`，授权串与 JWT 互不通用。
+- **过期策略没按原计划「与会话 exp 对齐」**：会话默认 30 天，而授权是放在 URL 里的能力凭据，会进浏览器历史、Referer 与访问日志，且不查 KV 撤销名单（每张私密图标一次 KV 读会打穿图标请求预算），登出后无法立即失效。改成 30 分钟，把「登出后仍可用」的窗口从 30 天压到 ≤30 分钟，前端临近过期前 2 分钟续签。
+- 校验先看形状与过期、再算 HMAC。反过来写的话，任意长度的 `key=` 都能换来一次 HMAC 运算，等于给匿名请求开一条计算放大路径。非法或过期的 `key` 一律退回匿名口径，响应与不带 `key` 时逐字节相同。
+- **判定放在 edge cache 命中查询之前**：命中查询的键不含身份，先查就会把写给匿名访客的兜底图标返回给管理员。授权路径全程不读不写 edge cache，响应 `private, no-store`。
+- **Service Worker 显式拒收 `no-store` 图标响应**：Cache Storage 不会自己遵守 `Cache-Control`，而 `/api/category-icon/*` 是 cache-first——不拒收就等于把私密图标留在本机，并让同一浏览器 profile 下的后续访客态命中它。
+- 顺手修掉一处被原实现掩盖的缓存策略混用：真实图标与兜底图标现在分别用 `successCache` / `fallbackCache`。兜底刻意只存 5 分钟，好让后来补上的真实图标很快生效；按 7 天的成功策略缓存兜底等于把「暂时没有图标」钉死一周。
+- 前端只在后台带 `key`（分类列表、书签列表、访问分析）。首页公开卡片不带，否则公开图标响应会退化成 `private, no-store`，白丢 edge cache 与 SW 缓存。授权在 `refreshLoggedInData` 时取一次（失败只降级成兜底图标），并在 `applySession(null)` 这一处漏斗清掉，覆盖登出与 401 两条路径。
+- 实测（本地隔离实例 + 隔离临时 headless Chrome）：匿名请求私密对象图标与「id 不存在」响应字节完全相同（sha1 一致、326 B、渲染文本 `NAV`）；带授权时同一端点返回 33270 B PNG + `private, no-store`；伪造/过期 `key` 退回匿名口径；匿名请求 `/api/icon-access` 得 401。后台页面里私密分类 `<img>` 实际带 `key=` 且 `naturalWidth×naturalHeight = 512×512`（真实图标已渲染）；Cache Storage 审计显示图标条目共 1 条且**带 `key=` 的条目数为 0**。
+- 测试：新增 `tests/unit/iconAccessGrant.test.ts`（16 条，覆盖跨密钥拒绝、过期边界、畸形输入、与 JWT 不可混淆、两条路径的响应差异、私密响应不进共享缓存、归一化键丢弃随机参数、兜底 TTL）与 `tests/unit/serviceWorkerIconCache.test.ts`（3 条，在 VM 里跑真实 `public/sw.js` 并派发 fetch 事件）。后者做过反向对照：删掉 `no-store` 拒收那一行，对应用例精确失败。
+- 同时退役三条源码文本断言（数 `cachedFallbackIconResponse` 出现次数、数 `iconCacheKey` 调用点、靠 `not.toContain("'/api/icon/'")` 反推 SW 不缓存）。它们钉的是调用写法而非行为，本轮重构后要么失败要么变成假通过；取代它们的是上面直接观察响应与 Cache Storage 的行为断言。
+- 未验证：真实 Cloudflare edge cache 下「授权路径没有污染共享条目」只有代码层与本地模拟证据；`npm run perf:audit` 未跑。两项并入 PROB-20c。
+
 ### 40 px 卡片宽度实测，并把「可能不美观」的提示改成实话（PROB-28v）
 
 - 上一轮把详情卡最小宽度下限从 44 降到 40 时，真机渲染与列数没验证。本轮用隔离临时 headless Chrome 实测（`card_style='info'` + 显示描述 + `width=40`），结论比原提示严重得多：**桌面 40 px 下详情卡只显示图标**——`.bookmark-title` 与 `.bookmark-description` 的 `clientWidth` 都是 `0`（`scrollWidth` 分别 52 / 92），一个字都看不到；横向溢出为 0。

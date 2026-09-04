@@ -19,6 +19,7 @@
     reorderAdminSortDraft,
   } from '../../lib/adminListState'
   import { getBookmarkFallbackIcon, getBookmarkIconUrl, hasBookmarkImageIcon } from '../../lib/bookmarkIconDisplay'
+  import { iconAccessKey, withIconAccessKey } from '../../lib/iconAccessKey'
   import { findCategoryTreeOption } from '../../lib/categorySelect'
   import CategoryTreeSelect from '../CategoryTreeSelect.svelte'
   import { truncateUnicodeText } from '../../lib/truncateUnicodeText'
@@ -342,7 +343,7 @@
                             icon={bookmark.icon ?? ''}
                             iconSource={bookmark.icon_source}
                             iconBlob={bookmark.icon_blob ?? ''}
-                            src={getBookmarkIconUrl(bookmark)}
+                            src={withIconAccessKey(getBookmarkIconUrl(bookmark), $iconAccessKey)}
                             alt=""
                             fallback={getBookmarkFallbackIcon(bookmark)}
                             style="width: 100%; height: 100%; object-fit: contain;"

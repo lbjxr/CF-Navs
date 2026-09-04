@@ -57,8 +57,10 @@ app.use('/api/fetch-favicon', authRequired)
 app.use('/api/fetch-site-meta', authRequired)
 app.route('/api', faviconRoutes)
 
-// /api/icon/:id 公开（不须认证），用于前台加载缓存图标
+// /api/icon/:id 与 /api/category-icon/:id 公开（不须认证），用于前台加载缓存图标；
+// 私密对象的真实图标要靠 /api/icon-access 签出的短期 key，该端点必须登录。
 app.use('/api/iconify-search', authRequired)
+app.use('/api/icon-access', authRequired)
 app.route('/api', iconRoutes)
 
 app.use('/api/settings', authRequired)

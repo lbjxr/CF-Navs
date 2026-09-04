@@ -296,7 +296,27 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - 处理结果：`worker/lib/db/aggregates.ts` 新增纯函数 `isBookmarkIconAnonymouslyVisible`，复用 `getPublicCategoryIds` 的祖先链结果，不重复实现层级规则；`worker/lib/db/bookmarks.ts` 的 `getBookmarkIconData` 补选 `category_id`、`is_private`；`worker/routes/icon.ts` 两个端点在返回真实图标前判定可见性，被拒绝时返回**传空标题与空 URL** 的兜底 SVG（兜底会渲染标题前 4 字或 hostname，不传空就等于换个形式泄露），使「私密」与「ID 不存在」表现完全一致。分类端点改为一次 `listCategories` 同时得到可见集合与目标分类，比原先的 `getCategory` 少一次查询
 - 缓存投毒的处理：判定发生在 edge cache 命中查询之后，而旧条目是在没有判定的情况下按不含身份的键写入的、`s-maxage` 为 6 天，所以只加过滤不会让它们失效。`worker/lib/iconResponses.ts` 新增 `ICON_CACHE_NAMESPACE = '2'` 并写进缓存键的 `ns` 参数，旧条目立即不可达；文档已写明收紧判定口径时必须同时递增该值
 - 验证结果：`tests/unit/publicVisibility.test.ts` 新增用例覆盖公开书签、`0`/`false` 公开、`true`/`1` 私密、公开书签挂私密根、公开书签挂私密后代、分类已删除六种情形；`tests/unit/iconResponses.test.ts` 新增缓存键命名空间断言与路由门禁断言（含「三条拒绝路径都必须传空标题空 URL」的计数断言）。`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 101 files / 689 passed；`npm run build` 成功。**未做匿名枚举探针实测**（需可达部署实例，`AGENTS.md` 禁止未经要求启动服务/部署），也未跑 `npm run perf:audit`
-- 已知残余风险：① 后台预览私密书签/私密分类的真实图标现在只得到兜底图标，恢复需要方案 2；② 访客 Cache Storage 里此前缓存的私密分类图标仍在其本机，未做 SW 缓存版本递增清理——该访客此前已经能看到这些图标，不构成新增泄漏面，但要彻底清掉需要递增 `public/sw.js` 的缓存版本（会连带丢弃全部预缓存资源，未做）；③ 匿名枚举面只关到「对匿名可见」这条线，公开对象的图标仍可按 ID 枚举，这是设计如此
+- 已知残余风险：① ~~后台预览私密书签/私密分类的真实图标现在只得到兜底图标，恢复需要方案 2~~ **已由 PROB-20b 解决（见下）**；② 访客 Cache Storage 里此前缓存的私密分类图标仍在其本机，未做 SW 缓存版本递增清理——该访客此前已经能看到这些图标，不构成新增泄漏面，但要彻底清掉需要递增 `public/sw.js` 的缓存版本（会连带丢弃全部预缓存资源，未做）；③ 匿名枚举面只关到「对匿名可见」这条线，公开对象的图标仍可按 ID 枚举，这是设计如此
+
+#### PROB-20b（P1，已完成）签名 URL 恢复后台私密对象的图标预览
+
+- 缺口：方案 1 让后台预览私密书签/私密分类时也只拿到兜底图标。`<img>` 不发 `Authorization` 头，恢复预览必须有一条能放进 URL 的凭据
+- 密钥与失效：直接复用 `settings.jwt_secret`，不引入第二个密钥——改密码走的 `rotateJwtSecret` 会顺带作废全部已签发授权，不需要额外失效通道。签名内容带域分隔前缀 `icon-access:`，所以授权串不可能被当成 JWT，反之亦然（授权是两段点分、首段是纯数字时间戳；JWT 是三段）
+- **过期策略与 BACKLOG 原建议不同（有意）**：原「下一步」写「建议 `exp` 与会话 `exp` 对齐」。**未采用**——会话默认 30 天，而授权是放在 URL 里的能力凭据，会进浏览器历史、Referer 与访问日志；它又不查 KV 撤销名单（每张私密图标一次 KV 读会把 `C-5` 的图标请求预算打穿），登出后无法立即失效。改为 30 分钟短寿命，把「登出后仍可用」的窗口从 30 天压到 ≤30 分钟，前端在临近过期前 2 分钟续签
+- 实现：新增 `worker/lib/iconSignature.ts`（`createIconAccessGrant` / `verifyIconAccessGrant`，`ICON_ACCESS_TTL_MS = 30 分钟`）。校验**先看形状与过期再算 HMAC**：不做这一步的话任意长度的 `key=` 都会换来一次 HMAC 运算，等于给匿名请求开一条计算放大路径。新增 `GET /api/icon-access`（`worker/index.ts` 上挂 `authRequired`）签发授权，响应 `private, no-store`
+- **判定位置**：`resolveIconAccess` 在两个端点里于 **edge cache 命中查询之前**执行。命中查询用的键不含身份，先查就会把之前写给匿名访客的兜底图标返回给管理员；授权路径因此全程 `cacheKey === null`（不读也不写 edge cache）。`cacheResponse` / `cachedFallbackIconResponse` 的 `request` 参数改为可空，`null` 即「本次响应不得进共享缓存」
+- **缓存策略拆成两条**：`ICON_PRIVATE_CACHE = 'private, no-store'` 用于授权路径；同时把原先混用的单一 `cacheControl` 拆成 `successCache` / `fallbackCache`。这一步是必要的——匿名兜底图标刻意只存 5 分钟（`ICON_FALLBACK_CACHE`），好让后来补上的真实图标很快生效；把它按 7 天的成功策略缓存等于把「暂时没有图标」钉死一周
+- **Service Worker**：`public/sw.js` 的 `cacheIconResponse` 新增 `no-store` 拒收。Cache Storage **不会自己遵守 `Cache-Control`**，`/api/category-icon/*` 又是 cache-first，不显式拒收就等于把私密图标留在本机、并让同一浏览器 profile 下的后续访客态 cache-first 命中它
+- 前端：新增 `src/lib/iconAccessKey.ts`（`iconAccessKey` store + `ensureIconAccessKey` + `withIconAccessKey`）。`refreshLoggedInData` 取一次授权（失败只降级成兜底图标，不影响数据刷新）；`authStore.applySession(null)` 一处漏斗清掉授权，覆盖登出与 401 两条路径。只有后台三处消费（`CategoryListPanel`、`BookmarkListPanel`、`AnalyticsPanel`）——**首页公开卡片不带 key**，否则公开图标响应会变成 `private, no-store`，白丢 edge cache 与 SW 缓存
+- 验证结果（本地隔离实例 + 隔离临时 headless Chrome，均为实测）：
+  - 服务端探针：匿名请求私密书签/私密分类图标与「id 不存在」**响应字节完全相同**（sha1 一致、326 B 兜底 SVG、渲染文本为 `NAV` 不含标题）；带合法授权时同一端点返回 `image/png` 33270 B、`Cache-Control: private, no-store`；伪造 `key` 与过期 `key` 都退回匿名口径、字节与匿名一致；匿名请求 `GET /api/icon-access` 返回 **401**
+  - 兜底 TTL：用**全新 id**（避开改策略前写入的旧 edge cache 条目）实测匿名兜底为 `public, max-age=300, s-maxage=300`，不是 7 天
+  - 浏览器端：后台分类管理里私密分类的 `<img src>` 实际带 `key=`，图片 `complete && naturalWidth > 0`、`naturalWidth×naturalHeight = 512×512`，真实图标已渲染；同页面 `fetch` 对比同一端点「不带 key → 326 B 兜底 + `x-icon-fallback: 1`」与「带 key → 33270 B PNG + `private, no-store`」
+  - Cache Storage 审计：4 个缓存里图标条目共 1 条，是**不带 key** 的公开条目；**带 `key=` 的条目数为 0**，证明 SW 拒收生效
+  - 单测：新增 `tests/unit/iconAccessGrant.test.ts`（16 条，含跨密钥拒绝、过期边界、畸形输入、与 JWT 不可混淆、授权/匿名两条路径的响应差异、私密响应不进共享缓存、归一化键丢弃随机参数、兜底 TTL）与 `tests/unit/serviceWorkerIconCache.test.ts`（3 条，在 VM 里跑真实 `public/sw.js` 并派发 fetch 事件）。后者做过**反向对照**：删掉 `no-store` 拒收那一行，`never writes a no-store category icon to Cache Storage` 精确失败
+  - `npm run type-check` 0 errors / 0 warnings；`npx vitest run` 103 files / 722 passed；`npm run build` 成功
+- 顺带退役两条源码文本断言（`CONTRIBUTING.md` 第 4 节：源码文本断言只用于「接线是否存在」，不用于证明行为）：`iconResponses.test.ts` 里数 `cachedFallbackIconResponse(c, cacheKey, '', '')` 出现次数和数 `iconCacheKey(c.req.raw)` 调用点的两条，以及 `serviceWorkerClient.test.ts` 里靠 `not.toContain("'/api/icon/'")` 反推 SW 不缓存的那条。它们钉的都是调用写法，本轮重构后要么失败要么变成假通过；取代它们的是上面那些直接观察响应与 Cache Storage 的行为断言
+- 仍未验证：真实 Cloudflare edge cache 下「授权路径确实没有污染共享条目」只有代码层与本地模拟证据；`npm run perf:audit` 的图标请求数与 Cache Storage 阈值未跑（需可达部署实例）。这两项并入 PROB-20c
 
 ### PROB-21（P2，已完成）`isValidNavigationSetting` 是带副作用的类型谓词
 

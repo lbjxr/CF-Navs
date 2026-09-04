@@ -155,13 +155,24 @@
 | --- | --- | --- | --- |
 | GET | `/api/fetch-favicon?url=` | 登录 | 服务端依次解析目标站 `<link rel="icon">`、Web App Manifest `icons[]`、`/favicon.ico`，失败或超时回退 `favicon.im` |
 | GET | `/api/iconify-search?query=` | 登录 | 搜索 Iconify 候选并返回预览地址 |
+| GET | `/api/icon-access` | 登录 | 签发后台预览私密对象图标用的短期授权，返回 `IconAccessResp`。响应 `private, no-store` |
 | GET | `/api/icon/:id` | 无 | 书签图标代理，**只对匿名可见的书签返回真实图标**（见下方可见性规则）。通过判定后优先返回 Cloudflare edge cache；cache miss 时读取书签的图标地址、标题与 D1 中缓存的 `icon_blob`；无 blob 时按书签保存的 HTTP(S) 图标地址服务端抓取并写回 D1；普通 HTTP(S) 外站抓取失败、图标缺失、非 HTTP(S) 值或缓存损坏时返回临时 SVG 文字图标，并带 `X-Icon-Fallback: 1` |
 | GET | `/api/category-icon/:id` | 无 | 分类图标代理，**只对匿名可见的分类返回真实图标**（见下方可见性规则）。优先返回 Cloudflare edge cache；cache miss 时一次读取全部分类，同时算出可见集合与目标分类；HTTP(S) 分类图标由 Worker 服务端抓取；外站失败或图标缺失时返回临时 SVG 文字图标，并带 `X-Icon-Fallback: 1` |
 | GET | `/api/iconify/:set/:name.svg` | 无 | Iconify 图标预览代理。新增/编辑书签弹窗通过该同源代理预览，成功响应可被 Cloudflare edge cache 复用；失败时返回 `no-store` 临时 SVG 文字图标，并带 `X-Icon-Fallback: 1` |
 
 **图标端点的匿名可见性规则。** `/api/icon/:id` 与 `/api/category-icon/:id` 按可猜测的整数 ID 寻址且不要求登录，因此两者都在返回真实图标前做一次可见性判定，口径与 `/api/public/data` 完全一致：私密书签不可见；公开书签只要挂在私密分类（或私密分类的后代）下同样不可见；私密分类及其后代不可见。层级规则复用 `getPublicCategoryIds` 的祖先链遍历，不在图标端点重复实现。被拒绝的请求返回**不含标题与域名**的兜底 SVG（`public, max-age=300`，带 `X-Icon-Fallback: 1`），与「ID 不存在」的响应完全一致，不提供存在性或内容线索——兜底 SVG 会渲染标题前 4 个字符或 URL 的 hostname，所以这两条路径必须传空标题与空 URL。只有 HTTP 400（非正整数 ID）走 `no-store`。
 
-判定发生在 cache 命中查询**之后**，因此收紧判定口径时必须同时递增 `worker/lib/iconResponses.ts` 的 `ICON_CACHE_NAMESPACE`：edge cache 的键不含身份，旧条目是在没有判定的情况下写入的，`s-maxage` 为 6 天，只加服务端过滤不会让它们失效。命名空间体现在缓存键的 `ns` 参数上，与前端用于图标更新失效的 `v` 参数并存。可见性判定给 `/api/icon/:id` 的 cache miss 增加一次分类表读取（`/api/category-icon/:id` 不增加，它本来就要读分类），命中路径不受影响，同源请求数也不变。
+**私密对象的授权预览（`key` 参数）。** 后台需要看到私密书签/私密分类的真实图标，而 `<img>` 不发 `Authorization` 头，因此两个端点接受 `?key=<授权>`：
+
+- 授权由 `GET /api/icon-access` 签发，形如 `<exp 毫秒时间戳>.<base64url(HMAC-SHA256)>`。签名密钥就是 `settings.jwt_secret`，**改密码触发的 `rotateJwtSecret` 会顺带作废全部已签发授权**；签名内容带域分隔前缀 `icon-access:`，所以授权串与 JWT 互不通用。
+- **寿命 30 分钟，刻意远短于会话（默认 30 天）**。授权是放在 URL 里的能力凭据，会进浏览器历史、Referer 与访问日志；它又不查 KV 撤销名单（每张私密图标一次 KV 读会打穿 `C-5` 的图标请求预算），因此登出后无法立即失效——短寿命是唯一的补偿，前端在临近过期前续签。
+- 校验**先看形状与过期，再算 HMAC**：否则任意长度的 `key=` 都会换来一次 HMAC 运算，等于给匿名请求开一条计算放大路径。非法或过期的 `key` 一律**退回匿名口径**，响应与不带 `key` 时逐字节相同。
+- 带合法授权的响应是 `private, no-store`，且**既不读也不写 edge cache**（`cacheKey` 为 `null`）。判定必须发生在 cache 命中查询之前：命中查询用的键不含身份，先查就会把写给匿名访客的兜底图标返回给管理员。`public/sw.js` 的 `cacheIconResponse` 另外显式拒收 `no-store` 响应——Cache Storage 不会自己遵守 `Cache-Control`，而 `/api/category-icon/*` 是 cache-first，不拒收就会把私密图标留在本机并被后续访客态命中。
+- 前端只在**后台**带 `key`（分类列表、书签列表、访问分析）。首页公开卡片不带，否则公开图标响应会退化成 `private, no-store`，白丢 edge cache 与 SW 缓存。
+
+判定发生在 cache 命中查询**之后**（匿名路径），因此收紧判定口径时必须同时递增 `worker/lib/iconResponses.ts` 的 `ICON_CACHE_NAMESPACE`：edge cache 的键不含身份，旧条目是在没有判定的情况下写入的，`s-maxage` 为 6 天，只加服务端过滤不会让它们失效。命名空间体现在缓存键的 `ns` 参数上，与前端用于图标更新失效的 `v` 参数并存；`key` 参数会被键归一化丢弃，所以伪造的 `key` 不会让缓存条目碎片化。可见性判定给 `/api/icon/:id` 的 cache miss 增加一次分类表读取（`/api/category-icon/:id` 不增加，它本来就要读分类），命中路径不受影响，同源请求数也不变。
+
+**真实图标与兜底图标的缓存策略是分开的**：真实图标 `public, max-age=7 天, s-maxage=6 天, immutable`，兜底图标只 `public, max-age=300, s-maxage=300`。兜底刻意短命，好让后来补上的真实图标很快生效——按成功策略缓存兜底等于把「暂时没有图标」钉死一周。
 
 图标来源包括：
 
@@ -174,7 +185,7 @@
 
 创建或更新书签后，前端会对普通 HTTP(S) 图标显式调用刷新接口，尽量缓存到 `bookmarks.icon_blob`；Iconify 图标和 icon-sets 页面链接不写入 `icon_blob`，后台预览由 `/api/iconify/:set/:name.svg` 和 Cloudflare edge cache 复用。更新书签但图标地址或图标来源未改变时不会清空已有 `icon_blob`。**聚合响应不下发 `icon_blob`（该字段为 `null`），而以 `icon_cached` 表示 D1 中是否已有持久化缓存**；首页据此配合浏览器本地图标缓存、`/api/icon/:id` 兼容路径或已保存的普通 HTTP(S) URL 取得图标。普通渲染不主动把 `/api/icon/:id` 挂载到首页 `<img>` 上；只有编辑/保存等显式刷新动作会调用刷新接口。HTTP(S) 分类图片使用 `/api/category-icon/:id?v=...`，data URI、文字和表情分类图标直接渲染；一级标题、二级标签、搜索分组和折叠导航复用相同解析与图片失败回退规则。已保存的 Iconify 书签图标首页可直接使用标准 Iconify SVG URL，并依赖浏览器 HTTP 缓存复用；后台预览仍使用稳定的 `/api/iconify/:set/:name.svg`。
 
-前端普通渲染普通 HTTP(S) 书签图标时应读取聚合数据中的 `icon_cached` 轻量标志，不应假设聚合响应携带二进制 `icon_blob`；缓存缺失时再读取浏览器本地图标缓存或保存的原始 HTTP(S) 图标 URL 兜底。不要直接把 `/api/icon/:id` 挂载到首页 `<img>`，后台列表仍可把 `/api/icon/:id` 作为兼容预览入口——但**该入口对私密对象只返回兜底图标**，后台预览私密书签/私密分类的真实图标需要另设签名 URL 或等价凭据通道，属未实现项。持久化的 Iconify 图标首页可使用标准 `https://api.iconify.design/*.svg`，由浏览器 HTTP 缓存复用，避免每张图标都占用一次同源 Worker 请求。
+前端普通渲染普通 HTTP(S) 书签图标时应读取聚合数据中的 `icon_cached` 轻量标志，不应假设聚合响应携带二进制 `icon_blob`；缓存缺失时再读取浏览器本地图标缓存或保存的原始 HTTP(S) 图标 URL 兜底。不要直接把 `/api/icon/:id` 挂载到首页 `<img>`，后台列表仍可把 `/api/icon/:id` 作为兼容预览入口——对私密对象需要附带 `GET /api/icon-access` 签出的 `key` 才能得到真实图标，不带 `key` 时只返回兜底图标。持久化的 Iconify 图标首页可使用标准 `https://api.iconify.design/*.svg`，由浏览器 HTTP 缓存复用，避免每张图标都占用一次同源 Worker 请求。
 
 HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloudflare edge cache；只有书签图标需要写入 `bookmarks.icon_blob` 时才生成 base64 data URI，避免 Iconify 预览和分类图标在 Worker 内部做不必要的 base64 编解码。
 

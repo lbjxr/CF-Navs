@@ -3,6 +3,8 @@
 // - App shell and hashed assets: cache first.
 // - Navigations: stale-while-revalidate — serve the cached shell immediately, refresh in the background.
 // - /api/category-icon/*: cache first because category icons are low volume.
+// - Any icon response marked `no-store` (private objects fetched with a signed access key)
+//   is never written to Cache Storage — Cache Storage does not honour Cache-Control on its own.
 // - /api/icon/* and /api/iconify/*: do not write to Cache Storage; rely on HTTP and edge caching.
 // - Other /api/* requests: network only.
 
@@ -55,6 +57,10 @@ async function matchCachedIcon(request) {
 function cacheIconResponse(request, response) {
   if (!response.ok) return
   if (response.type === 'opaque') return
+  // 私密对象的图标带签名授权，服务端标记 `private, no-store`。Cache Storage 不会自己
+  // 遵守 Cache-Control，写进去就等于把私密图标留在这台机器上、并让下一个访客（同一
+  // 浏览器 profile 下的访客态）cache-first 命中它。必须显式拒收。
+  if ((response.headers.get('Cache-Control') || '').includes('no-store')) return
 
   const contentLength = Number(response.headers.get('Content-Length') || '0')
   if (contentLength > MAX_ICON_CACHE_BYTES) return

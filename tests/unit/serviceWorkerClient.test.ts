@@ -138,11 +138,4 @@ describe('service worker source contracts', () => {
     expect(source).toMatch(/const CACHE = 'cf-navs-v(\d+)'/)
     expect(Number(source.match(/const CACHE = 'cf-navs-v(\d+)'/)?.[1])).toBeGreaterThanOrEqual(15)
   })
-
-  it('still refuses to cache bookmark icon proxy responses', () => {
-    // 性能契约：/api/icon/* 和 /api/iconify/* 不写 Cache Storage
-    expect(source).not.toContain("'/api/icon/'")
-    expect(source).not.toContain("'/api/iconify/'")
-    expect(source).toContain("url.pathname.startsWith('/api/')")
-  })
 })

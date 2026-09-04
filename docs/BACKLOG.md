@@ -11,7 +11,6 @@
 
 | ID | 类型 | 优先 | 事项 | 下一步 | 详情 |
 | --- | --- | --- | --- | --- | --- |
-| PROB-20b | 安全 | P1 | 签名 URL 恢复后台私密对象的图标预览 | 先定签名密钥与过期策略（建议 `exp` 与会话 `exp` 对齐，改密码触发 `rotateJwtSecret` 时顺带失效）；先验签再查缓存，私密响应改 `private, no-store` 并跳过 edge cache 与 Service Worker 的分类图标 cache-first 分支 | PH PROB-20 |
 | PROB-18b | 技术债 | P2 | 24 个源码文本断言文件迁到组件层 | 增量做：每次迁一个文件，删掉被真实 DOM 断言取代的那几条 | PH PROB-18 |
 | PROB-24 | 技术债 | P3 | `src/App.svelte` 按 use case 收敛编排职责 | **只在后续修改认证 / CRUD / 弹窗流程时顺带做**，不单独开一轮重构 | PH PROB-24 |
 | PROB-31 | 缺陷 | P3 | `SESSION` 绑定的必选性三处口径不一致 | `worker/middleware/rateLimit.ts` 的 `loginRateLimit` 无条件读 `env.SESSION`（缺绑定时 `POST /api/login` 实测返回 `code=1500`），而 `validateSession` 与 logout 把它当可选，`worker/types.ts` 的 `Env.SESSION` 又是必填类型。定一个口径：要么让缺绑定返回可定位的错误码（对齐 `/install` 的 `bindings_missing`），要么三处都按必填处理 | PH PROB-19 |
@@ -33,7 +32,7 @@
 | PROB-19v | 安全 | P1 | 登出撤销的跨 isolate 生效窗口（≤15 秒）与真实 KV 写入故障下的 `store_unavailable` 分支，需部署实例做故障注入。失败时的返回语义已定并落地（`LogoutResp` 三态 + 前端警告），此处只剩运行时验证 | PH PROB-19 |
 | PROB-13 | 验证欠账 | P1 | 部署后完成剩余 7 组真机验收（`L1`/`L3`/`L4`/`S3`/`S3 导入提示`/`S4`/`U1–U4`）。iOS 输入放大项必须真实 iOS Safari，隔离 Chrome 不能替代 | PH PROB-13 |
 | PROB-14 | 验证欠账 | P1 | 部署后在生产自定义域实测部分导出下载与 replace/merge 导入，再决定是否向 #9 征询原作者确认（**回帖需单独授权**） | PH PROB-14 |
-| PROB-20c | 安全 | P1 | 部署后做匿名枚举探针，确认图标端点确实拒绝私密对象；并确认缓存命名空间递增后旧 edge cache 条目不可达 | PH PROB-20 |
+| PROB-20c | 安全 | P1 | 部署后做匿名枚举探针，确认图标端点确实拒绝私密对象；确认缓存命名空间递增后旧 edge cache 条目不可达；并确认 PROB-20b 的授权路径没有污染真实 Cloudflare edge cache（本地只有代码层与模拟证据）。同时跑 `npm run perf:audit` 复核图标请求数与 Cache Storage 阈值 | PH PROB-20 |
 | PROB-18c | 技术债 | P2 | 真实浏览器验证层：复用本地已有 Chrome 或走 `real-chrome-cdp-testing` 流程，覆盖 computed style、`100dvh`/安全区/虚拟键盘、剪贴板用户手势、`prefers-reduced-motion` 实际时长、iOS 输入放大，以及 PROB-16 的数值断点。**不引入 Playwright** | PH PROB-18 |
 | PROB-23 | 验证欠账 | P2 | 旧 Service Worker、Cache Storage 膨胀、外站图标失败都是运行时条件，并入 PROB-13 的部署后验收，并跑 `npm run perf:audit` | PH PROB-23 |
 | PROB-17 | 验证欠账 | P2 | 补后台移动端三档视觉截图（备份/导入页移动端、`430x932`、`768x1024`）与桌面补充截图 | PH PROB-17 |

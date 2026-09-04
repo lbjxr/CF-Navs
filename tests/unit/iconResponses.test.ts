@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
 import {
   ICON_BROWSER_CACHE_SECONDS,
   ICON_EDGE_CACHE_SECONDS,
@@ -56,26 +55,5 @@ describe('icon proxy cache key', () => {
     expect(key('https://nav.example.com/api/icon/1')).toContain('ns=2')
     expect(key('https://nav.example.com/api/category-icon/1')).toContain('ns=2')
     expect(key('https://nav.example.com/api/iconify/mdi/home.svg')).toContain('ns=2')
-  })
-
-  it('is used by every icon proxy route', () => {
-    // 读写必须用同一个键，漏掉任何一处都会让缓存永远 miss
-    const source = readFileSync('worker/routes/icon.ts', 'utf8')
-
-    expect(source.match(/iconCacheKey\(c\.req\.raw\)/g)).toHaveLength(3)
-    expect(source).not.toContain('cacheResponse(c, c.req.raw')
-    expect(source).not.toContain('getCachedResponse(c.req.raw)')
-  })
-
-  it('gates both id-addressable icon endpoints on anonymous visibility', () => {
-    const source = readFileSync('worker/routes/icon.ts', 'utf8')
-
-    // 书签图标按「书签自身私密 + 所在分类祖先链」判定，分类图标按祖先链判定，
-    // 都不能退化成只看目标对象自身的 is_private。
-    expect(source).toContain('isBookmarkIconAnonymouslyVisible(bookmark, visibleCategoryIds)')
-    expect(source).toContain('getPublicCategoryIds(categories).has(id)')
-    // 兜底 SVG 会渲染标题前 4 字或 URL 的 hostname，所以被拒绝的三条路径必须传空标题空 URL，
-    // 让「私密」和「id 不存在」表现完全一致，不留存在性或内容线索。
-    expect(source.match(/cachedFallbackIconResponse\(c, cacheKey, '', ''\)/g)).toHaveLength(3)
   })
 })

@@ -15,6 +15,7 @@ import {
   type ChangePasswordReq,
   type DataVersionResp,
   type FaviconResp,
+  type IconAccessResp,
   type IconifySearchResp,
   type ImportReq,
   type ImportResp,
@@ -355,6 +356,7 @@ export const authApi = {
   login: (payload: LoginReq) => jsonRequest<LoginResp>('/login', 'POST', payload),
   changePassword: (payload: ChangePasswordReq) => jsonRequest<null>('/password', 'POST', payload, true),
   logout: () => jsonRequest<LogoutResp>('/logout', 'POST', undefined, true),
+  iconAccess: () => request<IconAccessResp>('/icon-access', { auth: true, cache: 'no-store' }),
 }
 
 export const categoriesApi = {

@@ -7,6 +7,9 @@ export const ICON_SUCCESS_CACHE =
   `public, max-age=${ICON_BROWSER_CACHE_SECONDS}, s-maxage=${ICON_EDGE_CACHE_SECONDS}, immutable`
 export const ICON_FAILURE_CACHE = 'no-store'
 export const ICON_FALLBACK_CACHE = 'public, max-age=300, s-maxage=300'
+// 私密对象的真实图标只允许在发起者的浏览器里短暂存活：不进共享 edge cache，也不进
+// Service Worker 的 Cache Storage。`no-store` 是这两者的统一开关。
+export const ICON_PRIVATE_CACHE = 'private, no-store'
 
 export function errorIconResponse(message: string, status: number): Response {
   return new Response(message, {
@@ -24,7 +27,7 @@ function escapeSvgText(value: string): string {
     .replace(/>/g, '&gt;')
 }
 
-export function fallbackIconResponse(title: string, url: string): Response {
+export function fallbackIconResponse(title: string, url: string, cacheControl = ICON_FALLBACK_CACHE): Response {
   let hostname = 'NAV'
   try {
     hostname = new URL(url).hostname.replace(/^www\./, '') || hostname
@@ -42,16 +45,28 @@ export function fallbackIconResponse(title: string, url: string): Response {
     status: 200,
     headers: {
       'Content-Type': 'image/svg+xml; charset=utf-8',
-      'Cache-Control': ICON_FALLBACK_CACHE,
+      'Cache-Control': cacheControl,
       'X-Icon-Fallback': '1',
     },
   })
 }
 
-export function cacheResponse(context: unknown, request: Request, response: Response) {
-  const executionCtx = (context as { executionCtx?: ExecutionContext }).executionCtx
-  const edgeCache = (caches as unknown as { default: Cache }).default
-  executionCtx?.waitUntil(edgeCache.put(request, response.clone()))
+// Workers 运行时的 `caches.default` 不在标准 CacheStorage 类型里，这里做一次带说明的
+// 断言而不是在每个使用点内联 cast。**必须惰性读取**：`caches` 在 node 测试环境里不存在，
+// 模块顶层求值会让所有导入本模块的单测直接 ReferenceError。
+function edgeCache(): Cache {
+  return (caches as unknown as { default: Cache }).default
+}
+
+// Hono 的 Context 与 @cloudflare/workers-types 各有一套 `ExecutionContext` 定义，两者
+// 不互相赋值。这里只声明真正用到的 `waitUntil`，两种上下文都能结构化匹配。
+type CacheWritableContext = { executionCtx?: { waitUntil(promise: Promise<unknown>): void } }
+
+// request 为 null 表示这次响应不允许进共享缓存（私密对象的签名授权路径）。
+export function cacheResponse(context: CacheWritableContext, request: Request | null, response: Response) {
+  if (!request) return
+
+  context.executionCtx?.waitUntil(edgeCache().put(request, response.clone()))
 }
 
 // 图标代理是匿名可访问的，而 edge cache 的键是整个请求 URL。不归一化的话
@@ -81,17 +96,17 @@ export function iconCacheKey(request: Request): Request {
 }
 
 export async function getCachedResponse(request: Request): Promise<Response | undefined> {
-  const edgeCache = (caches as unknown as { default: Cache }).default
-  return (await edgeCache.match(request)) ?? undefined
+  return (await edgeCache().match(request)) ?? undefined
 }
 
 export function cachedFallbackIconResponse(
-  context: unknown,
-  request: Request,
+  context: CacheWritableContext,
+  request: Request | null,
   title: string,
   url: string,
+  cacheControl = ICON_FALLBACK_CACHE,
 ): Response {
-  const response = fallbackIconResponse(title, url)
+  const response = fallbackIconResponse(title, url, cacheControl)
   cacheResponse(context, request, response)
   return response
 }

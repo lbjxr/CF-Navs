@@ -14,6 +14,7 @@
     reorderAdminSortDraft,
   } from '../../lib/adminListState'
   import { createIconVersion } from '../../lib/bookmarkIconDisplay'
+  import { iconAccessKey, withIconAccessKey } from '../../lib/iconAccessKey'
   import { sortableList } from '../../lib/sortableList'
   import './adminListPanels.css'
 
@@ -149,11 +150,14 @@
     }
   }
 
-  function getCategoryIconUrl(category: AdminCategory): string {
+  // 后台预览私密分类的真实图标需要短期授权 key（PROB-20b）；key 未就绪时 URL 不带参数，
+  // 服务端按匿名口径返回兜底图标。$iconAccessKey 变化会让这里重新求值。
+  function getCategoryIconUrl(category: AdminCategory, accessKey: string): string {
     const icon = category.icon?.trim()
     if (!icon || (!/^https?:\/\//i.test(icon) && !icon.startsWith('data:image/'))) return ''
 
-    return `/api/category-icon/${category.id}?v=${createIconVersion(`${category.id}:${icon}:${category.title}`)}`
+    const url = `/api/category-icon/${category.id}?v=${createIconVersion(`${category.id}:${icon}:${category.title}`)}`
+    return withIconAccessKey(url, accessKey)
   }
 </script>
 
@@ -237,8 +241,8 @@
               <article class="admin-compact-card sortable" data-sortable-item data-sort-id={category.id}>
                 <span class="admin-drag-handle" aria-hidden="true">⋮⋮</span>
                 <span class="admin-icon-badge">
-                  {#if getCategoryIconUrl(category)}
-                    <img src={getCategoryIconUrl(category)} alt="" loading="lazy" />
+                  {#if getCategoryIconUrl(category, $iconAccessKey)}
+                    <img src={getCategoryIconUrl(category, $iconAccessKey)} alt="" loading="lazy" />
                   {:else}
                     {category.icon || '📁'}
                   {/if}
@@ -271,8 +275,8 @@
                   <span class="admin-tree-toggle-spacer" aria-hidden="true"></span>
                 {/if}
                 <span class="admin-icon-badge">
-                  {#if getCategoryIconUrl(group.root)}
-                    <img src={getCategoryIconUrl(group.root)} alt="" loading="lazy" />
+                  {#if getCategoryIconUrl(group.root, $iconAccessKey)}
+                    <img src={getCategoryIconUrl(group.root, $iconAccessKey)} alt="" loading="lazy" />
                   {:else}
                     {group.root.icon || '📁'}
                   {/if}
@@ -304,8 +308,8 @@
                       <input type="checkbox" aria-label={`选择分类 ${category.title}`} checked={selectedIds.has(Number(category.id))} on:change={(event) => toggleCategorySelection(event, Number(category.id))} />
                       <span class="admin-hierarchy-connector" aria-hidden="true">↳</span>
                       <span class="admin-icon-badge">
-                        {#if getCategoryIconUrl(category)}
-                          <img src={getCategoryIconUrl(category)} alt="" loading="lazy" />
+                        {#if getCategoryIconUrl(category, $iconAccessKey)}
+                          <img src={getCategoryIconUrl(category, $iconAccessKey)} alt="" loading="lazy" />
                         {:else}
                           {category.icon || '📁'}
                         {/if}

@@ -17,6 +17,7 @@ import {
   isUnauthorizedError,
   setStoredAuthSession,
 } from './api'
+import { clearIconAccessKey } from './iconAccessKey'
 
 export interface LoadableState<T> {
   data: T
@@ -133,6 +134,8 @@ function createAuthStore() {
       setStoredAuthSession(session)
     } else {
       clearStoredAuthSession()
+      // 图标授权 key 跟着会话走：登出或 401 后不能继续把过期 key 挂在 URL 上。
+      clearIconAccessKey()
     }
 
     set({

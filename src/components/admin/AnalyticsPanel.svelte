@@ -7,6 +7,7 @@
     getAdminListTotalPages,
   } from '../../lib/adminListState'
   import { getBookmarkFallbackIcon, getBookmarkIconUrl, hasBookmarkImageIcon } from '../../lib/bookmarkIconDisplay'
+  import { iconAccessKey, withIconAccessKey } from '../../lib/iconAccessKey'
   import { truncateUnicodeText } from '../../lib/truncateUnicodeText'
   import CachedBookmarkIcon from '../CachedBookmarkIcon.svelte'
   import './adminListPanels.css'
@@ -82,7 +83,7 @@
                       icon={bookmark.icon ?? ''}
                       iconSource={bookmark.icon_source}
                       iconBlob={bookmark.icon_blob ?? ''}
-                      src={getBookmarkIconUrl(bookmark)}
+                      src={withIconAccessKey(getBookmarkIconUrl(bookmark), $iconAccessKey)}
                       alt=""
                       fallback={getBookmarkFallbackIcon(bookmark)}
                       style="width: 100%; height: 100%; object-fit: contain;"
@@ -134,7 +135,7 @@
                       icon={bookmark.icon ?? ''}
                       iconSource={bookmark.icon_source}
                       iconBlob={bookmark.icon_blob ?? ''}
-                      src={getBookmarkIconUrl(bookmark)}
+                      src={withIconAccessKey(getBookmarkIconUrl(bookmark), $iconAccessKey)}
                       alt=""
                       fallback={getBookmarkFallbackIcon(bookmark)}
                       style="width: 100%; height: 100%; object-fit: contain;"

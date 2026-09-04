@@ -371,6 +371,15 @@ export interface IconifySearchResp {
   candidates: IconifyCandidate[]
 }
 
+// GET /api/icon-access（需登录）
+// 后台预览私密书签/私密分类图标用的短期授权。`<img>` 不发 Authorization 头，所以凭据
+// 只能放进 URL 的 `key` 参数。签名密钥是 `settings.jwt_secret`，改密码会顺带作废全部
+// 授权；寿命刻意远短于会话（默认 30 分钟），因为它不查撤销名单、登出后无法立即失效。
+export interface IconAccessResp {
+  key: string
+  expires_at: number
+}
+
 // POST /api/categories/sort  和  /api/bookmarks/sort
 // 传有序 id 数组，后端按下标写 sort
 export interface SortReq {
