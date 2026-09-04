@@ -9,6 +9,7 @@ import {
   filterAdminCategoryGroups,
   getAdminBookmarkCategoryOptions,
   getHiddenCategoryIds,
+  pickMajorityCategoryId,
   filterAdminCategories,
   getAdminCategoryBookmarkCount,
   getAdminCategoryTitle,
@@ -218,5 +219,42 @@ describe('admin list state helpers', () => {
     ]
 
     expect(getAdminBookmarkCategoryOptions(tree, mixed)[1].notice).toBe('移入后会从公开首页隐藏 1 个公开书签')
+  })
+
+  it('defaults batch moves to the majority category of the selection', () => {
+    // 分类树展示顺序按 sort 再 id：Documentation(2) → Tools(1) → Tools/Frontend(3)
+    const selection = (categoryIds: Array<string | number>): AdminBookmarkSummary[] =>
+      categoryIds.map((category_id, index) => ({
+        id: 100 + index,
+        category_id,
+        title: `B${index}`,
+        url: `https://b${index}.test`,
+      }))
+
+    // 全同分类
+    expect(pickMajorityCategoryId(selection([1, 1, 1]), categories)).toBe(1)
+    // 明确多数：少数派在展示顺序里更靠前也不能夺走默认值
+    expect(pickMajorityCategoryId(selection([3, 3, 2]), categories)).toBe(3)
+    // 并列：取展示顺序最靠前的分类，而不是 id 最小的或首个选中项
+    expect(pickMajorityCategoryId(selection([1, 3]), categories)).toBe(1)
+    expect(pickMajorityCategoryId(selection([1, 2]), categories)).toBe(2)
+    // 空选与目标已删除：回落到展示顺序最靠前的分类
+    expect(pickMajorityCategoryId([], categories)).toBe(2)
+    expect(pickMajorityCategoryId(selection(['missing', 999]), categories)).toBe(2)
+  })
+
+  it('never defaults to a category missing from the selectable tree', () => {
+    const orphaned: AdminCategorySummary[] = [
+      { id: 1, parent_id: null, title: 'Root', sort: 0 },
+      { id: 5, parent_id: 99, title: 'Orphan', sort: 0 },
+    ]
+    const inOrphan: AdminBookmarkSummary[] = [
+      { id: 30, category_id: 5, title: 'A', url: 'https://a.test' },
+      { id: 31, category_id: 5, title: 'B', url: 'https://b.test' },
+    ]
+
+    expect(getAdminBookmarkCategoryOptions(orphaned, inOrphan).map((option) => option.id)).toEqual([1])
+    expect(pickMajorityCategoryId(inOrphan, orphaned)).toBe(1)
+    expect(pickMajorityCategoryId(inOrphan, [])).toBeNull()
   })
 })

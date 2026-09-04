@@ -182,6 +182,39 @@ export function getAdminBookmarkCategoryOptions(
   return options.map(annotate)
 }
 
+/**
+ * 批量移动的默认目标：选中书签里出现次数最多的分类（`GITHUB_ISSUES_REQUIREMENTS.md` R-05 的「多数书签所在分类」）。
+ * 并列时取后台排序最靠前的分类，保证同一选择集每次都落在同一个默认值上。
+ * 取值范围就是分类树里实际可选的分类：已删除、或挂在不存在父分类下的 `category_id` 不参与统计；
+ * 没有任何有效候选（空选、目标已删除）时回落到排序最靠前的分类。
+ */
+export function pickMajorityCategoryId(
+  selectedBookmarks: AdminBookmarkSummary[],
+  categories: AdminCategorySummary[],
+): number | null {
+  const ordered = flattenAdminCategoryGroups(buildAdminCategoryGroups(categories))
+  if (ordered.length === 0) return null
+
+  const counts = new Map<number, number>()
+  for (const bookmark of selectedBookmarks) {
+    const categoryId = Number(bookmark.category_id)
+    if (!Number.isFinite(categoryId)) continue
+    counts.set(categoryId, (counts.get(categoryId) ?? 0) + 1)
+  }
+
+  let majorityId = Number(ordered[0].id)
+  let majorityCount = 0
+  for (const category of ordered) {
+    const count = counts.get(Number(category.id)) ?? 0
+    if (count > majorityCount) {
+      majorityId = Number(category.id)
+      majorityCount = count
+    }
+  }
+
+  return majorityId
+}
+
 export function createAdminListPage<T>(
   items: T[],
   requestedPage: number,

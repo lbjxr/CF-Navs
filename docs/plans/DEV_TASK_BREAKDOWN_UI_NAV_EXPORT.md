@@ -343,6 +343,12 @@ graph TD
 | 收尾（CHANGELOG/OVERVIEW） | 3 | 已完成 | `CHANGELOG.md`；相关需求/任务文档 | 变更记录已补充；`PROJECT_OVERVIEW.md` 既有维护待办未涉及，不修改 | 本轮无 git/部署/生产操作 |
 | 设置卡片高度与滚动边界 | 3 | 已完成 | `src/components/SettingsPanel.svelte`、`src/components/admin/AdminTabContent.svelte`、`tests/unit/adminSettingsLayout.test.ts` | `adminSettingsLayout.test.ts` 14 passed；`npm run type-check` 0 errors / 0 warnings；隔离 headless Chrome 验证宽屏无外层溢出、1320px/移动端自然高度；`git diff --check` 通过 | 桌面高度扣除外层预留与 wrapper 24px 间距；内容在 section 内滚动，≤1320px 不保留固定高度 |
 
+> **数值证据的性质（2026-09-04 定性，PROB-16）**：本表与下方轮次记录里的数值断点证据是**一次性人工 CDP 证据，不构成持续回归**。具体指：`T9-export` 行的「实际下载 3 分类/6 书签、replace+merge `code=0`」；`T4-nav` 行与「集成验收修正（第二轮）」的「820px 桌面分行 2 行/98px、箭头隐藏、子菜单在视口内」；`T5-align` 行的「桌面 top=18 / nav top=12 / z-index=70，移动 top=14 / nav top=8」；以及 `721px / 768px / 799px` 中间断点复验。
+>
+> 可复跑闸门实际覆盖的是别的东西：`scripts/chrome-regression.mjs` 的 25 条断言只到「设置页/备份页已渲染、控件存在」这一层（见 `scripts/chrome-regression.mjs` 的 `collectChecks`），没有数值型断点、`getComputedStyle` 采样、视口仿真或下载/导入自动化；`scripts/smoke-test.mjs` 覆盖的是 API 端到端，不含布局数值。
+>
+> 未把这些数值补进 `scripts/chrome-regression.mjs`，原因是它需要的前置条件本轮不具备且不被授权：脚本必须有可达的 `BASE_URL`（环境变量或被忽略的 `verify.local.json`）、真实管理员凭据，并且它的安全场景会真实改写再还原管理员密码；补数值断言还需要额外引入视口仿真、确定性分类/书签 fixture 与下载断言。`AGENTS.md` 规定未经明确要求不启动本地服务、不部署，因此这些断点只能在显式授权的部署后验收里复跑（并入 PROB-13）。回归套件本身未改动。
+
 - **2026-08-30 补跑仓库自带冒烟与回归套件（验证遗漏修补）**
   - 发现遗漏：前几轮只跑了 `vitest` + `type-check` + `build` + 自写 CDP 场景脚本，**未运行仓库自带的 `scripts/smoke-test.mjs`（API 端到端冒烟）与 `scripts/chrome-regression.mjs`（真实浏览器回归套件）**，四份文档也未提及。已补跑并在 §9.1 / §9.2bis 固化为必跑项。
   - `smoke-test.mjs`（干净本地 D1）最初为 70 / 73；随后修正脚本与 PR #7 分类排序契约、`remapImportRecords` 导入重编号语义的漂移，最终 **75 / 75 全绿**。两处新断言均经故障注入证明能抓住对应回归。

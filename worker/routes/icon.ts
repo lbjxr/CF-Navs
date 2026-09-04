@@ -1,6 +1,12 @@
 import { Hono } from 'hono'
 import { ErrCode } from '../../shared/types'
-import { getBookmarkIconData, getCategory, setIconBlob } from '../lib/db'
+import {
+  getBookmarkIconData,
+  getPublicCategoryIds,
+  isBookmarkIconAnonymouslyVisible,
+  listCategories,
+  setIconBlob,
+} from '../lib/db'
 import {
   dataUriToResponse,
   fetchCacheableIcon,
@@ -81,7 +87,19 @@ iconRoutes.get('/icon/:id', async (c) => {
     }
 
     const bookmark = await getBookmarkIconData(c.env.DB, id)
-    if (bookmark?.icon_blob) {
+    // 端点匿名可访问：先判定这条书签对访客是否可见。私密书签、以及挂在私密分类（或其
+    // 后代）下的公开书签，一律返回不含标题与域名的兜底图标，表现与「id 不存在」完全
+    // 一致，不泄露存在性或内容线索（PROB-20 方案 1）。
+    if (!bookmark) {
+      return cachedFallbackIconResponse(c, cacheKey, '', '')
+    }
+
+    const visibleCategoryIds = getPublicCategoryIds(await listCategories(c.env.DB))
+    if (!isBookmarkIconAnonymouslyVisible(bookmark, visibleCategoryIds)) {
+      return cachedFallbackIconResponse(c, cacheKey, '', '')
+    }
+
+    if (bookmark.icon_blob) {
       const response = dataUriToResponse(bookmark.icon_blob, ICON_SUCCESS_CACHE)
       if (!response) {
         await setIconBlob(c.env.DB, id, null)
@@ -91,8 +109,8 @@ iconRoutes.get('/icon/:id', async (c) => {
       }
     }
 
-    if (!bookmark?.icon) {
-      return cachedFallbackIconResponse(c, cacheKey, bookmark?.title ?? '', bookmark?.url ?? '')
+    if (!bookmark.icon) {
+      return cachedFallbackIconResponse(c, cacheKey, bookmark.title, bookmark.url)
     }
 
     if (bookmark.icon.startsWith('data:image/')) {
@@ -140,7 +158,14 @@ iconRoutes.get('/category-icon/:id', async (c) => {
       return cached
     }
 
-    const category = await getCategory(c.env.DB, id)
+    // 分类图标同样匿名可访问：一次读全部分类，既算出可见集合又拿到目标分类。
+    // 私密分类及其后代一律走不含标题的兜底图标（PROB-20 方案 1）。
+    const categories = await listCategories(c.env.DB)
+    if (!getPublicCategoryIds(categories).has(id)) {
+      return cachedFallbackIconResponse(c, cacheKey, '', '')
+    }
+
+    const category = categories.find((item) => item.id === id)
     if (!category?.icon) {
       return cachedFallbackIconResponse(c, cacheKey, category?.title ?? '', '')
     }

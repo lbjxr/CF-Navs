@@ -2,7 +2,7 @@
 
 > **状态：本清单是索引，不是事实来源。** 每条只给「做什么 / 什么阻塞它 / 详情在哪」，证据与判断保留在来源文档里，避免出现第三份互相矛盾的记录。
 >
-> - 更新日期：2026-09-03；基线：`develop` 分支当前工作树。
+> - 更新日期：2026-09-04；基线：`develop` 分支当前工作树。
 > - 详情：问题类看 [问题处理任务清单](PROBLEM_HANDLING_TASK_LIST.md)（`PROB-NN`），需求类看 [需求开发任务清单](REQUIREMENT_DEVELOPMENT_TASK_LIST.md)（`REQ-NN`）。
 > - 编号不重新分配。本清单只做筛选和排序。
 > - 勾选一条时，必须同时在来源文档的对应条目里追加「处理结果」行，否则两处会失同步。
@@ -13,11 +13,8 @@
 
 这些不需要再决策，只等开工授权。
 
-- [ ] **PROB-02**（P2）批量移动默认目标改为「多数书签所在分类」。现在取首个选中项（`src/components/admin/BookmarkListPanel.svelte:152`），与 `GITHUB_ISSUES_REQUIREMENTS.md:218` 不符。抽 `pickMajorityCategoryId` 纯函数，并列时取排序最靠前的分类。
-- [ ] **PROB-21**（P2）拆掉 `isValidNavigationSetting` 的副作用。它是 `value is …` 类型谓词，却在 `worker/lib/settingsData.ts:133-134` 就地改写 `value.top_layout`；改前先 `lsp references` 确认调用点，同步改 `tests/unit/settingsData.test.ts:151-159` 的断言口径。
-- [ ] **PROB-08**（P2）给设置字段建字段名级契约表。`shared/settings.ts:45-92` 的 `SETTINGS_KEYS` 有约 30 个键，`API_CONTRACT.md:185-188` 只以聚合类型名 `Settings` 概称；11 个键在 `reference/`、`guides/` 里逐字检索无命中。
-- [ ] **PROB-16**（P2）把设置页/导航/导出的数值型断点断言补进 `scripts/chrome-regression.mjs`，或在台账明确标为一次性人工证据。
-- [ ] **PROB-22**（P2）核对安装失败三态（`configuration_required` / `bindings_missing` / `unavailable`）的用户可见文案能否定位到 `TROUBLESHOOTING.md:13-58` 的对应小节。
+- [ ] **PROB-20 后续**（P1）方案 2「签名 URL」：给后台聚合里的私密对象下发短期签名的 `/api/icon/:id`，**先验签再查缓存**，私密响应改 `private, no-store` 并跳过 edge cache 与 `public/sw.js` 的分类图标 cache-first 分支。目的是把方案 1 降级掉的后台私密图标预览恢复回来。需先定签名密钥与过期策略（建议 `exp` 与会话 `exp` 对齐，改密码触发 `rotateJwtSecret` 时顺带失效）。
+- [ ] **PROB-18 后续**（P2）把剩余 24 个 `readFileSync` + `toContain` 源码文本断言文件逐步迁到组件层。可增量做，每次迁一个文件并删掉被真实 DOM 断言取代的那几条。
 - [ ] **PROB-24**（P3）后续修改认证 / CRUD / 弹窗流程时，顺带按 use case 收敛 `src/App.svelte` 的编排职责。**不要**单独开一轮大重构。
 
 ## 2. 需要你裁定后才能动
@@ -30,8 +27,6 @@
 - [ ] **PROB-26**（P2）已关闭 #8 的追溯口径：在 R-08 来源补 #8 并给顶部导航分行补追溯，还是明确「Closed Issue 不建立追溯」？
 - [ ] **PROB-28**（P3）R-07 卡片最小宽度已从 80 降到 44，是否算满足 #13 的诉求？决定后才知道要不要回帖或继续下调。
 - [ ] **PROB-30**（P3）自定义背景（无预设）时 accent 回退仍是 `#2563eb` / `#7dd3fc`（`src/lib/appData.ts:253-255`）。保留加注释、改中性色，还是让自定义背景也能配 accent？
-- [ ] **PROB-18**（P2）要不要引入 e2e 层？现在 100 个测试文件全是 `tests/unit/*.test.ts`，交互只能靠人工浏览器闸门。
-- [ ] **PROB-20**（P1）图标代理匿名可枚举的修法需要先定架构：签名 URL、HttpOnly 会话校验，还是私密对象内联图标 + 缓存隔离？三条都会动缓存契约与 `C-5` 的图标请求预算。
 
 ## 3. 需要运行环境或部署后才能闭环
 
@@ -42,6 +37,7 @@
 - [ ] **PROB-17**（P2）补后台移动端三档视觉截图：备份/导入页移动端、`430x932`、`768x1024`，以及桌面补充截图。
 - [ ] **PROB-19**（P1）跨 isolate 登出撤销的生效窗口与 KV 写失败静默，需要真实环境做故障注入验证；同时决定失败时是否还返回纯成功。
 - [ ] **PROB-23**（P2）旧 Service Worker、Cache Storage 膨胀、外站图标失败都是运行时条件，本地判定不了。并入 PROB-13 的部署后验收，并跑 `npm run perf:audit` 复核 `C-5` 阈值。
+- [ ] **PROB-18 方案 C**（P2）真实浏览器层：用户裁定**不引入 Playwright**，改为复用本地已有 Chrome 或走 `real-chrome-cdp-testing` 技能。覆盖 jsdom 做不到的那一层——`FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md:401` 的 computed style 验收、`:400` 的 `100dvh` / 安全区 / 虚拟键盘、`:399` 的剪贴板 transient activation、`prefers-reduced-motion` 实际时长、iOS 输入放大，以及 PROB-16 的数值断点。**技能强制规则：复用现有浏览器必须在当次任务里显式授权，只创建和关闭专用 target，绝不关闭用户自有 Chrome 进程。**
 - [ ] **REQ-08 后续**（P3）部署后逐套切换 13 个毛玻璃预设做真机视觉确认。合成对比度目前是解析式估算（最低浅色 4.58），不是渲染采样。
 
 ## 4. 需要向报告者澄清
@@ -65,7 +61,26 @@
 
 `OQ-1`～`OQ-8` 默认结论都是「不做 / 不改」，只有显式推翻才转为 `REQ` 条目，见 [需求开发任务清单](REQUIREMENT_DEVELOPMENT_TASK_LIST.md) §4。
 
-## 6. 本轮已完成（2026-09-03）
+## 6. 已完成
+
+### 2026-09-04（第二轮：PROB-20 方案 1 + PROB-18 方案 B）
+
+- [x] **PROB-20**（P1）**方案 1** 落地：`/api/icon/:id` 与 `/api/category-icon/:id` 在返回真实图标前按「对匿名可见」判定（复用 `getPublicCategoryIds` 的祖先链，公开书签挂在私密分类下同样拒绝），被拒绝时返回**空标题空 URL** 的兜底 SVG，与「ID 不存在」表现一致。新增 `ICON_CACHE_NAMESPACE` 让判定前写入的 edge cache 旧条目立即不可达。方案 2「签名 URL」见 §1「PROB-20 后续」。
+- [x] **PROB-18**（P2）**方案 B** 落地：核对推翻原定性——缺的是组件/DOM 层，不是 e2e。新增 `@testing-library/svelte` + `jsdom`，用文件首行 `// @vitest-environment jsdom` 单文件启用（不改全局环境，既有 100 文件零影响）；新增 `tests/unit/categoryTreeSelect.test.ts` 断言 `aria-describedby` 真正解析、选项可点且点击生效，并退役被它取代的 4 条源码文本断言。迁移剩余 24 个文件见 §1「PROB-18 后续」，真实浏览器层见 §3「PROB-18 方案 C」。
+
+验证：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 101 files / 689 passed；`npm run build` 成功；`git diff --check` 通过。未运行部署、`smoke-test.mjs`、`chrome-regression.mjs`、`perf:audit` 与匿名枚举探针；后台私密对象的图标预览现在是兜底图标，属方案 1 的既定降级。
+
+### 2026-09-04（第一轮）
+
+- [x] **PROB-02**（P2）批量移动默认目标改为「多数书签所在分类」。新增 `pickMajorityCategoryId` 纯函数，并列时取展示顺序（`sort` 再 `id`）最靠前的分类；候选集限定为分类树里真正可选的分类，已删除或孤立分类不再可能成为默认值。
+- [x] **PROB-21**（P2）`isValidNavigationSetting` 改为纯谓词，只判 `position`/`always_expanded`，谓词类型不再谎称 `top_layout` 合法；降级逻辑移入 `normalizeNavigationSetting`，测试改断「校验且不改写入参」。
+- [x] **PROB-08**（P2）`API_CONTRACT.md` 增设置字段级契约表（30 键 × 类型 / 取值范围 / 归一化行为 / 默认值），显式区分服务端钳制与仅类型注释；顺带把原先落在浏览器同步小节之后的 4 段设置说明移回「设置接口」。
+- [x] **PROB-16**（P2）按第二个选项落地：在 `DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md` §12 明确标为「一次性人工 CDP 证据，不构成持续回归」。补断言需要可达 `BASE_URL`、真实管理员凭据、视口仿真与下载自动化，`AGENTS.md` 禁止未经要求启动服务，故并入 PROB-13 的部署后验收。
+- [x] **PROB-22**（P2）核对结论：三态原先都无法靠用户可见文案定位，`session_store_unreachable` 完全没有小节。`TROUBLESHOOTING.md` 已补状态对照表、把用户文案写进小节标题、新增会话存储小节，并区分 `database_unreachable` 与 schema 缺失。
+
+验证：`npm run type-check` 0 errors / 0 warnings；`npm test` 100 files / 683 passed；`npm run build` 成功；`git diff --check` 通过；独立 Reviewer 逐条复核后判定 **PASS**，findings 为空、无需返工。未运行部署、`smoke-test.mjs`、`chrome-regression.mjs` 与浏览器套件；PROB-02 的弹窗默认值只有纯函数单测与源码接线断言，未做真机目视确认。
+
+### 2026-09-03
 
 - [x] **PROB-01**（P1）批量移动目标树逐项后果提示。核对推翻了 R-05 的三个禁用理由，按「可选 + 逐项后果警告」实现，未硬禁用服务端允许的操作。
 - [x] **REQ-08**（P2）13 套毛玻璃预设逐套强调色，浅/深各 13 个取值互不重复，按最坏合成背景断言对比度 ≥ 4.5:1。

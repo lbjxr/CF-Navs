@@ -77,6 +77,19 @@ export function getPublicCategoryIds(categories: PublicCategory[]): Set<number> 
   return visible
 }
 
+/**
+ * 匿名图标端点的可见性判定。口径必须与 `getPublicCategoryIds` 保持一致：
+ * 私密书签自身不可见；公开书签只要挂在私密分类（或私密分类的后代）下同样不可见。
+ * 层级规则不在这里重复实现，只消费上面算好的可见集合。
+ */
+export function isBookmarkIconAnonymouslyVisible(
+  bookmark: Pick<Bookmark, 'category_id' | 'is_private'>,
+  visibleCategoryIds: Set<number>,
+): boolean {
+  if (bookmark.is_private === true || bookmark.is_private === 1) return false
+  return visibleCategoryIds.has(bookmark.category_id)
+}
+
 export async function getAdminData(db: D1Database): Promise<AdminData> {
   return await withSchemaRetry(db, async () => {
     const [categoriesResult, bookmarksResult, settingsResult] = await db.batch([

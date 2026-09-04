@@ -116,23 +116,26 @@ function normalizeBackgroundPresetId(value: unknown): Settings['background_prese
     : 'custom'
 }
 
+/** 谓词只证明 position/always_expanded，对 top_layout 不作断言。 */
+type ValidatedNavigationSetting = Pick<Settings['navigation'], 'position' | 'always_expanded'> & {
+  top_layout?: unknown
+}
+
 function normalizeNavigationSetting(value: unknown): Settings['navigation'] {
   if (!isValidNavigationSetting(value)) return { ...DEFAULT_SETTINGS.navigation }
   return {
     position: value.position,
     always_expanded: value.always_expanded,
-    top_layout: value.top_layout,
+    // 旧数据无 top_layout：缺失/非法安全降级为 'scroll'，不丢弃 navigation
+    top_layout: value.top_layout === 'wrap' ? 'wrap' : 'scroll',
   }
 }
 
-export function isValidNavigationSetting(value: unknown): value is Settings['navigation'] {
+/** 纯类型谓词：不读取也不改写入参，`top_layout` 归一化由 `normalizeNavigationSetting` 负责。 */
+export function isValidNavigationSetting(value: unknown): value is ValidatedNavigationSetting {
   if (!isRecord(value)) return false
   if (value.position !== 'left' && value.position !== 'top') return false
-  if (typeof value.always_expanded !== 'boolean') return false
-  // 旧数据无 top_layout：缺失/非法安全降级为 'scroll'，不丢弃 navigation
-  if (value.top_layout === undefined) value.top_layout = 'scroll'
-  else if (value.top_layout !== 'scroll' && value.top_layout !== 'wrap') value.top_layout = 'scroll'
-  return true
+  return typeof value.always_expanded === 'boolean'
 }
 
 export function readRawSettingsRows(rows: Array<{ key: string; value: string | null }>): Map<string, unknown> {

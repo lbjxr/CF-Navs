@@ -148,13 +148,19 @@ describe('worker settings data helpers', () => {
     })
   })
 
-  it('validates complete navigation payloads for settings updates', () => {
+  it('validates navigation payloads without mutating them', () => {
     expect(isValidNavigationSetting({ position: 'left', always_expanded: false })).toBe(true)
     expect(isValidNavigationSetting({ position: 'top', always_expanded: true })).toBe(true)
-    expect(isValidNavigationSetting({ position: 'left', always_expanded: false, top_layout: 'scroll' })).toBe(true)
-    expect(isValidNavigationSetting({ position: 'top', always_expanded: true, top_layout: 'wrap' })).toBe(true)
-    expect(isValidNavigationSetting({ position: 'top', always_expanded: true, top_layout: 'grid' })).toBe(true)
     expect(isValidNavigationSetting({ position: 'bottom', always_expanded: false })).toBe(false)
     expect(isValidNavigationSetting({ position: 'left' })).toBe(false)
+
+    // 谓词对 top_layout 不作断言，也不得就地补写：归一化只体现在 normalizeNavigationSetting 的返回值上
+    const legacy: Record<string, unknown> = { position: 'top', always_expanded: true }
+    const illegal: Record<string, unknown> = { position: 'top', always_expanded: true, top_layout: 'grid' }
+
+    expect(isValidNavigationSetting(legacy)).toBe(true)
+    expect(isValidNavigationSetting(illegal)).toBe(true)
+    expect(legacy).toEqual({ position: 'top', always_expanded: true })
+    expect(illegal).toEqual({ position: 'top', always_expanded: true, top_layout: 'grid' })
   })
 })

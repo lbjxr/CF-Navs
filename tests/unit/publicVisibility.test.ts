@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PublicCategory } from '../../shared/types'
-import { getPublicCategoryIds } from '../../worker/lib/db/aggregates'
+import { getPublicCategoryIds, isBookmarkIconAnonymouslyVisible } from '../../worker/lib/db/aggregates'
 import { getHiddenCategoryIds } from '../../src/lib/adminListState'
 
 const category = (id: number, parent_id: number | null, is_private?: boolean | number): PublicCategory => ({
@@ -55,5 +55,27 @@ describe('public category visibility', () => {
     for (const item of tree) {
       expect(hidden.has(item.id)).toBe(!visible.has(item.id))
     }
+  })
+
+  it('denies anonymous icon access to private bookmarks and to public bookmarks under private categories', () => {
+    const visible = getPublicCategoryIds([
+      category(1, null),
+      category(2, null, true),
+      category(3, 2),
+    ])
+
+    // 公开分类下的公开书签：可见
+    expect(isBookmarkIconAnonymouslyVisible({ category_id: 1 }, visible)).toBe(true)
+    // D1 里 0 与 false 都表示公开
+    expect(isBookmarkIconAnonymouslyVisible({ category_id: 1, is_private: 0 }, visible)).toBe(true)
+    expect(isBookmarkIconAnonymouslyVisible({ category_id: 1, is_private: false }, visible)).toBe(true)
+    // 私密书签本身：无论所在分类是否公开都不可见
+    expect(isBookmarkIconAnonymouslyVisible({ category_id: 1, is_private: true }, visible)).toBe(false)
+    expect(isBookmarkIconAnonymouslyVisible({ category_id: 1, is_private: 1 }, visible)).toBe(false)
+    // 公开书签挂在私密分类、或私密分类的后代下：同样不可见
+    expect(isBookmarkIconAnonymouslyVisible({ category_id: 2 }, visible)).toBe(false)
+    expect(isBookmarkIconAnonymouslyVisible({ category_id: 3 }, visible)).toBe(false)
+    // 分类已被删除：不可见
+    expect(isBookmarkIconAnonymouslyVisible({ category_id: 999 }, visible)).toBe(false)
   })
 })

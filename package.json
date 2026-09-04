@@ -36,7 +36,9 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260804.1",
     "@sveltejs/vite-plugin-svelte": "^3.1.2",
+    "@testing-library/svelte": "^4.2.3",
     "@tsconfig/svelte": "^5.0.4",
+    "jsdom": "^26.1.0",
     "svelte": "^4.2.19",
     "svelte-check": "^3.8.6",
     "tslib": "^2.7.0",

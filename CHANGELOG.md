@@ -1,4 +1,48 @@
 # 变更记录
+## 2026-09-04（图标代理关闭匿名枚举 / 引入组件测试层）
+### 图标代理只对匿名可见的对象返回真实图标（PROB-20 方案 1）
+
+- `GET /api/icon/:id` 与 `GET /api/category-icon/:id` 按可猜测的整数 ID 寻址且不要求登录，此前不区分公开/私密，任何人都能按 ID 枚举出私密书签和私密分类的图标；响应还会以不含身份的键写入共享 edge cache。
+- 现在两个端点在返回真实图标前判定「对匿名访客是否可见」，口径与 `/api/public/data` 完全一致：复用 `getPublicCategoryIds` 的祖先链遍历，因此挂在私密分类（或其后代）下的**公开**书签同样被拒绝，而不是只看对象自身的 `is_private`。
+- 被拒绝的请求返回**传空标题与空 URL** 的兜底 SVG。兜底图会渲染标题前 4 个字符或 URL 的 hostname，不传空就等于换个形式泄露；传空后「私密」与「ID 不存在」的响应完全一致，不留存在性线索。
+- 判定发生在 edge cache 命中查询之后，而旧条目是在没有判定的情况下写入的、`s-maxage` 为 6 天，只加服务端过滤不会让它们失效。新增 `ICON_CACHE_NAMESPACE = '2'` 并写进缓存键的 `ns` 参数，旧条目立即不可达；契约里写明收紧判定口径时必须同时递增该值。
+- 分类端点改为一次 `listCategories` 同时得到可见集合与目标分类，比原先的 `getCategory` 少一次查询；书签端点只在 cache miss 时多一次分类读取，cache 命中路径与同源请求数不变。
+- 已知降级：后台预览私密书签/私密分类的真实图标现在也只得到兜底图标。恢复需要签名 URL 或等价凭据通道（`<img>` 不发 Bearer Token），已登记为后续项。未采用 HttpOnly Cookie（为一个 `<img>` 场景引入全站第二凭据通道与 CSRF 面），也未采用「私密对象内联图标」——三条聚合 SQL 刻意都是 `NULL AS icon_blob`，内联会与 ~38KB 聚合目标和 1.5 MB 快照上限对着干。
+- 验证：`tests/unit/publicVisibility.test.ts` 覆盖公开、`0`/`false` 公开、`true`/`1` 私密、公开书签挂私密根、公开书签挂私密后代、分类已删除六种情形；`tests/unit/iconResponses.test.ts` 覆盖缓存键命名空间与两个端点的门禁，含「三条拒绝路径都必须传空标题空 URL」的计数断言。**未做匿名枚举探针实测**，该项需可达部署实例。
+
+### 引入组件测试层（PROB-18 方案 B）
+
+- 此前 `tests/` 的 100 个文件全在 `tests/unit/`，其中 25 个是 `readFileSync` + `toContain` 源码文本断言：只能证明模板里写了某串字符，证明不了 `aria-describedby` 的 id 真的解析到存在的元素，也证明不了选项可点。
+- 核对推翻了「缺的是 e2e」这个定性：焦点陷阱、`aria-activedescendant` 有效性、`isComposing` 拦截、destroy 清理都不需要真浏览器；而 computed style 验收、`100dvh` + 虚拟键盘、剪贴板 transient activation 是 jsdom 做不到的。两层需要不同工具，这一轮只补前者。
+- 新增 devDependencies `@testing-library/svelte@^4.2.3` 与 `jsdom@^26.1.0`。选 jsdom 26 而不是 30：30 的 engines 要求 node `^22.22.2 || ^24.15.0 || >=26`，而 CI 用的是 node 20。
+- **不改全局 vitest 环境**：组件测试用文件首行 `// @vitest-environment jsdom` 单文件启用，既有 100 个文件仍跑默认 node 环境。
+- 新增 `tests/unit/categoryTreeSelect.test.ts`：在真实 DOM 上断言每条 `notice` 的 `aria-describedby` 都解析到带该文案的元素、无 `notice` 的选项不带该属性、带后果提示的选项可点击且点击后菜单关闭并改显新选择。同时退役 `adminBookmarkLayout.test.ts` 里被它取代的 4 条源码文本断言，避免重复覆盖。
+- 验证：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 101 files / 689 passed；`npm run build` 成功；`git diff --check` 通过。
+
+
+## 2026-09-04（批量移动默认目标 / 导航谓词纯化 / 设置字段契约 / 排障定位）
+### 批量移动默认目标改为「多数书签所在分类」（R-05 验收补齐，PROB-02）
+
+- 此前 `openMoveModal` 取 `selectedBookmarks[0].category_id`，即首个选中项所在分类，与 `GITHUB_ISSUES_REQUIREMENTS.md` R-05 要求的「多数书签所在分类」不符。
+- `src/lib/adminListState.ts` 新增纯函数 `pickMajorityCategoryId(selectedBookmarks, categories)`：按 `buildAdminCategoryGroups` + `flattenAdminCategoryGroups` 的展示顺序（`sort` 再 `id`）遍历，用严格 `>` 取众数，因此并列时确定性地落在排序最靠前的分类。
+- 候选集限定为分类树里真正可选的分类：已删除的 `category_id` 与挂在不存在父分类下的孤立分类都不参与统计，也不可能成为默认值（旧实现会把这类 id 直接塞进 `moveTargetId`，得到一个树里选不到的目标）；空选或全部目标已删除时回落到排序最靠前的分类。
+- 验证：`tests/unit/adminListState.test.ts` 覆盖全同分类、明确多数、两组并列（含「id 更小但排序更靠后」的判别用例）、空选、目标已删除、孤立子分类；`tests/unit/adminBookmarkLayout.test.ts` 锁定组件接线并断言不再出现旧的 `selectedBookmarks[0]` 取值。
+
+### `isValidNavigationSetting` 拆除副作用（PROB-21）
+
+- 该函数签名是 `value is Settings['navigation']` 类型谓词，却在返回 `true` 之前就地改写 `value.top_layout`（缺失或非法一律写成 `'scroll'`）。它的正确性依赖调用方在守卫之后读取被改写的同一个对象——任何「先校验、后另取原值」的新调用点都会静默出错，而这个函数是 `export` 的。
+- 现在谓词只判断 `position` 与 `always_expanded`，不读取也不改写入参；谓词类型收窄为 `Pick<Settings['navigation'], 'position' | 'always_expanded'> & { top_layout?: unknown }`，不再谎称 `top_layout` 已合法。`top_layout` 的降级改由 `normalizeNavigationSetting` 在构造返回值时完成，外部可观察行为不变。
+- 验证：`lsp references` 确认该导出只有 `normalizeNavigationSetting` 一个调用点。`tests/unit/settingsData.test.ts` 原先把副作用写进契约的用例改为断言「校验且不改写入参」（对传入对象做 `toEqual`），归一化三态（缺失 → `scroll`、`wrap` → `wrap`、`grid` → `scroll`）仍由既有的 `settingsFromRows` 用例覆盖。
+
+### 文档核对与修正
+
+- `docs/reference/API_CONTRACT.md` 设置接口新增字段级契约表（PROB-08）：按 `SETTINGS_KEYS` 顺序列全 30 个键的类型、取值范围、归一化行为与默认值，并显式区分「服务端钳制」与「只是类型注释、服务端不钳制」（`site_title_font_size`、`card_background_opacity`、`background.blur`/`mask`、`content_layout` 数值项）；同时点明未知键在写入与读取聚合两个方向都会被丢弃，`most_visited_count` 与 `site_title_show` 在 PUT 没有类型校验、只在读取时归一化。原先落在浏览器同步小节之后的 4 段设置说明移回「设置接口」标题下，长度上限段不再重复逐字段数字。
+- `docs/guides/TROUBLESHOOTING.md` 补齐 `/install` 失败三态的定位路径（PROB-22）：核对发现三态原先都无法靠用户可见文案定位（页面显示「还缺少部署密钥」「还缺少存储绑定」「数据库暂时不可用」，文档小节标题却是「安装令牌无效」「Missing binding」「数据库初始化失败」），且 `unavailable` / `session_store_unreachable` 完全没有对应小节。现新增状态对照表（页面标题 + `data.state` / `data.reason` + 触发条件 → 小节），把用户文案写进既有小节标题，新增「会话存储暂时不可用」小节，并区分 `database_unreachable` 与 schema 缺失（手动执行 `schema.sql` 修不好前者）。
+- `docs/plans/DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md` §12 明确台账里的数值断点证据属于「一次性人工 CDP 证据，不构成持续回归」（PROB-16）。把它们补进 `scripts/chrome-regression.mjs` 需要可达的 `BASE_URL` 与真实管理员凭据（该脚本的安全场景会真实改写再还原管理员密码），还需额外引入视口仿真、确定性分类/书签 fixture 与下载断言；`AGENTS.md` 禁止未经要求启动本地服务或部署，因此这些断点并入 PROB-13 的部署后验收，回归套件本身未改动。
+- `docs/plans/TODO.md` 与 `docs/plans/PROBLEM_HANDLING_TASK_LIST.md` 同步勾选与「处理结果」行。
+- 验证：`npm run type-check` 0 errors / 0 warnings；`npm test` 100 files / 683 passed；`npm run build` 成功；`git diff --check` 通过；独立 Reviewer 逐条复核后判定 PASS。未运行部署、`smoke-test.mjs`、`chrome-regression.mjs` 与浏览器套件；PROB-02 的批量移动弹窗默认值只有纯函数单测与源码接线断言，未做真机目视确认。
+
+
 ## 2026-09-03（批量移动后果提示 / 毛玻璃强调色 / 文档核对）
 ### 批量移动目标树逐项后果提示（R-05 验收补齐，PROB-01）
 

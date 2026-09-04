@@ -20,12 +20,15 @@ export interface BookmarkIconData {
  icon: string | null
  icon_source: Bookmark['icon_source']
  icon_blob: string | null
+ // 图标端点是匿名可访问的，必须能判断这条书签是否对访客可见（PROB-20）。
+ category_id: Bookmark['category_id']
+ is_private: Bookmark['is_private']
 }
 
 export async function getBookmarkIconData(db: D1Database, id: number): Promise<BookmarkIconData | null> {
  return await withSchemaRetry(db, async () => (
   await db
-   .prepare('SELECT title, url, icon, icon_source, icon_blob FROM bookmarks WHERE id = ?')
+   .prepare('SELECT title, url, icon, icon_source, icon_blob, category_id, is_private FROM bookmarks WHERE id = ?')
    .bind(id)
    .first<BookmarkIconData>()
  ))

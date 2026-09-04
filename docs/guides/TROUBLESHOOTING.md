@@ -26,7 +26,19 @@ npm run build && npx wrangler deploy
 
 这通常表示 Cloudflare 正在执行预览分支的 `wrangler versions upload`。首次创建 D1/KV 资源时，请确认 Cloudflare Workers Builds 的生产分支是 `main`，Build command 为 `npm run build`，Deploy command 为 `npx wrangler deploy`，然后从 `main` 重新触发部署。资源创建完成后再按需开启预览分支部署。
 
-### `/install` 提示安装令牌无效
+### `/install` 配置提示与对应小节
+
+`GET /api/install/status` 始终返回成功包络（`code=0`、`msg="ok"`），真正的状态在 `data` 里；`/install` 页面据此显示提示。按页面上看到的标题或状态字面量查下表，再看对应小节：
+
+| 页面标题 | `data.state` / `data.reason` | 触发条件 | 排障小节 |
+| --- | --- | --- | --- |
+| 还缺少部署密钥 | `configuration_required` / `setup_token_missing` | 绑定齐全、D1 与 KV 均可达、站点未安装，但 Worker 读不到非空 `SETUP_TOKEN` | 「`/install` 提示安装令牌无效」 |
+| 还缺少存储绑定 | `bindings_missing`，`missing` 列出 `DB` / `SESSION` | Worker 缺少 `DB` D1 绑定或 `SESSION` KV 绑定 | 「Missing binding」 |
+| 数据库暂时不可用 | `unavailable` / `database_unreachable` | `DB` 绑定存在但 D1 探测查询失败，或读取安装状态时抛错 | 「`/install` 提示数据库初始化失败」 |
+| 会话存储暂时不可用 | `unavailable` / `session_store_unreachable` | `SESSION` 绑定存在但 KV 读取失败 | 「`/install` 提示会话存储暂时不可用」 |
+| 无法检查安装状态 | 无对应后端状态；前端 `status_error`，状态探测本身失败 | `/api/install/status` 请求没有返回任何状态 | 先确认部署成功，再按上面四条逐项排查绑定与可达性 |
+
+### `/install` 提示安装令牌无效（页面显示「还缺少部署密钥」）
 
 1. 确认当前访问的域名属于正在部署的同一个 Worker，不是另一个 Worker、Pages 项目或旧的自定义域名路由。
 2. 确认 Worker 的 **设置 → 变量和密钥** 中选择的是**生产环境**，存在类型为**密钥**的变量 `SETUP_TOKEN`，名称大小写完全一致；预览环境的 Secret 不会自动提供给生产流量。
@@ -35,13 +47,24 @@ npm run build && npx wrangler deploy
 5. 可直接请求 `GET /api/install/status` 检查运行时状态：返回 `needs_install` 表示 Worker 已读到 Secret；返回 `configuration_required` / `setup_token_missing` 表示当前处理请求的 Worker 环境没有读到 Secret。
 6. 如果站点已经安装完成，则不再需要 `SETUP_TOKEN`。安装状态检查不要求令牌，删除 Secret 不影响运行；后续安装请求仍会被永久拒绝。
 
-### `/install` 提示数据库初始化失败
+### `/install` 提示数据库初始化失败或「数据库暂时不可用」
 
 先确认 Worker 的 `DB` D1 和 `SESSION` KV 绑定存在。正常安装由 `/install` 自动初始化 schema；如果安装器仍失败，可在 D1 SQL Console 手动执行 [schema.sql](../../schema.sql) 后返回 `/install` 重试。手动 SQL 是恢复手段，不是正常部署步骤。
 
-### Missing binding
+页面标题为「数据库暂时不可用」时是另一种情况：`GET /api/install/status` 返回 `unavailable` / `database_unreachable`，即 `DB` 绑定存在但 D1 探测查询失败，或读取安装状态时抛错。这不是 schema 缺失，手动执行 `schema.sql` 修不好它 —— 先确认 `DB` 指向的 D1 数据库仍然存在、选择的是生产环境绑定，再用页面上的「重试数据库检查」重新探测。
 
-通常是 D1 或 KV 绑定没有写入本地部署配置。
+### `/install` 提示会话存储暂时不可用
+
+页面标题为「会话存储暂时不可用」，`GET /api/install/status` 返回 `unavailable` / `session_store_unreachable`：`SESSION` KV 绑定存在，但当前读不到 KV。
+
+1. 在 Worker 的 **设置 → 绑定** 中确认 `SESSION` 指向的 KV 命名空间仍然存在，没有被删除或改名。
+2. 确认使用的是**生产环境**绑定；预览环境的 KV 命名空间不会提供给生产流量。
+3. 排除 Cloudflare KV 侧的临时故障后，用页面上的「重试会话存储检查」重新探测。
+4. 安装完成后 `SESSION` 仍被登录限流与会话撤销名单使用，绑定不可用会让登出无法写入撤销记录（见 [API 契约](../reference/API_CONTRACT.md) 的鉴权规则）。
+
+### Missing binding（页面显示「还缺少存储绑定」）
+
+`GET /api/install/status` 返回 `bindings_missing`，`missing` 列出缺失的 `DB`（D1）或 `SESSION`（KV）。通常是绑定没有写入本地部署配置。
 
 1. 确认已经创建 D1 和 KV。
 2. 运行 `npm run setup:wrangler`。

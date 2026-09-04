@@ -1,11 +1,11 @@
 # 问题处理任务清单
 
-> **状态：核对完成，任务未开工。本文是一份经源码核对的问题台账，不是实现承诺。**
+> **状态：核对完成；2026-09-03 与 2026-09-04 两轮已处理部分条目，其余未开工。本文是一份经源码核对的问题台账，不是实现承诺。**
 >
 > - 核对日期：2026-09-03；核对基线：`develop` 分支当前工作树（docs/ 有未提交改动，`FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md` 为未跟踪新文件）。
 > - 核对方式：逐条读 `docs/reference/`、`docs/plans/`、`docs/guides/`、`CHANGELOG.md`，再到 `src/`、`worker/`、`shared/`、`tests/`、`scripts/`、`public/` 找实现证据；云端 Issue 通过 GitHub 独立读取。
 > - 事实优先级按 `docs/README.md:9-18` 与 `:31`：工程规则 → 当前源码与实际验证 → 参考契约 → 计划文档 → 变更记录。文档与源码冲突时以源码为事实。
-> - 本轮**未运行** `npm run type-check` / `npm test` / `npm run build` / `npm run perf:audit` / 浏览器套件，也未执行任何 git、部署或 GitHub 写操作。凡标「未验证」者即本轮无运行证据。
+> - **核对轮次**未运行 `npm run type-check` / `npm test` / `npm run build` / `npm run perf:audit` / 浏览器套件，也未执行任何 git、部署或 GitHub 写操作。凡标「未验证」者即该轮无运行证据；后续实现轮次的验证结果记在各条目的「处理结果」行与下方处理进度里。
 > - 配套文档：尚未实现的功能需求见 [需求开发任务清单](REQUIREMENT_DEVELOPMENT_TASK_LIST.md)。
 
 ---
@@ -27,17 +27,21 @@
 | D 安全与稳定性风险 | PROB-19 ~ PROB-24 | 6 |
 | E 信息不足需澄清 | PROB-25 ~ PROB-30 | 6 |
 
-### 处理进度（2026-09-03）
+### 处理进度（2026-09-04）
 
 | 状态 | 条目 |
 | --- | --- |
-| 已完成 | PROB-01、PROB-05、PROB-06、PROB-09、PROB-10 |
-| 未开工（已获结论，等待授权） | PROB-02、PROB-21 |
+| 已完成 | PROB-01、PROB-02、PROB-05、PROB-06、PROB-08、PROB-09、PROB-10、PROB-16、PROB-18、PROB-21、PROB-22 |
+| 已完成第一阶段，后续待授权 | PROB-20（方案 1 已落地，方案 2「签名 URL」未开工） |
 | 未开工（需运行环境或部署） | PROB-07、PROB-13～PROB-15、PROB-17、PROB-23 |
-| 未开工（需用户裁定） | PROB-03、PROB-04、PROB-11、PROB-12、PROB-26～PROB-30 |
-| 未开工（其余） | PROB-08、PROB-16、PROB-18～PROB-20、PROB-22、PROB-24、PROB-25 |
+| 未开工（需用户裁定） | PROB-03、PROB-04、PROB-11、PROB-12、PROB-19、PROB-26～PROB-30 |
+| 未开工（其余） | PROB-24、PROB-25 |
 
-PROB-29、PROB-30 是本轮实现 PROB-01 与 REQ-08 时新发现并登记的条目。
+2026-09-04 第一轮固定闸门：`npm run type-check` 0 errors / 0 warnings；`npm test` 100 files / 683 passed；`npm run build` 成功；`git diff --check` 通过。独立 Reviewer 对 PROB-02/08/16/21/22 五条改动逐项复核后判定 **PASS**，findings 为空；`git status --short --untracked-files=all` 确认工作树只有 12 个已跟踪文件被修改、无未跟踪产物。该轮未运行部署、`smoke-test.mjs`、`chrome-regression.mjs` 与浏览器套件；PROB-02 的弹窗默认值未做真机目视确认（Reviewer 判定不阻断）。
+
+2026-09-04 第二轮（PROB-20 方案 1 + PROB-18 方案 B）固定闸门：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 101 files / 689 passed；`npm run build` 成功；`git diff --check` 通过。该轮新增 devDependencies（`@testing-library/svelte`、`jsdom`），未运行部署、`smoke-test.mjs`、`chrome-regression.mjs`、`perf:audit` 与匿名枚举探针。
+
+PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登记的条目。
 
 已完成条目保留在原位置，只在条目内追加「处理结果」行；不删除，便于回溯当初的证据与判断。
 
@@ -63,7 +67,7 @@ PROB-29、PROB-30 是本轮实现 PROB-01 与 REQ-08 时新发现并登记的条
 | 验证 | `tests/unit/adminListState.test.ts` 覆盖私密根 / 私密后代 / 环形数据 / 计数 / 四种无需提示情形；`tests/unit/publicVisibility.test.ts` 交叉断言前端镜像与服务端 `getPublicCategoryIds` 逐项一致，防止两侧漂移；`tests/unit/adminBookmarkLayout.test.ts` 锁定逐项文案、无障碍描述与「不引入 `aria-disabled`」。`npm run type-check` 0 errors / 0 warnings；`npm test` 100 files / 680 passed；`npm run build` 成功。未运行浏览器套件（`AGENTS.md` 禁止未经要求启动本地服务） |
 | 遗留 | `:205`/`:209`/`:218` 的「禁用非法目标」表述与当前数据模型不符，应改写为「逐项后果提示」并说明无非法目标；该文档修正尚未执行，需与 PROB-11/PROB-12 的口径回写一起裁定 |
 
-### PROB-02（P2）批量移动默认目标是首个选中项，不是「多数书签所在分类」
+### PROB-02（P2，已完成）批量移动默认目标是首个选中项，不是「多数书签所在分类」
 
 | 项 | 内容 |
 | --- | --- |
@@ -72,6 +76,8 @@ PROB-29、PROB-30 是本轮实现 PROB-01 与 REQ-08 时新发现并登记的条
 | 源码事实 | `src/components/admin/BookmarkListPanel.svelte:151`：`moveTargetId = selectedBookmarks[0] ? Number(selectedBookmarks[0].category_id) : Number(categories[0].id)` —— 取首个选中项，未做众数统计 |
 | 处理动作 | 抽 `pickMajorityCategoryId(selectedBookmarks)` 纯函数（并列时取排序最靠前的分类，保持确定性），替换 `:151` 的取值 |
 | 验证 | `tests/unit/` 覆盖：全同分类、明确多数、并列、空选、目标已删除 |
+| 处理结果 | `src/lib/adminListState.ts` 新增 `pickMajorityCategoryId(selectedBookmarks, categories)`：按 `flattenAdminCategoryGroups(buildAdminCategoryGroups(categories))` 的展示顺序（`sort` 再 `id`）遍历，用严格 `>` 取众数，因此并列时落在排序最靠前的分类；候选集只含分类树里真正可选的分类，已删除或挂在不存在父分类下的 `category_id` 不参与统计，空选或全部目标已删除时回落到排序最靠前的分类。`src/components/admin/BookmarkListPanel.svelte` 的 `openMoveModal` 改为 `moveTargetId = pickMajorityCategoryId(selectedBookmarks, categories)`，替换原先的 `selectedBookmarks[0]` 取值 |
+| 验证结果 | `tests/unit/adminListState.test.ts` 覆盖全同分类、明确多数、两组并列（含「id 更小但排序更靠后」的判别用例）、空选、目标已删除、孤立子分类；`tests/unit/adminBookmarkLayout.test.ts` 锁定组件接线并断言不再出现 `Number(selectedBookmarks[0].category_id)`。`npx vitest run tests/unit/adminListState.test.ts` 通过；`npm run type-check` 0 errors / 0 warnings |
 
 ### PROB-03（P2）分类树打开时当前项只滚动可见，未获得焦点
 
@@ -133,7 +139,7 @@ PROB-29、PROB-30 是本轮实现 PROB-01 与 REQ-08 时新发现并登记的条
 | 处理动作 | 重跑 `scripts/smoke-test.mjs` 确认该断言当前结果，然后在 `PLATFORM_OPTIMIZATION_PLAN.md:868` 标注闭环或保留，并修正行号引用 |
 | 验证 | `node scripts/smoke-test.mjs`（需可用本地 D1），记录该条断言与总数 |
 
-### PROB-08（P2）设置字段缺少字段名级的契约说明
+### PROB-08（P2，已完成）设置字段缺少字段名级的契约说明
 
 | 项 | 内容 |
 | --- | --- |
@@ -145,6 +151,8 @@ PROB-29、PROB-30 是本轮实现 PROB-01 与 REQ-08 时新发现并登记的条
 | 定性 | 文档**颗粒度缺口**，不是代码缺失。字段全部在用：`src/lib/settingsForm.ts:90-94` 默认值、`src/views/Home.svelte:131-135` 消费、`src/components/settings/SettingsHomePreview.svelte:68-75` 预览 |
 | 处理动作 | 在 `API_CONTRACT.md` 增设置字段表（字段名 / 类型 / 取值范围 / 归一化行为 / 默认值），范围以 `shared/settings.ts` 的归一化函数为准 |
 | 验证 | 用 `SETTINGS_KEYS` 逐键核对表格完整性 |
+| 处理结果 | `docs/reference/API_CONTRACT.md` 的「设置接口」新增字段级契约表：按 `SETTINGS_KEYS` 顺序列全 30 个键的「键名 / 类型 / 取值范围 / 归一化行为 / 默认值」，范围与归一化逐条取自 `worker/routes/settings.ts` 的 PUT 校验和 `shared/settings.ts`、`worker/lib/settingsData.ts` 的归一化函数，并显式区分「服务端钳制」与「只是类型注释、服务端不钳制」（`site_title_font_size`、`card_background_opacity`、`background.blur/mask`、`content_layout` 数值项）。同时点明未知键在写入与读取聚合两个方向都被丢弃，`most_visited_count` / `site_title_show` 在 PUT 无类型校验、只在读取时归一化。原先散落在浏览器同步小节之后的 4 段设置说明（长度上限、`navigation`、背景兼容、22 组预设）一并移回「设置接口」标题下，长度上限段不再重复逐字段数字，改为指向新表 |
+| 验证结果 | 用 `shared/settings.ts:60-91` 的 `SETTINGS_KEYS` 逐键比对，30 行一一对应、顺序一致；`shared/types.ts:133-164` 的 `Settings` 字段集合与之相同，无单侧字段 |
 
 ### PROB-09（P2，已完成）`UI_UX_Plan.md` 无状态标注，且未进 `docs/README.md` 索引
 
@@ -219,12 +227,14 @@ PROB-29、PROB-30 是本轮实现 PROB-01 与 REQ-08 时新发现并登记的条
 - 源码事实：`src/App.svelte` 有 `isAdminPath` 判定与 Admin 懒加载路径，但「不短暂挂载首页」需运行观测
 - 处理动作：隔离临时 Chrome 直接导航 `/admin`，采集 console / pageException / failedRequests 与首页 shell 出现帧；按本地 `real-chrome-cdp-testing` 流程只开专用 target 并清理
 
-### PROB-16（P2）设置页/导航/导出的关键交互数值未进可复跑回归套件
+### PROB-16（P2，已完成）设置页/导航/导出的关键交互数值未进可复跑回归套件
 
 - 来源映射：`docs/plans/DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md:333-344`、`:346-369`
 - 已有可复跑闸门：`scripts/smoke-test.mjs`（75 项 API 端到端）、`scripts/chrome-regression.mjs`（25 项，覆盖首页渲染/搜索/主题、后台 shell、书签搜索、设置页与备份页渲染、右键编辑弹窗、登出与三项鉴权探针，见 `scripts/chrome-regression.mjs:1054-1079`）
 - 欠账：台账声称的具体数值型断点证据**不在**这两个套件内，属一次性人工 CDP 证据 —— `820px` 桌面分行 2 行/98px、箭头隐藏、子菜单在视口内（`:337`）；浮动按钮 `top=18`/`nav top=12`/`z-index=70`、移动 `top=14`/`nav top=8`（`:338`）；`721/768/799px` 中间断点复验（`:354`）；实际下载 3 分类/6 书签与 replace+merge `code=0`（`:335`）
 - 处理动作：把上述数值断言补入 `scripts/chrome-regression.mjs`，或在台账明确标为「一次性人工证据，不构成持续回归」
+- 处理结果：按第二个选项落地 —— 在 `docs/plans/DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md` §12 台账表后新增定性块，逐条点名 `820px` 分行 2 行/98px、浮动按钮 `top=18`/`nav top=12`/`z-index=70` 与移动 `top=14`/`nav top=8`、`721/768/799px` 中间断点、实际下载 3 分类/6 书签与 replace+merge `code=0`，明确标为「一次性人工 CDP 证据，不构成持续回归」，并写清两个可复跑套件实际只覆盖到「已渲染 / 控件存在」与 API 端到端。`scripts/chrome-regression.mjs` 未改动
+- 不补断言的理由（已核实，非推断）：该脚本需要可达的 `BASE_URL`（环境变量或被忽略的 `verify.local.json`）与真实管理员凭据，且其安全场景会真实改写再还原管理员密码；脚本只启动/连接 Chrome，不启动应用。当前套件没有视口仿真、`getComputedStyle` 采样或下载/导入自动化能力，补数值断言还需引入确定性分类/书签 fixture。`AGENTS.md` 规定未经明确要求不启动本地服务、不部署，故这些断点只能并入 PROB-13 的部署后验收
 
 ### PROB-17（P2）后台移动端布局缺三档视觉截图
 
@@ -232,12 +242,16 @@ PROB-29、PROB-30 是本轮实现 PROB-01 与 REQ-08 时新发现并登记的条
 - 欠账：实现后未补备份/导入页移动截图，以及 `430x932`、`768x1024`、桌面补充截图；文档明确契约测试不能替代真机视觉
 - 处理动作：按既有截图流程（`bringToFront` → `fonts.ready` → 布局读取 → 重绘）补齐；截图落 `docs/screenshots/` 需先确认是否属于发布资产
 
-### PROB-18（P2）无 e2e 层，行为验证依赖源码文本断言
+### PROB-18（P2，已完成）无 e2e 层，行为验证依赖源码文本断言
 
 - 来源映射：`C-6`、`C-12`；`docs/plans/FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md:44`、`:50`
 - 事实：`tests/` 下 100 个文件全部是 `tests/unit/*.test.ts`，无 `tests/e2e`；仓库无 `@testing-library/svelte`，组件契约测试多为 `readFileSync` + `toContain`
 - 影响：焦点陷阱、键盘导航、IME、剪贴板权限、hover/reduced-motion 等只能靠人工浏览器闸门，PROB-01/02/03 的修复也受此约束
 - 处理动作：不新增框架的前提下，坚持「行为先抽纯函数再单测」；把不可单测的交互固定登记为浏览器人工闸门。是否引入 e2e 需单独决策
+- 用户裁定（2026-09-04）：采用**方案 B「补组件层，不引入 e2e」**。核对推翻了条目原本的定性——缺的不是 e2e，而是组件/DOM 层：`FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md:395-398` 列的焦点陷阱、`aria-activedescendant` 有效性、`isComposing` 拦截、destroy 清理都不需要真浏览器，而 `:399-401` 的剪贴板 transient activation、`100dvh` + 虚拟键盘、computed style 验收则**jsdom 做不到**，必须留给真实浏览器。两层用不同工具，不能用一个「要不要 e2e」的答案覆盖
+- 处理结果：新增 devDependencies `@testing-library/svelte@^4.2.3`（peer 支持 svelte ^3/^4/^5）与 `jsdom@^26.1.0`（engines `node >=18`，与 CI 的 `node-version: 20` 兼容；`jsdom@30` 要求 node ^22.22.2/^24.15.0/>=26，会在 CI 上不满足 engines，故不用）。**不改全局 vitest 环境**：组件测试用文件首行 `// @vitest-environment jsdom` 单文件启用，既有 100 个文件仍跑默认 node 环境，零回归风险。新增 `tests/unit/categoryTreeSelect.test.ts` 作为首个组件测试，断言 3 条行为：每条 `notice` 的 `aria-describedby` 真正解析到一个带该文案的元素、无 `notice` 的选项不带该属性、带后果提示的选项仍可点击且点击后菜单关闭并改显新选择。同时退役 `tests/unit/adminBookmarkLayout.test.ts` 里被真实 DOM 断言取代的 4 条 `CategoryTreeSelect.svelte` 源码文本断言，避免重复覆盖
+- 为什么组件层比原来的断言强：`readFileSync` + `toContain` 只能证明模板里写了 `aria-describedby={item.notice ? ...}` 这串字符，证明不了 id 真的解析到存在的元素、也证明不了选项可点。组件测试是在真实 DOM 上查 `#${id}` 并触发 `fireEvent.click`
+- 遗留（未开工，需单独授权）：剩余 24 个源码文本断言文件的逐步迁移；以及**方案 C** —— 用户裁定改为不引入 Playwright，而是走本地已有 Chrome 或 `real-chrome-cdp-testing` 技能路线，见 TODO §3 的「PROB-18 后续」
 
 ---
 
@@ -251,15 +265,21 @@ PROB-29、PROB-30 是本轮实现 PROB-01 与 REQ-08 时新发现并登记的条
 - 处理动作：a) KV 写失败时不再返回纯成功，向调用方暴露可辨识状态；b) 在 `API_CONTRACT.md` 写明登出的最终一致语义与生效窗口；c) 缩短 token 有效期或引入版本号校验属架构决策，需单独评估
 - 验证：`scripts/smoke-test.mjs:363-365` 覆盖同 isolate 路径；跨 isolate 与 KV 故障注入需真实环境（与 PROB-07 合并执行）
 
-### PROB-20（P1）图标代理匿名可枚举，私密对象存在信息泄漏面
+### PROB-20（P1，已完成方案 1）图标代理匿名可枚举，私密对象存在信息泄漏面
 
 - 来源映射：`S2`；`docs/plans/PR7_MERGE_REVIEW_PLAN.md:167-173`、`:209-214`
 - 源码事实：`worker/routes/icon.ts` 图标端点匿名可访问并按 ID 取用；`worker/lib/iconResponses.ts` 走公共缓存；`public/sw.js:1-8` 明确图标代理不入 Cache Storage
 - 风险：书签/分类图标可被按 ID 枚举，私密书签与私密分类的图标不在鉴权边界内
 - 处理动作：三条候选（签名 URL、HttpOnly 会话校验、私密对象内联图标 + 缓存隔离）需先定架构，再实现。**改动会触及缓存契约与性能预算（`C-5` 图标请求 ≤ 260），不可顺手改**
 - 验证：匿名枚举探针 + `npm run perf:audit` 的图标请求数与 Cache Storage 阈值
+- 补充核实（2026-09-04）：`worker/index.ts:60-62` 确认两个端点注册为公开路由；`worker/middleware/auth.ts:105` 的 `authRequired` 只读 `Authorization` 头，全仓库无任何 Cookie 读写；`worker/lib/db/sql.ts:14,18,20` 的三条聚合 SQL 都是 `NULL AS icon_blob`，即后台聚合也刻意不下发图标字节（这是 `PERFORMANCE_CONTRACT.md:22` 的 ~38KB 目标与 `:39` 的 1.5MB 快照上限的前提）；`public/sw.js` 对 `/api/category-icon/*` 是 cache-first 写入访客 Cache Storage，比书签图标多漏一层。据此「私密对象内联图标」方案与现有性能契约方向相反，已排除
+- 用户裁定（2026-09-04）：先做**方案 1「服务端拒绝 + 接受后台降级」**，方案 2「签名 URL」列为后续待办；不采用 HttpOnly Cookie（为一个 `<img>` 场景引入全站第二凭据通道与 CSRF 面），不采用内联图标
+- 处理结果：`worker/lib/db/aggregates.ts` 新增纯函数 `isBookmarkIconAnonymouslyVisible`，复用 `getPublicCategoryIds` 的祖先链结果，不重复实现层级规则；`worker/lib/db/bookmarks.ts` 的 `getBookmarkIconData` 补选 `category_id`、`is_private`；`worker/routes/icon.ts` 两个端点在返回真实图标前判定可见性，被拒绝时返回**传空标题与空 URL** 的兜底 SVG（兜底会渲染标题前 4 字或 hostname，不传空就等于换个形式泄露），使「私密」与「ID 不存在」表现完全一致。分类端点改为一次 `listCategories` 同时得到可见集合与目标分类，比原先的 `getCategory` 少一次查询
+- 缓存投毒的处理：判定发生在 edge cache 命中查询之后，而旧条目是在没有判定的情况下按不含身份的键写入的、`s-maxage` 为 6 天，所以只加过滤不会让它们失效。`worker/lib/iconResponses.ts` 新增 `ICON_CACHE_NAMESPACE = '2'` 并写进缓存键的 `ns` 参数，旧条目立即不可达；文档已写明收紧判定口径时必须同时递增该值
+- 验证结果：`tests/unit/publicVisibility.test.ts` 新增用例覆盖公开书签、`0`/`false` 公开、`true`/`1` 私密、公开书签挂私密根、公开书签挂私密后代、分类已删除六种情形；`tests/unit/iconResponses.test.ts` 新增缓存键命名空间断言与路由门禁断言（含「三条拒绝路径都必须传空标题空 URL」的计数断言）。`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 101 files / 689 passed；`npm run build` 成功。**未做匿名枚举探针实测**（需可达部署实例，`AGENTS.md` 禁止未经要求启动服务/部署），也未跑 `npm run perf:audit`
+- 已知残余风险：① 后台预览私密书签/私密分类的真实图标现在只得到兜底图标，恢复需要方案 2；② 访客 Cache Storage 里此前缓存的私密分类图标仍在其本机，未做 SW 缓存版本递增清理——该访客此前已经能看到这些图标，不构成新增泄漏面，但要彻底清掉需要递增 `public/sw.js` 的缓存版本（会连带丢弃全部预缓存资源，未做）；③ 匿名枚举面只关到「对匿名可见」这条线，公开对象的图标仍可按 ID 枚举，这是设计如此
 
-### PROB-21（P2）`isValidNavigationSetting` 是带副作用的类型谓词
+### PROB-21（P2，已完成）`isValidNavigationSetting` 是带副作用的类型谓词
 
 | 项 | 内容 |
 | --- | --- |
@@ -269,13 +289,17 @@ PROB-29、PROB-30 是本轮实现 PROB-01 与 REQ-08 时新发现并登记的条
 | 影响 | 该函数是 `export` 的，任何新调用点都会被这个隐式改写影响 |
 | 处理动作 | 拆成纯守卫（只判断 `position`/`always_expanded`，不看 `top_layout`）+ `normalizeNavigationSetting` 内部归一化 `top_layout`；同步改测试断言为「归一化结果」而非「守卫返回值」 |
 | 验证 | 更新后的 `tests/unit/settingsData.test.ts` 覆盖 `undefined`/非法/合法三态；确认无其他调用点（改前先 `lsp references`） |
+| 处理结果 | `worker/lib/settingsData.ts` 的 `isValidNavigationSetting` 改为纯谓词：只判断 `position` 与 `always_expanded`，不再读取或就地改写 `top_layout`；谓词类型收窄到 `Pick<Settings['navigation'], 'position' \| 'always_expanded'> & { top_layout?: unknown }`，因此它不再谎称 `top_layout` 已合法。`top_layout` 的降级改由 `normalizeNavigationSetting` 在构造返回值时完成（`value.top_layout === 'wrap' ? 'wrap' : 'scroll'`），缺失与非法两种输入的结果与改造前一致 |
+| 验证结果 | `lsp references` 确认该导出只有 `normalizeNavigationSetting` 一个调用点（外加测试导入），无其他调用点受影响。`tests/unit/settingsData.test.ts` 原先断言谓词返回值的用例改为「校验且不改写入参」：保留 `left`/`top` 合法、`bottom` 与缺 `always_expanded` 非法的返回值断言，新增对传入对象的 `toEqual` 断言，证明缺失和非法 `top_layout` 都不会被补写；归一化三态（缺失 → `scroll`、`wrap` → `wrap`、`grid` → `scroll`）仍由既有的 `settingsFromRows` 用例覆盖。`npx vitest run tests/unit/settingsData.test.ts` 通过 |
 
-### PROB-22（P2）安装与绑定类已知问题仍可复现
+### PROB-22（P2，已完成）安装与绑定类已知问题仍可复现
 
 - 来源映射：`docs/guides/TROUBLESHOOTING.md:13-58`；关联已关闭 Issue #5（Invalid JSON response）
 - 源码事实：`worker/routes/install.ts:209-253`、`:256-369` 明确保留三条失败路径 —— 缺 `SETUP_TOKEN` → `configuration_required`；缺 `DB`/`SESSION` → `bindings_missing`；数据库不可达 → `unavailable`
 - 定性：这是部署配置类条件性问题，不是已修复缺陷。#5 云端已 CLOSED COMPLETED，但根因与复现未验证（报告者仅回「ok 了」）
 - 处理动作：保留排障文档；核对三种状态码的用户可见文案是否都能定位到 `TROUBLESHOOTING.md` 对应小节
+- 核对结果：三态**原先都不能靠用户可见文案定位**。页面标题分别是「还缺少部署密钥」「还缺少存储绑定」「数据库暂时不可用」「会话存储暂时不可用」（`src/views/Install.svelte:28-62`，前端模式映射在 `src/lib/appInstall.ts`），而排障文档的小节标题是「`/install` 提示安装令牌无效」「Missing binding」「`/install` 提示数据库初始化失败」——用词不重合；`unavailable` / `session_store_unreachable` 在 `TROUBLESHOOTING.md` 里**完全没有对应小节**；`database_unreachable` 只能概念性地落到讲 schema 恢复的「数据库初始化失败」小节
+- 处理结果：`docs/guides/TROUBLESHOOTING.md` 新增「`/install` 配置提示与对应小节」对照表，按页面标题 + `data.state` / `data.reason` + 触发条件指向具体小节（含前端 `status_error`「无法检查安装状态」）；三个既有小节标题补上用户可见文案；「数据库初始化失败」小节补一段区分 `database_unreachable` 与 schema 缺失（并说明手动跑 `schema.sql` 修不好它）；新增「`/install` 提示会话存储暂时不可用」小节。排障文档按原处理动作保留，未改运行代码
 
 ### PROB-23（P2）旧 Service Worker / 缓存膨胀 / 外站图标失败无法本地判定
 
@@ -380,7 +404,8 @@ PROB-29、PROB-30 是本轮实现 PROB-01 与 REQ-08 时新发现并登记的条
 
 ## 8. 未验证事项
 
-- 本轮未运行 `npm run type-check`、`npm test`、`npm run build`、`npm run perf:audit`、`scripts/smoke-test.mjs`、`scripts/chrome-regression.mjs`，也未启动任何浏览器。所有「已实现」结论均为静态源码证据。
+- 2026-09-03 核对轮未运行 `npm run type-check`、`npm test`、`npm run build`、`npm run perf:audit`、`scripts/smoke-test.mjs`、`scripts/chrome-regression.mjs`，也未启动任何浏览器；该轮所有「已实现」结论均为静态源码证据。2026-09-04 两轮实现都跑过 `type-check` / `vitest` / `npm run build` / `git diff --check`，仍未运行 `perf:audit`、两个套件与浏览器。
+- PROB-20 方案 1 的**匿名枚举探针未实测**：新增的可见性判定只由纯函数单测与路由源码断言覆盖，没有对可达实例发过真实的 `/api/icon/:id` / `/api/category-icon/:id` 请求。`ICON_CACHE_NAMESPACE` 递增后旧 edge cache 条目确实不可达这一点，同样只有代码层证据。两者都需部署后验收。
 - 生产部署版本、Worker 绑定、Custom Domain/DNS、线上实际行为均未验证。
 - `gh auth status` 未执行；云端 Issue 状态通过 `issue://` 只读读取，未做任何写操作。
-- PROB-13 / PROB-14 / PROB-15 / PROB-17 / PROB-19 / PROB-20 / PROB-23 的闭环都依赖部署环境或真机，无法在当前只读核对中完成。
+- PROB-13 / PROB-14 / PROB-15 / PROB-17 / PROB-19 / PROB-23 的闭环都依赖部署环境或真机，无法在只读核对或本地单测中完成；PROB-20 的方案 1 已落地，但其运行时验收（枚举探针、缓存条目失效）同样属于这一类。

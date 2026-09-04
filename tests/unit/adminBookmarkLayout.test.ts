@@ -23,9 +23,8 @@ describe('admin bookmark selection toolbar layout', () => {
     expect(panel).toContain('z-index: 1001;')
   })
 
-  it('surfaces the batch-move consequence per option and once in the confirm dialog', () => {
+  it('surfaces the batch-move consequence in the confirm dialog', () => {
     const panel = readFileSync('src/components/admin/BookmarkListPanel.svelte', 'utf8')
-    const treeSelect = readFileSync('src/components/CategoryTreeSelect.svelte', 'utf8')
 
     // 目标树按当前选中集合标注后果，而不是拿全量分类无差别渲染。
     expect(panel).toContain('getAdminBookmarkCategoryOptions(categories, selectedBookmarks)')
@@ -33,12 +32,15 @@ describe('admin bookmark selection toolbar layout', () => {
     expect(panel).toContain('{#if moveTargetNotice}')
     expect(panel).toContain('class="batch-move-notice" role="status"')
     expect(panel).toContain('私密书签不受影响，可随时把分类改回公开')
+    // 选项内的逐项文案、`aria-describedby` 指向与「不引入禁用态」改由组件层断言：
+    // 见 tests/unit/categoryTreeSelect.test.ts（PROB-18 方案 B）。
+  })
 
-    // 逐项后果文案必须渲染在选项内并接入无障碍描述，一级和二级都要有。
-    expect(treeSelect).toContain('aria-describedby={item.notice ? `category-tree-notice-${item.id}` : undefined}')
-    expect(treeSelect).toContain('aria-describedby={child.notice ? `category-tree-notice-${child.id}` : undefined}')
-    expect(treeSelect.match(/class="tree-option-notice"/g)).toHaveLength(2)
-    // 选项保持可选：不得引入禁用态阻断服务端允许的移动。
-    expect(treeSelect).not.toContain('aria-disabled')
+  it('defaults the batch-move target to the majority category of the selection', () => {
+    const panel = readFileSync('src/components/admin/BookmarkListPanel.svelte', 'utf8')
+
+    // R-05 要求默认落在「多数书签所在分类」，不得回退成首个选中项。
+    expect(panel).toContain('moveTargetId = pickMajorityCategoryId(selectedBookmarks, categories)')
+    expect(panel).not.toContain('Number(selectedBookmarks[0].category_id)')
   })
 })

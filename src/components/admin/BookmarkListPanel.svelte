@@ -9,6 +9,7 @@
     filterAdminBookmarks,
     getAdminCategoryTitle,
     getAdminBookmarkCategoryOptions,
+    pickMajorityCategoryId,
     getAdminListTotalPages,
     getAdminSortIds,
     cycleAdminBookmarkSort,
@@ -152,7 +153,7 @@
     if (selectedIds.size === 0 || moveCategoryOptions.length === 0) return
     moveError = ''
     movePosition = 'end'
-    moveTargetId = selectedBookmarks[0] ? Number(selectedBookmarks[0].category_id) : Number(categories[0].id)
+    moveTargetId = pickMajorityCategoryId(selectedBookmarks, categories)
     moveModalOpen = true
   }
 

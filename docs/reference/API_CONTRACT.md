@@ -143,9 +143,13 @@
 | --- | --- | --- | --- |
 | GET | `/api/fetch-favicon?url=` | 登录 | 服务端依次解析目标站 `<link rel="icon">`、Web App Manifest `icons[]`、`/favicon.ico`，失败或超时回退 `favicon.im` |
 | GET | `/api/iconify-search?query=` | 登录 | 搜索 Iconify 候选并返回预览地址 |
-| GET | `/api/icon/:id` | 无 | 书签图标代理。优先返回 Cloudflare edge cache；cache miss 时一次读取书签图标地址、标题和 D1 中缓存的 `icon_blob`；无 blob 时按书签保存的 HTTP(S) 图标地址服务端抓取并写回 D1；普通 HTTP(S) 外站抓取失败、图标缺失、非 HTTP(S) 值或缓存损坏时返回临时 SVG 文字图标，并带 `X-Icon-Fallback: 1` |
-| GET | `/api/category-icon/:id` | 无 | 分类图标代理。优先返回 Cloudflare edge cache；HTTP(S) 分类图标由 Worker 服务端抓取；外站失败或图标缺失时返回 `no-store` 临时 SVG 文字图标，并带 `X-Icon-Fallback: 1` |
+| GET | `/api/icon/:id` | 无 | 书签图标代理，**只对匿名可见的书签返回真实图标**（见下方可见性规则）。通过判定后优先返回 Cloudflare edge cache；cache miss 时读取书签的图标地址、标题与 D1 中缓存的 `icon_blob`；无 blob 时按书签保存的 HTTP(S) 图标地址服务端抓取并写回 D1；普通 HTTP(S) 外站抓取失败、图标缺失、非 HTTP(S) 值或缓存损坏时返回临时 SVG 文字图标，并带 `X-Icon-Fallback: 1` |
+| GET | `/api/category-icon/:id` | 无 | 分类图标代理，**只对匿名可见的分类返回真实图标**（见下方可见性规则）。优先返回 Cloudflare edge cache；cache miss 时一次读取全部分类，同时算出可见集合与目标分类；HTTP(S) 分类图标由 Worker 服务端抓取；外站失败或图标缺失时返回临时 SVG 文字图标，并带 `X-Icon-Fallback: 1` |
 | GET | `/api/iconify/:set/:name.svg` | 无 | Iconify 图标预览代理。新增/编辑书签弹窗通过该同源代理预览，成功响应可被 Cloudflare edge cache 复用；失败时返回 `no-store` 临时 SVG 文字图标，并带 `X-Icon-Fallback: 1` |
+
+**图标端点的匿名可见性规则。** `/api/icon/:id` 与 `/api/category-icon/:id` 按可猜测的整数 ID 寻址且不要求登录，因此两者都在返回真实图标前做一次可见性判定，口径与 `/api/public/data` 完全一致：私密书签不可见；公开书签只要挂在私密分类（或私密分类的后代）下同样不可见；私密分类及其后代不可见。层级规则复用 `getPublicCategoryIds` 的祖先链遍历，不在图标端点重复实现。被拒绝的请求返回**不含标题与域名**的兜底 SVG（`public, max-age=300`，带 `X-Icon-Fallback: 1`），与「ID 不存在」的响应完全一致，不提供存在性或内容线索——兜底 SVG 会渲染标题前 4 个字符或 URL 的 hostname，所以这两条路径必须传空标题与空 URL。只有 HTTP 400（非正整数 ID）走 `no-store`。
+
+判定发生在 cache 命中查询**之后**，因此收紧判定口径时必须同时递增 `worker/lib/iconResponses.ts` 的 `ICON_CACHE_NAMESPACE`：edge cache 的键不含身份，旧条目是在没有判定的情况下写入的，`s-maxage` 为 6 天，只加服务端过滤不会让它们失效。命名空间体现在缓存键的 `ns` 参数上，与前端用于图标更新失效的 `v` 参数并存。可见性判定给 `/api/icon/:id` 的 cache miss 增加一次分类表读取（`/api/category-icon/:id` 不增加，它本来就要读分类），命中路径不受影响，同源请求数也不变。
 
 图标来源包括：
 
@@ -158,7 +162,7 @@
 
 创建或更新书签后，前端会对普通 HTTP(S) 图标显式调用刷新接口，尽量缓存到 `bookmarks.icon_blob`；Iconify 图标和 icon-sets 页面链接不写入 `icon_blob`，后台预览由 `/api/iconify/:set/:name.svg` 和 Cloudflare edge cache 复用。更新书签但图标地址或图标来源未改变时不会清空已有 `icon_blob`。**聚合响应不下发 `icon_blob`（该字段为 `null`），而以 `icon_cached` 表示 D1 中是否已有持久化缓存**；首页据此配合浏览器本地图标缓存、`/api/icon/:id` 兼容路径或已保存的普通 HTTP(S) URL 取得图标。普通渲染不主动把 `/api/icon/:id` 挂载到首页 `<img>` 上；只有编辑/保存等显式刷新动作会调用刷新接口。HTTP(S) 分类图片使用 `/api/category-icon/:id?v=...`，data URI、文字和表情分类图标直接渲染；一级标题、二级标签、搜索分组和折叠导航复用相同解析与图片失败回退规则。已保存的 Iconify 书签图标首页可直接使用标准 Iconify SVG URL，并依赖浏览器 HTTP 缓存复用；后台预览仍使用稳定的 `/api/iconify/:set/:name.svg`。
 
-前端普通渲染普通 HTTP(S) 书签图标时应读取聚合数据中的 `icon_cached` 轻量标志，不应假设聚合响应携带二进制 `icon_blob`；缓存缺失时再读取浏览器本地图标缓存或保存的原始 HTTP(S) 图标 URL 兜底。不要直接把 `/api/icon/:id` 挂载到首页 `<img>`，后台列表仍可把 `/api/icon/:id` 作为兼容预览入口。持久化的 Iconify 图标首页可使用标准 `https://api.iconify.design/*.svg`，由浏览器 HTTP 缓存复用，避免每个 Iconify 书签都消耗 Worker 请求；后台预览和新增/编辑弹窗仍可规范化为 `/api/iconify/*`。图标缺失、非 HTTP(S) 值或缓存损坏时，代理返回 `no-store` 临时 SVG fallback，不写入长期缓存。Service Worker 只对 `/api/category-icon/*` 和可读的跨域 `https://api.iconify.design/*.svg` 使用 cache-first；同源 `/api/icon/*` 与 `/api/iconify/*` 由 Worker/浏览器 HTTP 缓存处理，不写入 Cache Storage。Service Worker 不缓存跨域 `opaque` 响应，并跳过超过 512KB 的图标响应，避免 Cache Storage 膨胀。同一个 Iconify 图标应共享稳定缓存键，不按书签 ID 重复缓存。
+前端普通渲染普通 HTTP(S) 书签图标时应读取聚合数据中的 `icon_cached` 轻量标志，不应假设聚合响应携带二进制 `icon_blob`；缓存缺失时再读取浏览器本地图标缓存或保存的原始 HTTP(S) 图标 URL 兜底。不要直接把 `/api/icon/:id` 挂载到首页 `<img>`，后台列表仍可把 `/api/icon/:id` 作为兼容预览入口——但**该入口对私密对象只返回兜底图标**，后台预览私密书签/私密分类的真实图标需要另设签名 URL 或等价凭据通道，属未实现项。持久化的 Iconify 图标首页可使用标准 `https://api.iconify.design/*.svg`，由浏览器 HTTP 缓存复用，避免每张图标都占用一次同源 Worker 请求。
 
 HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloudflare edge cache；只有书签图标需要写入 `bookmarks.icon_blob` 时才生成 base64 data URI，避免 Iconify 预览和分类图标在 Worker 内部做不必要的 base64 编解码。
 
@@ -191,17 +195,42 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 
 `browser_sync_enabled` 默认值为 `false`，仅属于管理员设置，不会下发到公开设置。开启该设置时服务端会幂等创建根分类“浏览器新增收藏”；关闭时不会删除该分类或其中已有书签。
 
-## 浏览器书签同步接口
+下表按 `shared/settings.ts` 的 `SETTINGS_KEYS` 顺序列出全部 30 个设置键。「取值范围」以服务端实际行为为准：PUT 校验见 `worker/routes/settings.ts`，归一化见 `shared/settings.ts` 与 `worker/lib/settingsData.ts`；类型注释写了范围但服务端不钳制的字段已逐项标出。默认值以 `worker/lib/settingsData.ts` 的 `DEFAULT_SETTINGS` 为准，并与 `schema.sql` 的 seed 对齐。未知键在两个方向都会被丢弃：写入和读取聚合都只遍历 `SETTINGS_KEYS`。
 
-全部需要登录，Chrome/Edge 扩展使用与后台相同的 Bearer Session Token。该接口只允许新增书签，不提供删除或反向同步能力。
+| 键名 | 类型 | 取值范围 | 归一化行为 | 默认值 |
+| --- | --- | --- | --- | --- |
+| `site_title` | `string` | 长度 ≤ 200 码位 | PUT 非字符串拒绝；不做内容归一化 | `'CF-Navs'` |
+| `site_title_color` | `string` | 长度 ≤ 64 码位 | PUT 非字符串拒绝；不校验颜色语法 | `''` |
+| `site_title_font_size` | `number` | 服务端不限范围 | PUT 只校验 `typeof number`；读取不钳制 | `32` |
+| `public_mode` | `boolean` | `true` / `false` | PUT 非布尔拒绝 | `true` |
+| `browser_sync_enabled` | `boolean` | `true` / `false` | PUT 非布尔拒绝；提交 `true` 时幂等创建同步根分类 | `false` |
+| `theme` | `ThemeMode` | `'light'` / `'dark'` / `'auto'` | PUT 集合外拒绝 | `'light'` |
+| `background_preset_id` | `BackgroundPresetId` | 22 个内置预设 ID 或 `'custom'` | PUT 集合外拒绝；读取时非法值归一化为 `'custom'`，键缺失取默认值而不是 `'custom'` | `'ocean-depths'` |
+| `background` | `BackgroundSetting` | `type` 取 `'image'` / `'color'` / `'gradient'`；`value` ≤ 262144 码位；`maskColor` ≤ 64 码位；`blur` `0-20`、`mask` `0-1` 只是类型注释，服务端不钳制 | PUT 允许部分对象，只校验出现过的属性；读取时非对象整体回落默认，属性缺失或非法逐项回落默认，数值不四舍五入也不钳制 | 见 `DEFAULT_SETTINGS.background` |
+| `backgrounds` | `ThemeBackgroundSettings` | `light` / `dark` 各自同 `background` | PUT 要求对象且 `light`、`dark` 均为合法背景对象；读取时逐主题逐属性归一化；整键缺失时由已归一化的 `background` 派生两套主题 | 见 `DEFAULT_SETTINGS.backgrounds` |
+| `custom_css` | `string` | 长度 ≤ 65536 码位 | PUT 非字符串或超长拒绝；不做内容清洗 | `''` |
+| `custom_js` | `string` | 长度 ≤ 65536 码位 | PUT 非字符串或超长拒绝；不做内容清洗 | `''` |
+| `image_host_url` | `string` | 长度 ≤ 2048 码位 | PUT 非字符串或超长拒绝；不校验 URL 语法 | `''` |
+| `search_engine` | `SearchEngineSetting` | 服务端不限引擎数量，也不限 `url_template` 形态 | PUT 只要求顶层是非数组对象，不校验 `engines` 元素与 `{q}` 占位符；读取不归一化 | Google 与 Bing 两条，见 `DEFAULT_SETTINGS.search_engine` |
+| `card_size` | `CardSizeSetting` | `width` 44–400、`height` 0–300，整数 | PUT 与读取都过 `normalizeCardSizeSetting`：非对象按空对象，非有限数回落默认，有限数四舍五入后钳制 | `{ width: 80, height: 60 }` |
+| `card_style` | `CardStyle` | `'info'` / `'icon'` | PUT 集合外拒绝 | `'info'` |
+| `card_icon_size` | `number` | 40–100，整数 | PUT 与读取都过 `normalizeCardIconSize`，规则同 `card_size` | `60` |
+| `category_display` | `CategoryDisplaySetting` | `root_font_size` 12–28、`root_icon_size` 14–36、`child_font_size` 11–24、`child_icon_size` 12–32，整数 | PUT 与读取都过 `normalizeCategoryDisplaySetting`，逐项回落默认后四舍五入并钳制 | `{ root_font_size: 16, root_icon_size: 20, child_font_size: 14, child_icon_size: 18 }` |
+| `card_show_description` | `boolean` | `true` / `false` | PUT 非布尔拒绝；与 `card_description_mode` 双向联动，读取结果恒为 `card_description_mode === 'always'`，不是独立存储语义 | `true` |
+| `card_description_mode` | `DescriptionDisplayMode` | `'always'` / `'hover'` / `'hidden'` | PUT 集合外拒绝；读取时合法值保留，缺失或非法则按旧 `card_show_description === false` 取 `'hidden'`，否则 `'always'` | `'always'` |
+| `card_background_color` | `string` | 长度 ≤ 64 码位 | PUT 非字符串或超长拒绝；不校验颜色语法 | `'#ffffff'` |
+| `card_background_opacity` | `number` | 类型注释为 `0-1`，服务端不钳制 | PUT 只校验 `typeof number` | `0.42` |
+| `card_icon_show_title` | `boolean` | `true` / `false` | PUT 非布尔拒绝 | `true` |
+| `card_text_color` | `string` | 长度 ≤ 64 码位 | PUT 非字符串或超长拒绝；不校验颜色语法 | `''` |
+| `search_box_show` | `boolean` | `true` / `false` | PUT 非布尔拒绝 | `true` |
+| `search_engine_selector_show` | `boolean` | `true` / `false` | PUT 非布尔拒绝 | `true` |
+| `content_layout` | `ContentLayoutSetting` | `max_width_unit` 取 `'px'` / `'%'`；`margin_x` `0-100`px、`margin_top` / `margin_bottom` `0-50`% 只是类型注释，服务端不钳制 | PUT 允许部分对象，只校验出现过的属性；读取不补齐缺失子字段，因此部分对象会原样进入聚合结果 | `{ max_width: 1200, max_width_unit: 'px', margin_x: 0, margin_top: 0, margin_bottom: 0 }` |
+| `navigation` | `NavigationSetting` | `position` 取 `'left'` / `'top'`；`always_expanded` 布尔；`top_layout` 取 `'scroll'` / `'wrap'` | PUT 只校验 `position` 与 `always_expanded`；读取时这两项非法则整项回落默认，`top_layout` 缺失或非法归一化为 `'scroll'`（详见下文 `navigation` 说明） | `{ position: 'left', always_expanded: false, top_layout: 'scroll' }` |
+| `footer_html` | `string` | 长度 ≤ 65536 码位 | PUT 非字符串或超长拒绝；不做内容清洗 | `''` |
+| `most_visited_count` | `number` | 聚合结果为 0–20 的整数 | PUT 无类型校验，原值入库；读取时 `Number(value) \|\| 0` 后四舍五入并钳制到 0–20，因此非数值变成 `0`，数值字符串会被转换 | `8` |
+| `site_title_show` | `boolean` | 聚合结果按 truthiness 判定 | PUT 无类型校验，原值入库；读取时键存在即取 `Boolean(value)`，只有键缺失才为 `true`，因此字符串 `'false'` 会被判为 `true` | `true` |
 
-| 方法 | 路径 | 请求 | 返回 |
-| --- | --- | --- | --- |
-| POST | `/api/browser-sync/bookmarks` | `{ bookmarks: { title: string, url: string }[] }`，最多 100 条 | `{ category_id, category_title, created, skipped }` |
-
-服务端只接收 `http://` 和 `https://` 书签；重复 URL、空标题、非法 URL 或无效记录会计入 `skipped`。同步创建的书签默认写入 `https://favicon.im/<hostname>?larger=true`，`icon_source` 为 `favicon_im`，不在同步请求期间执行外部页面抓取。同步开关关闭时返回冲突错误，不会写入数据。浏览器收藏夹文件夹不会作为导航分类处理，所有记录固定写入“浏览器新增收藏”。
-
-字符串设置项有长度上限，超出返回 `code=1002` 且 msg 中包含字段名与上限值。按 Unicode 码位计数（含 emoji 的标题不会被误判）：`site_title` 200；`site_title_color` / `card_background_color` / `card_text_color` / `background.maskColor` 各 64；`image_host_url` 2048；`custom_css` / `custom_js` / `footer_html` 各 65536；`background.value` 与 `backgrounds.light|dark.value` 各 262144。背景值的上限尤其重要：它会随 `toPublicSettings` 进入每个访客的 `/api/public/data`，不限长会直接破坏性能契约中「聚合数据保持轻量」的约定。
+字符串设置项超出上限时返回 `code=1002`，msg 中包含字段名与上限值；长度按 Unicode 码位计数，含 emoji 的标题不会被误判。逐字段上限见上表。背景值的上限尤其重要：它会随 `toPublicSettings` 进入每个访客的 `/api/public/data`，不限长会直接破坏性能契约中「聚合数据保持轻量」的约定。
 
 `navigation` 是公开设置对象，结构为 `{ position: 'left' | 'top', always_expanded: boolean, top_layout: 'scroll' | 'wrap' }`。缺失或非法的 D1 历史值读取时，`position`/`always_expanded` 回退为原默认值，缺失或非法 `top_layout` 归一化为 `'scroll'`；当前更新接口显式校验 `position` 与 `always_expanded`，随后由 settings normalization 处理 `top_layout`，不能表述为更新接口直接拒绝非法 `top_layout`。`always_expanded` 只控制桌面左侧布局，顶部和移动端不会应用该值，但后台切换布局时会保留原配置。
 
@@ -216,6 +245,16 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 选择内置方案时前端同时写入对应的 `backgrounds`、遮罩、卡片背景透明度和自动文字色设置。护眼纯色默认将 `card_background_opacity` 设为 `0.9`，浅色模式使用与页面背景同色系的浅卡片色，暗色模式使用预设的深色卡片色；该透明度同时作用于书签卡片、搜索框和分类导航。运行时根据 `background_preset_id` 选择对应的亮暗强调色和高对比标题/备注颜色，用户设置的 `card_text_color` 始终优先。
 
 旧数据缺少 `background_preset_id`，或仍为 `custom` 但浅色/深色背景值匹配内置方案时，后台面板会自动识别并显示对应预设。旧版护眼配置中的白色卡片背景会在公开设置聚合时映射为当前护眼预设的同色系卡片色；用户保存的非白色卡片背景保持不变。
+
+## 浏览器书签同步接口
+
+全部需要登录，Chrome/Edge 扩展使用与后台相同的 Bearer Session Token。该接口只允许新增书签，不提供删除或反向同步能力。
+
+| 方法 | 路径 | 请求 | 返回 |
+| --- | --- | --- | --- |
+| POST | `/api/browser-sync/bookmarks` | `{ bookmarks: { title: string, url: string }[] }`，最多 100 条 | `{ category_id, category_title, created, skipped }` |
+
+服务端只接收 `http://` 和 `https://` 书签；重复 URL、空标题、非法 URL 或无效记录会计入 `skipped`。同步创建的书签默认写入 `https://favicon.im/<hostname>?larger=true`，`icon_source` 为 `favicon_im`，不在同步请求期间执行外部页面抓取。同步开关关闭时返回冲突错误，不会写入数据。浏览器收藏夹文件夹不会作为导航分类处理，所有记录固定写入“浏览器新增收藏”。
 
 ## 导入接口
 

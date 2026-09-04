@@ -63,10 +63,17 @@ export function cacheResponse(context: unknown, request: Request, response: Resp
 // 保留形如版本号的 `v`，其余参数（包括超长随机串）一律并到同一个缓存条目上。
 const ICON_CACHE_VERSION = /^[A-Za-z0-9_.:-]{1,64}$/
 
+// PROB-20 之前，图标端点不做可见性判定就把响应写进 edge cache，私密书签/私密分类的
+// 图标可能已经躺在里面；而命中查询发生在可见性判定之前，只加服务端过滤不会让这些旧
+// 条目失效（`s-maxage` 是 6 天）。给缓存键加命名空间版本，旧条目立刻变成不可达，
+// 之后写入的每个条目都一定过了可见性判定。收紧判定口径时必须同时递增这个值。
+const ICON_CACHE_NAMESPACE = '2'
+
 export function iconCacheKey(request: Request): Request {
   const url = new URL(request.url)
   const version = url.searchParams.get('v')
   url.search = ''
+  url.searchParams.set('ns', ICON_CACHE_NAMESPACE)
   if (version && ICON_CACHE_VERSION.test(version)) {
     url.searchParams.set('v', version)
   }

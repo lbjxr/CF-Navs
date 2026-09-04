@@ -90,5 +90,5 @@
 - `shared/`：前后端共享类型与设置定义。
 - `public/`：PWA、Service Worker 和静态资源。
 - `scripts/`：开发、部署、测试、审计和数据转换脚本，详见 [脚本说明](../scripts/README.md)。
-- `tests/`：Vitest 单元与源码回归测试。
+- `tests/`：Vitest 单元、源码回归与组件测试。组件测试用 `@testing-library/svelte` + jsdom 挂载真实 DOM，通过文件首行 `// @vitest-environment jsdom` 单文件启用，不改全局环境，其余测试仍跑在默认 node 环境。
 - `schema.sql`：D1 数据库结构，是部署必需文件。

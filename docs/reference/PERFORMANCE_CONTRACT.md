@@ -27,6 +27,7 @@ This document records the current performance-sensitive behavior that should not
 - HTTP(S) bookmark icons may use same-origin proxy URLs only where the current runtime path already does so.
 - Icon rendering should keep native lazy loading, async decoding, fixed image dimensions, and low fetch priority for bookmark icons.
 - Failed icon handling should prefer stable fallback behavior over repeated retries in the same interaction path.
+- Anonymous icon proxies must pass the public-visibility check before returning real icon bytes. The check costs one extra category read on `/api/icon/:id` cache misses and none on `/api/category-icon/:id`; cache hits and same-origin request counts are unchanged. Do not drop the check to save that read, and do not move it ahead of the cache lookup without bumping `ICON_CACHE_NAMESPACE`.
 
 ## Service Worker And Storage
 
