@@ -27,6 +27,15 @@
 - 尺寸 1.3rem、`stroke-width: 1.9`，沿用 `.back-to-top-button svg` 既有的描边约定；按钮外框、间距、移动端 36×36 触控下限都没动。
 - 验证：`tests/unit/homeFloatingActions.test.ts` 升到 jsdom 组件测试——断言访客态不渲染该入口、登录态可访问名与 `data-testid` 不变、图标是 `aria-hidden` 的 svg 且恰好两笔路径、按钮可见文本为空，并锁定源码里不再出现裸加号字符。独立临时 profile 的 Chrome 渲染了同一段标记与 CSS 做视觉确认（浅色与暗色各一次，图标实测 21×21 px），**未在部署页面上验证**。本轮收尾全量门禁：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 700 passed；`npm run build` 成功；`git diff --check` 通过。
 
+### 移动端不再丢掉设置里的「顶部边距」
+
+- 用户报告部署后移动端自适应异常。逐宽度实测证伪了「布局溢出」：登录态与访客态在 280–820 CSS px 全区间 `scrollWidth - clientWidth` 都是 0，固定的目录导航按钮与首页标题也从不相交。真正查出的缺陷只有一条——**`content_layout.margin_top` 在 ≤720px 被整个丢弃**。
+- `HomeHeroSearch.svelte` 的 `@media (max-width: 720px)` 把 `.hero-search` / `.hero-search.top-navigation` 的 `margin-top` 写成裸 `3.5rem` / `3rem`，覆盖掉桌面规则里的 `calc(... + var(--content-margin-top, 0%))`。设置项标签是「顶部边距」，并未像「桌面左右边距」那样限定桌面，而「底部边距」在 `.home-shell` 的移动端规则里是保留的——三者口径不一致，这条是遗漏而非取舍。
+- 两条规则改回 `calc(3.5rem + var(--content-margin-top, 0%))` 与 `calc(3rem + var(--content-margin-top, 0%))`。「桌面左右边距」`--content-margin-x` 保持桌面独有，不动（`tests/unit/homeResponsiveLayout.test.ts` 原有断言继续锁定这一点）。
+- 本地隔离实例实测（登录态、390×844 起逐档改宽）：顶部边距设 8% 时移动端 hero `margin-top` 由恒定 56px 变为 82.2px（360）/ 84.6px（390）/ 86.4px（412）/ 87.8px（430）/ 93.4px（500），标题与目录导航按钮的间距从 6px 升到 32–43px；顶部边距为默认 0 时仍是 56px，**默认配置零视觉变化**。各档 `scrollWidth - clientWidth` 均为 0。
+- 验证：`tests/unit/homeResponsiveLayout.test.ts` 新增一条断言，锁定桌面与移动端两处都叠加该变量，并用负向断言禁止再写回裸 `3rem` / `3.5rem`。
+- 排查副产物（非本次改动）：`public/sw.js` 的导航请求是 stale-while-revalidate，`sw.js:173-175` 已写明「部署新版本后用户下一次打开看到的仍是旧版」；`main.ts:23-25` 会弹「已检测到新版本，刷新页面即可使用。」的 10 秒提示。因此部署后的第一次打开如果没再刷新一次，看到的是上一版构建——部署后验收必须刷新两次或强制刷新。
+
 ## 2026-09-04（图标代理关闭匿名枚举 / 引入组件测试层）
 ### 图标代理只对匿名可见的对象返回真实图标（PROB-20 方案 1）
 

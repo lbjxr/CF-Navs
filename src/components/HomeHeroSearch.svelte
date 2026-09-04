@@ -93,14 +93,17 @@
   }
 
   @media (max-width: 720px) {
+    /* 顶部边距（content_layout.margin_top）在这里必须保留：设置项标签是「顶部边距」，
+       不像「桌面左右边距」那样限定桌面，而「底部边距」在 .home-shell 的移动端规则里也保留了。
+       之前这两条写成裸 3.5rem / 3rem，等于把用户设的顶部边距在 ≤720px 全部丢掉。 */
     .hero-search {
       gap: 0.75rem;
-      margin-top: 3.5rem;
+      margin-top: calc(3.5rem + var(--content-margin-top, 0%));
       padding: 0 0.25rem;
     }
 
     .hero-search.top-navigation {
-      margin-top: 3rem;
+      margin-top: calc(3rem + var(--content-margin-top, 0%));
     }
 
     .search-card {
