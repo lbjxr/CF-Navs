@@ -12,13 +12,20 @@
 
 ### 五条验收口径裁定落地（PROB-03/11/12/28/29）
 
-- **移动端「新建子分类」收进「更多操作」菜单（PROB-11）**：`HomeCategoryScope` 现在同时渲染桌面直显按钮与移动端「更多操作」触发器，由组件既有的 `max-width: 720px` 断点互斥显示；`display: none` 会同时移出无障碍树，不会出现两个同名操作。菜单是 `role="menu"` + `role="menuitem"`，触发器带 `aria-haspopup="menu"` / `aria-expanded` / `aria-controls`，支持 Esc 关闭并把焦点还给触发器、点击菜单外部关闭；访客态两个入口都不渲染。断点沿用 720px 而非全局的 799px，避免改动 721–799px 区间的桌面视觉。
+- **移动端分类区操作收进「更多操作」菜单（PROB-11）**：`HomeCategoryScope` 现在同时渲染桌面直显按钮与移动端「更多操作」触发器，由组件既有的 `max-width: 720px` 断点互斥显示；`display: none` 会同时移出无障碍树，不会出现两个同名操作。菜单是 `role="menu"` + `role="menuitem"`，触发器带 `aria-haspopup="menu"` / `aria-expanded` / `aria-controls`，支持 Esc 关闭并把焦点还给触发器、点击菜单外部关闭；访客态两个入口都不渲染。断点沿用 720px 而非全局的 799px，避免改动 721–799px 区间的桌面视觉。**按用户实测反馈，菜单收纳三项**：「新增书签 → 新建子分类 → 排序」，只渲染当前可用项（排序会话中前两项不传）；`CategorySection` 同步在 720px 断点隐藏首页主分类区的非排序操作行（`class:sorting` 保留排序会话的拖拽提示），移动端不再出现两处相同入口。桌面端三个入口位置全部不变。
 - **卡片最小宽度下限 44 → 40（PROB-28）**：#13 只问「能否下调」、未给目标值，用户裁定继续降到 40。`CARD_SIZE_LIMITS.width.min`、`INFO_CARD_MIN_TRACK_WIDTH` 与设置控件 `min` 三处同步；移动端网格的 150 px 安全下限不变。**已知取舍**：40 px 低于 44 px 触控目标建议值，点击区域小于无障碍推荐尺寸，换来更密的列数——Tooltip、API 契约和共享常量注释都写明了这一点。
 - **R-04 分类树不自动聚焦当前项（PROB-03 / PROB-27）**：裁定为「建议而非验收标准」，实现不改；R-04 验收标准与已确认决策改为写明「定位只保证当前项滚动可见，不自动聚焦」，键盘可达由下/上箭头进首/末项 + 方向键逐项移动 + Esc 归还焦点保证。
 - **R-03 入口位置以浮动操作行为准（PROB-12）**：需求原文建议的「经常访问」标题右侧会在未登录、无访问记录或 `most_visited_count` 为 0 时随区域消失，浮动行才是需求同时接受的「稳定入口」。已改写建议方案与已确认决策，并删掉与实现冲突的「移动端使用经常访问标题栏加号」那条。
 - **R-05 文档不再写「禁用非法目标」（PROB-29）**：服务端只校验 `category_id` 是正整数且分类存在，「不存在 / 越权 / 跨层级违规」三类在当前数据模型都不成立。R-05 五处表述改为「不禁用任何目标 + 对会让公开书签从公开首页消失的目标逐项标注后果」。
 - 工程规范同步：`CONTRIBUTING.md` 的分支模型与发版流程改为「`develop` 既是集成也是发版与部署来源，tag 打在 `develop`，`main` 降级为只在维护者主动要求时合入的归档快照」；并写明关闭关键字在非默认分支不生效、Issue 需在部署验证后手动关闭。
-- 验证：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 695 passed（新增 `tests/unit/homeCategoryScopeActions.test.ts` 6 条组件测试）；`npm run build` 成功。**未运行部署与 L3**：移动端菜单的断点可见性、40 px 卡片的真机列数与触控都未验证，已登记为 `PROB-11v` / `PROB-28v`。
+- 验证：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 699 passed（新增 `tests/unit/homeCategoryScopeActions.test.ts` 10 条组件测试，含菜单项顺序与回调隔离断言）；`npm run build` 成功。**未运行部署与 L3**：移动端菜单的断点可见性、40 px 卡片的真机列数与触控都未验证，已登记为 `PROB-11v` / `PROB-28v`。
+
+### 新增主分类入口的图标语义修正
+
+- PC 右上角浮动操作行的「新增主分类」此前只画一个裸加号（U+FF0B），与旁边的 ⚙ / ↪ 并排时说不出加的是什么——可能被读成新增书签。`aria-label` / `title` 一直是对的，缺的是**视觉**语义。
+- 改为描边 SVG「闭合文件夹 + 居中加号」，`aria-hidden="true"`，可访问名仍只由 `aria-label` 提供，按钮不再有可见文本。与分类标题内「新建子分类」的图标（文件夹 + 悬在右下角外侧的加号）轮廓不同，两个入口不会互相混淆。
+- 尺寸 1.3rem、`stroke-width: 1.9`，沿用 `.back-to-top-button svg` 既有的描边约定；按钮外框、间距、移动端 36×36 触控下限都没动。
+- 验证：`tests/unit/homeFloatingActions.test.ts` 升到 jsdom 组件测试——断言访客态不渲染该入口、登录态可访问名与 `data-testid` 不变、图标是 `aria-hidden` 的 svg 且恰好两笔路径、按钮可见文本为空，并锁定源码里不再出现裸加号字符。独立临时 profile 的 Chrome 渲染了同一段标记与 CSS 做视觉确认（浅色与暗色各一次，图标实测 21×21 px），**未在部署页面上验证**。本轮收尾全量门禁：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 700 passed；`npm run build` 成功；`git diff --check` 通过。
 
 ## 2026-09-04（图标代理关闭匿名枚举 / 引入组件测试层）
 ### 图标代理只对匿名可见的对象返回真实图标（PROB-20 方案 1）

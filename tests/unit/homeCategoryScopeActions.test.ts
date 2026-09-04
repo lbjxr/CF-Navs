@@ -4,17 +4,27 @@ import { readFileSync } from 'node:fs'
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte'
 import HomeCategoryScope from '../../src/components/HomeCategoryScope.svelte'
 
-// PROB-11：移动端把「新建子分类」收进「更多操作」菜单（计划 T6）。
+// PROB-11：移动端把「新增书签」「新建子分类」「排序」三个入口统一收进「更多操作」菜单（计划 T6）。
 // DOM 行为用组件测试证明；断点可见性 jsdom 证明不了，只能断言接线并留给 L3 真机验证。
 
 afterEach(cleanup)
 
 function renderScope(overrides: Record<string, unknown> = {}) {
+  const onAddBookmark = vi.fn()
   const onCreateSubcategory = vi.fn()
+  const onRequestSort = vi.fn()
   render(HomeCategoryScope, {
-    props: { rootId: 7, title: '研发工具', reserveActions: true, onCreateSubcategory, ...overrides },
+    props: {
+      rootId: 7,
+      title: '研发工具',
+      reserveActions: true,
+      onAddBookmark,
+      onCreateSubcategory,
+      onRequestSort,
+      ...overrides,
+    },
   })
-  return { onCreateSubcategory }
+  return { onAddBookmark, onCreateSubcategory, onRequestSort }
 }
 
 const moreTrigger = () => screen.getByRole('button', { name: '研发工具 更多操作' })
@@ -28,21 +38,43 @@ describe('HomeCategoryScope 更多操作菜单', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('打开后菜单里有「新建子分类」，点击后执行回调并收起', async () => {
-    const { onCreateSubcategory } = renderScope()
+  it('菜单按固定顺序收纳三个操作，aria-controls 指向真实菜单节点', async () => {
+    renderScope()
 
     await fireEvent.click(moreTrigger())
     const menu = screen.getByRole('menu', { name: '研发工具 更多操作' })
     expect(moreTrigger().getAttribute('aria-expanded')).toBe('true')
-    // aria-controls 必须指向真实存在的菜单节点
     expect(menu.id).toBe(moreTrigger().getAttribute('aria-controls'))
 
-    const item = screen.getByRole('menuitem', { name: '新建子分类' })
-    await fireEvent.click(item)
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent?.trim()))
+      .toEqual(['新增书签', '新建子分类', '排序'])
+  })
 
-    expect(onCreateSubcategory).toHaveBeenCalledTimes(1)
+  it.each([
+    ['新增书签', 'onAddBookmark'],
+    ['新建子分类', 'onCreateSubcategory'],
+    ['排序', 'onRequestSort'],
+  ] as const)('点击「%s」执行对应回调并收起菜单', async (label, key) => {
+    const spies = renderScope()
+
+    await fireEvent.click(moreTrigger())
+    await fireEvent.click(screen.getByRole('menuitem', { name: label }))
+
+    expect(spies[key]).toHaveBeenCalledTimes(1)
+    for (const [otherKey, spy] of Object.entries(spies)) {
+      if (otherKey !== key) expect(spy).not.toHaveBeenCalled()
+    }
     expect(screen.queryByRole('menu')).toBeNull()
     expect(moreTrigger().getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('只渲染当前可用的操作：排序会话中不给出新增书签与排序', async () => {
+    renderScope({ onAddBookmark: undefined, onRequestSort: undefined })
+
+    await fireEvent.click(moreTrigger())
+
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent?.trim()))
+      .toEqual(['新建子分类'])
   })
 
   it('Esc 关闭菜单并把焦点还给触发器', async () => {
@@ -68,21 +100,27 @@ describe('HomeCategoryScope 更多操作菜单', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('访客态两个入口都不渲染', () => {
+  it('访客态不渲染任何入口', () => {
     render(HomeCategoryScope, { props: { rootId: 7, title: '研发工具', reserveActions: false } })
 
     expect(screen.queryByRole('button', { name: '研发工具 更多操作' })).toBeNull()
     expect(screen.queryByRole('button', { name: '新建子分类' })).toBeNull()
   })
 
-  it('把直显按钮与更多操作入口按 720px 断点互斥（接线断言，视觉由 L3 验证）', () => {
+  it('按 720px 断点让桌面直显入口与移动端菜单互斥（接线断言，视觉由 L3 验证）', () => {
     const scope = readFileSync('src/components/HomeCategoryScope.svelte', 'utf8')
-    const mobileBlock = scope.slice(scope.indexOf('@media (max-width: 720px)'))
+    const section = readFileSync('src/components/CategorySection.svelte', 'utf8')
+    const scopeMobile = scope.slice(scope.indexOf('@media (max-width: 720px)'))
+    const sectionMobile = section.slice(section.indexOf('@media (max-width: 720px)'))
 
-    // 桌面直显、移动端收进菜单：两者在同一断点内一个隐藏一个显示
+    // 桌面：Scope 直显「新建子分类」，CategorySection 的操作行提供「新增书签」「排序」
     expect(scope).toContain('class="scope-action scope-action-direct"')
     expect(scope).toContain('class="scope-action scope-more-trigger"')
-    expect(mobileBlock).toContain('.scope-action-direct {\n      display: none;')
-    expect(mobileBlock).toContain('.scope-more {\n      display: inline-flex;')
+    // 移动端：Scope 只留菜单入口，CategorySection 的非排序操作行整体隐藏
+    expect(scopeMobile).toContain('.scope-action-direct {\n      display: none;')
+    expect(scopeMobile).toContain('.scope-more {\n      display: inline-flex;')
+    expect(sectionMobile).toContain('.section-header.inline-actions .section-actions:not(.sorting) {\n      display: none;')
+    // 排序会话中的提示文案不能被一起隐藏
+    expect(section).toContain('class:sorting={activeSortMode}')
   })
 })

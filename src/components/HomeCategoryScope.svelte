@@ -21,6 +21,9 @@
   export let reserveActions = false
   export let onSelect: ((id: number) => AsyncVoid) | undefined = undefined
   export let onCreateSubcategory: (() => AsyncVoid) | undefined = undefined
+  /** 移动端把这两个操作也收进「更多操作」菜单；桌面端它们仍由 CategorySection 的操作行提供。 */
+  export let onAddBookmark: (() => AsyncVoid) | undefined = undefined
+  export let onRequestSort: (() => AsyncVoid) | undefined = undefined
   export let highlightedId: number | null = null
 
   let tabList: HTMLElement | null = null
@@ -32,14 +35,17 @@
     void onSelect?.(id)
   }
 
-  // 移动端把分类操作收进「更多操作」菜单（计划 T6 / PROB-11）。桌面端仍是直显按钮，
-  // 两者都渲染，由 720px 断点的 CSS 决定谁可见——`display: none` 会同时移出无障碍树，
-  // 不会出现两个同名操作。
+  // 移动端把分类操作、新增书签、排序三个入口统一收进「更多操作」菜单（计划 T6 / PROB-11）。
+  // 桌面端「新建子分类」仍是直显按钮，另两个仍在 CategorySection 的操作行里；两处都渲染，
+  // 由 720px 断点的 CSS 决定谁可见——`display: none` 会同时移出无障碍树，不会出现重复操作。
   let moreTrigger: HTMLButtonElement | null = null
   let moreMenu: HTMLElement | null = null
   let moreOpen = false
 
   $: moreMenuId = `home-category-more-${rootId}`
+  $: hasMoreActions = Boolean(onAddBookmark || onCreateSubcategory || onRequestSort)
+  // 菜单收起时若可用操作被撤掉（例如进入排序会话），避免留下指向已消失菜单的展开态
+  $: if (!hasMoreActions && moreOpen) moreOpen = false
 
   function closeMore(focusTrigger = false): void {
     moreOpen = false
@@ -49,6 +55,16 @@
   function runCreateSubcategory(): void {
     closeMore()
     void onCreateSubcategory?.()
+  }
+
+  function runAddBookmark(): void {
+    closeMore()
+    void onAddBookmark?.()
+  }
+
+  function runRequestSort(): void {
+    closeMore()
+    void onRequestSort?.()
   }
 
   function handleWindowPointerDown(event: PointerEvent): void {
@@ -106,6 +122,7 @@
           {title}<span class="scope-total-count">（{totalCount}）</span>
         </h2>
         {#if reserveActions && onCreateSubcategory}
+          <!-- 桌面直显按钮：只有「新建子分类」；新增书签与排序在 CategorySection 的操作行里 -->
           <button
             type="button"
             class="scope-action scope-action-direct"
@@ -120,6 +137,8 @@
               <path d="M16 15h6M19 12v6" />
             </svg>
           </button>
+        {/if}
+        {#if reserveActions && hasMoreActions}
           <div class="scope-more">
             <button
               type="button"
@@ -144,9 +163,21 @@
                 aria-label={`${title || '分类'} 更多操作`}
                 bind:this={moreMenu}
               >
-                <button type="button" class="scope-more-item" role="menuitem" on:click={runCreateSubcategory}>
-                  新建子分类
-                </button>
+                {#if onAddBookmark}
+                  <button type="button" class="scope-more-item" role="menuitem" on:click={runAddBookmark}>
+                    新增书签
+                  </button>
+                {/if}
+                {#if onCreateSubcategory}
+                  <button type="button" class="scope-more-item" role="menuitem" on:click={runCreateSubcategory}>
+                    新建子分类
+                  </button>
+                {/if}
+                {#if onRequestSort}
+                  <button type="button" class="scope-more-item" role="menuitem" on:click={runRequestSort}>
+                    排序
+                  </button>
+                {/if}
               </div>
             {/if}
           </div>

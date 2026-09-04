@@ -179,6 +179,8 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 | 处理动作 | 裁定后二选一：a) 移动端收进更多操作菜单；b) 在 R-02 段与 T6 台账写明「已改为直显图标按钮」并说明理由 |
 | 裁定与处理结果 | 用户 2026-09-04 选 a) **移动端收进「更多操作」菜单**。`HomeCategoryScope.svelte` 现在同时渲染桌面直显按钮（`.scope-action-direct`）与移动端「更多操作」触发器（`.scope-more-trigger`），由既有的 `max-width: 720px` 断点互斥显示——`display: none` 同时移出无障碍树，不会出现两个同名操作。菜单为 `role="menu"` + `role="menuitem"`，触发器带 `aria-haspopup="menu"` / `aria-expanded` / `aria-controls`；支持 Esc 关闭并把焦点还给触发器、`svelte:window` 上的 pointerdown 判定点击外部关闭；访客态（`reserveActions=false`）两个入口都不渲染。断点沿用组件既有的 720px，未改成全局的 799px，避免改动 721–799px 区间的桌面视觉 |
 | 验证结果 | 新增 `tests/unit/homeCategoryScopeActions.test.ts`（组件测试，jsdom）覆盖 6 条：disclosure 语义、`aria-controls` 指向真实菜单节点、点击菜单项执行回调并收起、Esc 关闭并归还焦点、点击外部关闭、访客态不渲染；断点互斥用源码断言锁定。`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 695 passed；`npm run build` 成功。**移动端实际可见性与触控仍需 L3 真机确认**（jsdom 不应用媒体查询） |
+| 2026-09-04 追加修正 | 用户实测反馈：移动端应该把**三个**操作都收进三点按钮，不只是「新建子分类」。`HomeCategoryScope` 新增 `onAddBookmark` / `onRequestSort` 两个 prop，菜单按「新增书签 → 新建子分类 → 排序」固定顺序渲染，只渲染当前可用项（排序会话中 Home 不再传前两者）；`CategorySection` 的 `.section-actions` 加 `class:sorting`，并在其既有的 `max-width: 720px` 块里隐藏 `.section-header.inline-actions .section-actions:not(.sorting)`，避免与菜单重复入口。排序会话中的「拖动书签到其他分类」提示不隐藏，否则移动端拖拽时没有任何说明。桌面端三个入口位置全部不变 |
+| 追加验证 | 组件测试扩到 10 条：新增菜单项顺序断言（`['新增书签','新建子分类','排序']`）、三个操作各自的回调隔离断言（点一个不能触发另两个）、「只渲染当前可用操作」断言，以及 `CategorySection` 的隐藏规则与 `class:sorting` 源码断言。`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 699 passed |
 
 ### PROB-12（P3，已完成）R-03 入口位置与建议方案不同
 

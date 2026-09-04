@@ -560,6 +560,8 @@
                 {panelId}
                 reserveActions={isAuthenticated}
                 onCreateSubcategory={isAuthenticated && onOpenCreateCategory ? () => onOpenCreateCategory?.(category.id) : undefined}
+                onAddBookmark={isAuthenticated && !homeSortMode && onOpenCreateBookmark ? () => onOpenCreateBookmark?.(selectedCategory.id) : undefined}
+                onRequestSort={isAuthenticated && !homeSortMode ? startHomeSort : undefined}
                 onSelect={(id) => handleScopeSelect(category.id, id)}
               />
 

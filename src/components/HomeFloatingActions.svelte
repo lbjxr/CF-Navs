@@ -88,6 +88,7 @@
     >
       &#9881;
     </button>
+    <!-- 图标语义：裸加号不说明加的是什么，改为「文件夹 + 加号」明确是新增分类 -->
     <button
       type="button"
       class="icon-button create-category-button"
@@ -96,7 +97,10 @@
       title="新增主分类"
       aria-label="新增主分类"
     >
-      ＋
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 8a2 2 0 0 1 2-2h3.6l1.7 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+        <path d="M12 11.5v5M9.5 14h5" />
+      </svg>
     </button>
     <button
       type="button"
@@ -174,6 +178,16 @@
     fill: none;
     stroke: currentColor;
     stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .create-category-button svg {
+    width: 1.3rem;
+    height: 1.3rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
     stroke-linecap: round;
     stroke-linejoin: round;
   }

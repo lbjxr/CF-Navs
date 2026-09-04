@@ -96,7 +96,7 @@
         </div>
       {/if}
       {#if showActions}
-        <div class="section-actions" role="group" aria-label={`${heading} 操作`}>
+        <div class="section-actions" class:sorting={activeSortMode} role="group" aria-label={`${heading} 操作`}>
           {#if activeSortMode && showSortActions}
             <button
               type="button"
@@ -547,6 +547,15 @@
 
     .section-actions {
       gap: 0.28rem;
+    }
+
+    /*
+     * 首页主分类区（inlineActions）在移动端把「新增书签」「排序」交给
+     * HomeCategoryScope 的「更多操作」菜单承载（PROB-11），这里隐藏重复入口。
+     * 排序会话中的提示文案不隐藏，否则移动端拖拽时没有任何说明。
+     */
+    .section-header.inline-actions .section-actions:not(.sorting) {
+      display: none;
     }
   }
 </style>
