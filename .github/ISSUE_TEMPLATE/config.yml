@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📢 注意事项
+    url: https://github.com/lbjxr/CF-Navs/issues
+    about: "请【一个 Issue 只聊一件事】。如果你同时有 Bug 和功能建议，请分开提交两次，感谢配合！🙏"
+  - name: 🔒 安全问题请勿公开提交
+    url: https://github.com/lbjxr/CF-Navs/security/policy
+    about: "涉及越权、信息泄漏、私密数据可被匿名读取等问题，请走 Security 标签的私密漏洞报告，不要开公开 Issue。"

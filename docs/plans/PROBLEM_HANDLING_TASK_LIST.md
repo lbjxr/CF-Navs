@@ -1,18 +1,19 @@
 # 问题处理任务清单
 
-> **状态：核对完成；2026-09-03 与 2026-09-04 两轮已处理部分条目，其余未开工。本文是一份经源码核对的问题台账，不是实现承诺。**
+> **状态：证据与决策记录，不维护待办状态。** 本文保留每条 `PROB-NN` 的核对证据、判断依据和处理结果，供后续回溯「当初为什么这么改」。
 >
-> - 核对日期：2026-09-03；核对基线：`develop` 分支当前工作树（docs/ 有未提交改动，`FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md` 为未跟踪新文件）。
+> **当前待办与状态一律看 [本地待办清单](../BACKLOG.md)**；用户可见的缺陷与需求看 GitHub Issue；工程规则看 [CONTRIBUTING.md](../../CONTRIBUTING.md)。本文不再维护勾选、进度表或完成名单，避免同一事实写两份。
+>
+> - 核对日期：2026-09-03；核对基线：`develop` 分支当时的工作树。
 > - 核对方式：逐条读 `docs/reference/`、`docs/plans/`、`docs/guides/`、`CHANGELOG.md`，再到 `src/`、`worker/`、`shared/`、`tests/`、`scripts/`、`public/` 找实现证据；云端 Issue 通过 GitHub 独立读取。
-> - 事实优先级按 `docs/README.md:9-18` 与 `:31`：工程规则 → 当前源码与实际验证 → 参考契约 → 计划文档 → 变更记录。文档与源码冲突时以源码为事实。
-> - **核对轮次**未运行 `npm run type-check` / `npm test` / `npm run build` / `npm run perf:audit` / 浏览器套件，也未执行任何 git、部署或 GitHub 写操作。凡标「未验证」者即该轮无运行证据；后续实现轮次的验证结果记在各条目的「处理结果」行与下方处理进度里。
+> - 文档与源码冲突时以源码为事实。本文里形如 `file.ts:123` 的行号引用来自当时的工作树，**可能已经腐烂**；以符号名和上下文为准，不要直接相信行号。
 > - 配套文档：尚未实现的功能需求见 [需求开发任务清单](REQUIREMENT_DEVELOPMENT_TASK_LIST.md)。
 
 ---
 
 ## 1. 编号与范围口径
 
-- 本文新编号统一用 `PROB-NN`，**不占用**既有原生编号（`R-01`~`R-08`、`FR-*`、`NFR-*`、`C-*`、`OQ-*`、`T*`、`L*`/`S*`/`U*`）。每条都在「来源映射」列回指原生编号与文档行号。
+- 本文编号统一用 `PROB-NN`，**不占用**既有原生编号（`R-01`~`R-08`、`FR-*`、`NFR-*`、`C-*`、`OQ-*`、`T*`、`L*`/`S*`/`U*`）。每条都在「来源映射」列回指原生编号。
 - 收录标准：当前源码/文档/云端状态能证明的**缺陷、验收未达标、文档与源码不一致、遗留验证欠账、残余风险、信息不足**。
 - 不收录：已闭环的历史轮次记录、实施前基线快照、尚未实现的功能需求（属需求清单）、评论中的候选贡献。
 - 优先级：`P0` 阻断可用性 / `P1` 影响正确性、安全或已声明验收 / `P2` 影响一致性与可维护性 / `P3` 表述与整洁度。
@@ -27,23 +28,15 @@
 | D 安全与稳定性风险 | PROB-19 ~ PROB-24 | 6 |
 | E 信息不足需澄清 | PROB-25 ~ PROB-30 | 6 |
 
-### 处理进度（2026-09-04）
+### 已执行的验证记录
 
-| 状态 | 条目 |
-| --- | --- |
-| 已完成 | PROB-01、PROB-02、PROB-05、PROB-06、PROB-08、PROB-09、PROB-10、PROB-16、PROB-18、PROB-21、PROB-22 |
-| 已完成第一阶段，后续待授权 | PROB-20（方案 1 已落地，方案 2「签名 URL」未开工） |
-| 未开工（需运行环境或部署） | PROB-07、PROB-13～PROB-15、PROB-17、PROB-23 |
-| 未开工（需用户裁定） | PROB-03、PROB-04、PROB-11、PROB-12、PROB-19、PROB-26～PROB-30 |
-| 未开工（其余） | PROB-24、PROB-25 |
+这些是历史轮次实际跑过的闸门，作为证据保留；不代表当前状态。
 
-2026-09-04 第一轮固定闸门：`npm run type-check` 0 errors / 0 warnings；`npm test` 100 files / 683 passed；`npm run build` 成功；`git diff --check` 通过。独立 Reviewer 对 PROB-02/08/16/21/22 五条改动逐项复核后判定 **PASS**，findings 为空；`git status --short --untracked-files=all` 确认工作树只有 12 个已跟踪文件被修改、无未跟踪产物。该轮未运行部署、`smoke-test.mjs`、`chrome-regression.mjs` 与浏览器套件；PROB-02 的弹窗默认值未做真机目视确认（Reviewer 判定不阻断）。
+- **2026-09-03 核对轮**：未运行 `type-check` / `npm test` / `build` / `perf:audit` / 浏览器套件，也未执行 git、部署或 GitHub 写操作。该轮所有「已实现」结论均为静态源码证据。
+- **2026-09-04 第一轮**（PROB-02/08/16/21/22）：`npm run type-check` 0 errors / 0 warnings；`npm test` 100 files / 683 passed；`npm run build` 成功；`git diff --check` 通过。独立 Reviewer 逐条复核判定 **PASS**，findings 为空。未运行部署、`smoke-test.mjs`、`chrome-regression.mjs` 与浏览器套件；PROB-02 的弹窗默认值未做真机目视确认。
+- **2026-09-04 第二轮**（PROB-20 方案 1 + PROB-18 方案 B）：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 101 files / 689 passed；`npm run build` 成功；`git diff --check` 通过。新增 devDependencies `@testing-library/svelte`、`jsdom`。未运行部署、`smoke-test.mjs`、`chrome-regression.mjs`、`perf:audit` 与匿名枚举探针。
 
-2026-09-04 第二轮（PROB-20 方案 1 + PROB-18 方案 B）固定闸门：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 101 files / 689 passed；`npm run build` 成功；`git diff --check` 通过。该轮新增 devDependencies（`@testing-library/svelte`、`jsdom`），未运行部署、`smoke-test.mjs`、`chrome-regression.mjs`、`perf:audit` 与匿名枚举探针。
-
-PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登记的条目。
-
-已完成条目保留在原位置，只在条目内追加「处理结果」行；不删除，便于回溯当初的证据与判断。
+PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登记的条目。已完成条目保留在原位置并追加「处理结果」行，不删除，便于回溯当初的证据与判断。
 
 ---
 

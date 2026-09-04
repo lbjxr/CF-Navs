@@ -1,0 +1,15 @@
+name: 💡 功能建议 / 优化想法
+description: 有什么可以让项目变得更好用的想法？
+title: "[Feature]: 简短描述你的新功能想法"
+labels: ["type: feature"]
+body:
+  - type: textarea
+    id: feature-idea
+    attributes:
+      label: 🚀 你的想法或痛点是什么？
+      description: 请用大白话描述，你希望增加什么功能，或者目前什么操作让你觉得很麻烦？最好可以有个截图加上标记说明
+      placeholder: |
+        我觉得现在的...用起来有点麻烦，如果能增加一个...的功能就太好了。
+        这个功能的使用场景是：...
+    validations:
+      required: true

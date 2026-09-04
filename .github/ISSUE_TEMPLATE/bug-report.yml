@@ -1,0 +1,24 @@
+name: 🐛 Bug 反馈
+description: 遇到程序报错、功能异常或显示错误？请告诉我。
+title: "[Bug]: 简短描述你遇到的问题"
+labels: ["type: bug"]
+body:
+  - type: textarea
+    id: screenshot-or-log
+    attributes:
+      label: 🔀 复现步骤与截图 / 报错日志
+      description: 请简单描述怎么会触发这个 Bug（如果是 UI 问题，可以直接把截图拖到这里）。
+      placeholder: |
+        1. 鼠标点击了...
+        2. 结果出现了...
+        3. 控制台报错信息或截图：
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 💻 运行环境（可选）
+      placeholder: 例如：Chrome 浏览器 / 手机 Safari
+    validations:
+      required: false
