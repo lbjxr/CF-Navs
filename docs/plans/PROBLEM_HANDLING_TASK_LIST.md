@@ -122,16 +122,19 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 | 验证 | 重新读取 `issue://lbjxr/CF-Navs/?state=open` 并与表格逐行对照 |
 | 处理结果 | 快照日期改为 2026-09-03，Open 数量 5 → 6，表格补入 #15 行（用上面 `gh` 核到的精确 UTC 时间），范围句改为「#9—#13 与 #15」，并新增一段说明 #15 未获实现承诺、未分配 R 编号、兼容边界待澄清，指向 PROB-25 与 REQ-12 |
 
-### PROB-07（P1）平台优化的「剩余真机验收 S1」可能已被后续冒烟覆盖但未回写
+### PROB-07（P1，已完成）平台优化的「剩余真机验收 S1」可能已被后续冒烟覆盖但未回写
 
 | 项 | 内容 |
 | --- | --- |
-| 来源映射 | `S1`；`docs/plans/PLATFORM_OPTIMIZATION_PLAN.md:868`；`docs/plans/DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md:342`、`:348` |
-| 冲突 | `PLATFORM_OPTIMIZATION_PLAN.md:868` 仍写「跑一次 `scripts/smoke-test.mjs`，确认第 347 行『登出后 token 失效 → 401』现在通过（这条断言自 `a296e74` 起一直是失败的）」；但 `DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md:342`/`:348` 记录 2026-08-30 已补跑 `smoke-test.mjs` 并 **75/75 全绿** |
-| 源码事实 | 该断言现位于 `scripts/smoke-test.mjs:365`（`登出 code=0` 在 `:363`），**不是** `:347`；即计划文档引用的行号也已漂移 |
+| 来源映射 | `S1`；`docs/plans/PLATFORM_OPTIMIZATION_PLAN.md` 第八节「剩余的真机验收清单」的 S1 条与 S1 完成记录；`docs/plans/DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md` 的冒烟补跑记录 |
+| 冲突 | `PLATFORM_OPTIMIZATION_PLAN.md` 的 S1 验收条仍写「跑一次 `scripts/smoke-test.mjs`，确认第 347 行『登出后 token 失效 → 401』现在通过（这条断言自 `a296e74` 起一直是失败的）」；但 `DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md` 记录 2026-08-30 已补跑 `smoke-test.mjs` 并 **75/75 全绿** |
+| 源码事实 | 该断言在 `scripts/smoke-test.mjs` 的「登出」小节（紧跟 `登出 code=0`），**不在**文档引用的第 347 行；计划文档的裸行号引用已漂移，违反 `CONTRIBUTING.md` 第 3 节 |
 | 影响 | 一条安全相关的遗留验证同时被标为「未闭环」和「已全绿」，无法据文档判断真实状态 |
-| 处理动作 | 重跑 `scripts/smoke-test.mjs` 确认该断言当前结果，然后在 `PLATFORM_OPTIMIZATION_PLAN.md:868` 标注闭环或保留，并修正行号引用 |
+| 处理动作 | 重跑 `scripts/smoke-test.mjs` 确认该断言当前结果，然后在 `PLATFORM_OPTIMIZATION_PLAN.md` 第八节的 S1 条标注闭环或保留，并修正行号引用 |
 | 验证 | `node scripts/smoke-test.mjs`（需可用本地 D1），记录该条断言与总数 |
+| 处理结果 | 断言**当前通过**，冲突按「已闭环」裁定。`PLATFORM_OPTIMIZATION_PLAN.md` 改三处：S1 完成记录里的 `scripts/smoke-test.mjs:347` 改为按断言名引用；「待真机复核」段改写为已闭环记录，并写明本地 `wrangler dev` 的 KV 是单进程模拟、只覆盖同 isolate 读己所写；第八节的 S1 条划掉并标注闭环，把跨 isolate 撤销窗口与 KV 写失败语义明确移交 PROB-19。三处都不再写裸行号 |
+| 验证结果 | 备份并清空 `.wrangler/state/v3/d1` → `npm run db:init` → `npm run dev`（本地 `127.0.0.1:8787`，凭据取 `.dev.vars` 的 `INIT_ADMIN_USER` / `INIT_ADMIN_PASSWORD`，未写入任何被跟踪文件）→ `node scripts/smoke-test.mjs`：**通过 75 / 75，exit 0**。`登出 code=0` 与 `登出后 token 失效 → 401` 两条均为 `✓`。这是本轮首次真实执行 L1，此前所有「75/75」结论都只有文档记载 |
+| 未验证 | 跨 isolate 撤销延迟（≤15 秒）与 KV 写失败静默：本地模拟 KV 不复现最终一致性，属 PROB-19 |
 
 ### PROB-08（P2，已完成）设置字段缺少字段名级的契约说明
 

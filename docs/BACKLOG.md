@@ -31,7 +31,6 @@
 | ID | 类型 | 优先 | 事项 | 详情 |
 | --- | --- | --- | --- | --- |
 | PROB-19 | 安全 | P1 | 跨 isolate 登出撤销的生效窗口与 KV 写失败静默，需真实环境故障注入；同时决定失败时是否还返回纯成功 | PH PROB-19 |
-| PROB-07 | 验证欠账 | P1 | 跑一次 `scripts/smoke-test.mjs` 确认「登出后 token 失效 → 401」的真实结果，并修正计划文档里过期的引用 | PH PROB-07 |
 | PROB-13 | 验证欠账 | P1 | 部署后完成剩余 7 组真机验收（`L1`/`L3`/`L4`/`S3`/`S3 导入提示`/`S4`/`U1–U4`）。iOS 输入放大项必须真实 iOS Safari，隔离 Chrome 不能替代 | PH PROB-13 |
 | PROB-14 | 验证欠账 | P1 | 部署后在生产自定义域实测部分导出下载与 replace/merge 导入，再决定是否向 #9 征询原作者确认（**回帖需单独授权**） | PH PROB-14 |
 | PROB-15 | 验证欠账 | P1 | 隔离临时 Chrome 直接导航 `/admin`，确认首页不会短暂挂载，采集 console / pageException / failedRequests | PH PROB-15 |

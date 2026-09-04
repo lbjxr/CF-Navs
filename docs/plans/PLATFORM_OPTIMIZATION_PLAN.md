@@ -244,7 +244,7 @@ authRoutes.post('/logout', authRequired, async (c) => {
 
 **完成记录**
 
-**这个 bug 有直接证据**：`scripts/smoke-test.mjs:347` 从第一个提交 `4d8fff6` 起就断言「登出后 token 失效 → 401」。`a296e74` 把会话从 KV 改成无状态 JWT 并同时删掉了 `session.ts` 里的 KV 写入，这条断言从那一刻起就一直是失败的。CI（`.github/workflows/ci.yml`）只跑 type-check / 单测 / build，不跑需要线上部署和凭据的冒烟测试，所以没人发现。计划里原本要"新增"的冒烟断言其实早就存在，本轮不需要加——真正缺的是把它搬进 CI 能跑的单测。
+**这个 bug 有直接证据**：`scripts/smoke-test.mjs` 登出小节的断言「登出后 token 失效 → 401」从第一个提交 `4d8fff6` 起就存在。`a296e74` 把会话从 KV 改成无状态 JWT 并同时删掉了 `session.ts` 里的 KV 写入，这条断言从那一刻起就一直是失败的。CI（`.github/workflows/ci.yml`）只跑 type-check / 单测 / build，不跑需要本地 D1 与运行实例的冒烟测试，所以没人发现。计划里原本要"新增"的冒烟断言其实早就存在，本轮不需要加——真正缺的是把它搬进 CI 能跑的单测。
 
 实现落在 `worker/lib/sessionRevocation.ts`：
 
@@ -263,7 +263,7 @@ authRoutes.post('/logout', authRequired, async (c) => {
 
 验证：`npm run type-check` 0 error / 0 warning；`npm test` **526 passed / 82 files**；`npm run build` 成功；`git diff --check` 干净。
 
-**待真机复核**：KV 是最终一致的，冒烟测试里 logout 紧接着的那个请求依赖写入 colo 的读己所写。部署后跑一次 `npm run regression:chrome` 或冒烟测试确认第 347 行断言现在通过。
+**已闭环（2026-09-04，PROB-07）**：本地隔离实例上跑通。清空 `.wrangler/state/v3/d1` → `npm run db:init` → `npm run dev`（`127.0.0.1:8787`）后执行 `node scripts/smoke-test.mjs`，**75 / 75 全绿**，其中 `登出 code=0` 与 `登出后 token 失效 → 401` 两条都通过。这证明的是**同 isolate 读己所写**路径：本地 `wrangler dev` 的 KV 是单进程模拟，不复现 KV 最终一致性。跨 isolate 的 ≤15 秒撤销窗口与 KV 写失败静默仍未验证，单列为 PROB-19。原先此处引用的「第 347 行」行号已漂移，改按断言名引用。
 
 ### S2 — 图标代理缓存键归一化（P1）
 
@@ -865,7 +865,7 @@ S3 走了两轮。第一轮实现 `'unsafe-inline'` 后逐条核对隐患，发�
 - **L1**：二次访问首页时网络面板不出现 `/api/install/status`；清掉 localStorage 后首次访问仍出现一次。
 - **L3**：首次访问结束后 Cache Storage `cf-navs-v15` 中存在 `index-*.js` 与 `index-*.css`；第二次访问这两个请求来源标记为 ServiceWorker。
 - **L4**：二访首屏不等网络即可绘制；部署新版本后第一次打开出现「已检测到新版本」提示；离线时仍能打开。
-- **S1**：跑一次 `scripts/smoke-test.mjs`，确认第 347 行「登出后 token 失效 → 401」现在通过（这条断言自 `a296e74` 起一直是失败的）。
+- ~~**S1**：跑一次 `scripts/smoke-test.mjs`，确认「登出后 token 失效 → 401」现在通过。~~ **已闭环（2026-09-04，PROB-07）**：本地隔离实例 75/75 全绿，见 S1 完成记录。剩下的跨 isolate 撤销窗口与 KV 写失败语义单列为 PROB-19，不在本清单。
 - **S3**：后台填一段自定义 JS（例如 `console.log('ok')`），确认它真的执行且控制台无 CSP 违规——`blob:` 在 `script-src` 下的行为单测环境验证不了。再切换一次主题，确认脚本**不会**重复执行。
 - **S3 导入提示**：导出一份含自定义 JS 的备份再导入，确认覆盖确认弹窗里出现「这份备份还包含 自定义 JS（… KB…）」且换行正常。
 - **S4**：给一个允许被嵌入的站点建书签、打开方式设为「当前页弹层」，确认弹层内正常渲染。
