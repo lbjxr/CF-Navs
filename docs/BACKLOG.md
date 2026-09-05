@@ -2,27 +2,27 @@
 
 > **这是内部工作项的唯一状态源。** 用户可见的缺陷与功能需求以 GitHub Issue 的开闭状态为准，安全问题按 [SECURITY.md](../SECURITY.md) 处理，不开公开 Issue。规则见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
 >
-> - 更新日期：2026-09-04；基线：`develop`。
+> - 更新日期：2026-09-05；基线：`develop`。
 > - 只列**未完成**条目。完成后从本表删除，成果记入 `CHANGELOG.md`，证据与判断留在 `plans/` 的决策记录里。
-> - 编号沿用既有 `PROB-NN` / `REQ-NN`，不重新分配。`PROB-18b`、`PROB-20b` 这类后缀表示同一编号的后续阶段。
+> - 编号沿用既有 `PROB-NN` / `REQ-NN`，不重新分配。`PROB-18c`、`PROB-20c` 这类后缀表示同一编号的后续阶段。
 > - 「详情」列指向决策记录：`PH` = [问题处理任务清单](plans/PROBLEM_HANDLING_TASK_LIST.md)，`RD` = [需求开发任务清单](plans/REQUIREMENT_DEVELOPMENT_TASK_LIST.md)。那两份文档**不再维护状态**，只保留证据。
 
 ## 1. 无阻塞，可直接开工
 
 | ID | 类型 | 优先 | 事项 | 下一步 | 详情 |
 | --- | --- | --- | --- | --- | --- |
-| PROB-18b | 技术债 | P2 | 源码文本断言文件迁到组件层 | 增量做：每次迁一个文件，删掉被真实 DOM 断言取代的那几条。**已迁 9 个**（2026-09-05 两轮：`adminEmptyStateMarkup` → `adminEmptyState` 整文件退役、`adminMobileLayout` 截断断言 → `adminMobileTruncation`、`uiComponents` 原地改真 DOM、`categoryCollapseMarkup` → `categoryCollapseBehavior`、`adminSettingsLayout` → `adminSettingsBehavior`、`adminBookmarkLayout` → `adminBookmarkBatchBehavior`、`navigationLayout` → `topNavigationSubmenu`、`homeFloatingActions` 滚动断言原地改行为、`confirmationFlow` 弹层断言 → `confirmDialogBehavior`）。剩余 24 个含 `readFileSync` 的文件**已逐个在文件开头注明保留理由**，分三类：jsdom 不做布局/不评估媒体查询的样式契约、没有可挂载对象的目标（`scripts/*.mjs`、`public/sw.js`、`worker/index.ts`、模块导出面）、需要先挂载约 1100 行 `App.svelte` 的接线与语句顺序断言（属 PROB-24）。**下一步只剩按需推进**：新增交互时直接写组件测试，不再批量迁移 | PH PROB-18 |
+| PROB-26 | 追溯 | P2 | 为已关闭 #8 的两项已实现诉求建立追溯 | 已裁定（2026-09-05，建立追溯）。改 `GITHUB_ISSUES_REQUIREMENTS.md` 三处（按小节定位，行号已漂移）：§1.2 的排除句改为「Closed Issue 不新立 R 编号，但已实现的诉求要在 §8 建立追溯」、§3 总表 R-08 来源列补 #8、§8 新增 #8 追溯（部分导出 → R-08；顶部导航分行 → `PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md` + `src/components/Sidebar.svelte`），并注明 #8 的 `bug-fixed` 只对应侧栏滚动条那一条。**只改本地文档，不动云端 #8** | PH PROB-26 |
+| PROB-04 | 需求对齐 | P3 | 配色分区去掉模块顶层说明，分组名收敛 | 已裁定（2026-09-05，方案 a）。改 `src/components/settings/GradientPresetSelector.svelte`（按内容定位）：删 `.gradient-preset-header` 里的 `内置配色方案` 标题与紧随的说明段落；`presetGroups` 的 `毛玻璃氛围` → `毛玻璃`（`护眼纯色` 不变）；两组 `hint` 从 `.gradient-preset-group-title` 的内联 `<span>` 移进 hover 的 `title`；header 右侧「自定义 / 已选方案」是选中态反馈，保留。验证挂载组件写行为断言，**不新增源码文本断言** | PH PROB-04 |
+| PROB-30 | 技术债 | P3 | 无预设时的 accent 回退值提为命名常量并加注释 | 已裁定（2026-09-05，方案 a：保留取值 + 注释）。`src/lib/appData.ts` 的 `buildHomeBackground` 里 `accentColor` 无预设回退分支的 `#7dd3fc` / `#2563eb` 提成命名常量，注明只在无预设时生效、与 22 套预设 accent 无继承关系、`#7dd3fc` 与 `ocean-depths` 的 `darkAccent` 同值属巧合。**不改渲染结果、不新增测试**。残余风险：自定义背景同色系时焦点环对比度不足，真正解法是「让自定义背景也能配 accent」，需单独立项 | PH PROB-30 |
 | PROB-24 | 技术债 | P3 | `src/App.svelte` 按 use case 收敛编排职责 | **只在后续修改认证 / CRUD / 弹窗流程时顺带做**，不单独开一轮重构 | PH PROB-24 |
 
 ## 2. 需要裁定
 
-| ID | 类型 | 优先 | 待裁定的问题 | 详情 |
-| --- | --- | --- | --- | --- |
-| PROB-26 | 需裁定 | P2 | 已关闭的 #8 要不要建立追溯，还是明确「Closed Issue 不建立追溯」？ | PH PROB-26 |
-| PROB-04 | 需裁定 | P3 | 配色分区的模块顶层说明算不算 `FR-B1` 范围？分组名要不要收敛成 `FR-B2` 写的「毛玻璃」？ | PH PROB-04 |
-| PROB-30 | 需裁定 | P3 | 自定义背景（无预设）时 accent 仍回退为固定冷蓝。保留并加注释、改中性色，还是让自定义背景也能配 accent？ | PH PROB-30 |
+当前没有待裁定条目。
 
-> 2026-09-04 已裁定并落地：PROB-03 / PROB-27（保持现状，回写文档）、PROB-11（移动端收进「更多操作」菜单）、PROB-12（回写文档，确认浮动操作行）、PROB-28（下限继续下调到 40 px）、PROB-29（改写为「无非法目标 + 逐项后果提示」）。各条的裁定与处理结果见 PH 对应条目，遗留的真机验证见下一节。
+> 2026-09-04 已裁定并落地：PROB-03 / PROB-27（保持现状，回写文档）、PROB-11（移动端收进「更多操作」菜单）、PROB-12（回写文档，确认浮动操作行）、PROB-28（下限继续下调到 40 px）、PROB-29（改写为「无非法目标 + 逐项后果提示」）。
+>
+> 2026-09-05 已裁定、**待实现**（见第 1 节）：PROB-26（建立追溯）、PROB-04（方案 a：删模块顶层说明 + 分组名收敛成「毛玻璃」）、PROB-30（方案 a：保留 accent 回退值并加注释）。各条的裁定依据与待实现动作见 PH 对应条目。
 
 ## 3. 需要运行环境或部署后才能闭环（L1 / L3）
 
