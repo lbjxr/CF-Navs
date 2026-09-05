@@ -287,7 +287,54 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - 夹具教训：第一版把标题设成恰好 20 字素，而访问分析的阈值就是 20 —— `truncateUnicodeText` 在「长度 <= 阈值」时原样返回，导致那条断言假失败。改成 24 字素并注明为什么不能贴边取值
 - 验证：`npx vitest run` 106 files / 740 passed；`npm run type-check` 0 errors / 0 warnings；`npm run build` 成功
 
-**进度**：已迁 2 个文件，仍有 25 个含 `readFileSync` 的测试文件（第 2 个迁移只搬走部分断言，原文件仍在，所以计数从 25 变 25）。
+**第 3 个（2026-09-05）：`uiComponents.test.ts` 原地改成真 DOM 断言（`d901f45`）**
+
+- 原文件断言 `toContain('role="switch"')`、`toContain('dispatch(\'change\', checked)')` 一类。新版挂载 Switch / Tooltip / InputGroup / Slider，断言 `aria-checked` 随点击翻转、`change` 事件载荷、tooltip 的 portal 落在 `document.body`、Slider 的数字输入与滑块双向同步
+- 反向对照：去掉 `handleKeydown` 的 disabled 守卫，测试仍绿——因为 jsdom 对 disabled 按钮仍派发 click，而 Switch 有两道防线（`handleKeydown` 与 `toggle` 各自检查）。两道都去掉才红。已在文件里注明这属 defense-in-depth，不是空转断言
+
+**第 4 个（2026-09-05）：`categoryCollapseMarkup.test.ts` 后两组 → `categoryCollapseBehavior.test.ts`（`10b039d`）**
+
+- 迁的是后台分类面板与左侧导航的折叠行为：默认收起、点箭头独立展开、搜索时自动展开命中组且可单独收起、换关键词重置手动收起状态、当前选中子分类时自动展开父级路径
+- 原文件保留第一组（Home 传给 CategorySection 的 prop、`sortableList` 的 `filter` 选项、卡片网格 CSS 变量与断点）——那些是跨组件接线与样式，挂载单组件读不到
+
+**第 5 个（2026-09-05）：`adminSettingsLayout.test.ts` 部分 → `adminSettingsBehavior.test.ts`（`4eed21f`）**
+
+- 16 条真 DOM 断言：六个分区互斥切换、控件到 payload 的实际写入、未改动时保存按钮禁用（防空提交覆盖线上设置）、高级设置展开/收起、卡片风格与尺寸控件的置灰联动、导航位置与「常驻展开」的联动
+- **写测试时发现的真缺陷**：尺寸控件的 `min` / `max` 是硬编码字面量，与 `shared/settings.ts` 的归一化区间是两份独立常量，调整裁定值时 UI 与服务端会分叉。已改为引用 `CARD_SIZE_LIMITS` / `CARD_ICON_SIZE_LIMITS`，PROB-28 的 40 px 裁定值由此单点化
+- 夹具教训：`DEFAULT_SETTINGS` 在 `worker/lib/settingsData`，**不在** `shared/settings`。从后者导入拿到的是 `undefined`，`{ ...undefined, site_title: 'X' }` 静默退化成只有一个字段的对象，而 `createSettingsFormState` 又把默认值补齐，于是大部分断言照样通过——一个引用不存在导出的测试文件看起来是绿的
+
+**第 6 个（2026-09-05）：`adminBookmarkLayout.test.ts` 部分 → `adminBookmarkBatchBehavior.test.ts`（`b369865`）**
+
+- 8 条真 DOM 断言：工具条按选中状态出现/消失且不在滚动容器内、批量删除交出选中 id、批量移动默认落在多数分类、私密目标出现 `role="status"` 后果提示、公开目标不出现、确认后把分类与位置一起交给回调
+- 反向对照：默认目标退回首个选中项、工具条永不渲染、摘掉私密提示，各自精确失败。提示里的计数语义（已在私密分类里的书签不计入「移入后隐藏」）留在纯函数层 `adminListState.test.ts`，那里已有对应断言
+- 原文件只留一条 CSS：`grid-template-rows`、`z-index`、`env(safe-area-inset-bottom)` 偏移
+
+**第 7 个（2026-09-05）：`navigationLayout.test.ts` 部分 → `topNavigationSubmenu.test.ts`（`e1b55a9`、`375900b`）**
+
+- 13 条真 DOM 断言：子菜单开合、子项列表、选中后上报导航目标并收起、无子分类的顶部项不弹菜单、键盘触发（`detail === 0`）把焦点送进首项而鼠标点击不抢焦点、方向键循环与 Home/End、Escape 关闭并归还焦点、点浮层外关闭而点内部不关、打开的父分类从分类树消失或失去子项后菜单跟着关
+- 删掉三条钉实现标识符的断言：拖动时的局部 `track` 变量名、焦点跳转的源码行、无子项守卫
+- 「打开的父分类消失」这条只有在模板守卫与响应式清理**都**去掉时才红，两道防线互为兜底，已在文件里说明
+
+**关键环境修复（2026-09-05，`375900b`）：Svelte 的 `browser` 解析条件**
+
+- Svelte 4 的 `exports["."]` 只在 `browser` 条件下指向 `src/runtime/index.js`，否则落到 `src/runtime/ssr.js`，而那里的 `onMount` 是空实现。Vitest 默认不带 `browser` 条件，于是**所有组件在 `onMount` 里注册的监听器在测试中全部不存在**
+- 用 `addEventListener` spy 加直接 dispatch 在两个独立组件上双向确认：Sidebar 的 document `keydown`/`pointerdown` 从未触发，HomeFloatingActions 从未注册 scroll 监听
+- `vite.config.ts` 在 test 模式补 `resolve.conditions: ['browser']`（生产构建本来就命中 browser）。这直接解锁了此前被判定「jsdom 不可达」的交互：Escape 关闭、点外部关闭、滚动显隐
+- 教训：把「测试里观察不到」直接当成「jsdom 能力不足」会写出错误的不可迁移结论。先验证运行时解析条件，再下判断
+
+**第 8 个（2026-09-05）：`homeFloatingActions.test.ts` 的滚动断言原地改成行为（`375900b`）**
+
+- 回到顶部按钮在页面顶部不渲染、越过偏移后出现、滚回顶部再次收起、点击把窗口滚到 0、`prefers-reduced-motion` 下从 `smooth` 换成 `auto`
+- 删掉一条假装检查监听清理的用例：把 `removeEventListener` 删掉它照样绿——组件销毁后 DOM 本来就没了，而 jsdom 不提供枚举监听器的 API
+
+**第 9 个（2026-09-05）：`confirmationFlow.test.ts` 的弹层断言 → `confirmDialogBehavior.test.ts`（`a340b20`）**
+
+- 原断言把函数体连缩进一起钉进 `toContain`，改个格式就红，却证明不了禁用态行为。8 条真 DOM 断言覆盖：关闭态不渲染、`alertdialog` 同时接入标题与后果说明、确认/取消各自只触发自己的回调、Enter/Escape 等价于两个按钮、处理中两个按钮都禁用且点击与键盘都不再触发、确认被禁用时取消仍可用、点遮罩等于取消、关闭态不响应 Enter
+- 反向对照：摘掉 loading 守卫、绕过 `confirmDisabled`、关闭态仍响应键盘、把取消与确认一起禁用，四个变异各自精确失败
+
+**注记（2026-09-05，`3367674`）**：13 个仍保留源码文本断言的文件在开头写明断言对象与不迁移的理由，分三类——jsdom 不做布局/不评估媒体查询的样式契约；没有可挂载对象的目标（`scripts/*.mjs`、`public/sw.js`、`worker/index.ts`、模块导出面）；接线与语句顺序断言（需要先挂载约 1100 行的 `App.svelte`，属 PROB-24 的拆分前置）。`chromeRegressionCleanup.test.ts` 刻意保留：它用 `not.toContain` 禁掉按进程名批量结束浏览器的写法，脚本源码文本正是恰当的证据面
+
+**进度**：本轮迁 7 个文件（累计 9 个），并修掉一个让所有 `onMount` 监听在测试中失效的解析条件缺陷。当前 111 个测试文件 / 812 条断言，其中 11 个是 jsdom 组件测试；仍有 24 个文件含 `readFileSync`，全部已注明保留理由
 
 ---
 

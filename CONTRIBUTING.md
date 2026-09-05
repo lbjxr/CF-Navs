@@ -71,6 +71,9 @@
 - 要测行为**先抽纯函数**再单测。组件的 DOM 行为（焦点、ARIA、键盘、禁用联动）用 `@testing-library/svelte` + jsdom 写组件测试，文件首行加 `// @vitest-environment jsdom`，不改全局测试环境。
 - 计算样式、`dvh` 与安全区、虚拟键盘、剪贴板用户手势、iOS 输入放大 **jsdom 证明不了**，只能进 L3。不要用源码文本断言假装覆盖了它们。
 - 源码文本断言（`readFileSync` + `toContain`）只用于"接线是否存在"，不用于证明行为。
+- 组件测试依赖 `vite.config.ts` 在 test 模式下的 `resolve.conditions: ['browser']`。Svelte 4 的 `exports["."]` 只在 `browser` 条件下给出真实运行时，否则落到 SSR 版本，那里的 `onMount` 是空实现——组件在 `onMount` 里注册的 `window` / `document` 监听器会**静默不存在**。不要删掉这项配置。
+- 断言「观察不到某个行为」时，先确认不是运行时解析或缺失的浏览器 API（`scrollIntoView`、`matchMedia`、`scrollTo` 在 jsdom 里都需要自己补），再下「jsdom 做不到」的结论。把环境问题写成不可迁移结论会留下错误的判断记录。
+- 新写的组件测试要做一次反向对照：改坏被测行为，确认对应用例精确失败。若两道防线互为兜底（去掉任一条都不红），在文件里注明这是 defense-in-depth，不要因此删掉断言。
 
 ## 5. 任务状态放在哪里
 

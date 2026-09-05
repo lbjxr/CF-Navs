@@ -10,6 +10,23 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 组件测试层收尾：7 个文件迁到真实 DOM，并修掉让 `onMount` 在测试中失效的解析条件（PROB-18b）
+
+- **`vite.config.ts` 的 `resolve.conditions`**：Svelte 4 的 `exports["."]` 只在 `browser` 条件下指向 `src/runtime/index.js`，否则落到 `src/runtime/ssr.js`，而那里的 `onMount` 是空实现。Vitest 默认不带 `browser` 条件，于是**所有组件在 `onMount` 里注册的监听器在测试中根本不存在**。用 `addEventListener` spy 加直接 dispatch 在 Sidebar 与 HomeFloatingActions 上双向确认后，在 test 模式补上 `resolve.conditions: ['browser']`（生产构建本来就命中 browser）。这直接解锁了此前被误判为「jsdom 能力不足」的交互：Escape 关闭、点外部关闭、滚动显隐。
+- `uiComponents.test.ts` 原地改成真 DOM：挂载 Switch / Tooltip / InputGroup / Slider，断言 `aria-checked` 随点击翻转、`change` 事件载荷、tooltip 的 portal 落在 `document.body`、Slider 的数字输入与滑块双向同步。
+- 新增 `categoryCollapseBehavior.test.ts`：后台分类面板与左侧导航的折叠——默认收起、点箭头独立展开、搜索时自动展开命中组且可单独收起、换关键词重置手动收起状态、选中子分类时自动展开父级路径。
+- 新增 `adminSettingsBehavior.test.ts` 16 条：六个分区互斥切换、控件到 payload 的实际写入、未改动时保存按钮禁用（防空提交覆盖线上设置）、高级设置展开/收起、卡片风格与尺寸控件的置灰联动、导航位置与「常驻展开」的联动。
+- 新增 `adminBookmarkBatchBehavior.test.ts` 8 条：工具条按选中状态出现/消失且不在滚动容器内、批量删除交出选中 id、批量移动默认落在多数分类、私密目标出现 `role="status"` 后果提示、公开目标不出现、确认后把分类与位置一起交给回调。
+- 新增 `topNavigationSubmenu.test.ts` 13 条：子菜单开合与子项列表、选中后上报导航目标并收起、无子分类的顶部项不弹菜单、键盘触发把焦点送进首项而鼠标点击不抢焦点、方向键循环与 Home/End、Escape 关闭并归还焦点、点浮层外关闭而点内部不关、打开的父分类从分类树消失或失去子项后菜单跟着关。
+- 新增 `confirmDialogBehavior.test.ts` 8 条：`alertdialog` 同时接入标题与后果说明、确认/取消各自只触发自己的回调、Enter/Escape 等价于两个按钮、处理中两个按钮都禁用且点击与键盘都不再触发、确认被禁用时取消仍可用、点遮罩等于取消、关闭态不响应 Enter。原断言把函数体连缩进一起钉进 `toContain`，改个格式就红却证明不了禁用态。
+- `homeFloatingActions.test.ts` 的滚动断言改成行为：顶部不渲染、越过偏移后出现、滚回顶部再收起、点击滚到 0、`prefers-reduced-motion` 下从 `smooth` 换成 `auto`。
+- **顺带修掉一个真缺陷**：设置页尺寸控件的 `min` / `max` 是硬编码字面量，与 `shared/settings.ts` 的归一化区间是两份独立常量，调整裁定值时 UI 与服务端会分叉。改为引用 `CARD_SIZE_LIMITS` / `CARD_ICON_SIZE_LIMITS`，PROB-28 的 40 px 裁定值由此单点化。
+- **删掉两条空转断言**，没有改写成钉新文本：拖动时局部 `track` 变量名那条钉的是写法；HomeFloatingActions 那条假装检查监听清理——删掉 `removeEventListener` 它照样绿，因为组件销毁后 DOM 本来就没了，而 jsdom 不提供枚举监听器的 API。
+- 每个新套件都做了反向对照（共 15 个变异点，逐一确认精确失败）。其中两处确认为 defense-in-depth 而非空转：Switch 的 disabled 双守卫、顶部子菜单的模板守卫 + 响应式清理，都要两道一起去掉才红，已在文件里写明。
+- 剩余 24 个含 `readFileSync` 的文件**逐个在开头注明保留理由**，分三类：jsdom 不做布局/不评估媒体查询的样式契约；没有可挂载对象的目标（`scripts/*.mjs`、`public/sw.js`、`worker/index.ts`、模块导出面）；需要先挂载约 1100 行 `App.svelte` 的接线与语句顺序断言（属 PROB-24）。`chromeRegressionCleanup.test.ts` 刻意保留——它用 `not.toContain` 禁掉按进程名批量结束浏览器的写法，脚本源码文本正是恰当的证据面。
+- 夹具教训：`DEFAULT_SETTINGS` 在 `worker/lib/settingsData` 而**不在** `shared/settings`。从后者导入拿到 `undefined`，`{ ...undefined, site_title: 'X' }` 静默退化成单字段对象，而 `createSettingsFormState` 又补齐默认值——于是一个引用不存在导出的测试文件看起来是绿的。
+- 验证：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 111 files / 812 passed；`npm run build` 成功。
+
 ### 移动端截断契约改用真实 DOM 断言（PROB-18b 第 2 个文件）
 
 - `adminMobileLayout.test.ts` 里那两组断言形如 `toContain('truncateUnicodeText(bookmark.title, 12)')` 与 `toContain('href={bookmark.url}')`：只能证明源码写了这两个调用，证明不了截断后完整值仍然可访问。而这正是 `ADMIN_MOBILE_LAYOUT_PLAN.md` 的硬约束——截断只是视觉手段，完整 `title` / `aria` / `href` 必须保留。

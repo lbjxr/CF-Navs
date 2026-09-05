@@ -11,7 +11,7 @@
 
 | ID | 类型 | 优先 | 事项 | 下一步 | 详情 |
 | --- | --- | --- | --- | --- | --- |
-| PROB-18b | 技术债 | P2 | 源码文本断言文件迁到组件层 | 增量做：每次迁一个文件，删掉被真实 DOM 断言取代的那几条。**已迁 2 个**（2026-09-05：`adminEmptyStateMarkup` → `adminEmptyState` 整文件退役；`adminMobileLayout` 的两组截断断言 → `adminMobileTruncation`，原文件保留 3 组纯 CSS 断言）。仍有 25 个文件含 `readFileSync` + `toContain`，按数量从多到少：`adminSettingsLayout`(155)、`categoryCollapseMarkup`(77)、`uiComponents`(38)、`chromeRegressionCleanup`(29)、`bookmarkCardTheme`(27)、`navigationLayout`(21) 等。**只迁 jsdom 能真实断言的**（DOM 结构、ARIA、禁用联动、条件渲染、截断与完整值保留）；`grid-template-columns`、`padding`、`position`、`env(safe-area-inset)`、媒体查询、`dvh` 这类要 computed style 的留在源码断言里并注明归 `PROB-18c` | PH PROB-18 |
+| PROB-18b | 技术债 | P2 | 源码文本断言文件迁到组件层 | 增量做：每次迁一个文件，删掉被真实 DOM 断言取代的那几条。**已迁 9 个**（2026-09-05 两轮：`adminEmptyStateMarkup` → `adminEmptyState` 整文件退役、`adminMobileLayout` 截断断言 → `adminMobileTruncation`、`uiComponents` 原地改真 DOM、`categoryCollapseMarkup` → `categoryCollapseBehavior`、`adminSettingsLayout` → `adminSettingsBehavior`、`adminBookmarkLayout` → `adminBookmarkBatchBehavior`、`navigationLayout` → `topNavigationSubmenu`、`homeFloatingActions` 滚动断言原地改行为、`confirmationFlow` 弹层断言 → `confirmDialogBehavior`）。剩余 24 个含 `readFileSync` 的文件**已逐个在文件开头注明保留理由**，分三类：jsdom 不做布局/不评估媒体查询的样式契约、没有可挂载对象的目标（`scripts/*.mjs`、`public/sw.js`、`worker/index.ts`、模块导出面）、需要先挂载约 1100 行 `App.svelte` 的接线与语句顺序断言（属 PROB-24）。**下一步只剩按需推进**：新增交互时直接写组件测试，不再批量迁移 | PH PROB-18 |
 | PROB-24 | 技术债 | P3 | `src/App.svelte` 按 use case 收敛编排职责 | **只在后续修改认证 / CRUD / 弹窗流程时顺带做**，不单独开一轮重构 | PH PROB-24 |
 
 ## 2. 需要裁定
