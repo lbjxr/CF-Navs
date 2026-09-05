@@ -1,6 +1,6 @@
 # 本地待办清单
 
-> **这是内部工作项的唯一状态源。** 用户可见的缺陷与功能需求以 GitHub Issue 的开闭状态为准，安全问题按 [SECURITY.md](../SECURITY.md) 处理，不开公开 Issue。规则见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
+> **这是内部工作项的唯一状态源。** 云端已有编号的缺陷与功能需求以 GitHub Issue 的开闭状态为准；本地发起的问题与需求不新开 Issue，状态就在本表。安全问题按 [SECURITY.md](../SECURITY.md) 处理，不开公开 Issue。规则见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
 >
 > - 更新日期：2026-09-05；基线：`develop`。
 > - 只列**未完成**条目。完成后从本表删除，成果记入 `CHANGELOG.md`，证据与判断留在 `plans/` 的决策记录里。
@@ -45,9 +45,9 @@
 
 ## 5. 未获批准的功能需求
 
-这些来自 `plans/FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md`（状态为「需求评估，尚未实现」），**逐项都需要明确批准才可开工**。批准后应开一个 GitHub Issue 承载状态，并从本表移除。
+这些来自 `plans/FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md`（状态为「需求评估，尚未实现」），**逐项都需要明确批准才可开工**。批准后从本表移到第 1 节，状态继续由本表承载。
 
-> `REQ-13`（自定义背景可配置强调色）**不在本表**：它已于 2026-09-05 随 PROB-30 裁定获得批准，列在第 1 节。按本节规则它还缺一个承载状态的 GitHub Issue —— **建 Issue 需单独授权**，尚未创建。
+> **不为本地发起的条目新开 Issue。** GitHub Issue 只承接**云端已有**的报告：由使用者提出、已经存在编号的缺陷与需求。本地开发中发现的问题、自己提出的改进和新增功能，状态一律记在本表，成果记在 `CHANGELOG.md`，决策依据留在 `plans/`。只有当某个本地条目确实对应一个已存在的 Issue 时，才在「详情」列回指那个编号。
 
 | ID | 优先 | 事项 | 前置 | 详情 |
 | --- | --- | --- | --- | --- |

@@ -81,11 +81,11 @@
 
 | 类型 | 状态源 | 说明 |
 | --- | --- | --- |
-| 用户可见的缺陷与功能需求 | **GitHub Issue** | open/closed 就是状态，label 就是分类，milestone 就是发版批次。一个 Issue 只聊一件事 |
-| 内部技术债、文档债、验证欠账、待裁定事项 | **`docs/BACKLOG.md`** | 单一勾选清单，一行一条，含阻塞原因 |
+| 云端已有编号的缺陷与功能需求 | **GitHub Issue** | open/closed 就是状态，label 就是分类，milestone 就是发版批次。一个 Issue 只聊一件事 |
+| 本地发起的问题、改进与新增功能 | **`docs/BACKLOG.md`** | **不为它们新开 Issue。** 本地开发中发现的缺陷、自己提出的改进、内部技术债、文档债、验证欠账、待裁定事项，全部记在这里，一行一条，含阻塞原因 |
 | 安全问题 | **不开公开 Issue** | 见 [SECURITY.md](SECURITY.md)；修复落地后再在变更记录中公开描述 |
 
-- 本地 backlog 条目一旦变成用户能观察到的问题或需求，就开 Issue 并在 backlog 里标注指向；反之不要把内部技术债搬到公开 Issue。
+- **GitHub Issue 只承接云端已有的报告**，不作为本地工作项的容器。本地条目即使后来变成用户可观察的行为改动，也不因此新开 Issue——成果进 `CHANGELOG.md`，随版本 tag 发布。只有当某个本地条目确实对应一个**已存在**的 Issue 时，才在 backlog 的「详情」列回指那个编号，并在该 Issue 的生命周期里闭环。反之也不要把内部技术债搬到公开 Issue。
 - `docs/plans/` 下的文档是**决策记录**：说明当初为什么这么改、哪些约束必须继续遵守。它们**不维护状态**，写完就不再改勾选和进度表。状态一律看 `docs/BACKLOG.md` 或 Issue。
 - 云端 Issue 状态只能通过实时查询确认，不得由本地提交或实现推断。
 
@@ -100,7 +100,7 @@
 5. 在 `develop` 的该提交上打 tag：`git tag -a v0.x.y -m "v0.x.y"`，推送分支与 tag。
 6. 部署（`npm run deploy`），随后验证**生产自定义域**而不只是默认域名。
 7. 执行该版本的 L3 清单，结果回写到 `CHANGELOG.md` 对应版本段或 `docs/BACKLOG.md`。
-8. L3 通过后，手动关闭该版本闭环的 Issue，并在评论里写明版本 tag。关闭前先 `gh auth status` 确认活动账号；**写 Issue 需要单独授权**。
+8. L3 通过后，手动关闭该版本闭环的 Issue，并在评论里写明版本 tag。关闭前先 `gh auth status` 确认活动账号；**写 Issue 需要单独授权**。**这一步只针对云端已有编号的条目**；本地发起的条目没有 Issue，它们的闭环凭据是 `CHANGELOG.md` 对应版本段加该版本的 tag。
 9. （可选，需维护者主动要求）把该版本合并到 `main` 归档：`git checkout main && git merge --no-ff v0.x.y -m "merge: archive v0.x.y into main"`。
 
 这样「线上是哪个版本」= `develop` 上最新的版本 tag；「某个修复上线了吗」= `git tag --contains <sha>`。每一步都需要单独授权：打 tag、推送、部署、关闭 Issue、合并 `main` 都不由一次「发版」指令一并授权。
