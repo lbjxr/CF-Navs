@@ -50,4 +50,22 @@ describe('home responsive layout', () => {
   expect(mobileStyles).toContain("grid-template-areas: 'message message' 'cancel save';")
   expect(mobileStyles).toContain('white-space: normal;')
  })
+
+  it('reserves room on the tab strip for the floating action row', () => {
+    const scope = readFileSync('src/components/HomeCategoryScope.svelte', 'utf8')
+    const mobileStyles = scope.slice(scope.indexOf('@media (max-width: 720px)'))
+
+    // CategorySection 的「新增书签 / 排序」是 position: absolute 浮在分组右上角，不占布局空间。
+    // 子分类标签行占满整宽，标签一多到横向滚动，最右侧的标签就被压在按钮下面，点不到。
+    // 生产实测：操作行宽 180 px，重叠 180 px，只有会滚动的那一组暴露。这里锁住右侧预留。
+    expect(scope).toContain('.category-scope.has-actions .scope-tabs {')
+    expect(scope).toContain('--scope-actions-reserve: 190px;')
+    expect(scope).toContain('padding-right: var(--scope-actions-reserve);')
+    // 键盘与程序化滚动也要把标签停在预留区之外
+    expect(scope).toContain('scroll-padding-inline-end: var(--scope-actions-reserve);')
+
+    // 移动端操作行整体隐藏、标签换到第二行，桌面那份预留在那里只会留一大块空白
+    expect(mobileStyles).toContain('.category-scope.has-actions .scope-tabs {')
+    expect(mobileStyles).toContain('scroll-padding-inline-end: 0;')
+  })
 })

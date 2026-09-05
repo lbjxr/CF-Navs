@@ -10,6 +10,16 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 桌面端子分类标签不再被浮动操作行遮挡
+
+- 「新增书签 / 排序」这一行来自 `CategorySection`，是 `.section-header.no-heading.inline-actions { position: absolute; right: 0; z-index: 2 }` —— 浮在分组右上角，**不占布局空间**（PROB-12 确认过的形态）。而 `HomeCategoryScope` 的子分类标签行占满整宽，于是标签一多到需要横向滚动，最右侧的标签就被压在按钮下面，既看不清也点不到。
+- 生产实测量化：操作行宽 **180 px**，标签行右边界与它重叠 **180 px**。20 个子分类的那一组 `lastTabUnderActions=true`，其余只有 2-3 个子分类的分组标签没占满，所以问题只在标签多时暴露 —— 这解释了为什么之前没被发现。
+- 修法是给标签行预留右侧空间：`.category-scope.has-actions .scope-tabs` 加 `padding-right: 190px`（实测 180 + 10 余量）与 `scroll-padding-inline-end`，让键盘和程序化滚动也把标签停在预留区外。用 padding 而不是缩短容器：滚动条仍是全宽，滚到底时最后一个标签正好落在按钮左侧。
+- 移动端单独还原：那里操作行整体隐藏、标签换到第二行，桌面那份预留只会留一大块空白。
+- 本地实例验证（22 个子分类）：1440 / 1280 / 1100 三档视口下滚到最右端，最后一个标签的右边界都小于操作行左边界（1122 < 1133、1042 < 1053、871 < 881），截图确认标签与按钮之间有清晰间隙。
+- 回归护栏在 `homeResponsiveLayout.test.ts`：删掉 `padding-right` 那行，该用例精确失败。
+- 190 px 依赖「新增书签」「排序」的文案与按钮内边距，改文案时要重新量 —— 这一点写在了 CSS 注释里。
+
 ### 首次生产验收通过，并修掉验收工具自身的六个缺陷
 
 - **`accept:prod` 27/27、`perf:audit` 9/9**，被测构建 `assets/index-E5e6ANTt.js`。基线数字记入 [部署后验收](docs/guides/PRODUCTION_ACCEPTANCE.md) §9，`docs/BACKLOG.md` 第 3 节逐条写明已验证什么、剩下什么。

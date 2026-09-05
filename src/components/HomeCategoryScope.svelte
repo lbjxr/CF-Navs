@@ -448,6 +448,29 @@
     overscroll-behavior-inline: contain;
   }
 
+  /*
+   * 桌面端「新增书签 / 排序」操作行来自 CategorySection，它是
+   * `.section-header.no-heading.inline-actions { position: absolute; right: 0; z-index: 2 }`——
+   * 浮在分组右上角，**不占布局空间**（这是 PROB-12 确认过的形态）。子分类标签行占满整宽，
+   * 于是标签一多到需要横向滚动，最右侧的标签就被压在按钮下面，既看不清也点不到。
+   *
+   * 实测（生产，20 个子分类）：操作行宽 180 px，标签行右边界与它的左边界重叠 180 px，
+   * 只有会横向滚动的那一组出现 `lastTabUnderActions=true`；子分类少的分组标签没占满，
+   * 所以问题只在标签多时暴露。
+   *
+   * 这里按实测宽度预留右侧内边距。用 padding 而不是缩短容器：滚动条仍是全宽，
+   * 用户滚到底时最后一个标签正好落在按钮左侧。`scroll-padding-inline-end` 让键盘与
+   * 程序化滚动也把标签停在预留区之外。
+   *
+   * 190px = 实测 180 + 10 余量。改「新增书签」「排序」的文案或按钮内边距时要重新量，
+   * `tests/unit/homeResponsiveLayout.test.ts` 有一条断言锁住「有操作行就必须有预留」。
+   */
+  .category-scope.has-actions .scope-tabs {
+    --scope-actions-reserve: 190px;
+    padding-right: var(--scope-actions-reserve);
+    scroll-padding-inline-end: var(--scope-actions-reserve);
+  }
+
   .scope-tabs::-webkit-scrollbar {
     height: 6px;
   }
@@ -564,6 +587,12 @@
       margin-right: -1rem;
       padding-right: 1rem;
       scrollbar-width: none;
+    }
+
+    /* 移动端操作行整体隐藏、标签换到第二行，桌面那份预留在这里反而会留一大块空白 */
+    .category-scope.has-actions .scope-tabs {
+      padding-right: 1rem;
+      scroll-padding-inline-end: 0;
     }
 
     .scope-tabs::-webkit-scrollbar {
