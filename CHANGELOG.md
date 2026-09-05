@@ -10,6 +10,17 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 移动端「更多操作」菜单不再溢出屏幕左侧
+
+- 菜单原先是 `position: absolute; right: 0`，右对齐到一个**并不在右边缘**的触发器。移动端 `.scope-title-row` 会换行，三个点按钮紧跟标题文字，标题短的分类里它离视口左边只有 100 px 出头；菜单 `min-width: 10rem`（160 px）一减就把左边缘顶成负值，最左一列被切在屏幕外。
+- 本地 wrangler dev 实例 + 390 px 视口实测复现：「AI服务」的 `trigger.right = 148`、`menu.left = -12`，溢出 12 px。所有短标题分类都中；标题长的只是碰巧把触发器推得够右才没露出来。
+- 改为用 `getAnchoredOverlayPosition`（与顶部导航子菜单同一个 helper）算位置，再换算成相对 `.scope-more` 的偏移——菜单仍是绝对定位，跟随页面滚动，不需要额外的滚动监听。优先左对齐触发器，放不下改右对齐，两侧都放不下就夹到视口边距；窗口 resize 时重算已打开的菜单。
+- 重新构建后在同一实例复验：390 px 下 19 个分类区全部左右零溢出；280 px 下右对齐兜底生效（偏移 `-124px`，`menu.left = 17`）仍在视口内。截图确认菜单完整可见、三个操作齐全。
+- 新增 4 条回归用例（`homeCategoryScopeActions.test.ts`）：桩掉 jsdom 造不出的几何，覆盖左侧挤压、右侧挤压、菜单比视口还宽、以及关闭后按新视口重开四种情形。反向对照：退回固定 `right: 0` 有 4 条失败，漏掉容器偏移换算有 2 条失败。
+- 顺带删掉一处无重量代码：关闭菜单时重置内联 style 没有可观察效果——菜单关闭即从 DOM 移除，重新打开必定重算。
+- 缺陷由 `a7555f4`（移动端把分类三个操作收进「更多操作」菜单）引入。
+- 验证：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 111 files / 816 passed；`npm run build` 成功；L2 本地真实 Chrome 移动端视口仿真。
+
 ### 组件测试层收尾：7 个文件迁到真实 DOM，并修掉让 `onMount` 在测试中失效的解析条件（PROB-18b）
 
 - **`vite.config.ts` 的 `resolve.conditions`**：Svelte 4 的 `exports["."]` 只在 `browser` 条件下指向 `src/runtime/index.js`，否则落到 `src/runtime/ssr.js`，而那里的 `onMount` 是空实现。Vitest 默认不带 `browser` 条件，于是**所有组件在 `onMount` 里注册的监听器在测试中根本不存在**。用 `addEventListener` spy 加直接 dispatch 在 Sidebar 与 HomeFloatingActions 上双向确认后，在 test 模式补上 `resolve.conditions: ['browser']`（生产构建本来就命中 browser）。这直接解锁了此前被误判为「jsdom 能力不足」的交互：Escape 关闭、点外部关闭、滚动显隐。
