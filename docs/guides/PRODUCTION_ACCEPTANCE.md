@@ -28,8 +28,8 @@ npm run type-check && npm test && npm run build
 git push origin HEAD:develop
 
 # 3. 等新版本真正生效（不要凭推送成功就断定线上已更新）
-#    判据是构建产物哈希，不是 /api/data/version——后者返回的是数据版本号，与部署无关
-curl.exe -s "$BASE_URL/" | Select-String -Pattern 'assets/index-[^"]+\.js'
+#    Cloudflare 的 UA 拦截：不带 user-agent 会拿到 403 挑战页，不是站点故障
+curl.exe -s -H "user-agent: Mozilla/5.0 Chrome/152" "$BASE_URL/" | Select-String -Pattern 'assets/index-[^"]+\.js'
 
 # 4. 只读验收
 npm run accept:prod
@@ -43,9 +43,15 @@ npm run perf:audit
 
 第 3 步不能省。Cloudflare 的构建需要时间，推送返回成功只代表 Git 收到了提交。
 
-判断新版本是否已生效的唯一可靠依据是**构建产物哈希**：首页 HTML 里引用的 `assets/index-<hash>.js` 变了，说明新构建已经上线。`/api/data/version` 不能用于此 —— 它返回的是数据版本号（`data_version`，随书签/分类/设置变化），与部署了哪个构建完全无关。本地 `npm run build` 后 `dist/index.html` 里的哈希就是期望值，和线上比对即可。
+**不要拿本地 `dist` 的哈希去等线上出现同一个值。** Cloudflare 在自己的环境重新构建，产物哈希与本机 `npm run build` 的结果不必相同 —— 实测等了 400 秒也等不到：线上哈希确实变了（说明部署已发生），但那是它自己算出来的值。
 
-`npm run accept:prod` 的报告里带 `deployedBundle` 字段，记录本次实际测到的 bundle 文件名。**在旧版本上跑验收会得出与代码无关的结论**，事后靠这个字段能分辨报告对应哪个构建。
+可用的判据，按可靠性排序：
+
+1. **验证改动本身的可观察结果**。这是最强的判据，因为它同时证明了「部署了」和「部署对了」。例如加了一条 CSS 预留，就去线上量那个元素的 `padding-right`。
+2. **线上哈希相对上次验收记录的值变了**。只能说明有新部署，不能说明是哪一次推送。
+3. `/api/data/version` **不能用**：它返回的是数据版本号（`data_version`，随书签/分类/设置变化），与部署了哪个构建完全无关。
+
+`npm run accept:prod` 的报告里带 `deployedBundle`，记录本次实际测到的 bundle 文件名。它的用途是事后分辨「这份报告对应哪个构建」，不是用来和本地比对。
 
 ## 3. 配置
 
@@ -149,7 +155,7 @@ Get-ChildItem $env:TEMP -Directory -Filter 'cf-navs-chrome-profile-*' | ForEach-
 
 ## 9. 首次生产验收基线（2026-09-05）
 
-被测构建 `assets/index-E5e6ANTt.js`。这组数字是后续比较的基线，明显偏离时先怀疑回归。
+首次基线构建 `assets/index-E5e6ANTt.js`；子分类标签预留修复上线后在 `assets/index-CydO-vTL.js` 上复跑，同样 27/27。这组数字是后续比较的基线，明显偏离时先怀疑回归。
 
 | 指标 | 实测 | 阈值 |
 | --- | --- | --- |
