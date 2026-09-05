@@ -124,3 +124,99 @@ describe('HomeCategoryScope 更多操作菜单', () => {
     expect(section).toContain('class:sorting={activeSortMode}')
   })
 })
+
+describe('更多操作菜单的视口夹紧', () => {
+  // 这个触发器紧跟标题、不靠右对齐：移动端标题短的分类里它离视口左边只有 100 px 出头。
+  // 菜单固定 `right: 0` 时，160 px 的最小宽度会把左边缘推到负坐标——真机实测「AI服务」
+  // 在 390 px 视口下 left = -12，菜单最左侧被切在屏幕外。
+  const realRect = Element.prototype.getBoundingClientRect
+  const realOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
+  const realInnerWidth = window.innerWidth
+
+  /** jsdom 不做布局，rect 与 offsetWidth 全是 0；按真机量到的数值喂进去才能测定位算法。 */
+  function stubGeometry(triggerLeft: number, triggerWidth: number, menuWidth: number, viewportWidth: number) {
+    Object.defineProperty(window, 'innerWidth', { value: viewportWidth, configurable: true, writable: true })
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      // `.scope-more` 只包着触发器，两者左边界相同
+      const isAnchor = this.classList.contains('scope-more-trigger') || this.classList.contains('scope-more')
+      const left = isAnchor ? triggerLeft : 0
+      const width = isAnchor ? triggerWidth : 0
+      return {
+        left, right: left + width, top: 200, bottom: 236, width, height: 36,
+        x: left, y: 200, toJSON: () => ({}),
+      } as DOMRect
+    }
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains('scope-more-menu') ? menuWidth : 0
+      },
+    })
+  }
+
+  afterEach(() => {
+    Element.prototype.getBoundingClientRect = realRect
+    if (realOffsetWidth) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', realOffsetWidth)
+    Object.defineProperty(window, 'innerWidth', { value: realInnerWidth, configurable: true, writable: true })
+  })
+
+  /** 菜单相对 `.scope-more` 定位，而容器左边界就是 triggerLeft，因此绝对左边界 = triggerLeft + style.left。 */
+  function menuViewportLeft(triggerLeft: number): number {
+    const style = screen.getByRole('menu').getAttribute('style') ?? ''
+    const offset = Number(/left:\s*(-?\d+(?:\.\d+)?)px/.exec(style)?.[1])
+    expect(Number.isFinite(offset)).toBe(true)
+    return triggerLeft + offset
+  }
+
+  it('触发器靠左时菜单不越过视口左边——这是线上报的缺陷形态', async () => {
+    stubGeometry(112, 36, 160, 390)
+    renderScope()
+
+    await fireEvent.click(moreTrigger())
+
+    const left = menuViewportLeft(112)
+    expect(left).toBeGreaterThanOrEqual(0)
+    expect(left + 160).toBeLessThanOrEqual(390)
+  })
+
+  it('放不下时改成右对齐锚点，仍然整块留在视口内', async () => {
+    // 280 px 视口 + 触发器右边缘 177：左对齐会溢出右侧，只能右对齐
+    stubGeometry(141, 36, 160, 280)
+    renderScope()
+
+    await fireEvent.click(moreTrigger())
+
+    const left = menuViewportLeft(141)
+    expect(left).toBeGreaterThanOrEqual(0)
+    expect(left + 160).toBeLessThanOrEqual(280)
+    // 右对齐到触发器右边缘：177 - 160 = 17
+    expect(left).toBe(17)
+  })
+
+  it('两侧都放不下时夹到视口边距，不留负坐标', async () => {
+    // 菜单比视口还宽的极端情况：只能贴到左边距
+    stubGeometry(20, 36, 300, 280)
+    renderScope()
+
+    await fireEvent.click(moreTrigger())
+
+    expect(menuViewportLeft(20)).toBeGreaterThanOrEqual(0)
+  })
+
+  it('重新打开时按当前视口重算，不沿用上一次的偏移', async () => {
+    stubGeometry(112, 36, 160, 390)
+    renderScope()
+
+    await fireEvent.click(moreTrigger())
+    expect(menuViewportLeft(112)).toBe(112)
+
+    await fireEvent.click(moreTrigger())
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    // 转屏/缩窗后再打开：390 px 下的 left: 0 到 280 px 就会溢出右侧，必须重算成右对齐
+    stubGeometry(141, 36, 160, 280)
+    await fireEvent.click(moreTrigger())
+
+    expect(menuViewportLeft(141)).toBe(17)
+  })
+})

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { tick } from 'svelte'
+  import { getAnchoredOverlayPosition } from '../lib/navigationLayout'
   import CategoryIcon from './CategoryIcon.svelte'
 
   type HomeCategoryScopeItem = {
@@ -41,11 +43,51 @@
   let moreTrigger: HTMLButtonElement | null = null
   let moreMenu: HTMLElement | null = null
   let moreOpen = false
+  let moreMenuStyle = ''
 
   $: moreMenuId = `home-category-more-${rootId}`
   $: hasMoreActions = Boolean(onAddBookmark || onCreateSubcategory || onRequestSort)
   // 菜单收起时若可用操作被撤掉（例如进入排序会话），避免留下指向已消失菜单的展开态
   $: if (!hasMoreActions && moreOpen) moreOpen = false
+
+  // 这个触发器紧跟标题，不靠右对齐：移动端 `.scope-title-row` 会换行，标题短的分类里它离
+  // 视口左边只有 100 px 出头。菜单原先固定 `right: 0`，160 px 的最小宽度直接把左边缘顶到
+  // 负坐标（实测「AI服务」在 390 px 视口下 left = -12）。改为按锚点算位置再夹进视口，
+  // 与顶部导航子菜单共用 `getAnchoredOverlayPosition`。
+  async function toggleMore(): Promise<void> {
+    if (moreOpen) {
+      closeMore()
+      return
+    }
+    moreOpen = true
+    // 菜单宽度由内容决定（`min-width` 到 `max-width` 之间），只能等它进 DOM 再量
+    await tick()
+    positionMoreMenu()
+  }
+
+  function positionMoreMenu(): void {
+    if (!moreOpen || !moreTrigger || !moreMenu) return
+
+    const host = moreTrigger.parentElement
+    if (!host) return
+
+    const anchor = moreTrigger.getBoundingClientRect()
+    const { left } = getAnchoredOverlayPosition({
+      anchorLeft: anchor.left,
+      anchorRight: anchor.right,
+      anchorBottom: anchor.bottom,
+      overlayWidth: moreMenu.offsetWidth,
+      viewportWidth: window.innerWidth,
+    })
+
+    // 菜单是 `.scope-more`（position: relative）内的绝对定位元素，换算成相对偏移后
+    // 它仍跟随页面滚动，不需要额外的滚动监听。
+    moreMenuStyle = `left: ${Math.round(left - host.getBoundingClientRect().left)}px; right: auto;`
+  }
+
+  function handleWindowResize(): void {
+    if (moreOpen) positionMoreMenu()
+  }
 
   function closeMore(focusTrigger = false): void {
     moreOpen = false
@@ -111,7 +153,7 @@
   }
 </script>
 
-<svelte:window on:pointerdown={handleWindowPointerDown} on:keydown={handleWindowKeyDown} />
+<svelte:window on:pointerdown={handleWindowPointerDown} on:keydown={handleWindowKeyDown} on:resize={handleWindowResize} />
 <section class="category-scope" class:has-children={children.length > 0} class:has-actions={reserveActions} class:highlighted={highlightedId === rootId} data-home-category-scope={rootId} aria-labelledby={`home-category-heading-${rootId}`}>
   <div class="scope-heading">
     <CategoryIcon category={{ id: rootId, title, icon }} size="var(--category-root-icon-size, 40px)" className="scope-icon" />
@@ -149,7 +191,7 @@
               aria-haspopup="menu"
               aria-expanded={moreOpen}
               aria-controls={moreMenuId}
-              on:click={() => (moreOpen = !moreOpen)}
+              on:click={() => void toggleMore()}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true" class="scope-action-icon">
                 <path d="M6 12h.01M12 12h.01M18 12h.01" />
@@ -161,6 +203,7 @@
                 id={moreMenuId}
                 role="menu"
                 aria-label={`${title || '分类'} 更多操作`}
+                style={moreMenuStyle}
                 bind:this={moreMenu}
               >
                 {#if onAddBookmark}
