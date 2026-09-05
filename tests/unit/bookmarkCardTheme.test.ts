@@ -1,6 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
+// 这一组全部是样式契约，**不迁移到组件层**（PROB-18）：断言的对象是 backdrop-filter、
+// 深浅色表面配色、theme-aware 文字色、tooltip 定位与 z-index、`content-visibility` 的
+// 释放条件。jsdom 不做布局、不合成 backdrop-filter、不解析 `@media (hover: none)`，
+// `getComputedStyle` 对这些属性返回空串或原样字符串，挂载组件拿不到比读源码更强的证据。
+// 真机层面由 `npm run regression:chrome` 与部署后人工验收覆盖。
+
 describe('bookmark card theme styles', () => {
   it('uses backdrop blur on both card variants for the glass surface', () => {
     const compact = readFileSync('src/components/BookmarkCardCompact.svelte', 'utf8')

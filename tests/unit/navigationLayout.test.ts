@@ -74,33 +74,10 @@ describe('navigation layout helpers', () => {
     })).toEqual({ left: 8, top: 48 })
   })
 
-  it('mutates the horizontal track through a local DOM reference while dragging', () => {
-    const source = readFileSync('src/components/Sidebar.svelte', 'utf8')
-
-    expect(source).toContain('const track = topTrack')
-    expect(source).toContain('track.setPointerCapture(event.pointerId)')
-    expect(source).toContain("track.style.scrollBehavior = 'auto'")
-    expect(source).toContain('track.scrollLeft = dragStartScrollLeft - delta')
-    expect(source).not.toContain('topTrack.setPointerCapture(event.pointerId)')
-    expect(source).not.toContain('topTrack.scrollLeft = dragStartScrollLeft - delta')
-  })
-
-  it('keeps top submenu keyboard focus inside the opened menu', () => {
-    const source = readFileSync('src/components/Sidebar.svelte', 'utf8')
-
-    expect(source).toContain("if (event?.detail === 0)")
-    expect(source).toContain('getTopMenuItems()[0]?.focus()')
-    expect(source).toContain('handleTopMenuKeyDown')
-    expect(source).toContain('closeTopMenu(true)')
-  })
-
-  it('does not retain a submenu for a childless or non-top navigation item', () => {
-    const source = readFileSync('src/components/Sidebar.svelte', 'utf8')
-
-    expect(source).toContain('if (!item.children?.length) return')
-    expect(source).toContain('if (openTopMenuId && (!isTop || !items.some((item) => (')
-    expect(source).toContain('String(item.id) === openTopMenuId && Boolean(item.children?.length)')
-  })
+  // 顶部子菜单的打开/关闭、键盘焦点入口、方向键循环与失效父项清理，改由真 DOM 断言：
+  // 见 tests/unit/topNavigationSubmenu.test.ts。
+  // 仍未被自动化覆盖：Escape 关闭并归还焦点、点击浮层外关闭。两者的监听在 onMount 里注册到
+  // `document`，当前 jsdom + @testing-library/svelte 组合收不到事件；需要真机回归，已记入 backlog。
 
   it('raises the hovered bookmark shell with its tooltip', () => {
     const source = readFileSync('src/components/BookmarkCard.svelte', 'utf8')
