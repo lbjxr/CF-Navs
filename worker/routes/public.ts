@@ -18,6 +18,7 @@ import { getDataVersion, getPublicDataSource, getSiteConfig, getSiteConfigWithDa
 import { shouldBypassRequestCache } from '../lib/requestCache'
 import { fail } from '../lib/response'
 import { ok } from '../lib/response'
+import { hasSessionBinding } from '../lib/sessionStore'
 import { extractBearerToken, validateSession } from '../middleware/auth'
 import type { HonoEnv } from '../types'
 
@@ -222,8 +223,10 @@ publicRoutes.post('/public/bookmarks/:id/click', async (c) => {
     return c.json(fail(ErrCode.BAD_REQUEST, 'invalid id'), 400)
   }
 
-  // OD-09: Click count rate limiting (max 3 clicks per 10 mins per IP+Bookmark ID)
-  if (c.env.SESSION) {
+  // 点击计数限流（每 IP + 书签 10 分钟最多 3 次）。这是 best-effort：缺 `SESSION` 绑定或
+  // KV 抛错时**继续计数**，不像鉴权路径那样 fail-closed——限流失效只是计数偏高，而拒绝
+  // 匿名点击会让公开首页的正常功能坏掉（PROB-31 的口径区分）。
+  if (hasSessionBinding(c.env)) {
     try {
       const ip = getClientIp(c)
       const rateLimitKey = `rl:click:${ip}:${id}`

@@ -15,6 +15,7 @@ import { setSettingValue } from '../lib/db'
 import { fail, ok } from '../lib/response'
 import { createSession } from '../lib/session'
 import { revokeSession } from '../lib/sessionRevocation'
+import { hasSessionBinding } from '../lib/sessionStore'
 import type { HonoEnv } from '../types'
 
 const ADMIN_PASSWORD_KEY = 'admin_password'
@@ -81,8 +82,13 @@ authRoutes.post('/logout', authRequired, async (c) => {
 
   // 清内存缓存只影响当前 isolate，JWT 本身在 exp 之前照样有效。
   // 必须写撤销名单，否则「退出登录」在共享设备上等于什么都没做。
+  //
+  // `store_unconfigured` 在 PROB-31 之后仍然可达，但只在一个很窄的窗口里：
+  // `validateSession` 的 isolate 内存缓存命中时会提前返回，不再复查绑定，所以「绑定存在
+  // 时验过并缓存 → 绑定被移除 → 15 秒内 logout」这条路径能进到这里。缓存过期后
+  // `authRequired` 就会直接 401，不会再走到这个分支。
   let result: LogoutResp
-  if (!c.env.SESSION) {
+  if (!hasSessionBinding(c.env)) {
     result = { revoked: false, reason: 'store_unconfigured' }
   } else {
     try {

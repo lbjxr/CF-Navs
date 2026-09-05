@@ -6,6 +6,7 @@ import { getSettingValues, setSettingValue } from '../lib/db'
 import { initializeSchema } from '../lib/installSchema'
 import { fail, ok } from '../lib/response'
 import { createSession } from '../lib/session'
+import { hasSessionBinding } from '../lib/sessionStore'
 import { getClientIp } from '../middleware/rateLimit'
 import type { Env, HonoEnv, LoginRateLimitState } from '../types'
 
@@ -53,7 +54,7 @@ function isMissingTableError(error: unknown): boolean {
 function getMissingBindings(env: Partial<Env>): InstallBinding[] {
   const missing: InstallBinding[] = []
   if (!env.DB || typeof env.DB.prepare !== 'function') missing.push('DB')
-  if (!env.SESSION || typeof env.SESSION.get !== 'function') missing.push('SESSION')
+  if (!hasSessionBinding(env)) missing.push('SESSION')
   return missing
 }
 
@@ -230,7 +231,7 @@ installRoutes.get('/install/status', async (c) => {
     } satisfies InstallStatusResp)))
   }
 
-  const sessionMissing = !c.env.SESSION || typeof c.env.SESSION.get !== 'function'
+  const sessionMissing = !hasSessionBinding(c.env)
   if (sessionMissing) {
     return noStore(c.json(ok({ state: 'bindings_missing', missing: ['SESSION'] } satisfies InstallStatusResp)))
   }
@@ -276,7 +277,7 @@ installRoutes.post('/install', async (c) => {
     return noStore(c.json(fail(ErrCode.SERVER_ERROR, 'database is unavailable')))
   }
 
-  const sessionMissing = !c.env.SESSION || typeof c.env.SESSION.get !== 'function'
+  const sessionMissing = !hasSessionBinding(c.env)
   if (sessionMissing || !(await sessionStoreIsReachable(c.env.SESSION))) {
     return noStore(c.json(fail(ErrCode.SERVER_ERROR, 'required bindings are unavailable')))
   }

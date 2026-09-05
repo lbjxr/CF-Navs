@@ -60,7 +60,7 @@ npm run build && npx wrangler deploy
 1. 在 Worker 的 **设置 → 绑定** 中确认 `SESSION` 指向的 KV 命名空间仍然存在，没有被删除或改名。
 2. 确认使用的是**生产环境**绑定；预览环境的 KV 命名空间不会提供给生产流量。
 3. 排除 Cloudflare KV 侧的临时故障后，用页面上的「重试会话存储检查」重新探测。
-4. 安装完成后 `SESSION` 仍被登录限流与会话撤销名单使用，绑定不可用会让登出无法写入撤销记录（见 [API 契约](../reference/API_CONTRACT.md) 的鉴权规则）。
+4. 安装完成后 `SESSION` 仍被登录限流与会话撤销名单使用。绑定不可用时**登录会直接失败**（`code=1500` + `required SESSION binding is unavailable`），已登录请求返回 401，而不是静默降级；公开首页读取与点击计数不受影响（见 [API 契约](../reference/API_CONTRACT.md) 的鉴权规则）。
 
 ### Missing binding（页面显示「还缺少存储绑定」）
 
@@ -101,11 +101,19 @@ Cloudflare Secret 生效可能需要等待片刻。执行重置前请确认 Wran
 
 ### KV 相关错误
 
-`SESSION` KV 不保存登录会话本身。登录使用无状态 JWT；该命名空间用于登录/点击限流和 JWT 撤销名单。请检查：
+`SESSION` KV 不保存登录会话本身。登录使用无状态 JWT；该命名空间用于登录/点击限流和 JWT 撤销名单。
+
+**绑定缺失或不可用时的可见症状**（2026-09-05 起统一为下列口径，见 [API 契约](../reference/API_CONTRACT.md) 的鉴权规则）：
+
+- `POST /api/login` 返回 `code=1500`、`msg` 为 `required SESSION binding is unavailable`。**看到这条文案就说明是绑定问题**，不需要再猜；此前它表现为笼统的 `internal server error`。
+- 已登录的请求返回 `401` / `code=1001`：撤销名单读不到时会拒绝会话，而不是放行。这是刻意的——放行等于「撤销名单不存在」而调用方无从得知。
+- 公开首页与点击计数**不受影响**：匿名读取正常，点击仍然计数，只是失去限流保护。
+
+请检查：
 
 1. `npx wrangler kv namespace create SESSION` 是否已执行。
 2. `npm run setup:wrangler` 是否已生成最新绑定。
-3. Worker 日志中是否出现 KV binding 错误；KV 缺失会影响限流和登出撤销，JWT 本身仍按签名和 `exp` 校验。
+3. Worker 日志中是否出现 KV binding 错误。
 
 查看日志：
 

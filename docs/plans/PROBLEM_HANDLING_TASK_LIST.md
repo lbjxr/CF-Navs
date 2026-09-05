@@ -295,8 +295,29 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - 未做（c）：缩短 token 有效期或引入 token 版本号校验属架构决策，未评估、未实现
 - 验证结果（实测，非推断）：本地隔离实例双实例探针。① 有 `SESSION` 绑定时 `POST /api/logout` 实际返回 `{"code":0,"msg":"ok","data":{"revoked":true}}`，随后同一 token 调 `/api/me` 得 401。② 用一份去掉 `[[kv_namespaces]]` 的临时配置、指向**同一个** D1（因此 `jwt_secret` 相同、旧 token 仍验签通过）启第二个实例，模拟「令牌签发后绑定被移除」：`/api/me` 先返回 200 证明 token 有效 → `POST /api/logout` 返回 `{"revoked":false,"reason":"store_unconfigured"}` → 同一 token 再调 `/api/me` **仍是 200**。这条直接证明了本条目所说的「静默失败」后果确实存在，且现在会被报告。③ 清空 D1 后 `node scripts/smoke-test.mjs` 仍 **75/75 全绿**，`登出 code=0` 未被返回值变更破坏。单测：`tests/unit/sessionRevocation.test.ts` 三态各一条（`store_unavailable` 用抛错的 KV 假实现，真实 KV 故障本地无法注入），`tests/unit/appAuthController.test.ts` 5 条覆盖 `logoutRevocationWarning`（含未知 `reason` 不退化成 `undefined` 文案）。`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 102 files / 708 passed；`npm run build` 成功
 - 验证结果（L2 真实浏览器，隔离临时 Chrome）：headless Chrome + 独立 `cf-navs-chrome-profile-l2probe-*` profile，通过 CDP `Input.dispatchMouseEvent` / `Input.insertText` 做真实点击与键盘输入，不用 `dispatchEvent` 代替。① `SESSION` 在位时点「退出登录」→ 回到访客态，**不弹**任何撤销警告（Toast 容器为空）。② 同一浏览器会话不刷新、后端从有绑定实例换成无绑定实例（同端口、同 D1）后点「退出登录」→ 回到访客态并弹出 `toast-item toast-error`，文案为「已退出登录，但服务端未能作废旧的登录令牌（部署缺少 SESSION 绑定）。这台设备上的登录态已清除；如果担心令牌被别人复用，请修改密码——改密码会立即作废全部会话。」，实测尺寸 380×107 且完整在视口内（`getBoundingClientRect` 采样）。换后端后旧 token 调 `/api/me` 先返回 200，证明「令牌仍然有效」这一后果真实存在。全程 console error 0、pageException 0、failedRequest 0，唯一 4xx 是刻意探测无 token 的 `/api/me` 401。清理：只关本次创建的 target，`Browser.close` 仅对 manifest 标记 `browserStartedByTest=true` 的实例执行，按命令行精确匹配确认残留进程数为 0 后删除临时 profile，未按进程名批量清理、未触碰用户自有 Chrome
-- 顺带查实（未修，见 BACKLOG 新条目）：完全没有 `SESSION` 绑定的部署**连登录都做不到** —— `worker/middleware/rateLimit.ts` 的 `loginRateLimit` 无条件读 `env.SESSION`，实测 `POST /api/login` 返回 `code=1500`。而 `validateSession` 与 logout 都把该绑定当可选，`worker/types.ts` 的 `Env.SESSION` 却是必填类型，三处口径不一致。这也是为什么 `store_unconfigured` 只在「令牌签发后绑定被移除」时可达
+- 顺带查实（**已由下方 PROB-31 修复**）：完全没有 `SESSION` 绑定的部署**连登录都做不到** —— `worker/middleware/rateLimit.ts` 的 `loginRateLimit` 无条件读 `env.SESSION`，实测 `POST /api/login` 返回 `code=1500`。而 `validateSession` 与 logout 都把该绑定当可选，`worker/types.ts` 的 `Env.SESSION` 却是必填类型，三处口径不一致。这也是为什么 `store_unconfigured` 只在「令牌签发后绑定被移除」时可达；PROB-31 收紧 `validateSession` 后该窗口进一步收窄到「内存缓存命中的 15 秒内」
 - 仍未验证：跨 isolate 的 ≤15 秒撤销窗口，以及真实 Cloudflare KV 写入故障下的 `store_unavailable`。本地 `wrangler dev` 的 KV 是单进程模拟，两者都需要部署实例，属 PROB-19v
+
+#### PROB-31（P3，已完成）`SESSION` 绑定的必选性三处口径不一致
+
+- 来源：PROB-19 实测时顺带查出并登记
+- 冲突（三处口径）：`worker/middleware/rateLimit.ts` 的 `loginRateLimit` **无条件**读 `env.SESSION`（缺绑定时 `env.SESSION.get` 抛 TypeError，被全局 `onError` 兜成 `code=1500 internal server error`，运维看不出是绑定问题）；`worker/middleware/auth.ts` 的 `validateSession` 把它当**可选**并**静默跳过撤销名单检查**；`worker/types.ts` 的 `Env.SESSION` 又是**必填**类型。此外 logout、点击计数、`/install` 三处各写了一套内联 `if`，判定条件还不一样（`!env.SESSION` vs `typeof env.SESSION.get !== 'function'`）
+- 裁定的口径：绑定缺失是**确定性的配置错误**（`/install` 本来就以 `bindings_missing` 拒绝安装），所以按「正确性是否依赖它」分两类 —— 鉴权与登录路径 **fail-closed**，best-effort 计数路径**降级继续**
+- 处理结果：新增 `worker/lib/sessionStore.ts` 的 `hasSessionBinding`，五个读取点统一走它，不再各写内联判定。判定检查 `get` / `put` / `delete` 三个方法而不是只看 `get`：撤销名单要写、限流要删，少任何一个都会在半路抛错而不是在入口被挡住
+  - `validateSession`：缺绑定时**拒绝会话**（原先静默跳过 = 「撤销名单不存在」而调用方无从得知，logout 会显得成功而 token 一直有效到 `exp`）
+  - `loginRateLimit`：缺绑定时返回 `code=1500` + `required SESSION binding is unavailable`，替代 TypeError 兜出来的通用文案。登录限流的整个意义就是那个 KV，没有它不能假装限流成功
+  - logout、点击计数、`/install` 的三处内联判定改用同一个 guard；点击计数**刻意保持 best-effort**（限流失效只是计数偏高，拒绝匿名点击会让公开首页坏掉）
+- `LogoutResp` 的 `store_unconfigured` 仍然可达但窗口更窄：`validateSession` 的 isolate 内存缓存命中时提前返回、不复查绑定，所以「绑定存在时验过并缓存 → 绑定被移除 → 15 秒内 logout」这条路径还在；缓存过期后 `authRequired` 直接 401。代码与测试都写明了这一点
+- 验证结果（本地隔离实例，双实例对照，均为实测）：用去掉 `[[kv_namespaces]]` 但指向**同一 D1**（`jwt_secret` 相同、旧 token 签名照样验得过）的临时配置起第二个实例 ——
+  - `POST /api/login` → `code=1500` / `msg="required SESSION binding is unavailable"`（改造前是 `"internal server error"`）
+  - `GET /api/me`（旧 token）→ **401 / code=1001**（改造前返回 200 + username）
+  - `GET /api/admin/data` → 401
+  - `GET /api/public/data`（匿名）→ 200，40 个分类正常返回：公开读取不受影响
+  - `POST /api/public/bookmarks/:id/click`（匿名，真实 id）连打 5 次 → 全部 200 / `code=0`：best-effort 路径确实降级继续，未被限流也未被拒绝
+  - 绑定恢复后 login / me / logout / logout 后 401 全部正常，无回归
+- 单测：新增 `tests/unit/sessionBinding.test.ts` 5 条 —— `hasSessionBinding` 要求三个方法（半个假 KV 会被正确判成缺绑定）、`validateSession` 缺绑定时拒绝会话、受保护端点因此 401、登录给出可定位错误且**不等于** `'internal server error'`、点击计数缺绑定时仍 200。两次反向对照：把 `validateSession` 改回静默跳过 → 前两条精确失败；删掉 `loginRateLimit` 的入口判定 → 登录那条精确失败
+- 顺带修掉一个**假通过的测试夹具**：`sessionRevocation.test.ts` 里模拟「KV 写失败」的假实现只有 `get` / `put`，收紧判定后被当成缺绑定，测出的是 `store_unconfigured` 而不是它要测的 `store_unavailable`。补上 `delete` 并加注释说明为什么必须三个方法都有
+- 验证：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 105 files / 736 passed；`npm run build` 成功；`npm run smoke` 75/75
 
 ### PROB-20（P1，已完成方案 1）图标代理匿名可枚举，私密对象存在信息泄漏面
 

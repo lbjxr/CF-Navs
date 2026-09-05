@@ -10,6 +10,18 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 缺 `SESSION` 绑定不再静默放行，也不再兜成看不懂的 500（PROB-31）
+
+- 这是做 PROB-19 时实测查出的三处口径不一致：`loginRateLimit` **无条件**读 `env.SESSION`（缺绑定时抛 TypeError，被全局 `onError` 兜成 `code=1500 internal server error`，运维看不出是绑定问题）；`validateSession` 把它当**可选**并**静默跳过撤销名单检查**；`Env.SESSION` 类型却是**必填**。logout、点击计数、`/install` 另有三套内联 `if`，判定条件还不一样（`!env.SESSION` vs `typeof env.SESSION.get !== 'function'`）。
+- 定一个口径，按「正确性是否依赖它」分两类：**鉴权与登录 fail-closed，best-effort 计数降级继续**。绑定缺失是确定性的配置错误——`/install` 本来就以 `bindings_missing` 拒绝安装。
+- 新增 `worker/lib/sessionStore.ts` 的 `hasSessionBinding`，五个读取点统一走它。判定检查 `get` / `put` / `delete` 三个方法而不是只看 `get`：撤销名单要写、限流要删，少任何一个都会在半路抛错而不是在入口被挡住。
+- 具体行为变化：`validateSession` 缺绑定时**拒绝会话**（受保护端点因此 401）；`POST /api/login` 返回 `code=1500` + `required SESSION binding is unavailable`（看到这条文案就知道是绑定问题）；点击计数**刻意保持 best-effort**，缺绑定时跳过限流但仍然计数——限流失效只是计数偏高，拒绝匿名点击会让公开首页坏掉。
+- 实测（双实例对照，去掉 `[[kv_namespaces]]` 但指向同一 D1）：`login` → `code=1500` + 指名 SESSION 的文案；`me`（旧 token）→ **401**（改造前返回 200 + username）；`admin/data` → 401；`public/data`（匿名）→ 200 且 40 个分类正常；`click` 连打 5 次 → 全部 200。绑定恢复后 login / me / logout / logout 后 401 全部正常，无回归。
+- 新增 `tests/unit/sessionBinding.test.ts` 5 条，两次反向对照：把 `validateSession` 改回静默跳过 → 前两条精确失败；删掉 `loginRateLimit` 的入口判定 → 登录那条精确失败。
+- 顺带修掉一个**假通过的夹具**：`sessionRevocation.test.ts` 里模拟「KV 写失败」的假 KV 只有 `get` / `put`，收紧判定后被当成缺绑定，测出的是 `store_unconfigured` 而不是它要测的 `store_unavailable`。补上 `delete` 并注明为什么三个方法都得有。
+- 文档同步：`API_CONTRACT.md` 的鉴权规则改掉「缺绑定会跳过撤销检查」这句过期描述并写明两类口径，`LogoutResp` 的 `store_unconfigured` 可达窗口收窄说明；`TROUBLESHOOTING.md` 的「KV 相关错误」与「会话存储暂时不可用」补上可见症状（哪条文案对应绑定问题、什么受影响什么不受影响）。
+- 验证：`npm run type-check` 0 errors / 0 warnings；`npx vitest run` 105 files / 736 passed；`npm run build` 成功；`npm run smoke` 75/75。
+
 ### 后台空态断言从「源码里写了这串字」迁到真实 DOM（PROB-18b 第 1 个文件）
 
 - `adminEmptyStateMarkup.test.ts` 的 5 条断言全是 `readFileSync` + `toContain('暂无分类')` 一类：能证明模板里写了那串字，证明不了空态在正确条件下渲染、CTA 真的可点，更证明不了「没有分类时不引导用户去加书签」这条实际的产品逻辑。已删除，换成 `adminEmptyState.test.ts` 的 9 条组件测试（jsdom）。

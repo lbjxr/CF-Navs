@@ -12,11 +12,14 @@
 
 ## 鉴权规则
 
-- `authRequired`：读取 Bearer token，用 `settings.jwt_secret` 校验 HS256 签名和 `exp`；在 `SESSION` 绑定存在时再查 KV 撤销名单。签名、过期或撤销不通过返回 401；KV 读取故障可能由全局错误处理返回服务端错误；缺少 `SESSION` 绑定时会跳过撤销检查，部署必须正确配置该绑定。
+- `authRequired`：读取 Bearer token，用 `settings.jwt_secret` 校验 HS256 签名和 `exp`，再查 KV 撤销名单。签名、过期或撤销不通过返回 401；KV 读取故障可能由全局错误处理返回服务端错误。**缺少 `SESSION` 绑定时不再跳过撤销检查，而是直接拒绝会话**（见下方口径）。
 - 会话是无状态 JWT，payload 为 `{ username, exp, jti }`。`jti` 保证同一毫秒内的两次登录也会签出不同 token，否则「退出这台设备」会连带撤销另一台。
 - `POST /api/logout` 把当前 token 的 SHA-256 摘要写入 KV `revoked:<sha256>`，TTL 为 `max(60 秒, token 剩余寿命)`，以满足 KV `expirationTtl` 的下限。用摘要而不是 token 本身做 key，避免 KV 被 dump 时泄露仍在有效期内的 token。其它 isolate 上最多 15 秒后才感知到撤销，这是内存缓存换来的固定窗口。撤销名单是「退出登录」的**全部实质**，写不进去就等于没退，因此该接口用 `LogoutResp` 把结果显式告知调用方，不再一律返回纯成功——三种结果见「认证接口」小节。
 - 修改密码和凭据重置走 `rotateJwtSecret`，一次性作废全部会话。
 - KV `SESSION` 绑定当前只用于登录限流（`rl:login:*`）、点击计数限流（`rl:click:*`）和会话撤销名单（`revoked:*`），不再存储会话本身。
+- **缺 `SESSION` 绑定时的行为按「正确性是否依赖它」分两类**（判定统一在 `worker/lib/sessionStore.ts` 的 `hasSessionBinding`，要求 `get`/`put`/`delete` 三个方法都存在）：
+  - **鉴权与登录 fail-closed**：`validateSession` 拒绝会话（受保护端点因此 401 / `code=1001`），`POST /api/login` 返回 `code=1500` + `required SESSION binding is unavailable`。撤销名单不可用时不能静默放行——那等于「撤销名单不存在」而调用方无从得知。缺绑定是确定性的配置错误，`/install` 本来就以 `bindings_missing` 拒绝安装。
+  - **best-effort 降级继续**：`POST /api/public/bookmarks/:id/click` 的点击计数限流在缺绑定或 KV 抛错时跳过限流但**仍然计数**。限流失效只是计数偏高，拒绝匿名点击会让公开首页的正常功能坏掉。
 - `/api/public/data`：匿名请求默认可查公开数据 edge cache；缓存未命中时先复用 `/api/config` edge cache，仍未命中才读取轻量 `site_title/public_mode`，公开模式关闭则要求有效 token，否则返回 `code=1005`，该轻量 1005 响应也会短时写入 edge cache。请求带 `Cache-Control: no-cache`、`Cache-Control: no-store`、`Cache-Control: max-age=0` 或 `Pragma: no-cache` 时，服务端必须绕过公开数据和站点配置 edge cache。
 - `/api/data/version`：用一次 `settings` 查询同时读取 `site_title`、`public_mode` 和内部 `data_version`，返回轻量版本号；公开模式关闭时匿名请求返回 `code=1005` 并携带轻量站点配置，登录态请求需通过 token 校验。这是每次页面加载都会走的热路径，查询条数是契约。
 
@@ -67,7 +70,7 @@
 
 后两种情况下前端照常清除本地登录态，但会额外提示「服务端未能作废旧的登录令牌」并给出可执行的补救动作——改密码走 `rotateJwtSecret`，一次性作废全部会话。这两种结果的**后果相同、原因不同**，因此用 `reason` 区分而不是合并成一个布尔值：`store_unconfigured` 是部署配置问题（照 `TROUBLESHOOTING.md` 补绑定），`store_unavailable` 是运行时故障（重试即可）。后续请求若 KV 读取也失败，鉴权可能返回错误。
 
-`store_unconfigured` 只在**令牌签发之后**绑定被移除时才可能出现：`loginRateLimit` 无条件读 `SESSION`，所以一开始就缺绑定的部署连 `POST /api/login` 都会返回 `code=1500`，根本拿不到 token（`/install` 也会先以 `bindings_missing` 拒绝安装）。已实测确认这一条。
+`store_unconfigured` 的可达窗口在 PROB-31 之后**进一步收窄到「令牌签发后绑定被移除，且 `validateSession` 的 isolate 内存缓存仍命中」的 ≤15 秒内**。原因：`loginRateLimit` 缺绑定时直接返回 `code=1500`，一开始就没有绑定的部署拿不到 token（`/install` 也会先以 `bindings_missing` 拒绝安装）；而缓存过期后 `authRequired` 会直接 401，不会再走到 logout 的这个分支。两条都已实测确认。
 
 `reason` 是可扩展取值：客户端遇到不认识的 `reason` 时仍必须给出警告，只是不带原因说明，不能静默当成成功。
 

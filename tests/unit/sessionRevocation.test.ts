@@ -173,11 +173,14 @@ describe('POST /api/logout', () => {
     // 会以为已经退出，而 token 还能用到 exp。
     const env = createEnv()
     const session = await createSession(env, 'admin')
+    // 假实现必须提供 get/put/delete 三个方法：真实 KVNamespace 一定有它们，少写一个
+    // 就会被绑定判定当成「缺绑定」，测出的是 store_unconfigured 而不是这条要测的写失败。
     const broken = {
       ...env,
       SESSION: {
         async get() { return null },
         async put() { throw new Error('kv down') },
+        async delete() {},
       },
     } as unknown as Env
 
@@ -191,6 +194,10 @@ describe('POST /api/logout', () => {
 
   it('reports the missing binding when the deployment has no session store', async () => {
     // 撤销被整体跳过，和「写失败」的后果一样但原因不同，前端要能分辨。
+    //
+    // PROB-31 之后这条路径只在一个窄窗口里可达：createSession 会把 token 写进 isolate
+    // 内存缓存，validateSession 命中缓存时提前返回、不复查绑定，所以「验过 → 绑定被移除
+    // → 15 秒内 logout」能走到这里。缓存过期后 authRequired 会直接 401。
     const env = createEnv()
     const session = await createSession(env, 'admin')
     const unbound = { DB: env.DB } as unknown as Env

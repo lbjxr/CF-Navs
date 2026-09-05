@@ -4,6 +4,7 @@ import { fail } from '../lib/response'
 import type { Env, HonoEnv, SessionValue } from '../types'
 import { getJwtSecret, verifyJwt, rotateJwtSecret } from '../lib/jwt'
 import { isSessionRevoked } from '../lib/sessionRevocation'
+import { hasSessionBinding } from '../lib/sessionStore'
 
 const SESSION_MEMORY_CACHE_TTL_MS = 15_000
 const SESSION_MEMORY_CACHE_MAX = 256
@@ -92,7 +93,11 @@ export async function validateSession(env: Env, token: string): Promise<SessionV
   // 撤销检查只在内存缓存未命中时走 KV，成本模型与既有的 session 缓存一致：
   // 每个 isolate 每个 token 最多 15 秒一次读。代价是别的 isolate 上的 logout
   // 最多 15 秒后才生效，这个窗口是刻意换来的，不要为了「立刻生效」去掉缓存。
-  if (env.SESSION && await isSessionRevoked(env.SESSION, token)) {
+  //
+  // 缺 `SESSION` 绑定时**拒绝会话**，不再静默跳过（PROB-31）。跳过等于「撤销名单不存在」
+  // 而调用方无从得知——logout 会显得成功，token 却一直有效到 exp。绑定缺失是确定性的
+  // 配置错误（`/install` 本来就以 `bindings_missing` 拒绝安装），只能 fail-closed。
+  if (!hasSessionBinding(env) || await isSessionRevoked(env.SESSION, token)) {
     sessionMemoryCache.delete(token)
     return null
   }
