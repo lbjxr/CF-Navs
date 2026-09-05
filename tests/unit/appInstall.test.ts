@@ -65,6 +65,13 @@ describe('install recheck after a data load failure', () => {
   })
 })
 
+// 下面这一组是**接线断言**，不迁移到组件层（PROB-18）：本文件其余用例已经用纯函数覆盖了
+// `shouldProbeInstallStatus` / `shouldRecheckInstallAfterDataError` 的全部判定分支，这里要证明的
+// 只有一件事——App 编排层真的调用了它们，而不是把判定逻辑另抄一份。要用真 DOM 证明就得挂载
+// `src/App.svelte`（约 1100 行，同时编排认证、CRUD、弹窗、Admin 懒加载与备份接线），需要预先
+// mock 整个 `src/lib/api` 与浏览器存储；那属于 PROB-24 的编排拆分前置工作。在拆分完成前，
+// 源码断言是这条接线唯一可及的证据。
+
 describe('app boot wiring', () => {
   it('gates the install probe and keeps the recheck fallback', () => {
     const source = readFileSync('src/App.svelte', 'utf8')

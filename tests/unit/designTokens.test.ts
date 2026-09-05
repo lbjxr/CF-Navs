@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
+// 断言设计令牌的声明与引用文本：`src/app.css` 的 `:root` 是否声明 `--font-size-*`/`--radius-*`/`--transition-*`/
+// `--control-padding-*`，各弹窗组件的 `<style>` 是否用 `var(--radius-)`/`var(--font-size-)`/`var(--control-padding-)`
+// 而非硬编码，全仓样式是否残留字面时长或 `transition: all`，模态卡片是否统一 `border-radius: var(--radius-xl)`。
+// 这是跨文件源码级一致性护栏（要求 offenders 数组为空），断言对象不是单个组件的可观测 DOM 行为；jsdom 不解析
+// CSS 变量级联，挂载单组件既无法遍历全仓 `<style>`，也拿不到 token 是否真正被引用的证据。（PROB-18）
+
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name)

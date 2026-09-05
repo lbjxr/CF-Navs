@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
+// 行为部分（折叠/切换/保存等交互）已迁到 tests/unit/adminSettingsBehavior.test.ts；此处保留的是无法挂载验证的
+// 三类源码契约：① CSS grid 规则——`.settings-panel-wrap`/`.settings-form`/`.settings-submenu`/`.settings-workspace`
+// 的 `grid-template-columns/rows`、`grid-column: 1 / -1`、`clamp(0px, calc(100dvh - 180px), 960px)` 高度与
+// `@media (max-width: 1320px/720px)` 折叠；② 分区归属——各 `form.*` 绑定落在哪个 `settings/*Section.svelte`、
+// 预览 iframe 的 `sandbox=""`/`script-src 'none'` 安全属性；③ 模板与菜单渲染顺序（组件标签、`indexOf` 先后）。
+// jsdom 不做 grid 布局、不评估媒体查询，挂载既拿不到这些计算值，跨文件归属/顺序也非单组件可观测。（PROB-18）
+
 describe('admin settings layout', () => {
   it('aligns the settings panel with category and bookmark content', () => {
     const source = readFileSync('src/components/admin/AdminTabContent.svelte', 'utf8')

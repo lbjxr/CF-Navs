@@ -1,6 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
+// 断言对象是 scripts/chrome-regression.mjs 与 scripts/perf-audit.mjs 两个 Node 脚本，不是 Svelte 组件，
+// 没有可挂载的东西（PROB-18）。它守的是清理安全边界：用 .not.toContain 禁掉 taskkill /IM chrome.exe、
+// Stop-Process -Name chrome 这类按进程名批量结束浏览器的写法，只允许 Target.closeTarget / Page.close 关自己建的 target，
+// Browser.close 只在 browserStartedByTest 时执行，临时 profile 用 --remote-debugging-port=0 隔离、清理失败必须报 'Temporary Chrome cleanup failed'。
+// 这类断言的价值在于防止有人把危险写法加回来——脚本源码文本正是恰当、也是唯一的证据面。
+
 describe('Chrome regression cleanup', () => {
   it('requires explicit opt-in before attaching to an existing Chrome', () => {
     const source = readFileSync('scripts/chrome-regression.mjs', 'utf8')

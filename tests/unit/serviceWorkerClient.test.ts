@@ -7,6 +7,12 @@ import {
   registerServiceWorker,
 } from '../../src/lib/serviceWorkerClient'
 
+// 前两组是真行为测试：collectPrecacheAssetUrls / createPrecacheMessage / registerServiceWorker /
+// listenForShellUpdate 都作为 src/lib/serviceWorkerClient 的导出函数被直接调用与断言。
+// 只有第三组 `service worker source contracts` 回落到 public/sw.js 的源码文本（导航 cache-first、
+// precache 仅收同源 `/assets/`、`cf-navs-v<n>` 版本号 ≥15）——sw.js 不经打包、跑在 Service Worker
+// 全局作用域，没有可 import/挂载的模块（PROB-18）：客户端 helper 只负责发消息，真正消费它的是另一个 runtime 里的 sw.js。
+
 function timeline(names: string[]) {
   return { getEntriesByType: () => names.map((name) => ({ name })) } as unknown as Performance
 }

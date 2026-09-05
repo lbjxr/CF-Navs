@@ -7,6 +7,12 @@ import * as stores from '../../src/lib/stores'
 // 并行的取数路径（configStore.refresh / adminStore.refreshAll / authStore.refreshMe …）
 // 和 7 个 derived store 一个调用方都没有，却仍然打进 227 KB 的主包——
 // api 是对象字面量导出，tree-shaking 拿不掉它的成员。
+
+// 断言对象是 src/lib/stores.ts 与 src/lib/api.ts 的模块导出面，不是组件（PROB-18）：Object.keys(stores) 必须恰好是
+// adminStore/authStore/configStore/isAuthenticated/publicStore 这 5 个，store 上不得再留 refresh/refreshAll/refreshMe
+// 等取数方法，api 顶层键与各子命名空间不得回退出 config/me/list/get；再反向读 worker/routes/*.ts 确认 /me、/config 等
+// 服务端路由（跑在 Workers runtime）仍在。这些是模块的导出形状与另一 runtime 文件的存在性，挂 Svelte 组件一个 key 都读不到。
+
 describe('stores.ts stays a state container', () => {
   it('exposes only the stores that are actually imported', () => {
     expect(Object.keys(stores).sort()).toEqual([

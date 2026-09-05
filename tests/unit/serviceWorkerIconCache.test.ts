@@ -8,6 +8,11 @@ import { readFileSync } from 'node:fs'
 import { createContext, runInContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 
+// 断言对象是 public/sw.js 的运行时缓存行为（公开图标写入 Cache Storage、`private, no-store` 图标绝不落盘、
+// /api/icon/* 与 /api/iconify/* 不进 Cache Storage），不是 Svelte 组件：sw.js 不经打包、跑在 Service Worker
+// 全局作用域，没有可挂载的东西（PROB-18）。所以文件头改用 node:vm 里的假 ServiceWorkerGlobalScope 跑真 sw.js、
+// 派发真实 fetch 事件、断言真实的 Cache Storage put——这已经比任何组件挂载或源码文本都强。
+
 type FetchListener = (event: FetchEventLike) => void
 
 type FetchEventLike = {

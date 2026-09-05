@@ -1,6 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
+// 断言 `src/views/Home.svelte`/`HomeHeroSearch.svelte`/`App.svelte`/`app.css` 里响应式边距的组合方式：
+// `@media (max-width: 799px/720px)` 断点内 padding/margin 是否用 `calc()` 叠加 `--content-margin-x/-top/-bottom`
+// 变量（横向边距限桌面、顶部边距两端都加），移动 overscroll 背景 `var(--home-background)`+`background-attachment: fixed`，
+// 以及排序工具条的 `grid-template-areas`、`env(safe-area-inset-*)`。这些是媒体查询规则与布局合成结果，
+// jsdom 不评估媒体查询、不做布局、不解析 `calc()`/`env()`，挂载后 `getComputedStyle` 拿不到断点内有效值。（PROB-18）
+
 describe('home responsive layout', () => {
  it('keeps the configurable horizontal margin desktop-only', () => {
   const home = readFileSync('src/views/Home.svelte', 'utf8')
