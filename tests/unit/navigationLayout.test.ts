@@ -74,10 +74,8 @@ describe('navigation layout helpers', () => {
     })).toEqual({ left: 8, top: 48 })
   })
 
-  // 顶部子菜单的打开/关闭、键盘焦点入口、方向键循环与失效父项清理，改由真 DOM 断言：
-  // 见 tests/unit/topNavigationSubmenu.test.ts。
-  // 仍未被自动化覆盖：Escape 关闭并归还焦点、点击浮层外关闭。两者的监听在 onMount 里注册到
-  // `document`，当前 jsdom + @testing-library/svelte 组合收不到事件；需要真机回归，已记入 backlog。
+  // 顶部子菜单的全部交互——打开/关闭、键盘焦点入口、方向键循环、Escape 归还焦点、
+  // 点浮层外关闭、失效父项清理——改由真 DOM 断言：见 tests/unit/topNavigationSubmenu.test.ts。
 
   it('raises the hovered bookmark shell with its tooltip', () => {
     const source = readFileSync('src/components/BookmarkCard.svelte', 'utf8')

@@ -8,9 +8,10 @@ import Sidebar from '../../src/components/Sidebar.svelte'
 // `toContain('getTopMenuItems()[0]?.focus()')`、`toContain('if (!item.children?.length) return')`）：
 // 那些能证明模板里写了这些标识符，证明不了键盘打开后焦点真的进了菜单、无子项的项真的不弹菜单。
 //
-// 环境边界：Sidebar 在 `onMount` 里往 `document` 注册 `keydown`（Escape 关闭 + 焦点归还）和
-// `pointerdown`（点外部关闭）。这两个监听在当前 jsdom + @testing-library/svelte 组合下**收不到事件**
-// （已用 spy 与直接 dispatch 双向确认），所以那两条行为仍由 `navigationLayout.test.ts` 的源码断言看守。
+// Escape 关闭与点外部关闭依赖 Sidebar 在 `onMount` 里注册到 `document` 的监听。这些监听一度在
+// 测试里完全不生效：Svelte 4 的 `exports["."]` 只在 `browser` 条件下指向 src/runtime/index.js，
+// Vitest 默认解析到 src/runtime/ssr.js，那里的 `onMount` 是空实现。`vite.config.ts` 在 test 模式
+// 补上 `resolve.conditions: ['browser']` 之后才能观察到这两条行为。
 
 const items = [
   {
@@ -106,6 +107,40 @@ describe('顶部导航子菜单的打开与关闭', () => {
     })
 
     expect(submenu()).toBeNull()
+  })
+
+  it('Escape 关闭菜单并把焦点还给展开按钮', async () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    await fireEvent.click(expandButton('常用工具'), { detail: 0 })
+    await tick()
+
+    await fireEvent.keyDown(document, { key: 'Escape' })
+    await tick()
+
+    expect(submenu()).toBeNull()
+    // 焦点不还回去的话，键盘用户按完 Escape 会掉到文档开头
+    expect(document.activeElement).toBe(expandButton('常用工具'))
+  })
+
+  it('点浮层外部关闭菜单', async () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    await fireEvent.click(expandButton('常用工具'), { detail: 1 })
+    expect(submenu()).toBeTruthy()
+
+    await fireEvent.pointerDown(document.body)
+    await tick()
+
+    expect(submenu()).toBeNull()
+  })
+
+  it('点菜单内部不关闭菜单', async () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    await fireEvent.click(expandButton('常用工具'), { detail: 1 })
+
+    await fireEvent.pointerDown(submenu() as HTMLElement)
+    await tick()
+
+    expect(submenu()).toBeTruthy()
   })
 
   it('切到左侧导航后不再渲染顶部子菜单', async () => {
