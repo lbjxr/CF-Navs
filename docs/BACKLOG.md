@@ -13,7 +13,7 @@
 | --- | --- | --- | --- | --- | --- |
 | PROB-26 | 追溯 | P2 | 为已关闭 #8 的两项已实现诉求建立追溯 | 已裁定（2026-09-05，建立追溯）。改 `GITHUB_ISSUES_REQUIREMENTS.md` 三处（按小节定位，行号已漂移）：§1.2 的排除句改为「Closed Issue 不新立 R 编号，但已实现的诉求要在 §8 建立追溯」、§3 总表 R-08 来源列补 #8、§8 新增 #8 追溯（部分导出 → R-08；顶部导航分行 → `PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md` + `src/components/Sidebar.svelte`），并注明 #8 的 `bug-fixed` 只对应侧栏滚动条那一条。**只改本地文档，不动云端 #8** | PH PROB-26 |
 | PROB-04 | 需求对齐 | P3 | 配色分区去掉模块顶层说明，分组名收敛 | 已裁定（2026-09-05，方案 a）。改 `src/components/settings/GradientPresetSelector.svelte`（按内容定位）：删 `.gradient-preset-header` 里的 `内置配色方案` 标题与紧随的说明段落；`presetGroups` 的 `毛玻璃氛围` → `毛玻璃`（`护眼纯色` 不变）；两组 `hint` 从 `.gradient-preset-group-title` 的内联 `<span>` 移进 hover 的 `title`；header 右侧「自定义 / 已选方案」是选中态反馈，保留。验证挂载组件写行为断言，**不新增源码文本断言** | PH PROB-04 |
-| PROB-30 | 技术债 | P3 | 无预设时的 accent 回退值提为命名常量并加注释 | 已裁定（2026-09-05，方案 a：保留取值 + 注释）。`src/lib/appData.ts` 的 `buildHomeBackground` 里 `accentColor` 无预设回退分支的 `#7dd3fc` / `#2563eb` 提成命名常量，注明只在无预设时生效、与 22 套预设 accent 无继承关系、`#7dd3fc` 与 `ocean-depths` 的 `darkAccent` 同值属巧合。**不改渲染结果、不新增测试**。残余风险：自定义背景同色系时焦点环对比度不足，真正解法是「让自定义背景也能配 accent」，需单独立项 | PH PROB-30 |
+| REQ-13 | 需求 | P2 | 自定义背景可配置强调色（承接 PROB-30 方案 c） | 已裁定并批准（2026-09-05，方案 c）。生效口径：**只在 `background_preset_id === 'custom'` 时生效**，有预设仍走预设 accent，因此不构成「两套真源」。需要浅/深成对两个字段。实现必须同时覆盖三处回退：`appData.ts` 的 `buildHomeBackground`、`Home.svelte` 的 `--home-accent-color` 两个档、`SettingsHomePreview.svelte` 的 6 处 `color-mix` 内联回退（后者深浅色都用浅色值，属既有不一致，一并对齐）。改动面含 `shared/types.ts`、`shared/settings.ts`（归一化 + `SETTINGS_KEYS` + 公开白名单）、`worker/lib/settingsData.ts`、`worker/routes/settings.ts`、`schema.sql`、设置面板 UI、`API_CONTRACT.md` 设置键表与其「30 个」计数。UI 落点与 `PROB-04` 争用 `GradientPresetSelector.svelte`，须串行 | RD REQ-13 |
 | PROB-24 | 技术债 | P3 | `src/App.svelte` 按 use case 收敛编排职责 | **只在后续修改认证 / CRUD / 弹窗流程时顺带做**，不单独开一轮重构 | PH PROB-24 |
 
 ## 2. 需要裁定
@@ -22,7 +22,7 @@
 
 > 2026-09-04 已裁定并落地：PROB-03 / PROB-27（保持现状，回写文档）、PROB-11（移动端收进「更多操作」菜单）、PROB-12（回写文档，确认浮动操作行）、PROB-28（下限继续下调到 40 px）、PROB-29（改写为「无非法目标 + 逐项后果提示」）。
 >
-> 2026-09-05 已裁定、**待实现**（见第 1 节）：PROB-26（建立追溯）、PROB-04（方案 a：删模块顶层说明 + 分组名收敛成「毛玻璃」）、PROB-30（方案 a：保留 accent 回退值并加注释）。各条的裁定依据与待实现动作见 PH 对应条目。
+> 2026-09-05 已裁定、**待实现**（见第 1 节）：PROB-26（建立追溯）、PROB-04（方案 a：删模块顶层说明 + 分组名收敛成「毛玻璃」）、PROB-30（**方案 c**：让自定义背景也能配 accent，承接编号 `REQ-13`，同时推翻 `FR-4.5` 第二条与 `D-10`）。各条的裁定依据与待实现动作见 PH / RD 对应条目。
 
 ## 3. 需要运行环境或部署后才能闭环（L1 / L3）
 
@@ -47,6 +47,8 @@
 
 这些来自 `plans/FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md`（状态为「需求评估，尚未实现」），**逐项都需要明确批准才可开工**。批准后应开一个 GitHub Issue 承载状态，并从本表移除。
 
+> `REQ-13`（自定义背景可配置强调色）**不在本表**：它已于 2026-09-05 随 PROB-30 裁定获得批准，列在第 1 节。按本节规则它还缺一个承载状态的 GitHub Issue —— **建 Issue 需单独授权**，尚未创建。
+
 | ID | 优先 | 事项 | 前置 | 详情 |
 | --- | --- | --- | --- | --- |
 | REQ-01 | P1 | 离屏搜索按钮 + 居中 Spotlight 命令面板 | 与顶部导航按钮对齐的改动必须串行；验收含焦点陷阱与键盘导航，需要 PROB-18c 的真实浏览器层 | RD REQ-01 |
@@ -55,7 +57,7 @@
 | REQ-02 | P2 | PC 操作胶囊 hover/focus 渐显，排序态恒显 | hover 与 reduced-motion 需 PROB-18c | RD REQ-02 |
 | REQ-03 | P2 | 空分类固定显示「新增书签」按钮，访客不显示 | — | RD REQ-03 |
 | REQ-06 | P2 | 新增书签时默认分类取视口中央分类 | — | RD REQ-06 |
-| REQ-07 | P2 | 新增 `accent-border` / `accent-glow` token | 先决定是否与已存在的 `--confirm-accent-border` 并轨 | RD REQ-07 |
+| REQ-07 | P2 | 新增 `accent-border` / `accent-glow` token | 先决定是否与已存在的 `--confirm-accent-border` 并轨；与已批准的 `REQ-13` 动同一批 accent 定义点与预览回退，两条必须串行 | RD REQ-07 |
 | REQ-10 | P2 | 书签图标属性契约补齐 | 先裁定 `CachedBookmarkIcon` 是否属于「书签网络图标路径」 | RD REQ-10 |
 | REQ-11 | P2 | 字母头像按 hostname/title 派生稳定高对比色 | — | RD REQ-11 |
 | REQ-09 | P3 | 信息卡标题/描述换字号 token | 有 0.4px 偏差，须先按视觉回归约束确认 | RD REQ-09 |
