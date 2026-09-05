@@ -128,11 +128,10 @@ function pageCacheReport() {
   })()
 }
 
-function pageProbeAnonymous(origin, ids) {
+function pageProbeAnonymous(origin, ids, token) {
   return (async () => {
-    const probe = async (url) => {
+    const probeJson = async (url) => {
       try {
-        // credentials: 'omit' 保证不带上任何 cookie，探的确实是匿名路径
         const response = await fetch(url, { credentials: 'omit', cache: 'no-store' })
         let code = null
         try {
@@ -140,18 +139,69 @@ function pageProbeAnonymous(origin, ids) {
         } catch {
           code = null
         }
-        return { url, status: response.status, code }
+        return { status: response.status, code }
       } catch (error) {
-        return { url, status: 0, code: null, error: String(error).slice(0, 200) }
+        return { status: 0, code: null, error: String(error).slice(0, 200) }
       }
     }
 
-    const results = { adminData: await probe(`${origin}/api/admin/data`) }
+    // 图标端点不返回 JSON，也不返回 401——按内容指纹比对，这才是「不泄露」的判据。
+    const fingerprint = async (url) => {
+      try {
+        const response = await fetch(url, { credentials: 'omit', cache: 'no-store' })
+        const buffer = await response.arrayBuffer()
+        const digest = await crypto.subtle.digest('SHA-256', buffer)
+        const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+        return {
+          status: response.status,
+          bytes: buffer.byteLength,
+          sha256: hex,
+          contentType: response.headers.get('content-type') ?? '',
+          cacheControl: response.headers.get('cache-control') ?? '',
+        }
+      } catch (error) {
+        return { status: 0, bytes: 0, sha256: '', error: String(error).slice(0, 200) }
+      }
+    }
+
+    const results = { adminData: await probeJson(`${origin}/api/admin/data`) }
+
+    // 基线：一个几乎不可能存在的 id。私密对象的匿名响应必须与它逐字节相同。
+    const absentId = 999999999
+    results.absentBookmarkIcon = await fingerprint(`${origin}/api/icon/${absentId}`)
+    results.absentCategoryIcon = await fingerprint(`${origin}/api/category-icon/${absentId}`)
+
+    // 授权基线：拿一个短寿命 key，证明该对象确实有真实图标可取。
+    // 没有这一步，「匿名拿到兜底」可能只是因为它本来就没图标，断言就是空转。
+    let grantKey = ''
+    if (token) {
+      try {
+        const grant = await fetch(`${origin}/api/icon-access`, {
+          headers: { authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+        grantKey = (await grant.json().catch(() => null))?.data?.key ?? ''
+      } catch {
+        grantKey = ''
+      }
+    }
+    results.grantAcquired = Boolean(grantKey)
+
     if (ids.bookmarkId != null) {
-      results.privateBookmarkIcon = await probe(`${origin}/api/icon/${ids.bookmarkId}`)
+      results.privateBookmarkIcon = await fingerprint(`${origin}/api/icon/${ids.bookmarkId}`)
+      if (grantKey) {
+        results.authorizedBookmarkIcon = await fingerprint(
+          `${origin}/api/icon/${ids.bookmarkId}?key=${encodeURIComponent(grantKey)}`,
+        )
+      }
     }
     if (ids.categoryId != null) {
-      results.privateCategoryIcon = await probe(`${origin}/api/category-icon/${ids.categoryId}`)
+      results.privateCategoryIcon = await fingerprint(`${origin}/api/category-icon/${ids.categoryId}`)
+      if (grantKey) {
+        results.authorizedCategoryIcon = await fingerprint(
+          `${origin}/api/category-icon/${ids.categoryId}?key=${encodeURIComponent(grantKey)}`,
+        )
+      }
     }
     return results
   })()
@@ -428,52 +478,85 @@ async function runOfflineCheck(session) {
   await sleep(1200)
 }
 
-async function runAnonymousProbes(session, ids) {
+async function runAnonymousProbes(session, ids, token) {
   phase('PROB-20c 匿名边界')
 
   const anonymous = await session.call(pageProbeAnonymous, TARGET_ORIGIN, {
     bookmarkId: ids.bookmarkId,
     categoryId: ids.categoryId,
-  })
+  }, token)
 
-  // shared/types.ts：UNAUTHORIZED = 1001（未登录/token 失效），BAD_REQUEST = 1002。
-  // 匿名访问受保护端点应当是 1001；判定同时接受 HTTP 401，两者任一成立即视为已拒绝。
-  const denied = (result) => Boolean(result) && (result.status === 401 || result.code === 1001)
-
+  // 管理数据端点确实返回 401 / code 1001（shared/types.ts：UNAUTHORIZED = 1001）。
   check(
     'anonymous-admin-data-denied',
     'PROB-20c',
-    denied(anonymous.adminData),
+    anonymous.adminData?.status === 401 || anonymous.adminData?.code === 1001,
     `status=${anonymous.adminData?.status} code=${anonymous.adminData?.code}`,
   )
 
-  if (ids.bookmarkId == null) {
-    skip(
-      'anonymous-private-bookmark-icon-denied',
+  // 图标端点是另一套语义（PROB-20 方案 1，见 worker/routes/icon.ts 的注释）：匿名请求私密
+  // 对象**不返回 401**，而是回落到不含标题与域名的兜底图标，表现与「id 不存在」逐字节一致——
+  // 那才是不泄露存在性的做法。所以判据是三方指纹比对，不是 HTTP 状态码。
+  const indistinguishable = (probe, baseline, label, id) => {
+    if (!probe?.sha256 || !baseline?.sha256) {
+      return check(`${label}-matches-absent-id`, 'PROB-20c', false, 'fingerprint unavailable')
+    }
+    return check(
+      `${label}-matches-absent-id`,
       'PROB-20c',
-      'no bookmark inside a private category on this instance',
-    )
-  } else {
-    check(
-      'anonymous-private-bookmark-icon-denied',
-      'PROB-20c',
-      denied(anonymous.privateBookmarkIcon),
-      `id=${ids.bookmarkId} status=${anonymous.privateBookmarkIcon?.status} code=${anonymous.privateBookmarkIcon?.code}`,
+      probe.sha256 === baseline.sha256,
+      `id=${id} identical=${probe.sha256 === baseline.sha256} bytes=${probe.bytes}/${baseline.bytes}`,
     )
   }
 
-  if (ids.categoryId == null) {
-    skip(
-      'anonymous-private-category-icon-denied',
-      'PROB-20c',
-      'no private category on this instance',
-    )
+  // 授权路径必须拿到**不同于**兜底的内容。缺了这一条，「匿名拿到兜底」可能只是因为该对象
+  // 本来就没有图标，上面那条比对就是空转断言。
+  const authorizedDiffers = (authorized, fallback, label) => {
+    if (!authorized?.sha256) {
+      return skip(`${label}-authorized-differs`, 'PROB-20b', 'no icon access grant, or the request failed')
+    }
+    if (authorized.sha256 === fallback?.sha256) {
+      return skip(
+        `${label}-authorized-differs`,
+        'PROB-20b',
+        'authorized response equals the fallback: this object has no stored icon, so the anonymous ' +
+        'comparison above cannot tell protection apart from absence',
+      )
+    }
+    return check(`${label}-authorized-differs`, 'PROB-20b', true, `bytes=${authorized.bytes}`)
+  }
+
+  if (ids.bookmarkId == null) {
+    skip('anonymous-private-bookmark-icon-matches-absent-id', 'PROB-20c',
+      'no bookmark inside a private category on this instance')
   } else {
+    indistinguishable(anonymous.privateBookmarkIcon, anonymous.absentBookmarkIcon,
+      'anonymous-private-bookmark-icon', ids.bookmarkId)
+    authorizedDiffers(anonymous.authorizedBookmarkIcon, anonymous.privateBookmarkIcon,
+      'private-bookmark-icon')
+  }
+
+  if (ids.categoryId == null) {
+    skip('anonymous-private-category-icon-matches-absent-id', 'PROB-20c',
+      'no private category on this instance')
+  } else {
+    indistinguishable(anonymous.privateCategoryIcon, anonymous.absentCategoryIcon,
+      'anonymous-private-category-icon', ids.categoryId)
+    authorizedDiffers(anonymous.authorizedCategoryIcon, anonymous.privateCategoryIcon,
+      'private-category-icon')
+  }
+
+  // 授权响应绝不能进共享缓存，否则下一个匿名访客可能命中它（PROB-20b 的缓存隔离）。
+  for (const [label, probe] of [
+    ['bookmark', anonymous.authorizedBookmarkIcon],
+    ['category', anonymous.authorizedCategoryIcon],
+  ]) {
+    if (!probe?.cacheControl) continue
     check(
-      'anonymous-private-category-icon-denied',
-      'PROB-20c',
-      denied(anonymous.privateCategoryIcon),
-      `id=${ids.categoryId} status=${anonymous.privateCategoryIcon?.status} code=${anonymous.privateCategoryIcon?.code}`,
+      `authorized-${label}-icon-not-shared-cacheable`,
+      'PROB-20b',
+      /private/.test(probe.cacheControl) && /no-store/.test(probe.cacheControl),
+      probe.cacheControl,
     )
   }
 
@@ -669,7 +752,7 @@ async function main() {
       hasPrivateCategory: ids.categoryId != null,
     }
 
-    report.anonymous = await runAnonymousProbes(session, ids)
+    report.anonymous = await runAnonymousProbes(session, ids, login.token)
     report.export = await runExportCheck(session, login.token)
     report.modals = await runModalChecks(session)
     report.screenshots = await captureViewportScreenshots(session)
@@ -710,8 +793,10 @@ async function main() {
   console.log(`  passed ${report.passed} / failed ${report.failed} / skipped ${report.skipped}`)
   console.log(
     `  cleanup: target=${cleanupOutcome?.targetClosed} browser=${cleanupOutcome?.browserClosed} ` +
-    `profile=${cleanupOutcome?.profileRemoved} errors=${cleanupOutcome?.errors.length ?? 0}`,
+    `profile=${cleanupOutcome?.profileRemoved} errors=${cleanupOutcome?.errors.length ?? 0} ` +
+    `warnings=${cleanupOutcome?.warnings?.length ?? 0}`,
   )
+  for (const warning of cleanupOutcome?.warnings ?? []) console.log(`  cleanup warning: ${warning}`)
 
   const reportFile = path.join(SHOT_DIR, 'acceptance-report.json')
   await mkdir(SHOT_DIR, { recursive: true })

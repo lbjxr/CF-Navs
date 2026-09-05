@@ -389,7 +389,10 @@ export class CdpSession {
       targetClosed: false,
       browserClosed: false,
       profileRemoved: false,
+      // errors 只装安全相关失败：浏览器没关掉、进程没归零。
       errors: [],
+      // warnings 装不影响安全的残留，例如临时目录删不掉（磁盘垃圾，不是安全问题）。
+      warnings: [],
     }
 
     if (this.createdTarget && this.targetId && this.ws) {
@@ -416,6 +419,14 @@ export class CdpSession {
       // 套接字已断开时无需处理。
     }
 
+    // 已经关过浏览器了，别再让 event loop 为这个子进程等下去——不 unref 的话脚本
+    // 输出完结果还会挂几分钟，看起来像卡死。
+    try {
+      this.chromeProcess?.unref()
+    } catch {
+      // 进程已退出时无需处理。
+    }
+
     if (this.startedByTest && this.profileIsSafeToDelete) {
       // Browser.close 返回后进程退出仍需要一点时间，等到计数归零再删目录。
       let remaining = this.#countProcessesUsingProfile()
@@ -432,7 +443,7 @@ export class CdpSession {
         // 进程数已归零，但 Chrome 刚退出时文件句柄可能还没释放（常见于词典文件 *.bdic），
         // 直接删会拿到 EBUSY。退避重试，最后一次失败才算清理失败。
         let lastError = null
-        for (let attempt = 0; attempt < 6; attempt += 1) {
+        for (let attempt = 0; attempt < 12; attempt += 1) {
           try {
             await rm(this.userDataDir, { recursive: true, force: true, maxRetries: 3 })
             outcome.profileRemoved = true
@@ -440,10 +451,17 @@ export class CdpSession {
             break
           } catch (error) {
             lastError = error
-            await sleep(750)
+            await sleep(1500)
           }
         }
-        if (lastError) outcome.errors.push(`profile removal: ${lastError.message}`)
+        if (lastError) {
+          // 进程已归零，所以没有安全问题；剩下的只是留在磁盘上的临时目录。
+          outcome.warnings.push(
+            `temp profile not deleted after 18s of retries (${lastError.message}). ` +
+            'No browser process is left running; this is disk residue only. ' +
+            'Remove it with the snippet in docs/guides/PRODUCTION_ACCEPTANCE.md section 7.',
+          )
+        }
       }
     }
 

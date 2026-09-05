@@ -18,12 +18,14 @@
 //   PERF_MIN_BOOKMARK_CARDS=300
 //   PERF_MAX_ICON_REQUESTS=260
 
-import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
+import { join as pathJoin } from 'node:path'
+import { CdpSession } from './lib/cdpSession.mjs'
+import { requireAdminCredentials } from './lib/verifyCredentials.mjs'
+import { resolveBaseUrl, resolveChromeProfileRoot, resolveSetting } from './lib/verifyTarget.mjs'
 
 const BASE_URL = resolveBaseUrl()
 const CHROME_DEBUG_PORT = resolveSetting('CHROME_DEBUG_PORT', 'chromeDebugPort', '9223')
-const ADMIN_USER = process.env.ADMIN_USER || ''
-const ADMIN_PASS = process.env.ADMIN_PASS || ''
+const { username: ADMIN_USER, password: ADMIN_PASS } = requireAdminCredentials()
 const ALLOW_FAILURES = process.env.PERF_AUDIT_ALLOW_FAILURES === '1'
 const MAX_FAILED_REQUESTS = readIntegerEnv('PERF_MAX_FAILED_REQUESTS', 0)
 const MAX_ADMIN_DATA_TRANSFER = readIntegerEnv('PERF_MAX_ADMIN_DATA_TRANSFER', 60000)
@@ -41,16 +43,6 @@ let pageTargetCreatedByTest = false
 const pending = new Map()
 const events = []
 const network = new Map()
-
-function usageError(message) {
-  console.error(message)
-  console.error('Required: ADMIN_USER and ADMIN_PASS environment variables.')
-  process.exit(2)
-}
-
-if (!ADMIN_USER || !ADMIN_PASS) {
-  usageError('Missing credentials.')
-}
 
 function readIntegerEnv(name, fallback) {
   const parsed = Number.parseInt(process.env[name] || '', 10)
@@ -377,14 +369,25 @@ async function runAdminSearch() {
         characterData: true,
       })
 
-      for (const value of ['n', 'np', 'npm']) {
-        input.value = value
+      // 从当前列表里取一个真实存在的词，逐字符输入以复现防抖行为。
+      // 写死关键词（原来是 'npm'）在数据不同的实例上必然命中 0 行，测出来的是夹具问题。
+      const firstRow = document.querySelector('tbody tr')
+      const rowText = (firstRow?.textContent ?? '').replace(/\s+/g, ' ').trim()
+      const term = (rowText.match(/[\p{L}\p{N}]{2,}/u)?.[0] ?? '').slice(0, 4)
+      if (!term) {
+        observer.disconnect()
+        return { error: 'no searchable term found in the bookmark table' }
+      }
+
+      for (let length = 1; length <= term.length; length += 1) {
+        input.value = term.slice(0, length)
         input.dispatchEvent(new Event('input', { bubbles: true }))
         await delay(80)
       }
       await delay(500)
 
       const afterSearch = {
+        term,
         rows: document.querySelectorAll('tbody tr').length,
         nodes: document.querySelectorAll('*').length,
         mutations: mutations.count,
@@ -457,9 +460,38 @@ function summarizeNetwork() {
 
   const adminData = requests.find((request) => new URL(request.url).pathname === '/api/admin/data')
 
+  const targetHost = new URL(TARGET_ORIGIN).host
+  const isFirstParty = (request) => new URL(request.url).host === targetHost
+
+  // 收尾时 Page.close 会中止此刻仍在进行的文档请求（典型是 Service Worker 的导航预载），
+  // 它会被记成 net::ERR_FAILED。那是本脚本自己造成的，不是站点故障——accept:prod 同样
+  // 反复导航根路径却没有失败请求，差别就在于它不关页面。只放行「根文档 + ERR_FAILED」
+  // 这一种组合，其它本站失败照旧算失败。
+  const isTeardownAbort = (request) => {
+    const url = new URL(request.url)
+    return (
+      url.host === targetHost &&
+      (url.pathname === '/' || url.pathname === '') &&
+      request.errorText === 'net::ERR_FAILED'
+    )
+  }
+
   return {
     totalRequests: requests.length,
-    navsHostRequests: requests.filter((request) => new URL(request.url).host === new URL(TARGET_ORIGIN).host).length,
+    navsHostRequests: requests.filter(isFirstParty).length,
+    failedFirstParty: failed
+      .filter((request) => isFirstParty(request) && !isTeardownAbort(request))
+      .map((request) => ({
+        url: request.url,
+        status: request.status ?? null,
+        errorText: request.errorText ?? null,
+      })),
+    teardownAborts: failed.filter(isTeardownAbort).length,
+    failedThirdParty: failed.filter((request) => !isFirstParty(request)).map((request) => ({
+      host: new URL(request.url).host,
+      status: request.status ?? null,
+      errorText: request.errorText ?? null,
+    })),
     apiRequests: countPath('/api/'),
     iconRequests: countPath('/api/icon/'),
     iconifyRequests: countPath('/api/iconify/'),
@@ -488,11 +520,21 @@ function auditCheck(name, passed, actual, expected) {
 
 function collectAuditChecks(result) {
   return [
+    // 按 origin 分开算。外站图标失败是站点管不着的事——书签指向的第三方图片可能设了
+    // `Cross-Origin-Resource-Policy: same-origin`，浏览器直接拒收（生产实测遇到一例）。
+    // 前端对此有兜底，`home broken images` 那条能证明用户看不到破图。
+    // 真正不能容忍的是**本站**请求失败，那才说明部署或路由出了问题。
     auditCheck(
-      'failed network requests',
-      result.network.failed.length <= MAX_FAILED_REQUESTS,
-      result.network.failed.length,
-      `<= ${MAX_FAILED_REQUESTS}`,
+      'failed first-party requests',
+      result.network.failedFirstParty.length <= MAX_FAILED_REQUESTS,
+      result.network.failedFirstParty,
+      `<= ${MAX_FAILED_REQUESTS} first-party failures`,
+    ),
+    auditCheck(
+      'third-party resource failures reported',
+      true,
+      result.network.failedThirdParty.map((item) => `${item.host} ${item.errorText ?? item.status}`),
+      'informational only; the icon fallback path covers these',
     ),
     auditCheck(
       'home bookmark card count',
@@ -553,8 +595,56 @@ async function clearAuth() {
   }
 }
 
+/**
+ * 保证 chromeDebugPort 上有一个可用的 DevTools 端点。
+ *
+ * 端口空着就启动隔离临时 Chrome；端口被占用但不是 DevTools 端点（例如恰好撞上使用者
+ * 自己 Chrome 随机占用的端口）时给出可操作错误，而不是让后面的请求抛出 404。
+ */
+async function ensureDevToolsEndpoint() {
+  const endpoint = `http://127.0.0.1:${CHROME_DEBUG_PORT}`
+
+  let listening = false
+  try {
+    const probe = await fetch(`${endpoint}/json/version`, { signal: AbortSignal.timeout(3000) })
+    if (probe.ok) return null
+    listening = true
+  } catch {
+    listening = false
+  }
+
+  if (listening) {
+    throw new Error(
+      `Port ${CHROME_DEBUG_PORT} is in use but does not answer /json/version.\n` +
+      "Something other than a DevTools endpoint is listening there — commonly the user's own Chrome, " +
+      'which grabs assorted local ports.\n' +
+      'Pick a free port for chromeDebugPort in verify.local.json (or CHROME_DEBUG_PORT).',
+    )
+  }
+
+  const chromeExe = resolveSetting(
+    'CHROME_EXE',
+    'chromeExe',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  )
+  const profileDir = pathJoin(
+    resolveChromeProfileRoot(),
+    `cf-navs-chrome-profile-perf-${Date.now().toString(36)}`,
+  )
+  const session = new CdpSession({
+    chromeExe,
+    debugPort: CHROME_DEBUG_PORT,
+    userDataDir: profileDir,
+    headless: process.env.PERF_HEADED !== '1',
+    noSandbox: process.env.CHROME_NO_SANDBOX === '1',
+  })
+  await session.start()
+  return session
+}
+
 async function main() {
   const startedAt = new Date().toISOString()
+  const launched = await ensureDevToolsEndpoint()
   const target = await getPageTarget()
   await connect(target)
 
@@ -609,6 +699,15 @@ async function main() {
       }
     }
     ws?.close()
+
+    if (launched) {
+      const outcome = await launched.cleanup()
+      for (const warning of outcome.warnings) console.error('cleanup warning:', warning)
+      if (outcome.errors.length > 0) {
+        console.error('cleanup failed:', outcome.errors.join('; '))
+        process.exitCode = 1
+      }
+    }
   }
 }
 

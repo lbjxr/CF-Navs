@@ -138,13 +138,36 @@ Get-ChildItem $env:TEMP -Directory -Filter 'cf-navs-chrome-profile-*' | ForEach-
 | 现象 | 原因与处理 |
 | --- | --- |
 | `Debug port N is already in use` | 端口上有别的 Chrome。先 `curl http://127.0.0.1:N/json/version` 看它是谁；是孤儿就按 §7 清理，是专用实例就设 `ACCEPT_ALLOW_EXISTING_CHROME=1` |
+| `Port N is in use but does not answer /json/version` | 端口被非 DevTools 的东西占着。**使用者自己的 Chrome 会随机占用一批本地端口**——首次配置时实测撞上过一个。换一个空闲端口写进 `chromeDebugPort` / `acceptDebugPort` |
+| 用 `curl` / `urllib` 直接请求站点得到 **403** | Cloudflare 拦掉了不带 `User-Agent` 的请求，返回的是挑战页而不是站点内容。**这不代表站点故障**：带上正常浏览器 UA 就是 200，验收脚本用真实 Chrome 也不受影响。手工探测时记得加 `-H "user-agent: Mozilla/5.0 ..."` |
+| `temp profile not deleted after 18s of retries` | Windows 上 Chrome 退出后 `first_party_sets.db`、`*.bdic` 等文件的句柄释放滞后于进程退出。**这是 warning 不是 error**：进程已归零，没有安全问题，只是磁盘上留了个目录。按 §7 清掉即可 |
 | `verify.local.json is tracked by Git` | 凭据文件进了版本库。`git rm --cached verify.local.json`，然后**轮换管理员密码** |
 | `Missing verification target origin` | `verify.local.json` 缺 `baseUrl`，或 JSON 语法错误 |
 | 验收结果与代码不符 | 大概率是在旧版本上跑的。回到 §2 第 3 步确认部署已生效 |
 | `profile removal: EBUSY` | Chrome 刚退出，文件句柄未释放。脚本已做退避重试；仍失败时按 §7 手动清 |
 | localhost 目标返回 502 | `HTTP_PROXY` 拦截了本地请求。用 `curl.exe --noproxy '*'` 或给脚本设 `NO_PROXY=127.0.0.1,localhost` |
 
-## 9. 脚本分工
+## 9. 首次生产验收基线（2026-09-05）
+
+被测构建 `assets/index-E5e6ANTt.js`。这组数字是后续比较的基线，明显偏离时先怀疑回归。
+
+| 指标 | 实测 | 阈值 |
+| --- | --- | --- |
+| `accept:prod` | 27 passed / 0 failed / 0 skipped | 全通过 |
+| `perf:audit` | 9 passed / 0 failed | 全通过 |
+| 登出撤销生效 | 178 ms | ≤ 15 000 ms |
+| 书签图标请求数 | 235 | ≤ 260 |
+| Cache Storage | 0.74 MiB | ≤ 5 MiB |
+| 管理数据传输量 | 37 669 B | ≤ 60 000 B |
+| 首页书签卡片 | 370 | ≥ 300 |
+| 首页破图 | 0 | 0 |
+| Service Worker 命中 | 9 个响应 | > 0 |
+
+**最有价值的一条结论**：匿名取私密书签图标（`/api/icon/1015`）与「不存在的 id」**逐字节相同**（326 B，SHA-256 一致），私密分类同理；带授权 key 时返回不同内容（568 B / 329 B），且 `cache-control: private, no-store`。四条组合起来才证明 PROB-20 方案 1 与 PROB-20b 在生产上真的生效——单看 HTTP 状态码永远得不出这个结论，因为该设计**刻意不返回 401**。
+
+一处已知的第三方失败：某书签指向的外站图片设了 `Cross-Origin-Resource-Policy: same-origin`，浏览器拒收。站点管不着，前端兜底生效（首页 0 破图），因此计入 informational 而不是失败。
+
+## 10. 脚本分工
 
 | 脚本 | 目标 | 副作用 | 说明 |
 | --- | --- | --- | --- |

@@ -81,9 +81,15 @@ export function redactCredentials(text, credentials = resolveAdminCredentials())
   if (typeof text !== 'string' || !text) return text
 
   let output = text
-  for (const secret of [credentials.password, credentials.username]) {
-    if (!secret || secret.length < 3) continue
-    output = output.split(secret).join('<redacted>')
+  // 密码一律全局替换。
+  if (credentials.password && credentials.password.length >= 3) {
+    output = output.split(credentials.password).join('<redacted>')
+  }
+  // 用户名只在足够长时才挡：常见值就是 "admin"，全局替换会把检查 ID 里的 admin
+  // 一起改掉（实测出现过 anonymous-<redacted>-data-denied），让报告难读却没换来保密。
+  // 用户名本身不是秘密——密码才是。
+  if (credentials.username && credentials.username.length >= 8) {
+    output = output.split(credentials.username).join('<redacted-user>')
   }
   return output
 }

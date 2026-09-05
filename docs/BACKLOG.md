@@ -24,23 +24,23 @@
 >
 > 2026-09-05 已裁定、**待实现**（见第 1 节）：PROB-26（建立追溯）、PROB-04（方案 a：删模块顶层说明 + 分组名收敛成「毛玻璃」）、PROB-30（**方案 c**：让自定义背景也能配 accent，承接编号 `REQ-13`，同时推翻 `FR-4.5` 第二条与 `D-10`）。各条的裁定依据与待实现动作见 PH / RD 对应条目。
 
-## 3. 需要运行环境或部署后才能闭环（L1 / L3）
+## 3. 需要运行环境或部署后才能闭环（L1 / L3 / L4）
 
 > 部署来源是 `develop`：推送后 Cloudflare 自动构建并更新站点，没有手动 deploy 步骤。
-> 推送生效后跑 `npm run accept:prod`（只读，无任何写入）能自动闭环下表大部分条目——
-> 每条的「自动化」列写明覆盖到哪、剩下什么必须人工。流程、分层与排障见
-> [部署后验收](guides/PRODUCTION_ACCEPTANCE.md)。
+> **首次生产验收已完成（2026-09-05）**：`npm run accept:prod` 27/27 通过、`npm run perf:audit` 9/9 通过，
+> 被测构建 `assets/index-E5e6ANTt.js`。流程、分层与排障见 [部署后验收](guides/PRODUCTION_ACCEPTANCE.md)。
+> 下表「剩余」列写的是这次**没能**闭环的部分，其余已由脚本证明。
 
-| ID | 类型 | 优先 | 事项 | 自动化 | 详情 |
+| ID | 类型 | 优先 | 已验证（2026-09-05 生产） | 剩余 | 详情 |
 | --- | --- | --- | --- | --- | --- |
-| PROB-19v | 安全 | P1 | 登出撤销的跨 isolate 生效窗口（≤15 秒）与真实 KV 写入故障下的 `store_unavailable` 分支 | **生效窗口已自动化**（`logout-accepted` + `revoked-token-rejected-within-window`，报告里带实际毫秒数）。KV 故障注入仍需人工：生产上没有安全的注入手段 | PH PROB-19 |
-| PROB-13 | 验证欠账 | P1 | 剩余 7 组真机验收（`L1`/`L3`/`L4`/`S3`/`S3 导入提示`/`S4`/`U1–U4`） | **`L1`/`L3` 全覆盖**，`L4` 覆盖离线可打开，`U1–U4` 覆盖桌面与 390x844 的弹窗尺寸与操作栏。仍需人工：iOS Safari 输入放大（iOS 独有行为）、`L4` 的「已检测到新版本」（要两次真实部署）、`S3`（属 Tier 1 写设置）、`S3 导入提示`（要人工选文件）、`S4`（要可嵌入站点作书签） | PH PROB-13 |
-| PROB-14 | 验证欠账 | P1 | 部署后实测部分导出下载与 replace/merge 导入 | **导出子集已自动化**（`partial-export-builds-subset-with-parent`，含父分类补齐）。导入是 Tier 2：`replace` 会清库，**只在本地实例验证** | PH PROB-14 |
-| PROB-20c | 安全 | P1 | 匿名枚举探针、缓存命名空间递增后旧 edge cache 条目不可达、PROB-20b 授权路径未污染 edge cache | **匿名探针已自动化**（管理数据 + 私密书签图标 + 私密分类图标三条；实例上没有私密对象时记 skip 并说明）。edge cache 条目不可达与污染判定仍需人工：要能观察 Cloudflare edge 的缓存键 | PH PROB-20 |
-| PROB-18c | 技术债 | P2 | 真实浏览器验证层 | **基础设施已建成**：`scripts/lib/cdpSession.mjs` 提供视口仿真、`getComputedStyle` 采样、真实 `Input` 事件、离线仿真与精确清理。剩下的是逐项补场景，以及 `100dvh`/虚拟键盘、剪贴板 transient activation、iOS 放大这些真机独有项 | PH PROB-18 |
-| PROB-23 | 验证欠账 | P2 | 旧 Service Worker、Cache Storage 膨胀、外站图标失败 | **Cache Storage 预算与图标破图已自动化**（`cache-storage-within-budget`、`home-images-not-broken`）。旧 SW 版本残留取决于访客浏览器历史状态，无法在干净 profile 里复现 | PH PROB-23 |
-| PROB-17 | 验证欠账 | P2 | 后台移动端三档视觉截图 | **首页三档截图已自动化**（430x932 / 768x1024 / 1440x900，落 `tmp/acceptance/`）。后台备份/导入页截图待补场景 | PH PROB-17 |
-| REQ-08b | 验证欠账 | P3 | 逐套切换 13 个毛玻璃预设做真机视觉确认 | 属 Tier 1（要写 `background_preset_id`）且「好不好看」需要人眼，不自动化 | RD REQ-08 |
+| PROB-19v | 安全 | P1 | 登出后旧 token 被拒，实测 **178 ms**，远低于 15 秒窗口 | KV 写入故障下的 `store_unavailable` 分支——生产上没有安全的故障注入手段 | PH PROB-19 |
+| PROB-13 | 验证欠账 | P1 | `L1` 首访探测一次/二访零次；`L3` Service Worker 接管（9 个响应）+ 预缓存含 `index-*.js`/`.css`；`L4` 离线可打开 | iOS Safari 输入放大（iOS 独有）；`L4` 的「已检测到新版本」（要两次真实部署）；`S3` 自定义 JS 与 `S3 导入提示`（Tier 1/人工选文件）；`S4` 当前页弹层（要可嵌入站点作书签） | PH PROB-13 |
+| PROB-14 | 验证欠账 | P1 | 子集导出含被选分类且补齐父分类 | 证据偏弱：生产上第一个根分类没有子分类也没有书签，导出子集只有 1 个分类 0 个书签。replace/merge 导入属 Tier 2，**只在本地实例验证** | PH PROB-14 |
+| PROB-20c | 安全 | P1 | **匿名枚举防护确认生效**：匿名取私密书签图标（id=1015）与「不存在的 id」逐字节相同（326/326 B，SHA-256 一致），私密分类同理；带授权 key 时返回不同内容（568 B / 329 B），证明防护不是「本来就没图标」；授权响应 `cache-control: private, no-store`。`perf:audit` 图标请求 235 ≤ 260 | 旧 edge cache 条目不可达——需要能观察 Cloudflare edge 的缓存键 | PH PROB-20 |
+| PROB-18c | 技术债 | P2 | 基础设施建成并跑通生产：`scripts/lib/cdpSession.mjs` 提供视口仿真、真实 `Input`、离线仿真、证据采集与精确清理 | `100dvh`/虚拟键盘、剪贴板 transient activation、iOS 放大等真机独有项（归 L4） | PH PROB-18 |
+| PROB-23 | 验证欠账 | P2 | Cache Storage **0.74 MiB** ≤ 5 MiB；首页 0 破图；**观测到一例真实外站图标失败**（第三方图片设了 `Cross-Origin-Resource-Policy: same-origin`，被浏览器拒收，前端兜底生效所以用户看不到破图） | 旧 SW 版本残留取决于访客浏览器历史状态，干净 profile 里复现不出来 | PH PROB-23 |
+| PROB-17 | 验证欠账 | P2 | 首页三档截图（430x932 / 768x1024 / 1440x900） | 后台备份/导入页移动端截图待补场景 | PH PROB-17 |
+| REQ-08b | 验证欠账 | P3 | — | 逐套切换 13 个毛玻璃预设：属 Tier 1（要写 `background_preset_id`）且「好不好看」需要人眼 | RD REQ-08 |
 
 ## 4. 需要向报告者澄清
 

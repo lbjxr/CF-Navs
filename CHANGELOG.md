@@ -10,6 +10,18 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 首次生产验收通过，并修掉验收工具自身的六个缺陷
+
+- **`accept:prod` 27/27、`perf:audit` 9/9**，被测构建 `assets/index-E5e6ANTt.js`。基线数字记入 [部署后验收](docs/guides/PRODUCTION_ACCEPTANCE.md) §9，`docs/BACKLOG.md` 第 3 节逐条写明已验证什么、剩下什么。
+- **PROB-20c 的匿名枚举防护确认在生产生效**，而且是用能站得住的方式证明的：匿名取私密书签图标与「不存在的 id」**逐字节相同**（326 B，SHA-256 一致），私密分类同理；带授权 key 时返回不同内容（568 B / 329 B），说明防护不是「本来就没图标」；授权响应带 `private, no-store` 不进共享缓存。四条缺一条这个结论就立不住。
+- **一条探针判定本来是错的**：最初按「匿名请求私密图标应返回 401」断言，生产上跑出两个 FAIL。查 `worker/routes/icon.ts` 才确认 PROB-20 方案 1 **刻意不返回 401** —— 私密对象一律回落到不含标题与域名的兜底图标，表现与「id 不存在」完全一致，那才是不泄露存在性的做法。按状态码判定会把正确实现报成安全缺陷，已改为三方指纹比对。
+- 其余五个工具缺陷：① `perf-audit.mjs` 假定调试端口上已有 DevTools 端点，端口空着或被占只抛难懂的 `HTTP 404 for .../json/new`，现改为按需自启隔离 Chrome，撞上非 DevTools 端口时给出可操作提示；② 它的后台搜索写死关键词 `'npm'`，生产数据里没有匹配项，于是把「夹具不匹配」报成「后台搜索坏了」，现改为从当前列表取一个真实词；③ `failed network requests` 阈值不分 origin，外站图片设了 `Cross-Origin-Resource-Policy: same-origin` 被浏览器拒收也算失败，现拆成本站/第三方两项，第三方仅作 informational（前端兜底生效，首页 0 破图）；④ 收尾 `Page.close` 会中止此刻仍在进行的文档请求，那条 `net::ERR_FAILED` 被当成站点故障，现单独计入 `teardownAborts`；⑤ 清理把「临时目录删不掉」算成失败，实际 Windows 上 `first_party_sets.db` / `*.bdic` 的句柄释放滞后于进程退出——进程已归零就没有安全问题，现拆成 `errors`（安全）与 `warnings`（磁盘垃圾）。
+- 另外两处：`CdpSession` 关掉浏览器后没 `unref()` 子进程，脚本输出完结果还会挂几分钟像卡死；`redactCredentials` 对 5 字符的用户名 `admin` 做全局替换，把检查 ID 里的 admin 一起脱敏成 `anonymous-<redacted>-data-denied`——密码才是秘密，用户名放宽到 8 字符以上才挡。
+- `perf-audit.mjs` 与 `chrome-regression.mjs` 的凭据也接上共享解析，三个脚本统一支持 `verify.local.json` 的 `adminUser` / `adminPass`。
+- 手册补两条实测排障：用 `curl` / `urllib` 不带 `User-Agent` 请求该站点会得到 **403**（Cloudflare 的挑战页，不是站点故障，带浏览器 UA 就是 200）；配置里的调试端口可能撞上使用者自己 Chrome 随机占用的本地端口。
+- `PROB-25` 改为由维护者直接在 GitHub 回帖澄清，不占用代理任务。
+- 未做：任何功能代码开发。本轮只动测试工具与文档。
+
 ### 部署后验收改成可复跑脚本，按副作用分层（PROB-13 / 14 / 17 / 19v / 20c / 23 / 18c）
 
 - **`npm run accept:prod`（新增）**：零写入的只读探针，21 条检查，本地实例实测 21 passed / 0 failed / 2 skipped，37 秒跑完。覆盖首访/二访安装探测、Service Worker 接管与预缓存内容、离线可打开、Cache Storage 预算、匿名边界（管理数据 + 私密书签图标 + 私密分类图标）、导出子集含父分类、桌面与 390x844 的弹窗尺寸与底部操作栏、三档视口截图、登出撤销生效窗口（报告里带实际毫秒数）。
