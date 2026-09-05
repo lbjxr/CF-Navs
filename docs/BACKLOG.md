@@ -11,7 +11,7 @@
 
 | ID | 类型 | 优先 | 事项 | 下一步 | 详情 |
 | --- | --- | --- | --- | --- | --- |
-| PROB-18b | 技术债 | P2 | 24 个源码文本断言文件迁到组件层 | 增量做：每次迁一个文件，删掉被真实 DOM 断言取代的那几条 | PH PROB-18 |
+| PROB-18b | 技术债 | P2 | 源码文本断言文件迁到组件层 | 增量做：每次迁一个文件，删掉被真实 DOM 断言取代的那几条。**已迁 1 个**（`adminEmptyStateMarkup` → `adminEmptyState`，2026-09-05）；剩余 25 个仍含 `readFileSync` + `toContain`，按 `toContain` 数量从多到少依次是 `adminSettingsLayout`(155)、`categoryCollapseMarkup`(77)、`uiComponents`(38)、`chromeRegressionCleanup`(29)、`adminMobileLayout`(28)、`bookmarkCardTheme`(27)、`navigationLayout`(21) 等。优先迁能被 jsdom 真实断言取代的（DOM 结构、ARIA、禁用联动、条件渲染）；computed style、媒体查询、`dvh`、剪贴板归 `PROB-18c` | PH PROB-18 |
 | PROB-24 | 技术债 | P3 | `src/App.svelte` 按 use case 收敛编排职责 | **只在后续修改认证 / CRUD / 弹窗流程时顺带做**，不单独开一轮重构 | PH PROB-24 |
 | PROB-31 | 缺陷 | P3 | `SESSION` 绑定的必选性三处口径不一致 | `worker/middleware/rateLimit.ts` 的 `loginRateLimit` 无条件读 `env.SESSION`（缺绑定时 `POST /api/login` 实测返回 `code=1500`），而 `validateSession` 与 logout 把它当可选，`worker/types.ts` 的 `Env.SESSION` 又是必填类型。定一个口径：要么让缺绑定返回可定位的错误码（对齐 `/install` 的 `bindings_missing`），要么三处都按必填处理 | PH PROB-19 |
 

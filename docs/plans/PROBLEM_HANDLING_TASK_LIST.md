@@ -262,7 +262,21 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - 用户裁定（2026-09-04）：采用**方案 B「补组件层，不引入 e2e」**。核对推翻了条目原本的定性——缺的不是 e2e，而是组件/DOM 层：`FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md:395-398` 列的焦点陷阱、`aria-activedescendant` 有效性、`isComposing` 拦截、destroy 清理都不需要真浏览器，而 `:399-401` 的剪贴板 transient activation、`100dvh` + 虚拟键盘、computed style 验收则**jsdom 做不到**，必须留给真实浏览器。两层用不同工具，不能用一个「要不要 e2e」的答案覆盖
 - 处理结果：新增 devDependencies `@testing-library/svelte@^4.2.3`（peer 支持 svelte ^3/^4/^5）与 `jsdom@^26.1.0`（engines `node >=18`，与 CI 的 `node-version: 20` 兼容；`jsdom@30` 要求 node ^22.22.2/^24.15.0/>=26，会在 CI 上不满足 engines，故不用）。**不改全局 vitest 环境**：组件测试用文件首行 `// @vitest-environment jsdom` 单文件启用，既有 100 个文件仍跑默认 node 环境，零回归风险。新增 `tests/unit/categoryTreeSelect.test.ts` 作为首个组件测试，断言 3 条行为：每条 `notice` 的 `aria-describedby` 真正解析到一个带该文案的元素、无 `notice` 的选项不带该属性、带后果提示的选项仍可点击且点击后菜单关闭并改显新选择。同时退役 `tests/unit/adminBookmarkLayout.test.ts` 里被真实 DOM 断言取代的 4 条 `CategoryTreeSelect.svelte` 源码文本断言，避免重复覆盖
 - 为什么组件层比原来的断言强：`readFileSync` + `toContain` 只能证明模板里写了 `aria-describedby={item.notice ? ...}` 这串字符，证明不了 id 真的解析到存在的元素、也证明不了选项可点。组件测试是在真实 DOM 上查 `#${id}` 并触发 `fireEvent.click`
-- 遗留（未开工，需单独授权）：剩余 24 个源码文本断言文件的逐步迁移；以及**方案 C** —— 用户裁定改为不引入 Playwright，而是走本地已有 Chrome 或 `real-chrome-cdp-testing` 技能路线，见 TODO §3 的「PROB-18 后续」
+- 遗留（增量进行中，见下）：剩余源码文本断言文件的逐步迁移；以及**方案 C** —— 用户裁定改为不引入 Playwright，而是走本地已有 Chrome 或 `real-chrome-cdp-testing` 技能路线，见 BACKLOG 的 `PROB-18c`
+
+#### PROB-18b（P2，增量进行中）源码文本断言文件迁到组件层
+
+按「每次迁一个文件」推进，不做一次性大迁移。
+
+**第 1 个（2026-09-05）：`adminEmptyStateMarkup.test.ts` → `adminEmptyState.test.ts`（已删除旧文件）**
+
+- 原文件 5 条断言全是 `readFileSync` + `toContain('暂无分类')` 一类。它们能证明的只有「模板里写了这串字」——证明不了空态在正确条件下渲染、CTA 真的可点，也证明不了「没有分类时不引导用户去加书签」这条实际的产品逻辑
+- 新文件 9 条组件测试（jsdom），按状态组合渲染真实 DOM：分类面板的加载态 / 无数据 / 搜索无结果三档互斥（「暂无分类」与「没有匹配的分类」不能混淆——一个该去创建，一个该改关键词）；空态 CTA 点击真的触发回调；访客态该 CTA 为 `disabled`。书签面板的「一个分类都没有」档**刻意不给 CTA**（没有分类时新增书签必然失败），已有分类才给且可点；加载中不显示「暂无书签」，避免把加载中误报成空数据
+- 反向对照：给「一个分类都没有」那档硬加一个「新增书签」按钮，`一个分类都没有时引导去建分类，不给「新增书签」CTA` 精确失败；恢复后 9 条全绿
+- 旧文件里那条 `not.toContain('`n')`（PowerShell 把字面量反引号 n 写进模板的事故）**没有丢**，改成按**渲染文本**断言：那两个字符如果进了模板会被当作可见文本渲染出来，按渲染结果断言比在源码里搜字符串更贴近后果
+- 定位器纠正：空态 CTA 与页头同名按钮共存，`getAllByRole` 取最后一个是靠出现顺序的脆弱写法；改为先定位 `.admin-empty-state` 容器再取其中的按钮
+- 一处**没有**写成假证据的地方：访客态那条只断言 `disabled === true`，不用 `fireEvent.click` 去演示「点了没反应」。jsdom 的 `dispatchEvent` 会把事件送到禁用按钮上（真实浏览器不会），拿它当证据是自欺
+- 验证：`npx vitest run` 104 files / 730 passed（迁移后总数不变，旧文件 5 条换成新文件 9 条）；`npm run type-check` 0 errors / 0 warnings
 
 ---
 
