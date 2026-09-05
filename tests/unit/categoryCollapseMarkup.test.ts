@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
+// PROB-18b：折叠行为的两组断言已迁到 categoryCollapseBehavior.test.ts（后台分类面板 +
+// 左侧导航）与 categoryTreeSelect.test.ts（分类选择器），在真实 DOM 上验证默认收起、
+// 点箭头独立展开、搜索自动展开、换关键词重置、当前子分类自动揭示父级。
+//
+// 这里留下的是**跨组件接线巡检**：Home 是否把某个 prop 传给了 CategorySection、
+// sortableList 的 filter 选项是否设了、卡片网格的 CSS 变量与断点是否还在。它们的价值是
+// 「防止重构时静默断链」，不是证明行为；用组件测试重写需要挂载整个首页且断言不会更强。
 describe('category hierarchy visibility markup', () => {
   it('shows every root group with direct bookmarks and per-group child tabs', () => {
     const section = readFileSync('src/components/CategorySection.svelte', 'utf8')
@@ -77,26 +84,5 @@ describe('category hierarchy visibility markup', () => {
     expect(sortable).toContain('preventOnFilter: options.preventOnFilter ?? true')
     expect(section).toContain("filter: '.bookmark-context-menu, .category-tree-menu, .bookmark-mobile-menu-trigger'")
     expect(section).toContain('preventOnFilter: false')
-  })
-
-  it('collapses selector and admin child categories behind independent arrows', () => {
-    const treeSelect = readFileSync('src/components/CategoryTreeSelect.svelte', 'utf8')
-    const adminCategories = readFileSync('src/components/admin/CategoryListPanel.svelte', 'utf8')
-
-    expect(treeSelect).toContain('expandedRootIds = getCategoryTreeExpandedRootIds(items, value)')
-    expect(treeSelect).toContain('item.children.length > 0 && expandedRootIds.has(String(item.id))')
-    expect(treeSelect).toContain('toggleRootExpansion(item.id, event)')
-    expect(adminCategories).toContain('let expandedRootIds = new Set<string>()')
-    expect(adminCategories).toContain('{#if displayedExpandedRootIds.has(rootId)}')
-    expect(adminCategories).toContain('data-testid={`admin-category-expand-${rootId}`}')
-  })
-
-  it('keeps navigation collapsed by default and reveals the active child path', () => {
-    const sidebar = readFileSync('src/components/Sidebar.svelte', 'utf8')
-
-    expect(sidebar).toContain('let expandedParentIds = new Set<string>()')
-    expect(sidebar).toContain('activeParentId != null')
-    expect(sidebar).toContain('expandedParentIds = new Set([...expandedParentIds, revealedActiveParentId])')
-    expect(sidebar).toContain('on:click={() => toggleParent(item)}')
   })
 })
