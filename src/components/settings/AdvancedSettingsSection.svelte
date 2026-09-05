@@ -1,5 +1,9 @@
 <script lang="ts">
   import { tick } from 'svelte'
+  import {
+    CARD_ICON_SIZE_LIMITS,
+    CARD_SIZE_LIMITS,
+  } from '../../../shared/settings'
   import type { BackgroundSetting } from '../../../shared/types'
   import {
     applyCustomThemeBackground,
@@ -109,12 +113,12 @@
         <h3>尺寸与密度</h3>
         <div class="settings-grid card-size-grid">
           <label class="field field-number" class:disabled={form.card_style !== 'info'} for="settings-card-width">
-            <span>卡片最小宽度 <Tooltip text="控制一行能容纳的卡片数量，最小值为 40 px。实测：约 68 px 以下详情卡只显示图标，标题与描述的可用宽度为 0；标题要到约 120 px 才完整显示。低于 44 px 时点击区域也会小于触控推荐尺寸。移动端另有 150 px 安全下限，不受此值影响。" /></span>
+            <span>卡片最小宽度 <Tooltip text="控制一行能容纳的卡片数量，最小值为 {CARD_SIZE_LIMITS.width.min} px。实测：约 68 px 以下详情卡只显示图标，标题与描述的可用宽度为 0；标题要到约 120 px 才完整显示。低于 44 px 时点击区域也会小于触控推荐尺寸。移动端另有 150 px 安全下限，不受此值影响。" /></span>
             <InputGroup
               inputId="settings-card-width"
               type="number"
-              min={40}
-              max={400}
+              min={CARD_SIZE_LIMITS.width.min}
+              max={CARD_SIZE_LIMITS.width.max}
               step={1}
               suffixUnit="px"
               placeholder="默认 80"
@@ -123,7 +127,7 @@
               ariaLabel="卡片最小宽度"
               on:input={() => void syncForm()}
             />
-            {#if form.card_style === 'info' && form.card_size.width >= 40 && form.card_size.width <= 68}
+            {#if form.card_style === 'info' && form.card_size.width >= CARD_SIZE_LIMITS.width.min && form.card_size.width <= 68}
               <small class="warn">当前宽度下详情卡只显示图标：标题与描述的可用宽度为 0。标题约需 120 px 才完整显示。移动端仍按 150 px 安全下限渲染。</small>
             {:else if form.card_style === 'info' && form.card_size.width < 80}
               <small class="warn">当前宽度低于 80 px，标题与描述会被截断，只显示开头几个字符。</small>
@@ -136,8 +140,8 @@
             <InputGroup
               inputId="settings-card-height"
               type="number"
-              min={0}
-              max={300}
+              min={CARD_SIZE_LIMITS.height.min}
+              max={CARD_SIZE_LIMITS.height.max}
               step={10}
               suffixUnit="px"
               placeholder="0 为自适应"
@@ -152,8 +156,8 @@
             <InputGroup
               inputId="settings-card-icon"
               type="number"
-              min={40}
-              max={100}
+              min={CARD_ICON_SIZE_LIMITS.min}
+              max={CARD_ICON_SIZE_LIMITS.max}
               step={5}
               suffixUnit="px"
               placeholder="默认 60"

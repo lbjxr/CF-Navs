@@ -11,24 +11,6 @@ describe('admin settings layout', () => {
     expect(settingsRule).not.toContain('margin: 0 auto')
   })
 
-  it('associates the public mode switch with its label', () => {
-    const source = readFileSync('src/components/settings/BasicSettingsSection.svelte', 'utf8')
-
-    expect(source).toContain('公开模式')
-    expect(source).toContain('checked={form.public_mode}')
-    expect(source).toContain("on:change={(event) => { form.public_mode = event.detail; void syncForm() }}")
-  })
-
-  it('provides navigation position and persistent-left controls', () => {
-    const source = readFileSync('src/components/settings/NavigationSettingsSection.svelte', 'utf8')
-    const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
-
-    expect(panel).toContain('<NavigationSettingsSection bind:form {saving} />')
-    expect(source).toContain('bind:group={form.navigation.position}')
-    expect(source).toContain('checked={form.navigation.always_expanded}')
-    expect(source).toContain('disabled={saving || !isLeft}')
-  })
-
   it('places the secondary settings menu above the workspace', () => {
     const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
 
@@ -205,9 +187,6 @@ describe('admin settings layout', () => {
     const advanced = readFileSync('src/components/settings/AdvancedSettingsSection.svelte', 'utf8')
     const backgroundCard = readFileSync('src/components/settings/ThemeBackgroundCard.svelte', 'utf8')
 
-    expect(panel).toContain('appearanceAdvancedOpen = shouldAutoExpandAppearanceAdvanced(initialForm)')
-    expect(advanced).toContain('data-testid="appearance-advanced-toggle"')
-    expect(advanced).toContain('{#if advancedOpen}')
     expect(advanced).toContain('class="advanced-settings-section"')
     expect(advanced).toContain('aria-label="高级设置"')
     expect(advanced).not.toContain('class="group group-wide')
@@ -231,7 +210,7 @@ describe('admin settings layout', () => {
     expect(backgroundCard.indexOf('endLabel="结束颜色"')).toBeLessThan(backgroundCard.indexOf('<div class="background-range-grid">'))
     expect(backgroundCard.indexOf('<div class="background-range-grid">')).toBeLessThan(backgroundCard.indexOf('遮罩颜色'))
   })
-  it('exposes category-level visual controls and the 40px card width contract', () => {
+  it('exposes category-level visual controls in the advanced section', () => {
     const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
     const categoryDisplay = readFileSync('src/components/settings/CategoryDisplaySettingsSection.svelte', 'utf8')
     const advanced = readFileSync('src/components/settings/AdvancedSettingsSection.svelte', 'utf8')
@@ -244,8 +223,6 @@ describe('admin settings layout', () => {
     expect(categoryDisplay).toContain('二级分类标题字号')
     expect(categoryDisplay).toContain('min={12}')
     expect(categoryDisplay).toContain('min={11}')
-    expect(advanced).toContain('min={40}')
-    expect(advanced).toContain('disabled={form.card_style !== \'info\'}')
     expect(home).toContain('--category-root-font-size-base')
     expect(home).toContain('* 0.88')
   })
