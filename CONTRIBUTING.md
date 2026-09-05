@@ -54,7 +54,8 @@
 | **L0** 静态 | 类型、单元测试、构建、空白字符 | `npm run type-check`、`npm test`、`npm run build`、`git diff --check` | 无。CI 已覆盖前三项 |
 | **L1** API 端到端 | 鉴权、CRUD、排序、设置、导入导出、登出失效 | `npm run smoke` | 需先 `npm run build`（`ASSETS` 绑定要 `./dist`）。脚本自己起隔离实例、造临时 D1 与一次性凭据并拆除，**CI 已覆盖** |
 | **L2** 浏览器 | 渲染、交互、后台流程 | `npm run regression:chrome`；组件测试随 `npm test` 一起跑 | 回归套件需可达目标地址与管理员凭据；组件测试无前置 |
-| **L3** 真机 / 部署后 | 视口数值、iOS Safari 输入放大、Service Worker 与缓存、性能预算 | 人工 CDP 验证 + `npm run perf:audit` | 需已部署实例；部分项必须真实 iOS Safari |
+| **L3** 真机 / 部署后 | 首访/二访、Service Worker 与预缓存、离线、匿名边界、弹窗尺寸、登出撤销、三档截图 | `npm run accept:prod` + `npm run perf:audit` | 需已部署实例。脚本**只读**，不产生任何服务端写入，可无条件对生产跑 |
+| **L4** 真机独有 | iOS Safari 输入放大、`100dvh` 与虚拟键盘、剪贴板 transient activation、连续两次部署才出现的新版本提示 | 人工 | 自动化拿不到有效证据的那部分，逐项见 [部署后验收](docs/guides/PRODUCTION_ACCEPTANCE.md) §5 |
 
 按改动范围决定必须达到哪一级：
 
@@ -64,16 +65,20 @@
 | 纯函数 / 类型 / 共享定义 | L0 |
 | `worker/routes/`、`worker/lib/db/`、`schema.sql` | L0 + L1 |
 | Svelte 组件、样式、交互 | L0 + L2 |
-| 缓存策略、Service Worker、图标链路、性能相关 | L0 + L2，并把 L3 项登记到发版清单 |
+| 缓存策略、Service Worker、图标链路、性能相关 | L0 + L2，推送后跑 L3，并把 L4 项登记到发版清单 |
 
 补充纪律：
 
 - 要测行为**先抽纯函数**再单测。组件的 DOM 行为（焦点、ARIA、键盘、禁用联动）用 `@testing-library/svelte` + jsdom 写组件测试，文件首行加 `// @vitest-environment jsdom`，不改全局测试环境。
-- 计算样式、`dvh` 与安全区、虚拟键盘、剪贴板用户手势、iOS 输入放大 **jsdom 证明不了**，只能进 L3。不要用源码文本断言假装覆盖了它们。
+- 计算样式、`dvh` 与安全区、虚拟键盘、剪贴板用户手势、iOS 输入放大 **jsdom 证明不了**。计算样式与视口数值现在由 L3 的 CDP 脚本覆盖；真机独有的那几项进 L4。不要用源码文本断言假装覆盖了它们。
 - 源码文本断言（`readFileSync` + `toContain`）只用于"接线是否存在"，不用于证明行为。
 - 组件测试依赖 `vite.config.ts` 在 test 模式下的 `resolve.conditions: ['browser']`。Svelte 4 的 `exports["."]` 只在 `browser` 条件下给出真实运行时，否则落到 SSR 版本，那里的 `onMount` 是空实现——组件在 `onMount` 里注册的 `window` / `document` 监听器会**静默不存在**。不要删掉这项配置。
 - 断言「观察不到某个行为」时，先确认不是运行时解析或缺失的浏览器 API（`scrollIntoView`、`matchMedia`、`scrollTo` 在 jsdom 里都需要自己补），再下「jsdom 做不到」的结论。把环境问题写成不可迁移结论会留下错误的判断记录。
 - 新写的组件测试要做一次反向对照：改坏被测行为，确认对应用例精确失败。若两道防线互为兜底（去掉任一条都不红），在文件里注明这是 defense-in-depth，不要因此删掉断言。
+- **部署由推送触发**：`develop` 收到提交后 Cloudflare 自动构建更新站点，没有手动 deploy 步骤。因此「推上去」等于「改线上」，L0 未过的改动不要推。
+- 判断线上是否已是新版本，只看**构建产物哈希**（首页引用的 `assets/index-<hash>.js`）。`/api/data/version` 返回的是数据版本号，与部署了哪个构建无关。在旧版本上跑验收会得出与代码无关的结论。
+- **生产上的验证按副作用分层**：只读探针（`accept:prod`）随时可跑；改设置再还原属 Tier 1，需逐次授权；`replace` 导入与管理员密码轮换属 Tier 2，**只在本地实例做**。`regression:chrome` 的密码轮换已默认关闭，需 `REGRESSION_ALLOW_PASSWORD_ROTATION=1` 显式开启。
+- 验证脚本的目标域名与凭据只放在被 Git 忽略的 `verify.local.json`，或同名环境变量。脚本每次运行都用 `git ls-files` 复核该文件未被跟踪；一旦发现被跟踪就拒绝执行并要求轮换密码。
 
 ## 5. 任务状态放在哪里
 

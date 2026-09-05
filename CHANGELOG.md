@@ -10,6 +10,22 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 部署后验收改成可复跑脚本，按副作用分层（PROB-13 / 14 / 17 / 19v / 20c / 23 / 18c）
+
+- **`npm run accept:prod`（新增）**：零写入的只读探针，21 条检查，本地实例实测 21 passed / 0 failed / 2 skipped，37 秒跑完。覆盖首访/二访安装探测、Service Worker 接管与预缓存内容、离线可打开、Cache Storage 预算、匿名边界（管理数据 + 私密书签图标 + 私密分类图标）、导出子集含父分类、桌面与 390x844 的弹窗尺寸与底部操作栏、三档视口截图、登出撤销生效窗口（报告里带实际毫秒数）。
+- **按副作用分层，而不是按「能不能自动跑」**：Tier 0 零写入可无条件对生产跑；Tier 1（改设置再还原）逐次授权；Tier 2（`replace` 导入会清库、密码轮换）生产禁止，只在本地实例做。分层与逐项覆盖度见新增的 [部署后验收](docs/guides/PRODUCTION_ACCEPTANCE.md)。
+- **修掉一个真实风险**：`npm run regression:chrome` 原本会真实改写再还原生产管理员密码。进程在改完、还没还原时被打断（Ctrl+C、断网、Chrome 崩溃），临时密码只存在于内存里，管理员访问就永久丢失。该场景改为默认关闭，需 `REGRESSION_ALLOW_PASSWORD_ROTATION=1` 显式开启；跳过时两条断言记为通过并在 `actual` 里标明 `skipped`。等价的登出撤销验证由 `accept:prod` 用只读方式覆盖。
+- **修掉两处错误的期望值**：`chrome-regression.mjs` 的三处安全断言把匿名/失效 token 的错误码写成 `1002`（`BAD_REQUEST`），实际是 `1001`（`UNAUTHORIZED`）。它们一直靠同时判 `status === 401` 才通过——服务端哪天改成返回 200 + code，断言就会静默失效。
+- **凭据可以放本地文件**：新增 `scripts/lib/verifyCredentials.mjs`，按 环境变量 > `verify.local.json` 的 `adminUser` / `adminPass` 解析。文件方案的防线是三条而不是一条注释：该文件被 Git 忽略；每次运行用 `git ls-files --error-unmatch` 复核它确实未被跟踪，发现被跟踪就拒绝执行并要求轮换密码；报告与错误输出落盘前一律过 `redactCredentials()`。
+- **新增 `scripts/lib/cdpSession.mjs`** 作为 CDP 会话层：视口仿真、`getComputedStyle` 采样、真实 `Input` 事件、离线仿真、证据采集（console error / 页面异常 / 失败请求 / `fromServiceWorker` 标记）与精确清理。这正是 `PROB-18c` 缺的那层基础设施。
+- **三个安全默认值**：调试端口被占用时**拒绝**复用未知浏览器（可能是使用者自己的 Chrome，也可能是上次被强杀留下的孤儿）；临时 profile 名必须匹配 `cf-navs-chrome-profile-<id>` 才允许启动与清理；清理只按精确 profile 路径匹配进程，绝不按进程名。清理失败时报告「场景通过，清理失败」并以非零码退出。
+- **两个开发中实测到的缺陷，已修**：① `Browser.close` 带 `sessionId` 会被拒为 `Session with given id not found`——浏览器级命令（`Target.*` / `Browser.*` / `SystemInfo.*`）不能带页面会话 id；② `Page.navigate` 返回只代表导航被受理，此时 document 可能还是 `about:blank`，那是 opaque origin，读 `localStorage` / `caches` 直接抛 `SecurityError`。改成轮询 `location.href` 与 `document.readyState` 等文档真正换过去，不靠 sleep 猜时长。
+- **`SKIP` 与 `FAIL` 分开**：实例上不存在被测对象（例如一个私密分类都没有）记为 skip 并说明原因，不计入失败也不影响退出码——否则真失败会被噪声淹没。
+- **报告自证版本**：报告带 `deployedBundle` 字段，记录本次实际测到的 `assets/index-<hash>.js`。判断线上是否已是新版本只看构建产物哈希；`/api/data/version` 返回的是数据版本号，与部署了哪个构建无关。
+- 验证分级表新增 **L4**（真机独有：iOS 输入放大、`100dvh` 与虚拟键盘、剪贴板 transient activation、需要两次部署才出现的新版本提示），原 L3 收归为可复跑的 CDP 脚本。`docs/BACKLOG.md` 第 3 节每条补「自动化」列，写明覆盖到哪、剩下什么必须人工。
+- `PROB-25`（#15 的 EdgeOne 兼容边界）改为**由维护者直接在 GitHub 回帖澄清**，不占用代理任务。
+- 未做：任何功能代码开发。本轮只动测试工具与文档。生产站点未验证——脚本在本地 wrangler dev 实例上实测通过，对生产的首次运行需要 `verify.local.json` 填好目标与凭据。
+
 ### 三条待裁定项落定（PROB-26 / PROB-04 / PROB-30 → 新立 REQ-13），仅更新清单未动实现
 
 - **PROB-26 建立追溯**：已关闭 #8 的两项已实现诉求（部分导出备份、顶部导航分行）此前没有到原始 Issue 的追溯链。裁定为建立追溯——`GITHUB_ISSUES_REQUIREMENTS.md` 的 §1.2 排除句改口径、§3 总表 R-08 来源补 #8、§8 新增 #8 追溯，并注明该 Issue 的 `bug-fixed` 标签实际只对应「Chrome 侧栏白色原生滚动条」一条。只改本地文档，不动云端 #8。

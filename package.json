@@ -11,6 +11,7 @@
     "smoke": "node scripts/smoke-local.mjs",
     "perf:audit": "node scripts/perf-audit.mjs",
     "regression:chrome": "node scripts/chrome-regression.mjs",
+    "accept:prod": "node scripts/prod-acceptance.mjs",
     "setup:wrangler": "node scripts/create-wrangler-local.mjs",
     "wrangler": "node scripts/wrangler-config.mjs",
     "dev": "node scripts/wrangler-config.mjs dev",
