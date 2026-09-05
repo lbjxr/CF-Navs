@@ -10,6 +10,14 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 移动端截断契约改用真实 DOM 断言（PROB-18b 第 2 个文件）
+
+- `adminMobileLayout.test.ts` 里那两组断言形如 `toContain('truncateUnicodeText(bookmark.title, 12)')` 与 `toContain('href={bookmark.url}')`：只能证明源码写了这两个调用，证明不了截断后完整值仍然可访问。而这正是 `ADMIN_MOBILE_LAYOUT_PLAN.md` 的硬约束——截断只是视觉手段，完整 `title` / `aria` / `href` 必须保留。
+- 新增 `adminMobileTruncation.test.ts` 6 条（jsdom）：完整标题仍在无障碍树里（截断版本是 `aria-hidden` 装饰）、截断结果是原标题前缀 + 省略号而不是原样重复、**移动端 URL 的 `href` 是完整地址**、短标题不被截断也不凭空加省略号、访问分析零访问列表两个阈值都生效、全部书签有访问记录时显示祝贺态。
+- 反向对照：把移动端 URL 的 `href` 换成截断值（正是原断言想防的错），对应用例精确失败。
+- **原文件保留 3 组不迁**：`grid-template-columns` / `padding` / `position: fixed` / `env(safe-area-inset-bottom)` 这些纯 CSS 布局约定 jsdom 拿不到 computed style，写成组件测试只会变成更花哨的字符串匹配。已在文件顶部注明它们归 `PROB-18c`，避免后人以为截断契约漏了。
+- 夹具教训记录在案：第一版标题取了恰好 20 字素，而访问分析阈值就是 20 —— `truncateUnicodeText` 在「长度 <= 阈值」时原样返回，导致假失败。改成 24 字素并注明不能贴边取值。
+
 ### 缺 `SESSION` 绑定不再静默放行，也不再兜成看不懂的 500（PROB-31）
 
 - 这是做 PROB-19 时实测查出的三处口径不一致：`loginRateLimit` **无条件**读 `env.SESSION`（缺绑定时抛 TypeError，被全局 `onError` 兜成 `code=1500 internal server error`，运维看不出是绑定问题）；`validateSession` 把它当**可选**并**静默跳过撤销名单检查**；`Env.SESSION` 类型却是**必填**。logout、点击计数、`/install` 另有三套内联 `if`，判定条件还不一样（`!env.SESSION` vs `typeof env.SESSION.get !== 'function'`）。

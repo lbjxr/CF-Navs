@@ -278,6 +278,17 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - 一处**没有**写成假证据的地方：访客态那条只断言 `disabled === true`，不用 `fireEvent.click` 去演示「点了没反应」。jsdom 的 `dispatchEvent` 会把事件送到禁用按钮上（真实浏览器不会），拿它当证据是自欺
 - 验证：`npx vitest run` 104 files / 730 passed（迁移后总数不变，旧文件 5 条换成新文件 9 条）；`npm run type-check` 0 errors / 0 warnings
 
+**第 2 个（2026-09-05）：`adminMobileLayout.test.ts` 的两组截断断言 → `adminMobileTruncation.test.ts`（原文件保留 3 组纯 CSS 断言）**
+
+- 迁的是「移动端截断标题/URL 但保留完整值」两组。原断言形如 `toContain('truncateUnicodeText(bookmark.title, 12)')` 与 `toContain('href={bookmark.url}')`：只能证明源码里写了这两个调用，证明不了截断后完整值仍然可访问。而这正是 `ADMIN_MOBILE_LAYOUT_PLAN.md` 的硬约束——截断只是视觉手段，完整 `title` / `aria` / `href` 必须保留
+- 新文件 6 条组件测试（jsdom）：完整标题仍在无障碍树里（`aria-label` + `title` 都是完整值，截断版本是 `aria-hidden` 装饰）、截断结果确实更短且是原标题的前缀 + 省略号（不是原样重复）、**移动端 URL 的 `href` 是完整地址**、短标题不被截断也不凭空加省略号、私密标记出现在元信息里、访问分析零访问列表两个阈值都生效且完整值可访问、全部书签有访问记录时显示祝贺态而不是空列表
+- 反向对照：把移动端 URL 的 `href` 换成截断值（这正是原断言想防的错），`移动端 URL 截断不改变链接目标` 精确失败；恢复后 6 条全绿
+- **原文件保留 3 组不迁**：`grid-template-columns` / `padding` / `position: fixed` / `env(safe-area-inset-bottom)` 这些纯 CSS 布局约定，jsdom 不做布局、拿不到 computed style，写成组件测试只会变成更花哨的字符串匹配。已在文件顶部注明它们属 PROB-18c 的范围，避免后人以为这里漏了截断契约
+- 夹具教训：第一版把标题设成恰好 20 字素，而访问分析的阈值就是 20 —— `truncateUnicodeText` 在「长度 <= 阈值」时原样返回，导致那条断言假失败。改成 24 字素并注明为什么不能贴边取值
+- 验证：`npx vitest run` 106 files / 740 passed；`npm run type-check` 0 errors / 0 warnings；`npm run build` 成功
+
+**进度**：已迁 2 个文件，仍有 25 个含 `readFileSync` 的测试文件（第 2 个迁移只搬走部分断言，原文件仍在，所以计数从 25 变 25）。
+
 ---
 
 ## 5. D 类：安全与稳定性风险

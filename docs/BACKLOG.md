@@ -11,7 +11,7 @@
 
 | ID | 类型 | 优先 | 事项 | 下一步 | 详情 |
 | --- | --- | --- | --- | --- | --- |
-| PROB-18b | 技术债 | P2 | 源码文本断言文件迁到组件层 | 增量做：每次迁一个文件，删掉被真实 DOM 断言取代的那几条。**已迁 1 个**（`adminEmptyStateMarkup` → `adminEmptyState`，2026-09-05）；剩余 25 个仍含 `readFileSync` + `toContain`，按 `toContain` 数量从多到少依次是 `adminSettingsLayout`(155)、`categoryCollapseMarkup`(77)、`uiComponents`(38)、`chromeRegressionCleanup`(29)、`adminMobileLayout`(28)、`bookmarkCardTheme`(27)、`navigationLayout`(21) 等。优先迁能被 jsdom 真实断言取代的（DOM 结构、ARIA、禁用联动、条件渲染）；computed style、媒体查询、`dvh`、剪贴板归 `PROB-18c` | PH PROB-18 |
+| PROB-18b | 技术债 | P2 | 源码文本断言文件迁到组件层 | 增量做：每次迁一个文件，删掉被真实 DOM 断言取代的那几条。**已迁 2 个**（2026-09-05：`adminEmptyStateMarkup` → `adminEmptyState` 整文件退役；`adminMobileLayout` 的两组截断断言 → `adminMobileTruncation`，原文件保留 3 组纯 CSS 断言）。仍有 25 个文件含 `readFileSync` + `toContain`，按数量从多到少：`adminSettingsLayout`(155)、`categoryCollapseMarkup`(77)、`uiComponents`(38)、`chromeRegressionCleanup`(29)、`bookmarkCardTheme`(27)、`navigationLayout`(21) 等。**只迁 jsdom 能真实断言的**（DOM 结构、ARIA、禁用联动、条件渲染、截断与完整值保留）；`grid-template-columns`、`padding`、`position`、`env(safe-area-inset)`、媒体查询、`dvh` 这类要 computed style 的留在源码断言里并注明归 `PROB-18c` | PH PROB-18 |
 | PROB-24 | 技术债 | P3 | `src/App.svelte` 按 use case 收敛编排职责 | **只在后续修改认证 / CRUD / 弹窗流程时顺带做**，不单独开一轮重构 | PH PROB-24 |
 
 ## 2. 需要裁定
