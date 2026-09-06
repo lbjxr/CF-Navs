@@ -245,7 +245,7 @@
     top: 0.15rem;
     right: 0;
     z-index: 2;
-    height: var(--category-root-icon-size, 40px);
+    height: max(36px, var(--category-root-icon-size, 40px));
     align-items: center;
   }
 
