@@ -10,6 +10,11 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### PROB-20c：Cloudflare Workers Cache key 观测受限
+
+- 已复用用户登录的 Cloudflare Dashboard，只读确认目标 Worker 已部署最新版本；Worker Observability 与 Workers Traces 当前均为禁用状态。
+- Cloudflare Trace 页面仅提供配置模拟，未展示 `caches.default` 的实际对象键，因此不能用普通 `CF-Cache-Status` 推断旧无 namespace 条目已不可达；PROB-20c 保持阻塞，不执行缓存 purge、权限修改或 Observability 启用。
+
 ### PROB-32：优化一级分类空态选择
 
 - 删除首页一级分类下的「本分类」语义 tab。一级分类有直属书签时保留根内容并以边框、强调背景和阴影表示选中；直属书签为空且有二级分类时自动选择排序最前的第一个二级分类。
