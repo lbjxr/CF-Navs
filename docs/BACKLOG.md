@@ -36,7 +36,7 @@
 | PROB-19v | 安全 | P1 | 登出后旧 token 被拒，实测 **178 ms**，远低于 15 秒窗口；**2026-09-06 复验 212 ms**，仍远低于 15 秒窗口 | KV 写入故障下的 `store_unavailable` 分支——生产上没有安全的故障注入手段 | PH PROB-19 |
 | PROB-13 | 验证欠账 | P1 | `L1` 首访探测一次/二访零次；`L3` Service Worker 接管（9 个响应）+ 预缓存含 `index-*.js`/`.css`；`L4` 离线可打开；**2026-09-06 复验**：首访/二访、Service Worker、预缓存、离线、弹窗尺寸和全程异常检查均通过（27/27） | iOS Safari 输入放大（iOS 独有）；`L4` 的「已检测到新版本」（要两次真实部署）；`S3` 自定义 JS 与 `S3 导入提示`（Tier 1/人工选文件）；`S4` 当前页弹层（要可嵌入站点作书签） | PH PROB-13 |
 | PROB-14 | 验证欠账 | P1 | 子集导出含被选分类且补齐父分类；**2026-09-06 复验通过**：生产只读探针完成子集导出检查 | 证据偏弱：生产上第一个根分类没有子分类也没有书签，导出子集只有 1 个分类 0 个书签。replace/merge 导入属 Tier 2，**只在本地实例验证** | PH PROB-14 |
-| PROB-20c | 安全 | P1 | **匿名枚举防护确认生效**：匿名取私密书签图标（id=1015）与「不存在的 id」逐字节相同（326/326 B，SHA-256 一致），私密分类同理；带授权 key 时返回不同内容（568 B / 329 B），证明防护不是「本来就没图标」；授权响应 `cache-control: private, no-store`。`perf:audit` 图标请求 235 ≤ 260 | 旧 edge cache 条目不可达——需要能观察 Cloudflare edge 的缓存键 | PH PROB-20 |
+| PROB-20c | 安全 | P1 | **匿名枚举防护确认生效**：匿名取私密书签图标（id=1015）与「不存在的 id」逐字节相同（326/326 B，SHA-256 一致），私密分类同理；带授权 key 时返回不同内容（568 B / 329 B），证明防护不是「本来就没图标」；授权响应 `cache-control: private, no-store`。**2026-09-06 复验**：匿名书签/分类图标指纹均一致，授权响应不同；`perf:audit` 图标请求 245 ≤ 260 | 旧 edge cache 条目不可达——需要能观察 Cloudflare edge 的缓存键 | PH PROB-20 |
 | PROB-18c | 技术债 | P2 | 基础设施建成并跑通生产：`scripts/lib/cdpSession.mjs` 提供视口仿真、真实 `Input`、离线仿真、证据采集与精确清理 | `100dvh`/虚拟键盘、剪贴板 transient activation、iOS 放大等真机独有项（归 L4） | PH PROB-18 |
 | PROB-23 | 验证欠账 | P2 | Cache Storage **0.74 MiB** ≤ 5 MiB；首页 0 破图；**观测到一例真实外站图标失败**（第三方图片设了 `Cross-Origin-Resource-Policy: same-origin`，被浏览器拒收，前端兜底生效所以用户看不到破图） | 旧 SW 版本残留取决于访客浏览器历史状态，干净 profile 里复现不出来 | PH PROB-23 |
 | PROB-17 | 验证欠账 | P2 | 首页三档截图（430x932 / 768x1024 / 1440x900） | 后台备份/导入页移动端截图待补场景 | PH PROB-17 |
