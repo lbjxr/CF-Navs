@@ -28,7 +28,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 
 ### 1.2 明确排除的内容
 
-- Closed Issue 不属于本文件的正式需求范围，包括已关闭的 #8、#5；不把其已完成或已关闭的结论重新列为待办。
+- Closed Issue 不新立 R 编号，但已实现的诉求要在 §8 建立追溯；包括已关闭的 #8、#5；不把其已完成或已关闭的结论重新列为待办。
 - #9 评论中的移动端前台编辑、内网地址/NAS 协同、Chrome 新标签页插件属于候选贡献，不属于本轮正式验收范围。
 - 评论中的油猴脚本、截图和第三方仓库是实现参考，不是已确认的产品契约；不复制带临时签名参数的附件 URL。
 - 本文不直接修改源码、数据库、API 或云端 Issue；实现时仍须以当前源码、共享类型和测试为准。
@@ -91,7 +91,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 | R-05 | 后台批量移动书签 | Enhancement | 云端 Open；T4/T5 与验收反馈修复已完成本地 PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
 | R-06 | 调整一级/二级分类字体和图标大小 | Enhancement | 云端 Open；T8-R06 与验收反馈修复已完成本地设置/PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
 | R-07 | 评估卡片最小宽度下限是否可下调 | Enhancement | 云端 Open；下限已于 2026-09-04 由 44 降到 40（PROB-28 裁定），L0 通过，40px 真机布局验收待部署 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#13](https://github.com/lbjxr/CF-Navs/issues/13) |
-| R-08 | 部分导出备份，便于多个项目同步维护 | Enhancement | 云端 Open；T9/T9b 本地源码、PC/移动端核对完成，部署与原作者预期待同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9) |
+| R-08 | 部分导出备份，便于多个项目同步维护 | Enhancement | 云端 Open；T9/T9b 本地源码、PC/移动端核对完成，部署与原作者预期待同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#8](https://github.com/lbjxr/CF-Navs/issues/8) |
 
 ## 4. 详细需求与 UI 规划
 
@@ -363,6 +363,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 - Issue 正文：`gh issue view <number> --repo lbjxr/CF-Navs --json body`
 - Issue 元数据：`gh issue list --repo lbjxr/CF-Navs --state all --limit 100 --json number,title,state,labels,author,createdAt,updatedAt,closedAt,url`
 - 评论：通过 GitHub Issue 评论接口读取；本文只保留稳定的 Issue / 评论链接，不保留临时签名附件地址。
+- **Closed Issue #8 追溯（PROB-26）**：#8 中已实现的“部分导出”诉求对应 R-08；“顶部导航分行”诉求的实现依据为 `docs/plans/PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md` 与 `src/components/Sidebar.svelte`，不新立 R 编号。#8 的 `bug-fixed` 标签只对应“Chrome 侧栏白色原生滚动条”这一项，不代表上述两项诉求均已由云端关闭确认。
 - 项目现状：`docs/reference/PROJECT_OVERVIEW.md`、`docs/reference/API_CONTRACT.md` 及本文第 2 节列出的源码路径。
 
 每次实现或状态变化后，应更新本文的快照日期、状态标签、验收证据和对应 Issue 链接；不要把“本地已有代码”直接等同于“云端 Issue 已关闭”。
