@@ -242,9 +242,11 @@
 
   .section-header.no-heading.inline-actions {
     position: absolute;
-    top: 0.12rem;
+    top: 0.15rem;
     right: 0;
     z-index: 2;
+    height: var(--category-root-icon-size, 40px);
+    align-items: center;
   }
 
   .section-title-wrap {

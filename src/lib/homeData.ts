@@ -177,7 +177,7 @@ export function resolveHomeCategoryForRoot(
     ? root.children[0]
     : root
 
-  if (normalizedId === String(root.id) || normalizedId === `category-${root.id}`) return defaultCategory
+  if (normalizedId === String(root.id) || normalizedId === `category-${root.id}`) return root
 
   return root.children.find((child) => (
     normalizedId === String(child.id) || normalizedId === `category-${child.id}`

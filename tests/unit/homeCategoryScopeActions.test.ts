@@ -150,6 +150,28 @@ describe('首页分类范围选择', () => {
     expect(screen.getByRole('tab', { name: '另一个子分类 1' }).getAttribute('aria-selected')).toBe('false')
     expect(document.querySelector('.category-scope.selected')).toBeNull()
   })
+
+  it('选中子分类后仍可点击一级分类回到根内容', async () => {
+    const onSelect = vi.fn()
+    render(HomeCategoryScope, {
+      props: {
+        rootId: 7,
+        title: '研发工具',
+        activeId: 8,
+        children: [
+          { id: 8, title: '子分类', icon: null, count: 2 },
+        ],
+        onSelect,
+      },
+    })
+
+    const rootButton = screen.getByRole('button', { name: /^研发工具\s*（0）$/ })
+    expect(rootButton.getAttribute('aria-pressed')).toBe('false')
+
+    await fireEvent.click(rootButton)
+
+    expect(onSelect).toHaveBeenCalledWith(7)
+  })
 })
 
 describe('更多操作菜单的视口夹紧', () => {

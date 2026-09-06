@@ -154,6 +154,67 @@ describe('顶部导航子菜单的打开与关闭', () => {
   })
 })
 
+
+describe('顶部导航滚轮横向滚动', () => {
+  it('垂直滚轮推进横向列表并在滚动边界放行页面事件', () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    const track = screen.getByTestId('top-navigation').querySelector('.top-track') as HTMLElement
+    Object.defineProperty(track, 'scrollWidth', { configurable: true, value: 320 })
+    Object.defineProperty(track, 'clientWidth', { configurable: true, value: 120 })
+    track.scrollLeft = 0
+
+    const atLeftEdge = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -60 })
+    track.dispatchEvent(atLeftEdge)
+
+    expect(track.scrollLeft).toBe(0)
+    expect(atLeftEdge.defaultPrevented).toBe(false)
+
+    const horizontal = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: 45, deltaY: 3 })
+    track.dispatchEvent(horizontal)
+
+    expect(track.scrollLeft).toBe(45)
+    expect(horizontal.defaultPrevented).toBe(true)
+
+    track.scrollLeft = 200
+    const atRightEdge = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 60 })
+    track.dispatchEvent(atRightEdge)
+
+    expect(track.scrollLeft).toBe(200)
+    expect(atRightEdge.defaultPrevented).toBe(false)
+  })
+
+  it('桌面分行模式不拦截滚轮', () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: { ...topNavigation, top_layout: 'wrap' } } })
+    const track = screen.getByTestId('top-navigation').querySelector('.top-track') as HTMLElement
+    Object.defineProperty(track, 'scrollWidth', { configurable: true, value: 320 })
+    Object.defineProperty(track, 'clientWidth', { configurable: true, value: 120 })
+
+    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 60 })
+    track.dispatchEvent(wheel)
+
+    expect(track.scrollLeft).toBe(0)
+    expect(wheel.defaultPrevented).toBe(false)
+  })
+
+  it('移动端即使配置分行也保留横向滚轮', () => {
+    const previousWidth = window.innerWidth
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
+    try {
+      render(Sidebar, { props: { items, activeId: null, navigation: { ...topNavigation, top_layout: 'wrap' } } })
+      const track = screen.getByTestId('top-navigation').querySelector('.top-track') as HTMLElement
+      Object.defineProperty(track, 'scrollWidth', { configurable: true, value: 320 })
+      Object.defineProperty(track, 'clientWidth', { configurable: true, value: 120 })
+
+      const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 60 })
+      track.dispatchEvent(wheel)
+
+      expect(track.scrollLeft).toBe(60)
+      expect(wheel.defaultPrevented).toBe(true)
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: previousWidth })
+    }
+  })
+})
 describe('顶部导航子菜单的键盘可达性', () => {
   it('键盘触发（detail 为 0）把焦点送进菜单第一项', async () => {
     render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })

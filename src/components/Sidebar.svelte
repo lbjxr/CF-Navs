@@ -268,6 +268,23 @@
     updateTopMenuPosition()
   }
 
+  function handleTopTrackWheel(event: WheelEvent): void {
+    if (isWrap || !topTrack) return
+
+    const track = topTrack
+    if (track.scrollWidth <= track.clientWidth) return
+
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+    if (delta === 0) return
+
+    const maxScrollLeft = track.scrollWidth - track.clientWidth
+    const nextScrollLeft = Math.min(maxScrollLeft, Math.max(0, track.scrollLeft + delta))
+    if (nextScrollLeft === track.scrollLeft) return
+
+    event.preventDefault()
+    track.scrollLeft = nextScrollLeft
+  }
+
   function handleDocumentPointerDown(event: PointerEvent): void {
     if (openTopMenuId && navigationRoot && !navigationRoot.contains(event.target as Node)) {
       closeTopMenu()
@@ -440,6 +457,7 @@
       class:dragging
       bind:this={topTrack}
       on:scroll={handleTopTrackScroll}
+      on:wheel={handleTopTrackWheel}
       on:pointerdown={handlePointerDown}
       on:pointermove={handlePointerMove}
       on:pointerup={finishPointerDrag}

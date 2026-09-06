@@ -157,7 +157,17 @@
     <div class="scope-copy">
       <div class="scope-title-row">
         <h2 id={`home-category-heading-${rootId}`} title={title}>
-          {title}<span class="scope-total-count">（{totalCount}）</span>
+          <button
+            type="button"
+            class="scope-root-trigger"
+            class:active={rootActive}
+            aria-pressed={rootActive}
+            aria-controls={resolvedPanelId}
+            on:click={() => select(rootId)}
+          >
+            <span class="scope-root-title">{title}</span>
+            <span class="scope-total-count">（{totalCount}）</span>
+          </button>
         </h2>
         {#if reserveActions && onCreateSubcategory}
           <!-- 桌面直显按钮：只有「新建子分类」；新增书签与排序在 CategorySection 的操作行里 -->
@@ -266,13 +276,6 @@
     border-bottom: 1px solid color-mix(in srgb, var(--home-text-color) 14%, transparent);
     scroll-margin-top: 6rem;
   }
-  .category-scope.selected {
-    padding: 0.65rem 0.75rem 0.78rem;
-    border: 1px solid color-mix(in srgb, var(--home-accent-color) 42%, var(--home-stat-border));
-    border-radius: var(--radius-lg, 16px);
-    background: color-mix(in srgb, var(--home-stat-bg) 84%, transparent);
-    box-shadow: 0 10px 24px color-mix(in srgb, var(--home-accent-color) 12%, transparent);
-  }
 
   .scope-heading {
     display: flex;
@@ -310,6 +313,41 @@
 
   .scope-copy h2 {
     margin: 0;
+  }
+
+  .scope-root-trigger {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 100%;
+    align-items: baseline;
+    gap: 0.12rem;
+    padding: 0.2rem 0.45rem;
+    border: 1px solid transparent;
+    border-radius: 0.62rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    appearance: none;
+  }
+
+  .scope-root-trigger.active {
+    border-color: color-mix(in srgb, var(--home-accent-color) 42%, var(--home-stat-border));
+    background: color-mix(in srgb, var(--home-stat-bg) 84%, transparent);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--home-accent-color) 12%, transparent);
+  }
+
+  .scope-root-trigger:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--home-accent-color) 58%, transparent);
+    outline-offset: 2px;
+  }
+
+  .scope-root-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: inherit;
   }
 
   .category-scope.highlighted {
