@@ -10,6 +10,14 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
+### 首页分类与导航交互修正
+
+- 一级分类选中态从整块分类区外框改为仅包围标题与总站点数，避免强调色喧宾夺主。
+- 修复选中二级分类后无法再次选择一级分类的问题；显式选择一级分类不再被空根分类的默认首个二级分类回退覆盖。
+- PC 端「新增书签 / 排序」操作行按一级分类标题行高度垂直居中；移动端既有操作收纳规则保持不变。
+- 恢复 PC 顶部导航的鼠标滚轮横向滚动，并保留滚动边界、桌面分行和移动端分行行为。
+- 验证：定向测试 3 files / 43 passed；`npm run type-check` 0 errors / 0 warnings；`npm test` 112 files / 830 passed；`npm run build` 成功；`git diff --check` 通过。测试站点在用户现有 Chrome 的专用标签页完成视觉与交互复核：选中框、真实鼠标点击下的根/子分类切换、操作行中心偏差 0.43 px，以及页面内 `WheelEvent` 驱动顶部导航横向移动 240 px 均通过；Relay 的真实 `mouseWheel` 输入两次因 20 秒 RPC 超时，未将其作为独立鼠标输入通过证据。无 console error、页面异常、失败请求或异常 HTTP 响应。
+
 ### PROB-20c：Cloudflare edge cache 观测结论
 
 - 已复用用户已登录的 Cloudflare Dashboard，只读确认目标 Worker 已部署最新版本；Cloudflare Worker Observability 与 Workers Traces 当前因免费版不可用，Cloudflare Trace 仅提供配置模拟，未展示 `caches.default` 实际 key。
