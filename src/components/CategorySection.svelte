@@ -18,6 +18,7 @@
   export let inlineActions = false
   export let showCategoryIcon = true
   export let canAddBookmark = false
+  export let onCreateSubcategory: (() => AsyncVoid) | undefined = undefined
   export let canSort = false
   /** 传入后由页面统一控制排序会话，支持多个分类列表互相拖放。 */
   export let controlledSortMode: boolean | undefined = undefined
@@ -47,7 +48,7 @@
   $: activeSortMode = controlledSortMode ?? false
   // 跨分类拖放时单个甚至零个书签也需要入口，把书签拖出或拖入本分类。
   $: canEnterSort = canSort && controlledSortMode !== undefined
-  $: showActions = activeSortMode || canAddBookmark || canEnterSort
+  $: showActions = activeSortMode || canAddBookmark || canEnterSort || Boolean(onCreateSubcategory)
 
   function handleReorder(orderedIds: Array<string | number>) {
     void onSortDraft?.(category.id, orderedIds.map(Number))
@@ -121,6 +122,22 @@
               <span class="action-label">{savingSort ? '保存中' : '保存排序'}</span>
             </button>
           {:else if !activeSortMode}
+            {#if onCreateSubcategory}
+              <button
+                type="button"
+                class="add-link-button"
+                on:click={() => void onCreateSubcategory?.()}
+                aria-label="新建子分类"
+                title="新建子分类"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" class="action-symbol action-icon">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v3" />
+                  <path d="M3 7v10a2 2 0 0 0 2 2h6" />
+                  <path d="M16 15h6M19 12v6" />
+                </svg>
+                <span class="action-label">新建子分类</span>
+              </button>
+            {/if}
             {#if canAddBookmark}
               <button
                 type="button"

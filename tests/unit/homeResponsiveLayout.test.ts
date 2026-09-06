@@ -55,11 +55,10 @@ describe('home responsive layout', () => {
     const scope = readFileSync('src/components/HomeCategoryScope.svelte', 'utf8')
     const mobileStyles = scope.slice(scope.indexOf('@media (max-width: 720px)'))
 
-    // CategorySection 的「新增书签 / 排序」是 position: absolute 浮在分组右上角，不占布局空间。
-    // 子分类标签行占满整宽，标签一多到横向滚动，最右侧的标签就被压在按钮下面，点不到。
-    // 生产实测：操作行宽 180 px，重叠 180 px，只有会滚动的那一组暴露。这里锁住右侧预留。
+    // CategorySection 的三按钮操作行是 position: absolute 浮在分组右上角，不占布局空间。
+    // 子分类标签行占满整宽，标签一多到横向滚动，末端标签不能被三按钮遮挡。
+    expect(scope).toContain('.category-scope.has-actions {\n    --scope-actions-reserve: 300px;')
     expect(scope).toContain('.category-scope.has-actions .scope-tabs {')
-    expect(scope).toContain('--scope-actions-reserve: 190px;')
     expect(scope).toContain('padding-right: var(--scope-actions-reserve);')
     // 键盘与程序化滚动也要把标签停在预留区之外
     expect(scope).toContain('scroll-padding-inline-end: var(--scope-actions-reserve);')
@@ -67,5 +66,13 @@ describe('home responsive layout', () => {
     // 移动端操作行整体隐藏、标签换到第二行，桌面那份预留在那里只会留一大块空白
     expect(mobileStyles).toContain('.category-scope.has-actions .scope-tabs {')
     expect(mobileStyles).toContain('scroll-padding-inline-end: 0;')
+  })
+
+  it('在桌面与移动派生值中保持二级字体小于一级', () => {
+    const home = readFileSync('src/views/Home.svelte', 'utf8')
+    const mobileStyles = home.slice(home.indexOf('@media (max-width: 799px)'))
+
+    expect(home).toContain('--category-child-font-size: min(var(--category-child-font-size-base, 14px), calc(var(--category-root-font-size) - 1px));')
+    expect(mobileStyles).toContain('--category-child-font-size: min(calc(var(--category-child-font-size-base, 14px) * 0.88), calc(var(--category-root-font-size) - 1px));')
   })
 })

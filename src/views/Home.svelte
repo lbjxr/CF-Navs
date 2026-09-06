@@ -625,6 +625,7 @@
                     showSortActions={false}
                     moveCategories={categoryTreeOptions}
                     onMoveBookmark={handleMoveBookmark}
+                    onCreateSubcategory={isAuthenticated && onOpenCreateCategory ? () => onOpenCreateCategory?.(category.id) : undefined}
                     onAddBookmark={onOpenCreateBookmark}
                     onEditBookmark={onEditBookmark}
                     onRequestSort={startHomeSort}
@@ -681,7 +682,7 @@
     --home-accent-color: var(--theme-accent-color, var(--custom-accent-color, #2563eb));
     --category-root-font-size: var(--category-root-font-size-base, 16px);
     --category-root-icon-size: var(--category-root-icon-size-base, 20px);
-    --category-child-font-size: var(--category-child-font-size-base, 14px);
+    --category-child-font-size: min(var(--category-child-font-size-base, 14px), calc(var(--category-root-font-size) - 1px));
     --category-child-icon-size: var(--category-child-icon-size-base, 18px);
     --toc-expanded-width: 232px;
     color: var(--home-text-color);
@@ -918,7 +919,7 @@
     .home-shell {
       --category-root-font-size: calc(var(--category-root-font-size-base, 16px) * 0.88);
       --category-root-icon-size: calc(var(--category-root-icon-size-base, 20px) * 0.88);
-      --category-child-font-size: calc(var(--category-child-font-size-base, 14px) * 0.88);
+      --category-child-font-size: min(calc(var(--category-child-font-size-base, 14px) * 0.88), calc(var(--category-root-font-size) - 1px));
       --category-child-icon-size: calc(var(--category-child-icon-size-base, 18px) * 0.88);
     }
 

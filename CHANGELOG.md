@@ -18,6 +18,14 @@
 - 恢复 PC 顶部导航的鼠标滚轮横向滚动，并保留滚动边界、桌面分行和移动端分行行为。
 - 验证：定向测试 3 files / 43 passed；`npm run type-check` 0 errors / 0 warnings；`npm test` 112 files / 830 passed；`npm run build` 成功；`git diff --check` 通过。测试站点在用户现有 Chrome 的专用标签页完成视觉与交互复核：选中框、真实鼠标点击下的根/子分类切换、操作行中心偏差 0.43 px，以及页面内 `WheelEvent` 驱动顶部导航横向移动 240 px 均通过；Relay 的真实 `mouseWheel` 输入两次因 20 秒 RPC 超时，未将其作为独立鼠标输入通过证据。无 console error、页面异常、失败请求或异常 HTTP 响应。
 
+### 首页分类层级与操作按钮细化
+
+- 二级分类字体在桌面与移动派生值中限制为至少比一级分类小 1px，同时保留用户原有字号设置范围。
+- 一级分类与二级分类统一使用相同的选中边框、背景和底部强调线，移除一级分类独有的大面积强调阴影。
+- PC 操作行按「新建子分类 → 新增书签 → 排序」排列；新建子分类复用新增书签按钮样式，移动端仍由「更多操作」菜单承载。
+- 三按钮操作行对应的子分类标签右侧预留同步调整为 300px，避免横向滚动末端被遮挡。
+- 验证：定向测试 3 files / 28 passed；`npm run type-check` 0 errors / 0 warnings；`npm test` 112 files / 834 passed；`npm run build` 成功；`git diff --check` 通过。
+
 ### PROB-20c：Cloudflare edge cache 观测结论
 
 - 已复用用户已登录的 Cloudflare Dashboard，只读确认目标 Worker 已部署最新版本；Cloudflare Worker Observability 与 Workers Traces 当前因免费版不可用，Cloudflare Trace 仅提供配置模拟，未展示 `caches.default` 实际 key。

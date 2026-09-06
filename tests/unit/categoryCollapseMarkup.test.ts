@@ -47,6 +47,7 @@ describe('category hierarchy visibility markup', () => {
     expect(home).toContain('inlineActions={true}')
     expect(home).toContain('class:has-inline-actions={isAuthenticated}')
     expect(home).toContain('reserveActions={isAuthenticated}')
+    expect(home).toContain('onCreateSubcategory={isAuthenticated && onOpenCreateCategory ? () => onOpenCreateCategory?.(category.id) : undefined}')
     expect(home).toContain('children={category.children.map((child) => ({')
     expect(scope).toContain('scope-title-row')
     expect(scope).toContain('class="scope-tabs"')

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte'
 import HomeCategoryScope from '../../src/components/HomeCategoryScope.svelte'
+import CategorySection from '../../src/components/CategorySection.svelte'
 
 // PROB-11：移动端把「新增书签」「新建子分类」「排序」三个入口统一收进「更多操作」菜单（计划 T6）。
 // DOM 行为用组件测试证明；断点可见性 jsdom 证明不了，只能断言接线并留给 L3 真机验证。
@@ -106,22 +107,76 @@ describe('HomeCategoryScope 更多操作菜单', () => {
     expect(screen.queryByRole('button', { name: '研发工具 更多操作' })).toBeNull()
     expect(screen.queryByRole('button', { name: '新建子分类' })).toBeNull()
   })
-
-  it('按 720px 断点让桌面直显入口与移动端菜单互斥（接线断言，视觉由 L3 验证）', () => {
+  it('按 720px 断点让操作行与移动端菜单互斥（接线断言，视觉由 L3 验证）', () => {
     const scope = readFileSync('src/components/HomeCategoryScope.svelte', 'utf8')
     const section = readFileSync('src/components/CategorySection.svelte', 'utf8')
     const scopeMobile = scope.slice(scope.indexOf('@media (max-width: 720px)'))
     const sectionMobile = section.slice(section.indexOf('@media (max-width: 720px)'))
 
-    // 桌面：Scope 直显「新建子分类」，CategorySection 的操作行提供「新增书签」「排序」
-    expect(scope).toContain('class="scope-action scope-action-direct"')
+    // 桌面：CategorySection 操作行统一提供「新建子分类」「新增书签」「排序」
+    expect(scope).not.toContain('scope-action-direct')
     expect(scope).toContain('class="scope-action scope-more-trigger"')
+    expect(section).toContain('export let onCreateSubcategory')
+    expect(section).toContain('aria-label="新建子分类"')
     // 移动端：Scope 只留菜单入口，CategorySection 的非排序操作行整体隐藏
-    expect(scopeMobile).toContain('.scope-action-direct {\n      display: none;')
+    expect(scopeMobile).not.toContain('scope-action-direct')
     expect(scopeMobile).toContain('.scope-more {\n      display: inline-flex;')
     expect(sectionMobile).toContain('.section-header.inline-actions .section-actions:not(.sorting) {\n      display: none;')
     // 排序会话中的提示文案不能被一起隐藏
     expect(section).toContain('class:sorting={activeSortMode}')
+  })
+})
+
+describe('CategorySection PC 操作行', () => {
+  it('按新建子分类、新增书签、排序顺序渲染并保持回调隔离', async () => {
+    const onCreateSubcategory = vi.fn()
+    const onAddBookmark = vi.fn()
+    const onRequestSort = vi.fn()
+    render(CategorySection, {
+      props: {
+        category: { id: 7, parent_id: null, title: '研发工具', icon: null, sort: 0 },
+        showHeading: false,
+        inlineActions: true,
+        canAddBookmark: true,
+        canSort: true,
+        controlledSortMode: false,
+        onCreateSubcategory,
+        onAddBookmark,
+        onRequestSort,
+      },
+    })
+
+    const actionGroup = screen.getByRole('group', { name: '研发工具 操作' })
+    const buttons = Array.from(actionGroup.querySelectorAll<HTMLButtonElement>('button'))
+    expect(buttons.map((button) => button.getAttribute('aria-label')))
+      .toEqual(['新建子分类', '新增书签', '排序'])
+    expect(buttons.slice(0, 2).every((button) => button.classList.contains('add-link-button'))).toBe(true)
+    expect(buttons[0]?.classList.contains('ghost')).toBe(false)
+    expect(buttons[1]?.classList.contains('ghost')).toBe(false)
+
+    await fireEvent.click(buttons[0])
+    await fireEvent.click(buttons[1])
+    await fireEvent.click(buttons[2])
+
+    expect(onCreateSubcategory).toHaveBeenCalledTimes(1)
+    expect(onAddBookmark).toHaveBeenCalledTimes(1)
+    expect(onRequestSort).toHaveBeenCalledTimes(1)
+  })
+
+  it('排序态不渲染新建子分类按钮', () => {
+    render(CategorySection, {
+      props: {
+        category: { id: 7, parent_id: null, title: '研发工具', icon: null, sort: 0 },
+        showHeading: false,
+        inlineActions: true,
+        canSort: true,
+        controlledSortMode: true,
+        onCreateSubcategory: vi.fn(),
+        onAddBookmark: vi.fn(),
+      },
+    })
+
+    expect(screen.queryByRole('button', { name: '新建子分类' })).toBeNull()
   })
 })
 describe('首页分类范围选择', () => {
@@ -149,6 +204,14 @@ describe('首页分类范围选择', () => {
     expect(screen.getByRole('tab', { name: '子分类 2' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('tab', { name: '另一个子分类 1' }).getAttribute('aria-selected')).toBe('false')
     expect(document.querySelector('.category-scope.selected')).toBeNull()
+  })
+
+  it('根分类与子分类复用同一选中边框背景和指示线', () => {
+    const scope = readFileSync('src/components/HomeCategoryScope.svelte', 'utf8')
+
+    expect(scope).toContain('.scope-root-trigger.active,\n  .scope-tabs button.active {')
+    expect(scope).toContain('.scope-root-trigger.active::after,\n  .scope-tabs button.active::after {')
+    expect(scope).not.toContain('box-shadow: 0 10px 24px color-mix(in srgb, var(--home-accent-color) 12%, transparent);')
   })
 
   it('选中子分类后仍可点击一级分类回到根内容', async () => {

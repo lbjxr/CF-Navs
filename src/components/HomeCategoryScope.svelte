@@ -22,7 +22,7 @@
   export let reserveActions = false
   export let onSelect: ((id: number) => AsyncVoid) | undefined = undefined
   export let onCreateSubcategory: (() => AsyncVoid) | undefined = undefined
-  /** 移动端把这两个操作也收进「更多操作」菜单；桌面端它们仍由 CategorySection 的操作行提供。 */
+  /** 移动端把分类操作统一收进「更多操作」菜单；桌面端由 CategorySection 操作行提供。 */
   export let onAddBookmark: (() => AsyncVoid) | undefined = undefined
   export let onRequestSort: (() => AsyncVoid) | undefined = undefined
   export let highlightedId: number | null = null
@@ -169,23 +169,6 @@
             <span class="scope-total-count">（{totalCount}）</span>
           </button>
         </h2>
-        {#if reserveActions && onCreateSubcategory}
-          <!-- 桌面直显按钮：只有「新建子分类」；新增书签与排序在 CategorySection 的操作行里 -->
-          <button
-            type="button"
-            class="scope-action scope-action-direct"
-            aria-label="新建子分类"
-            title="新建子分类"
-            on:click={() => void onCreateSubcategory?.()}
-          >
-            <span class="scope-action-label">新建子分类</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true" class="scope-action-icon">
-              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v3" />
-              <path d="M3 7v10a2 2 0 0 0 2 2h6" />
-              <path d="M16 15h6M19 12v6" />
-            </svg>
-          </button>
-        {/if}
         {#if reserveActions && hasMoreActions}
           <div class="scope-more">
             <button
@@ -316,6 +299,7 @@
   }
 
   .scope-root-trigger {
+    position: relative;
     display: inline-flex;
     min-width: 0;
     max-width: 100%;
@@ -323,19 +307,25 @@
     gap: 0.12rem;
     padding: 0.2rem 0.45rem;
     border: 1px solid transparent;
-    border-radius: 0.62rem;
+    border-radius: 6px;
     background: transparent;
     color: inherit;
     font: inherit;
     text-align: left;
     cursor: pointer;
     appearance: none;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
   }
 
-  .scope-root-trigger.active {
-    border-color: color-mix(in srgb, var(--home-accent-color) 42%, var(--home-stat-border));
-    background: color-mix(in srgb, var(--home-stat-bg) 84%, transparent);
-    box-shadow: 0 10px 24px color-mix(in srgb, var(--home-accent-color) 12%, transparent);
+  .scope-root-trigger.active,
+  .scope-tabs button.active {
+    border-color: color-mix(in srgb, var(--home-accent-color) 34%, var(--home-stat-border));
+    background: var(--home-stat-bg);
+  }
+
+  .scope-root-trigger:hover {
+    border-color: var(--home-stat-border);
+    background: var(--home-stat-chip-bg);
   }
 
   .scope-root-trigger:focus-visible {
@@ -477,24 +467,19 @@
   }
 
   /*
-   * 桌面端「新增书签 / 排序」操作行来自 CategorySection，它是
-   * `.section-header.no-heading.inline-actions { position: absolute; right: 0; z-index: 2 }`——
-   * 浮在分组右上角，**不占布局空间**（这是 PROB-12 确认过的形态）。子分类标签行占满整宽，
-   * 于是标签一多到需要横向滚动，最右侧的标签就被压在按钮下面，既看不清也点不到。
+   * 桌面端 CategorySection 的绝对操作行包含「新建子分类 / 新增书签 / 排序」三项，
+   * 不占分类标题与子分类标签的布局空间。标签行需要预留操作行宽度，避免横向滚动
+   * 到末端时最后一个子分类标签被操作按钮遮挡。
    *
-   * 实测（生产，20 个子分类）：操作行宽 180 px，标签行右边界与它的左边界重叠 180 px，
-   * 只有会横向滚动的那一组出现 `lastTabUnderActions=true`；子分类少的分组标签没占满，
-   * 所以问题只在标签多时暴露。
-   *
-   * 这里按实测宽度预留右侧内边距。用 padding 而不是缩短容器：滚动条仍是全宽，
-   * 用户滚到底时最后一个标签正好落在按钮左侧。`scroll-padding-inline-end` 让键盘与
-   * 程序化滚动也把标签停在预留区之外。
-   *
-   * 190px = 实测 180 + 10 余量。改「新增书签」「排序」的文案或按钮内边距时要重新量，
-   * `tests/unit/homeResponsiveLayout.test.ts` 有一条断言锁住「有操作行就必须有预留」。
+   * `scroll-padding-inline-end` 同步预留区，保证键盘与程序化滚动也能停在操作行左侧。
+   * 300px 按三按钮实际文案、图标、间距与安全余量收敛；修改任一按钮文案或内边距时要重新量。
+   * `tests/unit/homeResponsiveLayout.test.ts` 锁住「有操作行就必须有预留」。
    */
+  .category-scope.has-actions {
+    --scope-actions-reserve: 300px;
+  }
+
   .category-scope.has-actions .scope-tabs {
-    --scope-actions-reserve: 190px;
     padding-right: var(--scope-actions-reserve);
     scroll-padding-inline-end: var(--scope-actions-reserve);
   }
@@ -544,11 +529,8 @@
     outline: 2px solid color-mix(in srgb, var(--home-accent-color) 58%, transparent);
     outline-offset: 2px;
   }
-  .scope-tabs button.active {
-    border-color: color-mix(in srgb, var(--home-accent-color) 34%, var(--home-stat-border));
-    background: var(--home-stat-bg);
-  }
 
+  .scope-root-trigger.active::after,
   .scope-tabs button.active::after {
     content: '';
     position: absolute;
@@ -641,17 +623,8 @@
       font-size: 0;
     }
 
-    /* 移动端只保留「更多操作」入口，直显按钮移出无障碍树 */
-    .scope-action-direct {
-      display: none;
-    }
-
     .scope-more {
       display: inline-flex;
-    }
-
-    .scope-action-label {
-      display: none;
     }
   }
 </style>
