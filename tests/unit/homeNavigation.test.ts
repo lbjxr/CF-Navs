@@ -93,6 +93,7 @@ describe('home navigation helpers', () => {
 
   it('defaults every root group to direct bookmarks and accepts only its own children', () => {
     expect(resolveHomeCategoryForRoot(forest[0], undefined).id).toBe(1)
+    expect(resolveHomeCategoryForRoot(forest[0], undefined, groupedBookmarks).id).toBe(1)
     expect(resolveHomeCategoryForRoot(forest[0], 'category-3').id).toBe(3)
     expect(resolveHomeCategoryForRoot(forest[0], 3).id).toBe(3)
     expect(resolveHomeCategoryForRoot(forest[0], 'category-2').id).toBe(1)
@@ -102,6 +103,17 @@ describe('home navigation helpers', () => {
       { root: 1, selected: 3 },
       { root: 2, selected: 2 },
     ])
+  })
+  it('falls back to the first child when the root has no direct bookmarks', () => {
+    const emptyRoot = buildCategoryForest([
+      { id: 4, parent_id: null, title: 'Empty root', icon: null, sort: 0 },
+      { id: 5, parent_id: 4, title: 'First child', icon: null, sort: 0 },
+    ])[0]
+    const bookmarks = new Map([[5, [bookmark(5, 5)]]])
+
+    expect(resolveHomeCategoryForRoot(emptyRoot, undefined, bookmarks).id).toBe(5)
+    expect(resolveHomeCategoryForRoot(emptyRoot, 4, bookmarks).id).toBe(5)
+    expect(getHomeCategoryGroups([emptyRoot], new Map(), bookmarks)[0].selected.id).toBe(5)
   })
 
   it('tracks the last root above the navigation threshold or the first root below it', () => {

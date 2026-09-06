@@ -689,7 +689,6 @@
         await tick()
         homeFocusCategoryId = category.id
         await tick()
-        document.getElementById(`home-category-tab-${category.id}`)?.click()
       }
       toastStore.addToast(
         categoryModalMode === 'edit' ? `分类「${category.title}」已更新` : `分类「${category.title}」已创建`,

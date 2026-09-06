@@ -170,22 +170,28 @@ export function resolveHomeCategorySelection(
 export function resolveHomeCategoryForRoot(
   root: CategoryNode<PublicCategory>,
   activeId: string | number | null | undefined,
+  categoryBookmarks?: ReadonlyMap<number, PublicBookmark[]>,
 ): CategoryNode<PublicCategory> {
   const normalizedId = String(activeId ?? '')
-  if (normalizedId === String(root.id) || normalizedId === `category-${root.id}`) return root
+  const defaultCategory = categoryBookmarks && (categoryBookmarks.get(root.id)?.length ?? 0) === 0 && root.children.length > 0
+    ? root.children[0]
+    : root
+
+  if (normalizedId === String(root.id) || normalizedId === `category-${root.id}`) return defaultCategory
 
   return root.children.find((child) => (
     normalizedId === String(child.id) || normalizedId === `category-${child.id}`
-  )) ?? root
+  )) ?? defaultCategory
 }
 
 export function getHomeCategoryGroups(
   forest: CategoryNode<PublicCategory>[],
   selectedCategoryIds: ReadonlyMap<number, number>,
+  categoryBookmarks?: ReadonlyMap<number, PublicBookmark[]>,
 ): HomeCategoryGroup[] {
   return forest.map((root) => ({
     root,
-    selected: resolveHomeCategoryForRoot(root, selectedCategoryIds.get(root.id)),
+    selected: resolveHomeCategoryForRoot(root, selectedCategoryIds.get(root.id), categoryBookmarks),
   }))
 }
 

@@ -15,7 +15,6 @@
   export let rootId: number
   export let title = ''
   export let icon: string | null = null
-  export let directCount = 0
   export let totalCount = 0
   export let children: HomeCategoryScopeItem[] = []
   export let activeId: number | null = null
@@ -31,7 +30,6 @@
   let tabList: HTMLElement | null = null
 
   $: resolvedPanelId = panelId || `home-category-panel-${rootId}`
-  $: rootTabId = `home-category-tab-${rootId}`
   $: rootActive = activeId == null || String(activeId) === String(rootId)
   function select(id: number): void {
     void onSelect?.(id)
@@ -136,9 +134,7 @@
   function handleTabKeyDown(event: KeyboardEvent): void {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
 
-    const tabs = Array.from(tabList?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? [])
-    if (tabs.length === 0) return
-
+    const tabs = Array.from(tabList?.querySelectorAll<HTMLButtonElement>('[role="tab"], [role="button"]') ?? [])
     event.preventDefault()
     const currentIndex = Math.max(0, tabs.indexOf(document.activeElement as HTMLButtonElement))
     let nextIndex = currentIndex
@@ -154,7 +150,7 @@
 </script>
 
 <svelte:window on:pointerdown={handleWindowPointerDown} on:keydown={handleWindowKeyDown} on:resize={handleWindowResize} />
-<section class="category-scope" class:has-children={children.length > 0} class:has-actions={reserveActions} class:highlighted={highlightedId === rootId} data-home-category-scope={rootId} aria-labelledby={`home-category-heading-${rootId}`}>
+<section class="category-scope" class:has-children={children.length > 0} class:has-actions={reserveActions} class:selected={rootActive} class:highlighted={highlightedId === rootId} data-home-category-scope={rootId} aria-labelledby={`home-category-heading-${rootId}`}>
   <div class="scope-heading">
     <CategoryIcon category={{ id: rootId, title, icon }} size="var(--category-root-icon-size, 40px)" className="scope-icon" />
     <div class="scope-accent" aria-hidden="true"></div>
@@ -228,36 +224,23 @@
         {#if children.length > 0}
           <div
             class="scope-tabs"
-            role="tablist"
+            role={rootActive ? 'group' : 'tablist'}
             aria-label={`${title} 分类范围`}
             tabindex="-1"
             bind:this={tabList}
             on:keydown={handleTabKeyDown}
             on:wheel={handleTabWheel}
           >
-            <button
-              id={rootTabId}
-              type="button"
-              role="tab"
-              aria-selected={rootActive}
-              aria-controls={resolvedPanelId}
-              tabindex={rootActive ? 0 : -1}
-              class:active={rootActive}
-              on:click={() => select(rootId)}
-            >
-              <span>本分类</span>
-              <small>{directCount}</small>
-            </button>
 
             {#each children as child (child.id)}
               {@const childActive = String(activeId) === String(child.id)}
               <button
                 id={`home-category-tab-${child.id}`}
-                role="tab"
-                aria-selected={childActive}
-                aria-controls={resolvedPanelId}
-                tabindex={childActive ? 0 : -1}
-                class:active={childActive}
+                role={rootActive ? 'button' : 'tab'}
+                aria-selected={!rootActive ? childActive : undefined}
+                aria-controls={!rootActive ? resolvedPanelId : undefined}
+                tabindex={rootActive ? 0 : childActive ? 0 : -1}
+                class:active={!rootActive && childActive}
                 title={child.title}
                 on:click={() => select(child.id)}
               >
@@ -282,6 +265,13 @@
     padding: 0.15rem 0 0.78rem;
     border-bottom: 1px solid color-mix(in srgb, var(--home-text-color) 14%, transparent);
     scroll-margin-top: 6rem;
+  }
+  .category-scope.selected {
+    padding: 0.65rem 0.75rem 0.78rem;
+    border: 1px solid color-mix(in srgb, var(--home-accent-color) 42%, var(--home-stat-border));
+    border-radius: var(--radius-lg, 16px);
+    background: color-mix(in srgb, var(--home-stat-bg) 84%, transparent);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--home-accent-color) 12%, transparent);
   }
 
   .scope-heading {

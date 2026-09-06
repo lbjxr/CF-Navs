@@ -124,8 +124,57 @@ describe('HomeCategoryScope 更多操作菜单', () => {
     expect(section).toContain('class:sorting={activeSortMode}')
   })
 })
+describe('首页分类范围选择', () => {
+  it('删除本分类 tab，根分类状态改用 scope 选中语义', () => {
+    renderScope({
+      children: [{ id: 8, title: '子分类', icon: null, count: 2 }],
+    })
+
+    expect(screen.queryByText('本分类')).toBeNull()
+    expect(screen.getByRole('group', { name: '研发工具 分类范围' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '子分类 2' })).toBeTruthy()
+    expect(document.querySelector('.category-scope.selected')).toBeTruthy()
+  })
+
+  it('选中子分类时恢复 tablist 与唯一 active tab', () => {
+    renderScope({
+      activeId: 8,
+      children: [
+        { id: 8, title: '子分类', icon: null, count: 2 },
+        { id: 9, title: '另一个子分类', icon: null, count: 1 },
+      ],
+    })
+
+    expect(screen.getByRole('tablist', { name: '研发工具 分类范围' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: '子分类 2' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: '另一个子分类 1' }).getAttribute('aria-selected')).toBe('false')
+    expect(document.querySelector('.category-scope.selected')).toBeNull()
+  })
+})
 
 describe('更多操作菜单的视口夹紧', () => {
+  it('根分类模式下方向键仍能切换到子分类控件', async () => {
+    const onSelect = vi.fn()
+    render(HomeCategoryScope, {
+      props: {
+        rootId: 7,
+        title: '研发工具',
+        children: [
+          { id: 8, title: '子分类', icon: null, count: 2 },
+          { id: 9, title: '另一个子分类', icon: null, count: 1 },
+        ],
+        onSelect,
+      },
+    })
+
+    const group = screen.getByRole('group', { name: '研发工具 分类范围' })
+    const first = screen.getByRole('button', { name: '子分类 2' })
+    first.focus()
+    await fireEvent.keyDown(group, { key: 'ArrowRight' })
+
+    expect(onSelect).toHaveBeenCalledWith(9)
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '另一个子分类 1' }))
+  })
   // 这个触发器紧跟标题、不靠右对齐：移动端标题短的分类里它离视口左边只有 100 px 出头。
   // 菜单固定 `right: 0` 时，160 px 的最小宽度会把左边缘推到负坐标——真机实测「AI服务」
   // 在 390 px 视口下 left = -12，菜单最左侧被切在屏幕外。
@@ -136,7 +185,7 @@ describe('更多操作菜单的视口夹紧', () => {
   /** jsdom 不做布局，rect 与 offsetWidth 全是 0；按真机量到的数值喂进去才能测定位算法。 */
   function stubGeometry(triggerLeft: number, triggerWidth: number, menuWidth: number, viewportWidth: number) {
     Object.defineProperty(window, 'innerWidth', { value: viewportWidth, configurable: true, writable: true })
-    Element.prototype.getBoundingClientRect = function (this: Element) {
+    Element.prototype.getBoundingClientRect = function(this: Element) {
       // `.scope-more` 只包着触发器，两者左边界相同
       const isAnchor = this.classList.contains('scope-more-trigger') || this.classList.contains('scope-more')
       const left = isAnchor ? triggerLeft : 0

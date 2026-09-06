@@ -88,7 +88,7 @@
   $: allCategoryBookmarks = groupBookmarksByCategory(sortedBookmarks)
   $: displayCategoryBookmarks = homeSortMode ? groupBookmarksByCategory(homeSortDraft) : allCategoryBookmarks
   $: navigationSections = getHomeSections(categoryForest, allCategoryBookmarks)
-  $: categoryGroups = getHomeCategoryGroups(categoryForest, selectedCategoryIds)
+  $: categoryGroups = getHomeCategoryGroups(categoryForest, selectedCategoryIds, allCategoryBookmarks)
   $: activeId = resolveHomeActiveSectionId(navigationSections, activeId)
   $: if (
     focusCategoryId != null &&
@@ -304,7 +304,7 @@
     if (nextRootId == null) return
     const root = categoryForest.find((category) => category.id === nextRootId)
     if (!root) return
-    const selected = resolveHomeCategoryForRoot(root, selectedCategoryIds.get(root.id))
+    const selected = resolveHomeCategoryForRoot(root, selectedCategoryIds.get(root.id), allCategoryBookmarks)
     const nextId = `category-${selected.id}`
     if (nextId !== activeId) activeId = nextId
   }
@@ -359,12 +359,13 @@
       const isRoot = selection.root?.id === categoryId
       const isChild = selection.child?.id === categoryId
       if (selection.root && (isRoot || isChild)) {
-        setSelectedCategory(selection.root.id, categoryId)
-        activeId = `category-${categoryId}`
+        const selected = resolveHomeCategoryForRoot(selection.root, categoryId, allCategoryBookmarks)
+        setSelectedCategory(selection.root.id, selected.id)
+        activeId = `category-${selected.id}`
         scrollSpySuppressedUntil = performance.now() + 900
         await tick()
-        const tab = document.getElementById(`home-category-tab-${categoryId}`)
-        const target = tab ?? document.querySelector(`[data-home-category-scope="${categoryId}"]`)
+        const tab = document.getElementById(`home-category-tab-${selected.id}`)
+        const target = tab ?? document.querySelector(`[data-home-category-scope="${selection.root.id}"]`)
         target?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
         return
       }
@@ -547,7 +548,6 @@
                 rootId={category.id}
                 title={category.title}
                 icon={category.icon}
-                directCount={allCategoryBookmarks.get(category.id)?.length ?? 0}
                 totalCount={getCategoryTreeBookmarkCount(category, allCategoryBookmarks)}
                 children={category.children.map((child) => ({
                   id: child.id,
@@ -569,7 +569,11 @@
                 id={panelId}
                 class="scope-section-list"
                 role={category.children.length > 0 ? 'tabpanel' : undefined}
-                aria-labelledby={category.children.length > 0 ? `home-category-tab-${selectedCategory.id}` : undefined}
+                aria-labelledby={category.children.length > 0
+                  ? selectedCategory.id === category.id
+                    ? `home-category-heading-${category.id}`
+                    : `home-category-tab-${selectedCategory.id}`
+                  : undefined}
               >
                 {#if homeSortMode}
                   {#each [category, ...category.children] as sortableCategory (sortableCategory.id)}
