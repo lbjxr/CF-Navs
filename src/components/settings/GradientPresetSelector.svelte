@@ -12,7 +12,7 @@
   $: glassPresets = gradientPresets.filter((preset) => preset.surface === 'glass')
   $: flatPresets = gradientPresets.filter((preset) => preset.surface === 'flat')
   $: presetGroups = [
-    { label: '毛玻璃氛围', hint: '渐变背景、半透明卡片与柔和光晕', items: glassPresets },
+    { label: '毛玻璃', hint: '渐变背景、半透明卡片与柔和光晕', items: glassPresets },
     { label: '护眼纯色', hint: '低饱和纯色背景与不透明卡片', items: flatPresets },
   ]
 
@@ -21,10 +21,6 @@
 
 <div class="gradient-preset-panel">
   <div class="gradient-preset-header">
-    <div>
-      <strong>内置配色方案</strong>
-      <p>每套方案包含浅色/深色两种背景，选中后会一并套用遮罩和推荐的卡片透明度、文字颜色。</p>
-    </div>
     {#if activeGradientPresetId === 'custom'}
       <span>自定义</span>
     {:else}
@@ -35,7 +31,7 @@
   <div id="builtin-preset-groups" class="builtin-preset-groups">
   {#each presetGroups as group (group.label)}
     <div class="gradient-preset-group" class:collapsed={!presetsExpanded}>
-      <div class="gradient-preset-group-title"><strong>{group.label}</strong><span>{group.hint}</span></div>
+      <div class="gradient-preset-group-title" title={group.hint}><strong>{group.label}</strong></div>
       <div class="gradient-preset-grid">
       {#each group.items as preset (preset.id)}
       <label
@@ -116,18 +112,6 @@
     gap: 14px;
   }
 
-  .gradient-preset-header strong {
-    display: block;
-    color: var(--sp-heading);
-    font-size: 14px;
-  }
-
-  .gradient-preset-header p {
-    margin: 4px 0 0;
-    color: var(--sp-muted);
-    font-size: 13px;
-    line-height: 1.5;
-  }
 
   .gradient-preset-header > span {
     flex: 0 0 auto;

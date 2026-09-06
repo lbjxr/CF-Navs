@@ -56,6 +56,13 @@
 - 明确 #8 的 `bug-fixed` 标签只对应 Chrome 侧栏白色原生滚动条，不把云端 Issue 状态误判为上述诉求均已关闭。
 - 验证：`git diff --check` 通过，追溯计划文件存在；未修改云端 Issue。
 
+### PROB-04：收敛配色分区说明
+
+- 设置页配色选择器移除模块级「内置配色方案」标题与长说明，保留右侧「自定义 / 已选方案」状态反馈。
+- 内置分组名由「毛玻璃氛围」收敛为「毛玻璃」；两组说明移入分组标题的 `title`，避免默认占用布局空间；自定义分组说明保持可见。
+- 新增 `tests/unit/gradientPresetSelectorBehavior.test.ts` 覆盖可观察 DOM 文案、分组 hover 语义和状态反馈。
+- 验证：`npm run type-check` 通过（0 errors / 0 warnings）；`npm test` 112 files / 819 passed；`npm run build` 成功；`git diff --check` 通过。生产/L2 需部署后再验证。
+
 ### 三条待裁定项落定（PROB-26 / PROB-04 / PROB-30 → 新立 REQ-13），仅更新清单未动实现
 
 - **PROB-26 建立追溯**：已关闭 #8 的两项已实现诉求（部分导出备份、顶部导航分行）此前没有到原始 Issue 的追溯链。裁定为建立追溯——`GITHUB_ISSUES_REQUIREMENTS.md` 的 §1.2 排除句改口径、§3 总表 R-08 来源补 #8、§8 新增 #8 追溯，并注明该 Issue 的 `bug-fixed` 标签实际只对应「Chrome 侧栏白色原生滚动条」一条。只改本地文档，不动云端 #8。
