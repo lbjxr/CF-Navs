@@ -50,6 +50,12 @@
 - `PROB-25`（#15 的 EdgeOne 兼容边界）改为**由维护者直接在 GitHub 回帖澄清**，不占用代理任务。
 - 未做：任何功能代码开发。本轮只动测试工具与文档。生产站点未验证——脚本在本地 wrangler dev 实例上实测通过，对生产的首次运行需要 `verify.local.json` 填好目标与凭据。
 
+### PROB-26：已关闭 Issue #8 的本地追溯
+
+- `docs/reference/GITHUB_ISSUES_REQUIREMENTS.md` 已在 §1.2 明确 Closed Issue 不新立 R 编号但对已实现诉求建立追溯；R-08 来源补回 #8；§8 记录 #8 的部分导出与顶部导航分行诉求。
+- 明确 #8 的 `bug-fixed` 标签只对应 Chrome 侧栏白色原生滚动条，不把云端 Issue 状态误判为上述诉求均已关闭。
+- 验证：`git diff --check` 通过，追溯计划文件存在；未修改云端 Issue。
+
 ### 三条待裁定项落定（PROB-26 / PROB-04 / PROB-30 → 新立 REQ-13），仅更新清单未动实现
 
 - **PROB-26 建立追溯**：已关闭 #8 的两项已实现诉求（部分导出备份、顶部导航分行）此前没有到原始 Issue 的追溯链。裁定为建立追溯——`GITHUB_ISSUES_REQUIREMENTS.md` 的 §1.2 排除句改口径、§3 总表 R-08 来源补 #8、§8 新增 #8 追溯，并注明该 Issue 的 `bug-fixed` 标签实际只对应「Chrome 侧栏白色原生滚动条」一条。只改本地文档，不动云端 #8。
