@@ -317,12 +317,6 @@
     transition: background var(--transition-fast), border-color var(--transition-fast);
   }
 
-  .scope-root-trigger.active,
-  .scope-tabs button.active {
-    border-color: color-mix(in srgb, var(--home-accent-color) 34%, var(--home-stat-border));
-    background: var(--home-stat-bg);
-  }
-
   .scope-root-trigger:hover {
     border-color: var(--home-stat-border);
     background: var(--home-stat-chip-bg);
@@ -528,6 +522,12 @@
   .scope-tabs button:focus-visible {
     outline: 2px solid color-mix(in srgb, var(--home-accent-color) 58%, transparent);
     outline-offset: 2px;
+  }
+
+  .scope-root-trigger.active,
+  .scope-tabs button.active {
+    border-color: color-mix(in srgb, var(--home-accent-color) 34%, var(--home-stat-border));
+    background: var(--home-stat-bg);
   }
 
   .scope-root-trigger.active::after,
