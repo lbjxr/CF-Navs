@@ -35,7 +35,6 @@
 | PROB-19v | 安全 | P1 | 登出后旧 token 被拒，实测 **178 ms**，远低于 15 秒窗口；**2026-09-06 复验 212 ms**，仍远低于 15 秒窗口 | KV 写入故障下的 `store_unavailable` 分支——生产上没有安全的故障注入手段 | PH PROB-19 |
 | PROB-13 | 验证欠账 | P1 | `L1` 首访探测一次/二访零次；`L3` Service Worker 接管（9 个响应）+ 预缓存含 `index-*.js`/`.css`；`L4` 离线可打开；**2026-09-06 复验**：首访/二访、Service Worker、预缓存、离线、弹窗尺寸和全程异常检查均通过（27/27）；Tier 1 自定义 JS 已执行临时写入/恢复流程，原值已恢复；真实 iPhone/iOS Safari 输入放大与 S4 iframe 由用户自行测试，代理未验证 | `L4` 的「已检测到新版本」（要两次真实部署）；`S3` 自定义 JS 的正式 CSP 断言与 `S3 导入提示`（需含自定义 JS 的备份文件） | PH PROB-13 |
 | PROB-14 | 验证欠账 | P1 | 子集导出含被选分类且补齐父分类；**2026-09-06 复验通过**：生产只读探针完成子集导出检查 | 证据偏弱：生产上第一个根分类没有子分类也没有书签，导出子集只有 1 个分类 0 个书签。replace/merge 导入属 Tier 2，**只在本地实例验证** | PH PROB-14 |
-| PROB-20c | 安全 | P1 | **匿名枚举防护确认生效**：匿名取私密书签图标（id=1015）与「不存在的 id」逐字节相同（326/326 B，SHA-256 一致），私密分类同理；带授权 key 时返回不同内容（568 B / 329 B），证明防护不是「本来就没图标」；授权响应 `cache-control: private, no-store`。**2026-09-06 复验**：匿名书签/分类图标指纹均一致，授权响应不同；`perf:audit` 图标请求 245 ≤ 260；Cloudflare Worker Dashboard 显示 Observability/Workers Traces 已禁用，Trace 仅提供配置模拟，未能观测 `caches.default` 实际 key | 旧 edge cache 条目不可达——需要能观察 Cloudflare edge 的缓存键；当前 Dashboard 无可用的运行时 cache key 观测 | PH PROB-20 |
 | PROB-23 | 验证欠账 | P2 | Cache Storage **0.74 MiB / 774006 B** ≤ 5 MiB；首页 0 破图；**2026-09-06 复验**：`accept:prod` 与 `perf:audit` 均确认首页无破图、缓存低于预算；观测到一例真实外站图标失败（第三方图片设了 `Cross-Origin-Resource-Policy: same-origin`，浏览器拒收，前端兜底生效所以用户看不到破图） | 旧 SW 版本残留取决于访客浏览器历史状态，干净 profile 里复现不出来 | PH PROB-23 |
 | REQ-08b | 验证欠账 | P3 | — | 逐套切换 13 个毛玻璃预设：属 Tier 1（要写 `background_preset_id`）且「好不好看」需要人眼 | RD REQ-08 |
 

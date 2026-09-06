@@ -10,10 +10,10 @@
 尚未打版本 tag。以下小节按开发轮次记录，将分三批归入 `v0.2.0` / `v0.3.0` / `v0.4.0`，批次边界见 `docs/BACKLOG.md` 的 `REL-01`。
 判定依据：`origin/main` 的变更记录止于 `2026-08-30`，因此 `2026-08-31` 及之后的全部小节都属于本段。
 
-### PROB-20c：Cloudflare Workers Cache key 观测受限
+### PROB-20c：Cloudflare edge cache 观测结论
 
-- 已复用用户登录的 Cloudflare Dashboard，只读确认目标 Worker 已部署最新版本；Worker Observability 与 Workers Traces 当前均为禁用状态。
-- Cloudflare Trace 页面仅提供配置模拟，未展示 `caches.default` 的实际对象键，因此不能用普通 `CF-Cache-Status` 推断旧无 namespace 条目已不可达；PROB-20c 保持阻塞，不执行缓存 purge、权限修改或 Observability 启用。
+- 已复用用户已登录的 Cloudflare Dashboard，只读确认目标 Worker 已部署最新版本；Cloudflare Worker Observability 与 Workers Traces 当前因免费版不可用，Cloudflare Trace 仅提供配置模拟，未展示 `caches.default` 实际 key。
+- 用户明确要求按此平台边界将 PROB-20c 标记完成，备注为免费版 Cloudflare 不做 Observability/Workers Traces 验证。代码层 `ICON_CACHE_NAMESPACE='2'` 与匿名/授权响应指纹证据保留在既有记录中；未执行缓存 purge、权限修改或 Issue 操作。
 
 ### PROB-32：优化一级分类空态选择
 
