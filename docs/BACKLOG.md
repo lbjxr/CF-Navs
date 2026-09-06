@@ -2,7 +2,7 @@
 
 > **这是内部工作项的唯一状态源。** 云端已有编号的缺陷与功能需求以 GitHub Issue 的开闭状态为准；本地发起的问题与需求不新开 Issue，状态就在本表。安全问题按 [SECURITY.md](../SECURITY.md) 处理，不开公开 Issue。规则见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
 >
-> - 更新日期：2026-09-05；基线：`develop`。
+> - 更新日期：2026-09-06；基线：`develop`。
 > - 只列**未完成**条目。完成后从本表删除，成果记入 `CHANGELOG.md`，证据与判断留在 `plans/` 的决策记录里。
 > - 编号沿用既有 `PROB-NN` / `REQ-NN`，不重新分配。`PROB-18c`、`PROB-20c` 这类后缀表示同一编号的后续阶段。
 > - 「详情」列指向决策记录：`PH` = [问题处理任务清单](plans/PROBLEM_HANDLING_TASK_LIST.md)，`RD` = [需求开发任务清单](plans/REQUIREMENT_DEVELOPMENT_TASK_LIST.md)。那两份文档**不再维护状态**，只保留证据。
@@ -11,6 +11,7 @@
 
 | ID | 类型 | 优先 | 事项 | 下一步 | 详情 |
 | --- | --- | --- | --- | --- | --- |
+| PROB-32 | 缺陷/交互 | P1 | 一级分类无直接书签时「本分类」内容区空白 | 2026-09-06 用户报告并给定方案，**本轮只登记不实现**。查实根因不在 `showEmpty`：`homeData.ts:170-179,183-189` 的选中回退在 root 缺已选 id 时只落回 root，`Home.svelte:535-538` 又只渲染 `selectedCategory`，于是 root 直接书签为 0 时 `CategorySection.svelte:156-208` 渲染空态卡（文案 `:207`）；`showEmpty={false}` 只出现在搜索分支 `Home.svelte:467-514`，与正常态无关。三项改动：① 删「本分类」tab（`HomeCategoryScope.svelte:240-250`）；② 默认展示一级分类直接书签，为空则落第一个二级分类（改 `homeData.ts:170-189` 的回退，`resolveHomeCategoryForRoot` 是唯一所有者）；③ 一级分类加边框 + 突出背景选中态（`.category-scope` 在 `HomeCategoryScope.svelte:157-164`，当前无 selected class，`:325-328` 的 `highlighted` 是 focus 态不可复用；可取 `Home.svelte:667-675` 与 `:714-721` 的 `--home-stat-bg`、`--home-stat-border`、`--home-accent-color`，全局无 `--accent-border` / `--accent-glow`）。删 tab 的连带断点：`aria-selected={rootActive}`（`:242`）移除后 tablist 失去唯一选中项与 roving `tabindex`（键盘处理 `:137-153` 只枚举 `[role="tab"]`）；`Home.svelte:572` 的 `aria-labelledby` 指向 `home-category-tab-${selectedCategory.id}`，选中 root 时会悬空；`App.svelte:687-692` 新建 root 后按 tab id 的 click 可能 no-op（已有 `[data-home-category-scope]` 回退）。删 tab 后 root 内容的 ARIA 口径用户未规定，按 WAI-ARIA tabs 模式定即可，不需再裁定。**必须串行**：与 REQ-03 同改 `CategorySection.svelte` 空态、与 REQ-06 同改 `Home.svelte` 选中态与 scroll-spy 及 `homeData.ts`；若同轮动 `Home.svelte` 的 accent 定义点则与 REQ-07 / REQ-13 争用。测试处置：`tests/unit/categoryCollapseMarkup.test.ts:60-62` 断言的是源码文本（`rootActive` 表达式、`aria-selected={rootActive}`、`<span>本分类</span>`），按 `CONTRIBUTING.md` §4 现行纪律**删除而不是改写成新文案**；`tests/unit/homeNavigation.test.ts:94-100` 锁 `resolveHomeCategoryForRoot(undefined)` 回退 root，属行为断言，随新语义更新 | 本表（2026-09-06 报告） |
 | PROB-26 | 追溯 | P2 | 为已关闭 #8 的两项已实现诉求建立追溯 | 已裁定（2026-09-05，建立追溯）。改 `GITHUB_ISSUES_REQUIREMENTS.md` 三处（按小节定位，行号已漂移）：§1.2 的排除句改为「Closed Issue 不新立 R 编号，但已实现的诉求要在 §8 建立追溯」、§3 总表 R-08 来源列补 #8、§8 新增 #8 追溯（部分导出 → R-08；顶部导航分行 → `PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md` + `src/components/Sidebar.svelte`），并注明 #8 的 `bug-fixed` 只对应侧栏滚动条那一条。**只改本地文档，不动云端 #8** | PH PROB-26 |
 | PROB-04 | 需求对齐 | P3 | 配色分区去掉模块顶层说明，分组名收敛 | 已裁定（2026-09-05，方案 a）。改 `src/components/settings/GradientPresetSelector.svelte`（按内容定位）：删 `.gradient-preset-header` 里的 `内置配色方案` 标题与紧随的说明段落；`presetGroups` 的 `毛玻璃氛围` → `毛玻璃`（`护眼纯色` 不变）；两组 `hint` 从 `.gradient-preset-group-title` 的内联 `<span>` 移进 hover 的 `title`；header 右侧「自定义 / 已选方案」是选中态反馈，保留。验证挂载组件写行为断言，**不新增源码文本断言** | PH PROB-04 |
 | REQ-13 | 需求 | P2 | 自定义背景可配置强调色（承接 PROB-30 方案 c） | 已裁定并批准（2026-09-05，方案 c）。生效口径：**只在 `background_preset_id === 'custom'` 时生效**，有预设仍走预设 accent，因此不构成「两套真源」。需要浅/深成对两个字段。实现必须同时覆盖三处回退：`appData.ts` 的 `buildHomeBackground`、`Home.svelte` 的 `--home-accent-color` 两个档、`SettingsHomePreview.svelte` 的 6 处 `color-mix` 内联回退（后者深浅色都用浅色值，属既有不一致，一并对齐）。改动面含 `shared/types.ts`、`shared/settings.ts`（归一化 + `SETTINGS_KEYS` + 公开白名单）、`worker/lib/settingsData.ts`、`worker/routes/settings.ts`、`schema.sql`、设置面板 UI、`API_CONTRACT.md` 设置键表与其「30 个」计数。UI 落点与 `PROB-04` 争用 `GradientPresetSelector.svelte`，须串行 | RD REQ-13 |
@@ -23,6 +24,8 @@
 > 2026-09-04 已裁定并落地：PROB-03 / PROB-27（保持现状，回写文档）、PROB-11（移动端收进「更多操作」菜单）、PROB-12（回写文档，确认浮动操作行）、PROB-28（下限继续下调到 40 px）、PROB-29（改写为「无非法目标 + 逐项后果提示」）。
 >
 > 2026-09-05 已裁定、**待实现**（见第 1 节）：PROB-26（建立追溯）、PROB-04（方案 a：删模块顶层说明 + 分组名收敛成「毛玻璃」）、PROB-30（**方案 c**：让自定义背景也能配 accent，承接编号 `REQ-13`，同时推翻 `FR-4.5` 第二条与 `D-10`）。各条的裁定依据与待实现动作见 PH / RD 对应条目。
+>
+> 2026-09-06 用户直接给出方案、要求只写进清单不实现：`PROB-32`（删「本分类」tab + 默认落一级分类直接书签、为空则落第一个二级分类 + 一级分类加边框与突出背景选中态）。方案由用户拍板，无待裁定项；根因、落点、连带断点与串行约束见第 1 节。
 
 ## 3. 需要运行环境或部署后才能闭环（L1 / L3 / L4）
 
