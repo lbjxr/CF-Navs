@@ -24,6 +24,11 @@
 - 截图证据落在 Git 忽略目录 `tmp/acceptance/admin-backup-mobile-390x844.png`，未进入提交。
 - 验证：生产站点真实浏览器页面，登录成功；移动端面板可访问，布局无横向溢出；关闭测试 tab，未关闭用户浏览器。
 
+### PROB-13：用户自行完成 iOS 与 iframe 测试
+
+- 用户明确将真实 iPhone/iOS Safari 输入放大与 S4 iframe 嵌入测试书目标记完成，备注为用户自行测试；代理未验证或伪造真机证据。
+- Tier 1 自定义 JS 临时写入/恢复已执行，原设置已精确恢复；正式 CSP 断言与导入提示仍待专用备份文件。
+
 ### 桌面端子分类标签不再被浮动操作行遮挡
 
 - 「新增书签 / 排序」这一行来自 `CategorySection`，是 `.section-header.no-heading.inline-actions { position: absolute; right: 0; z-index: 2 }` —— 浮在分组右上角，**不占布局空间**（PROB-12 确认过的形态）。而 `HomeCategoryScope` 的子分类标签行占满整宽，于是标签一多到需要横向滚动，最右侧的标签就被压在按钮下面，既看不清也点不到。
