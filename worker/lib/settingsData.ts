@@ -20,6 +20,8 @@ export const DEFAULT_SETTINGS: Settings = {
   browser_sync_enabled: false,
   theme: 'light',
   background_preset_id: 'ocean-depths',
+  custom_accent_color: '',
+  custom_dark_accent_color: '',
   background: {
     type: 'gradient',
     value: 'radial-gradient(circle at 16% 12%, rgba(56, 189, 248, 0.5), transparent 44%), radial-gradient(circle at 84% 18%, rgba(45, 212, 191, 0.42), transparent 46%), radial-gradient(circle at 52% 96%, rgba(147, 197, 253, 0.46), transparent 50%), linear-gradient(145deg, #eff9ff 0%, #e7f5fe 46%, #e9f9f8 100%)',
@@ -160,6 +162,8 @@ export function settingsFromRawMap(raw: Map<string, unknown>): Settings {
   }
   for (const key of SETTINGS_KEYS) assignSetting(key)
   out.background_preset_id = normalizeBackgroundPresetId(out.background_preset_id)
+  out.custom_accent_color = typeof out.custom_accent_color === 'string' ? out.custom_accent_color.trim() : ''
+  out.custom_dark_accent_color = typeof out.custom_dark_accent_color === 'string' ? out.custom_dark_accent_color.trim() : ''
   const rawMode = raw.get('card_description_mode')
   const rawLegacy = raw.get('card_show_description')
   out.card_description_mode = rawMode === 'hover' || rawMode === 'hidden' || rawMode === 'always'

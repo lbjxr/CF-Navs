@@ -72,6 +72,7 @@
     `--category-child-icon-size-base: ${previewSettings.category_display.child_icon_size}px`,
     previewSettings.card_text_color ? `--card-text-color: ${previewSettings.card_text_color}` : '',
     `--preview-card-width: ${previewSettings.card_size.width}px`,
+    `--preview-accent-fallback: ${theme === 'dark' ? '#7dd3fc' : '#2563eb'}`,
   ].filter(Boolean).join('; ')
   $: descriptionMode = previewSettings.card_description_mode
   $: showDescription = descriptionMode !== 'hidden'
@@ -452,7 +453,7 @@
   .custom-content-preview iframe {
     width: 100%;
     height: 220px;
-    border: 1px solid color-mix(in srgb, var(--theme-accent-color, #2563eb) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--theme-accent-color, var(--custom-accent-color, var(--preview-accent-fallback, #2563eb))) 18%, transparent);
     border-radius: 10px;
     background: transparent;
     pointer-events: none;
@@ -478,7 +479,7 @@
     justify-content: center;
     width: var(--category-root-icon-size, 34px);
     height: var(--category-root-icon-size, 34px);
-    border: 1px solid color-mix(in srgb, var(--theme-accent-color, #2563eb) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--theme-accent-color, var(--custom-accent-color, var(--preview-accent-fallback, #2563eb))) 22%, transparent);
     border-radius: 9px;
     background: rgb(var(--card-bg-rgb, 255 255 255) / var(--card-bg-opacity, 0.9));
     color: var(--card-title-color, currentColor);
@@ -546,7 +547,7 @@
     align-items: center;
     gap: 5px;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--theme-accent-color, #2563eb) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--theme-accent-color, var(--custom-accent-color, var(--preview-accent-fallback, #2563eb))) 20%, transparent);
     border-radius: 10px;
     padding: 4px;
     transform: translateX(-50%);
@@ -566,7 +567,7 @@
   }
 
   .preview-nav-top button.active {
-    background: color-mix(in srgb, var(--theme-accent-color, #2563eb) 14%, transparent);
+    background: color-mix(in srgb, var(--theme-accent-color, var(--custom-accent-color, var(--preview-accent-fallback, #2563eb))) 14%, transparent);
   }
 
   .preview-nav-top small {
@@ -580,7 +581,7 @@
     display: grid;
     gap: 4px;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--theme-accent-color, #2563eb) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--theme-accent-color, var(--custom-accent-color, var(--preview-accent-fallback, #2563eb))) 20%, transparent);
     border-radius: 10px;
     padding: 5px;
     transition: width var(--transition-base);
@@ -602,7 +603,7 @@
   }
 
   .preview-nav-left button.active {
-    background: color-mix(in srgb, var(--theme-accent-color, #2563eb) 14%, transparent);
+    background: color-mix(in srgb, var(--theme-accent-color, var(--custom-accent-color, var(--preview-accent-fallback, #2563eb))) 14%, transparent);
   }
 
   .nav-mark {

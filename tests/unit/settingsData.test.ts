@@ -52,6 +52,19 @@ describe('worker settings data helpers', () => {
     expect(settings.background_preset_id).toBe('custom')
     expect(settings.search_engine.current).toBe(DEFAULT_SETTINGS.search_engine.current)
   })
+  it('trims custom accent values and preserves blank fallback defaults', () => {
+    expect(settingsFromRows([])).toMatchObject({
+      custom_accent_color: '',
+      custom_dark_accent_color: '',
+    })
+    expect(settingsFromRows([
+      { key: 'custom_accent_color', value: JSON.stringify('  #123456  ') },
+      { key: 'custom_dark_accent_color', value: JSON.stringify('  #abcdef  ') },
+    ])).toMatchObject({
+      custom_accent_color: '#123456',
+      custom_dark_accent_color: '#abcdef',
+    })
+  })
 
   it('parses raw rows with base overrides and malformed JSON fallback', () => {
     const raw = readRawSettingsRows([

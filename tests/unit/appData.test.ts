@@ -73,6 +73,8 @@ const settings: Settings = {
   public_mode: true,
   theme: 'auto',
   background_preset_id: 'custom',
+  custom_accent_color: '#112233',
+  custom_dark_accent_color: '#ddeeff',
   background: { type: 'color', value: '#0f172a', blur: 0, mask: 0.3, maskColor: '#000000' },
   backgrounds: {
     light: { type: 'image', value: 'https://example.com/bg.png', blur: 8, mask: 0.25, maskColor: '#ffffff' },
@@ -171,6 +173,7 @@ describe('app data adapters', () => {
 
   it('builds home background CSS variables from themed settings', () => {
     const cssVars = buildHomeBackground(toPublicSettings(settings), 'light')
+    expect(cssVars).toContain('--theme-accent-color: #112233;')
 
     expect(cssVars).toContain('--home-background: url("https://example.com/bg.png") center / cover no-repeat;')
     expect(cssVars).toContain('--home-background-blur: 8px;')
@@ -215,6 +218,18 @@ describe('app data adapters', () => {
     expect(customizedCssVars).toContain('--card-title-color: #112233;')
     expect(customizedCssVars).toContain('--card-description-color: #112233;')
   })
+  it('ignores custom accents while a built-in preset is active', () => {
+    const presetSettings = toPublicSettings({
+      ...settings,
+      background_preset_id: 'paper-indigo',
+      custom_accent_color: '#123456',
+      custom_dark_accent_color: '#abcdef',
+    })
+
+    const cssVars = buildHomeBackground(presetSettings, 'light')
+    expect(cssVars).toContain('--theme-accent-color: #5f769b;')
+    expect(cssVars).not.toContain('#123456')
+  })
 
   it('returns the editable settings form subset', () => {
     expect(toSettingsForm(settings)).toEqual({
@@ -224,6 +239,8 @@ describe('app data adapters', () => {
       public_mode: settings.public_mode,
       theme: settings.theme,
       background_preset_id: settings.background_preset_id,
+      custom_accent_color: settings.custom_accent_color,
+      custom_dark_accent_color: settings.custom_dark_accent_color,
       custom_css: settings.custom_css,
       custom_js: settings.custom_js,
       image_host_url: settings.image_host_url,

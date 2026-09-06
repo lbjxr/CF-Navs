@@ -63,6 +63,13 @@
 - 新增 `tests/unit/gradientPresetSelectorBehavior.test.ts` 覆盖可观察 DOM 文案、分组 hover 语义和状态反馈。
 - 验证：`npm run type-check` 通过（0 errors / 0 warnings）；`npm test` 112 files / 819 passed；`npm run build` 成功；`git diff --check` 通过。生产/L2 需部署后再验证。
 
+### REQ-13：自定义背景强调色
+
+- 新增 `custom_accent_color` / `custom_dark_accent_color` 两个浅/深主题设置；默认空值时沿用原有内置回退，仅在 `background_preset_id === 'custom'` 时生效，选中内置预设仍严格使用预设 accent。
+- 设置字段已贯通 `Settings` / `PublicSettings`、公开 key 白名单、D1 seed、Worker 读取归一化与 PUT 类型/长度校验、设置表单、首页背景变量和首页预览。
+- 预览六处 accent `color-mix` 回退统一支持主题对应的 fallback；新增设置、持久化归一化、首页 accent 优先级和预览表单行为测试。
+- 验证：`npm run type-check` 通过（0 errors / 0 warnings）；`npm test` 112 files / 821 passed；`npm run build` 成功；`git diff --check` 通过。生产/L2 需部署后再验证。
+
 ### 三条待裁定项落定（PROB-26 / PROB-04 / PROB-30 → 新立 REQ-13），仅更新清单未动实现
 
 - **PROB-26 建立追溯**：已关闭 #8 的两项已实现诉求（部分导出备份、顶部导航分行）此前没有到原始 Issue 的追溯链。裁定为建立追溯——`GITHUB_ISSUES_REQUIREMENTS.md` 的 §1.2 排除句改口径、§3 总表 R-08 来源补 #8、§8 新增 #8 追溯，并注明该 Issue 的 `bug-fixed` 标签实际只对应「Chrome 侧栏白色原生滚动条」一条。只改本地文档，不动云端 #8。

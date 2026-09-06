@@ -187,6 +187,8 @@ describe('settings form model', () => {
       site_title_font_size: 200,
       theme: 'dark',
       custom_css: '  body{}  ',
+      custom_accent_color: '  #123456  ',
+      custom_dark_accent_color: '  #abcdef  ',
       image_host_url: '  https://img.example.com  ',
       search_engine: {
         current: 'Missing',
@@ -206,6 +208,8 @@ describe('settings form model', () => {
     expect(normalized.site_title).toBe('CF-Navs')
     expect(normalized.site_title_font_size).toBe(72)
     expect(normalized.custom_css).toBe('body{}')
+    expect(normalized.custom_accent_color).toBe('#123456')
+    expect(normalized.custom_dark_accent_color).toBe('#abcdef')
     expect(normalized.image_host_url).toBe('https://img.example.com')
     expect(normalized.search_engine.current).toBe('Google')
     expect(normalized.search_engine.engines[0]).toEqual({

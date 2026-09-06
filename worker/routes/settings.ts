@@ -57,6 +57,12 @@ settingsRoutes.put('/', async (c) => {
   ) {
     return badRequest(c, 'invalid background_preset_id')
   }
+  if (body.custom_accent_color !== undefined && typeof body.custom_accent_color !== 'string') {
+    return badRequest(c, 'invalid custom_accent_color')
+  }
+  if (body.custom_dark_accent_color !== undefined && typeof body.custom_dark_accent_color !== 'string') {
+    return badRequest(c, 'invalid custom_dark_accent_color')
+  }
   if (body.public_mode !== undefined && typeof body.public_mode !== 'boolean') {
     return badRequest(c, 'invalid public_mode')
   }

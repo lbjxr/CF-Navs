@@ -221,7 +221,7 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 
 `browser_sync_enabled` 默认值为 `false`，仅属于管理员设置，不会下发到公开设置。开启该设置时服务端会幂等创建根分类“浏览器新增收藏”；关闭时不会删除该分类或其中已有书签。
 
-下表按 `shared/settings.ts` 的 `SETTINGS_KEYS` 顺序列出全部 30 个设置键。「取值范围」以服务端实际行为为准：PUT 校验见 `worker/routes/settings.ts`，归一化见 `shared/settings.ts` 与 `worker/lib/settingsData.ts`；类型注释写了范围但服务端不钳制的字段已逐项标出。默认值以 `worker/lib/settingsData.ts` 的 `DEFAULT_SETTINGS` 为准，并与 `schema.sql` 的 seed 对齐。未知键在两个方向都会被丢弃：写入和读取聚合都只遍历 `SETTINGS_KEYS`。
+下表按 `shared/settings.ts` 的 `SETTINGS_KEYS` 顺序列出全部 32 个设置键。「取值范围」以服务端实际行为为准：PUT 校验见 `worker/routes/settings.ts`，归一化见 `shared/settings.ts` 与 `worker/lib/settingsData.ts`；类型注释写了范围但服务端不钳制的字段已逐项标出。默认值以 `worker/lib/settingsData.ts` 的 `DEFAULT_SETTINGS` 为准，并与 `schema.sql` 的 seed 对齐。未知键在两个方向都会被丢弃：写入和读取聚合都只遍历 `SETTINGS_KEYS`。
 
 | 键名 | 类型 | 取值范围 | 归一化行为 | 默认值 |
 | --- | --- | --- | --- | --- |
@@ -232,6 +232,8 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 | `browser_sync_enabled` | `boolean` | `true` / `false` | PUT 非布尔拒绝；提交 `true` 时幂等创建同步根分类 | `false` |
 | `theme` | `ThemeMode` | `'light'` / `'dark'` / `'auto'` | PUT 集合外拒绝 | `'light'` |
 | `background_preset_id` | `BackgroundPresetId` | 22 个内置预设 ID 或 `'custom'` | PUT 集合外拒绝；读取时非法值归一化为 `'custom'`，键缺失取默认值而不是 `'custom'` | `'ocean-depths'` |
+| `custom_accent_color` | `string` | 长度 ≤ 64 码位 | PUT 非字符串或超长拒绝；读取时去除首尾空白，空值在自定义背景下回退内置浅色强调色；选中内置预设时不生效 | `''` |
+| `custom_dark_accent_color` | `string` | 长度 ≤ 64 码位 | PUT 非字符串或超长拒绝；读取时去除首尾空白，空值在自定义背景下回退内置深色强调色；选中内置预设时不生效 | `''` |
 | `background` | `BackgroundSetting` | `type` 取 `'image'` / `'color'` / `'gradient'`；`value` ≤ 262144 码位；`maskColor` ≤ 64 码位；`blur` `0-20`、`mask` `0-1` 只是类型注释，服务端不钳制 | PUT 允许部分对象，只校验出现过的属性；读取时非对象整体回落默认，属性缺失或非法逐项回落默认，数值不四舍五入也不钳制 | 见 `DEFAULT_SETTINGS.background` |
 | `backgrounds` | `ThemeBackgroundSettings` | `light` / `dark` 各自同 `background` | PUT 要求对象且 `light`、`dark` 均为合法背景对象；读取时逐主题逐属性归一化；整键缺失时由已归一化的 `background` 派生两套主题 | 见 `DEFAULT_SETTINGS.backgrounds` |
 | `custom_css` | `string` | 长度 ≤ 65536 码位 | PUT 非字符串或超长拒绝；不做内容清洗 | `''` |

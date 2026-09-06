@@ -138,6 +138,8 @@ export interface Settings {
   browser_sync_enabled: boolean
   theme: ThemeMode
   background_preset_id: BackgroundPresetId
+  custom_accent_color: string
+  custom_dark_accent_color: string
   background: BackgroundSetting // 兼容旧版本：新逻辑优先使用 backgrounds
   backgrounds: ThemeBackgroundSettings
   custom_css: string
@@ -272,6 +274,8 @@ export interface PublicSettings {
   site_title_font_size: number
   theme: ThemeMode
   background_preset_id: BackgroundPresetId
+  custom_accent_color: string
+  custom_dark_accent_color: string
   background: BackgroundSetting // 兼容旧版本：新逻辑优先使用 backgrounds
   backgrounds: ThemeBackgroundSettings
   search_engine: SearchEngineSetting

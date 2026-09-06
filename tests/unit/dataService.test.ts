@@ -83,6 +83,8 @@ const settings: Settings = {
   public_mode: true,
   theme: 'auto',
   background_preset_id: 'custom',
+  custom_accent_color: '',
+  custom_dark_accent_color: '',
   background: { type: 'color', value: '#0f172a', blur: 0, mask: 0.3, maskColor: '#000000' },
   backgrounds: {
     light: { type: 'color', value: '#f8fafc', blur: 0, mask: 0.18, maskColor: '#ffffff' },

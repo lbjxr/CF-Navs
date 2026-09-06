@@ -179,6 +179,30 @@ describe('外观分区的高级设置与置灰联动', () => {
 
     expect((document.getElementById('settings-card-width') as HTMLInputElement).min).toBe('40')
   })
+  it('自定义背景显示浅/深强调色控件并把值写入保存 payload', async () => {
+    const { onSubmit } = renderPanel({
+      value: {
+        ...baseValue,
+        background_preset_id: 'custom',
+        custom_accent_color: '#123456',
+        custom_dark_accent_color: '#abcdef',
+      },
+    })
+    await openSection('外观与卡片')
+
+    const light = screen.getByLabelText('自定义浅色强调色值') as HTMLInputElement
+    const dark = screen.getByLabelText('自定义深色强调色值') as HTMLInputElement
+    expect(light.value).toBe('#123456')
+    expect(dark.value).toBe('#abcdef')
+
+    await fireEvent.input(light, { target: { value: '#234567' } })
+    await fireEvent.input(dark, { target: { value: '#bcdef0' } })
+    await fireEvent.submit(document.querySelector('#settings-form') as HTMLFormElement)
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0].custom_accent_color).toBe('#234567')
+    expect(onSubmit.mock.calls[0][0].custom_dark_accent_color).toBe('#bcdef0')
+  })
 })
 
 describe('布局与导航分区的置灰联动', () => {
