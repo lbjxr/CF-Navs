@@ -189,6 +189,7 @@ describe('首页分类范围选择', () => {
     expect(screen.getByRole('group', { name: '研发工具 分类范围' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '子分类 2' })).toBeTruthy()
     expect(document.querySelector('.category-scope.selected')).toBeTruthy()
+    expect(document.querySelector('.scope-root-trigger.active')).toBeTruthy()
   })
 
   it('选中子分类时恢复 tablist 与唯一 active tab', () => {
@@ -204,6 +205,8 @@ describe('首页分类范围选择', () => {
     expect(screen.getByRole('tab', { name: '子分类 2' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('tab', { name: '另一个子分类 1' }).getAttribute('aria-selected')).toBe('false')
     expect(document.querySelector('.category-scope.selected')).toBeNull()
+    expect(document.querySelector('.scope-root-trigger.active')).toBeNull()
+    expect(screen.getByRole('tab', { name: '子分类 2' }).classList.contains('active')).toBe(true)
   })
 
   it('根分类与子分类复用同一选中边框背景和指示线', () => {
@@ -212,6 +215,15 @@ describe('首页分类范围选择', () => {
     expect(scope).toContain('.scope-root-trigger.active,\n  .scope-tabs button.active {')
     expect(scope).toContain('.scope-root-trigger.active::after,\n  .scope-tabs button.active::after {')
     expect(scope).not.toContain('box-shadow: 0 10px 24px color-mix(in srgb, var(--home-accent-color) 12%, transparent);')
+    expect(scope).toContain('.scope-root-trigger,\n  .scope-tabs button {')
+    expect(scope).toContain('min-height: 34px;')
+    expect(scope).toContain('padding: 0.34rem 0.62rem;')
+    expect(scope).toContain('opacity: 0.74;')
+    expect(scope).toContain('transition: background var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);')
+    expect(scope).toContain('.scope-root-trigger:hover,\n  .scope-tabs button:hover {')
+    expect(scope).toContain('.scope-root-trigger:focus-visible,\n  .scope-tabs button:focus-visible {')
+    const mobileStyles = scope.slice(scope.indexOf('@media (max-width: 720px)'))
+    expect(mobileStyles).toContain('.scope-root-trigger,\n    .scope-tabs button {')
   })
 
   it('选中子分类后仍可点击一级分类回到根内容', async () => {

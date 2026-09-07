@@ -298,34 +298,33 @@
     margin: 0;
   }
 
-  .scope-root-trigger {
+  .scope-root-trigger,
+  .scope-tabs button {
     position: relative;
     display: inline-flex;
-    min-width: 0;
-    max-width: 100%;
-    align-items: baseline;
-    gap: 0.12rem;
-    padding: 0.2rem 0.45rem;
+    min-height: 34px;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.34rem 0.62rem;
     border: 1px solid transparent;
     border-radius: 6px;
     background: transparent;
+    cursor: pointer;
+    opacity: 0.74;
+    transition: background var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);
+  }
+
+  .scope-root-trigger {
+    min-width: 0;
+    max-width: 100%;
     color: inherit;
     font: inherit;
     text-align: left;
-    cursor: pointer;
+    white-space: nowrap;
     appearance: none;
-    transition: background var(--transition-fast), border-color var(--transition-fast);
   }
 
-  .scope-root-trigger:hover {
-    border-color: var(--home-stat-border);
-    background: var(--home-stat-chip-bg);
-  }
-
-  .scope-root-trigger:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--home-accent-color) 58%, transparent);
-    outline-offset: 2px;
-  }
 
   .scope-root-title {
     min-width: 0;
@@ -493,32 +492,20 @@
 
 
   .scope-tabs button {
-    position: relative;
-    display: inline-flex;
-    min-height: 34px;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.34rem 0.62rem;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    background: transparent;
     color: var(--home-text-color, currentColor);
     font: inherit;
     font-size: var(--category-child-font-size, 0.82rem);
     font-weight: 600;
     white-space: nowrap;
-    cursor: pointer;
-    opacity: 0.74;
-    transition: background var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);
   }
 
+  .scope-root-trigger:hover,
   .scope-tabs button:hover {
     border-color: var(--home-stat-border);
     background: var(--home-stat-chip-bg);
     opacity: 1;
   }
-
+  .scope-root-trigger:focus-visible,
   .scope-tabs button:focus-visible {
     outline: 2px solid color-mix(in srgb, var(--home-accent-color) 58%, transparent);
     outline-offset: 2px;
@@ -609,9 +596,13 @@
       display: none;
     }
 
+    .scope-root-trigger,
     .scope-tabs button {
       min-height: 32px;
       padding: 0.28rem 0.56rem;
+    }
+
+    .scope-tabs button {
       font-size: var(--category-child-font-size, 0.78rem);
     }
 
