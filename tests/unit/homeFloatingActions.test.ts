@@ -173,4 +173,13 @@ describe('移动端折叠菜单', () => {
     expect(source).toContain('top: 4rem;')
     expect(source).toContain('top: calc(100% + 6px)')
   })
+
+  it('平板到中屏（800–1650px）顶部导航模式也折叠，避免平铺按钮遮挡居中导航栏', () => {
+    // 居中导航栏（max-width 1200px）右缘距视口约 16px，与右上角平铺按钮组重叠直到约 1608px；
+    // 该区间折叠为「更多」菜单并下移到导航栏下方，>1650px 才恢复平铺。jsdom 不解析 @media，读源码断言。
+    expect(source).toContain('min-width: 800px) and (max-width: 1650px')
+    expect(source).toContain('top: 4.5rem;')
+    // 规则必须限定顶部导航模式，否则侧栏模式在 800–1650px 会被误折叠
+    expect(source).toContain('below-top-navigation .actions-menu-trigger')
+  })
 })

@@ -398,4 +398,44 @@
       bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 4.4rem);
     }
   }
+
+  /* 平板到中屏（800–1650px）的顶部导航模式：居中导航栏（max-width 1200px）右缘距视口仅约 16px，
+     与右上角平铺按钮组（约占右侧 204px）必然重叠——按钮会盖住导航栏右滚动箭头与末端标签。
+     判据：(vw − content-max-width) / 2 ≥ 204 → 约 vw ≥ 1608px 才不重叠，取 1650px 留冗余。
+     故此区间也折叠为「更多」菜单并下移到导航栏下方；>1650px 恢复平铺，侧栏模式不受影响。 */
+  @media (min-width: 800px) and (max-width: 1650px) {
+    .floating-actions.below-top-navigation {
+      top: 4.5rem;
+    }
+
+    .floating-actions.below-top-navigation .actions-menu-trigger {
+      display: flex;
+    }
+
+    .floating-actions.below-top-navigation .actions-group {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 80;
+      display: none;
+      flex-direction: column;
+      gap: 0.4rem;
+      padding: 0.4rem;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 0.85rem;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+    }
+
+    .floating-actions.below-top-navigation.menu-open .actions-group {
+      display: flex;
+    }
+
+    :global([data-theme='dark']) .floating-actions.below-top-navigation .actions-group {
+      background: rgba(15, 23, 42, 0.92);
+      border-color: rgba(148, 163, 184, 0.32);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+    }
+  }
 </style>
