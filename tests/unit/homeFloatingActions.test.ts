@@ -106,3 +106,71 @@ describe('home floating actions', () => {
     expect(source).not.toContain('＋')
   })
 })
+
+describe('移动端折叠菜单', () => {
+  it('渲染竖三点「更多」触发器，默认收起且带 disclosure 语义', () => {
+    render(HomeFloatingActions, { props: { isAuthenticated: true } })
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+
+    expect(trigger.getAttribute('aria-haspopup')).toBe('true')
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(trigger.getAttribute('aria-controls')).toBe('home-actions-menu')
+    // 图标是 svg，可访问名只由 aria-label 提供，不靠字符
+    expect(trigger.querySelector('svg')).not.toBeNull()
+    expect(trigger.getAttribute('aria-label')).toBe('更多操作')
+    expect(trigger.textContent?.trim()).toBe('')
+  })
+
+  it('点击触发器展开，再次点击收起', async () => {
+    render(HomeFloatingActions, { props: { isAuthenticated: true } })
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+
+    await fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+
+    await fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('点击组内操作后回调触发并收起菜单', async () => {
+    const onToggleTheme = vi.fn()
+    render(HomeFloatingActions, { props: { isAuthenticated: true, onToggleTheme } })
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+
+    await fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+
+    await fireEvent.click(screen.getByRole('button', { name: /切换到/ }))
+
+    expect(onToggleTheme).toHaveBeenCalledTimes(1)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('Escape 关闭已展开的菜单', async () => {
+    render(HomeFloatingActions, { props: { isAuthenticated: true } })
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+
+    await fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+
+    await fireEvent.keyDown(window, { key: 'Escape' })
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('点击弹层外部关闭菜单', async () => {
+    render(HomeFloatingActions, { props: { isAuthenticated: true } })
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+
+    await fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+
+    await fireEvent.pointerDown(document.body)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('顶部导航模式移动端把触发器下移到导航栏下方，向下弹出且与其错开', () => {
+    // jsdom 不解析 @media，位置只能读源码断言（与 safe-area 断言同一手法）
+    expect(source).toContain('top: 4rem;')
+    expect(source).toContain('top: calc(100% + 6px)')
+  })
+})

@@ -19,6 +19,14 @@
 
   let showBackToTop = false
 
+  // 移动端把整组操作收进一个「更多」触发器，点开后向下弹出；桌面端仍平铺（纯 CSS @media 切换）。
+  // 触发器与操作组始终在 DOM，由 @media 决定形态——jsdom 不解析 @media，所以操作按钮在单元测试里
+  // 始终可查，不会因折叠而丢失可访问入口。
+  let menuTrigger: HTMLButtonElement | null = null
+  let menuGroup: HTMLElement | null = null
+  let menuOpen = false
+  const menuId = 'home-actions-menu'
+
   $: currentThemeLabel = activeThemeMode === 'auto'
     ? `跟随系统，当前${activeTheme === 'dark' ? '暗色' : '浅色'}`
     : activeThemeMode === 'dark' ? '暗色模式' : '浅色模式'
@@ -28,22 +36,37 @@
   $: themeToggleLabel = `当前${currentThemeLabel}，点击切换到${nextThemeLabel}`
   $: themeToggleIcon = activeThemeMode === 'auto' ? 'A' : activeTheme === 'dark' ? '☾' : '☀'
 
+  function toggleMenu() {
+    menuOpen = !menuOpen
+  }
+
+  function closeMenu(focusTrigger = false) {
+    menuOpen = false
+    if (focusTrigger) menuTrigger?.focus()
+  }
+
   function handleToggleTheme() {
+    closeMenu()
     void onToggleTheme?.()
   }
 
   function handleSwitchToAdmin() {
+    closeMenu()
     void onSwitchToAdmin?.()
   }
 
   function handleLogout() {
+    closeMenu()
     void onLogout?.()
   }
 
   function handleOpenCreateRootCategory() {
+    closeMenu()
     void onOpenCreateRootCategory?.()
   }
+
   function handleOpenLogin() {
+    closeMenu()
     void onOpenLogin?.()
   }
 
@@ -56,6 +79,20 @@
     window.scrollTo({ top: 0, behavior })
   }
 
+  // 弹层外点击与 Escape 关闭：仅在移动端 menuOpen 为真时生效；桌面 menuOpen 恒为 false，处理器直接返回。
+  function handleWindowPointerDown(event: PointerEvent) {
+    if (!menuOpen) return
+    const target = event.target as Node | null
+    if (target && (menuTrigger?.contains(target) || menuGroup?.contains(target))) return
+    closeMenu()
+  }
+
+  function handleWindowKeyDown(event: KeyboardEvent) {
+    if (!menuOpen || event.key !== 'Escape') return
+    event.preventDefault()
+    closeMenu(true)
+  }
+
   onMount(() => {
     updateBackToTopVisibility()
     window.addEventListener('scroll', updateBackToTopVisibility, { passive: true })
@@ -64,67 +101,88 @@
   })
 </script>
 
-<div class="floating-actions" class:below-top-navigation={topNavigation}>
+<svelte:window on:pointerdown={handleWindowPointerDown} on:keydown={handleWindowKeyDown} />
+
+<div class="floating-actions" class:below-top-navigation={topNavigation} class:menu-open={menuOpen}>
+  <!-- 折叠触发器：竖三点「更多」，与 Sidebar 目录的横三线汉堡区分；仅移动端可见（@media 控制）。 -->
   <button
     type="button"
-    class="icon-button theme-toggle-button"
-    data-testid="home-theme-toggle"
-    class:is-dark={activeTheme === 'dark'}
-    class:is-auto={activeThemeMode === 'auto'}
-    on:click={handleToggleTheme}
-    title={themeToggleLabel}
-    aria-label={themeToggleLabel}
+    class="icon-button actions-menu-trigger"
+    data-testid="home-actions-menu-trigger"
+    aria-haspopup="true"
+    aria-expanded={menuOpen}
+    aria-controls={menuId}
+    on:click={toggleMenu}
+    bind:this={menuTrigger}
+    title="更多操作"
+    aria-label="更多操作"
   >
-    {themeToggleIcon}
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 6h.01M12 12h.01M12 18h.01" />
+    </svg>
   </button>
-  {#if isAuthenticated}
+  <div class="actions-group" id={menuId} bind:this={menuGroup}>
     <button
       type="button"
-      class="icon-button"
-      data-testid="home-admin-button"
-      on:click={handleSwitchToAdmin}
-      title="管理后台"
-      aria-label="管理后台"
+      class="icon-button theme-toggle-button"
+      data-testid="home-theme-toggle"
+      class:is-dark={activeTheme === 'dark'}
+      class:is-auto={activeThemeMode === 'auto'}
+      on:click={handleToggleTheme}
+      title={themeToggleLabel}
+      aria-label={themeToggleLabel}
     >
-      &#9881;
+      {themeToggleIcon}
     </button>
-    <!-- 图标语义：裸加号不说明加的是什么，改为「文件夹 + 加号」明确是新增分类 -->
-    <button
-      type="button"
-      class="icon-button create-category-button"
-      data-testid="home-create-root-category"
-      on:click={handleOpenCreateRootCategory}
-      title="新增主分类"
-      aria-label="新增主分类"
-    >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M3 8a2 2 0 0 1 2-2h3.6l1.7 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-        <path d="M12 11.5v5M9.5 14h5" />
-      </svg>
-    </button>
-    <button
-      type="button"
-      class="icon-button"
-      data-testid="home-logout-button"
-      on:click={handleLogout}
-      disabled={authLoading}
-      title="退出登录"
-      aria-label="退出登录"
-    >
-      &#8618;
-    </button>
-  {:else}
-    <button
-      type="button"
-      class="icon-button"
-      data-testid="home-login-button"
-      on:click={handleOpenLogin}
-      title="管理员登录"
-      aria-label="管理员登录"
-    >
-      &#9881;
-    </button>
-  {/if}
+    {#if isAuthenticated}
+      <button
+        type="button"
+        class="icon-button"
+        data-testid="home-admin-button"
+        on:click={handleSwitchToAdmin}
+        title="管理后台"
+        aria-label="管理后台"
+      >
+        &#9881;
+      </button>
+      <!-- 图标语义：裸加号不说明加的是什么，改为「文件夹 + 加号」明确是新增分类 -->
+      <button
+        type="button"
+        class="icon-button create-category-button"
+        data-testid="home-create-root-category"
+        on:click={handleOpenCreateRootCategory}
+        title="新增主分类"
+        aria-label="新增主分类"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 8a2 2 0 0 1 2-2h3.6l1.7 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+          <path d="M12 11.5v5M9.5 14h5" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        data-testid="home-logout-button"
+        on:click={handleLogout}
+        disabled={authLoading}
+        title="退出登录"
+        aria-label="退出登录"
+      >
+        &#8618;
+      </button>
+    {:else}
+      <button
+        type="button"
+        class="icon-button"
+        data-testid="home-login-button"
+        on:click={handleOpenLogin}
+        title="管理员登录"
+        aria-label="管理员登录"
+      >
+        &#9881;
+      </button>
+    {/if}
+  </div>
 </div>
 
 {#if showBackToTop}
@@ -157,6 +215,26 @@
      悬浮在导航栏之上（z-index 70 > 导航栏 60），宽视口右缘重叠时不被遮挡（OQ-C2）。 */
   .floating-actions.below-top-navigation {
     top: 1.125rem;
+  }
+
+  .actions-group {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  /* 折叠触发器只在移动端出现，桌面保持整组平铺 */
+  .actions-menu-trigger {
+    display: none;
+  }
+
+  .actions-menu-trigger svg {
+    width: 1.3rem;
+    height: 1.3rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .back-to-top-button {
@@ -265,8 +343,39 @@
     }
 
     .floating-actions.below-top-navigation {
-      /* 移动端顶部导航 top:8px、高 48px；按钮垂直居中对齐首行，不遮挡搜索框 */
-      top: 0.85rem;
+      /* 顶部导航栏移动端占据 y≈8..56px 全宽；把折叠触发器下移到导航栏下方，与其错开不重叠 */
+      top: 4rem;
+    }
+
+    .actions-menu-trigger {
+      display: flex;
+    }
+
+    /* 移动端整组收进触发器下方的弹层，向下展开 */
+    .actions-group {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 80;
+      display: none;
+      flex-direction: column;
+      gap: 0.4rem;
+      padding: 0.4rem;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 0.85rem;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+    }
+
+    .floating-actions.menu-open .actions-group {
+      display: flex;
+    }
+
+    :global([data-theme='dark']) .actions-group {
+      background: rgba(15, 23, 42, 0.92);
+      border-color: rgba(148, 163, 184, 0.32);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
     }
 
     .icon-button {
