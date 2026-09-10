@@ -223,7 +223,7 @@
   }
 
   /* 折叠触发器只在移动端出现，桌面保持整组平铺 */
-  .actions-menu-trigger {
+  .floating-actions .actions-menu-trigger {
     display: none;
   }
 
@@ -347,7 +347,7 @@
       top: 4rem;
     }
 
-    .actions-menu-trigger {
+    .floating-actions .actions-menu-trigger {
       display: flex;
     }
 
