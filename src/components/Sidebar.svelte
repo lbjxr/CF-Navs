@@ -1237,7 +1237,7 @@
     }
 
     .top-track {
-      width: calc(100% - 8.5rem);
+      width: 100%;
       justify-self: start;
       box-sizing: border-box;
       gap: 4px;
