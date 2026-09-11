@@ -450,6 +450,14 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - 约束（来自待办原文）：每次拆分必须先接入真实调用链并保留现有缓存、路由和回滚行为
 - 处理动作：不做一次性大重构。仅在后续修改认证/CRUD/弹窗流程时顺带按 use case 抽出，且每次都有对应验证
 
+### PROB-33（P1）排序异步初始化在销毁后仍创建实例
+
+- 来源：2026-09-11 导航修复的全量测试两次出现 `ReferenceError: window is not defined`，112 files / 841 assertions passed 但退出码为 1；栈指向 `src/lib/sortableList.ts` 的 `initSortable`。这是本地验证阻塞条目，未关联云端 Issue。
+- 根因：`sortableList` 的 `destroy()` 只销毁已存在的实例，无法失效仍在等待 `loadSortable()` 的初始化；旧 continuation 在组件卸载或新配置生效后仍会继续创建实例。连续更新还会让多个过期初始化重复创建、销毁实例。
+- 处理（2026-09-12）：action 保存 `destroyed` 与 `initializationVersion`；每次真正重建时推进代次，导入完成后先检查销毁状态与代次，再触碰实例。无配置变化的 `update()` 不使唯一待执行初始化失效；保留动态导入缓存、排序及跨列表回调契约，不吞掉导入错误。
+- 回归证据：`tests/unit/sortableList.test.ts` 延迟模块加载并使用真实 SortableJS，原实现 4 条中 3 条失败，修复后 4 条通过；与 `homeCategoryScopeActions.test.ts` 合跑 25/25 通过。完整 `npm run type-check` 0 errors / 0 warnings、`npm test` 113 files / 845 passed 且无未处理异常、`npm run build` 成功。
+- 直接验证：隔离 Chrome 原生鼠标拖拽确认同列表重排、跨列表的来源/目标分类与两侧顺序、禁用后不重排、重新启用后恢复；销毁后无活动实例，浏览器诊断全为 0，测试 target、浏览器、fixture 与 profile 已清理。该验证为真实 action 的独立浏览器夹具，不代表生产持久化或真机触摸已验证。
+
 ---
 
 ## 6. E 类：信息不足需澄清

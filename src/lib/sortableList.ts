@@ -91,6 +91,8 @@ export const sortableList = (
 ): ActionReturn<SortableListOptions> => {
   let sortable: SortableInstance | null = null
   let options = initialOptions
+  let destroyed = false
+  let initializationVersion = 0
 
   const destroySortable = () => {
     sortable?.destroy()
@@ -98,12 +100,16 @@ export const sortableList = (
   }
 
   const initSortable = async () => {
-    if (!options.enabled || !options.onSort) {
+    const version = ++initializationVersion
+    if (destroyed || !options.enabled || !options.onSort) {
       destroySortable()
       return
     }
 
     const { default: SortableCtor } = await loadSortable()
+
+    // 过期初始化不能创建实例，也不能销毁后来生效的实例。
+    if (destroyed || version !== initializationVersion) return
 
     // await 期间选项可能已变化，重新校验。
     if (!options.enabled || !options.onSort) {
@@ -178,6 +184,7 @@ export const sortableList = (
       }
     },
     destroy() {
+      destroyed = true
       destroySortable()
     },
   }
