@@ -126,6 +126,20 @@ describe('设置控件到 payload 的实际写入', () => {
     expect(document.body.textContent).toContain('有未保存更改')
     expect(saveButton.disabled).toBe(false)
   })
+
+  it('允许保存输入控件已支持的 40 px 卡片宽度', async () => {
+    const { onSubmit } = renderPanel()
+    await openSection('外观与卡片')
+    await fireEvent.click(screen.getByTestId('appearance-advanced-toggle'))
+
+    await fireEvent.input(screen.getByRole('spinbutton', { name: '卡片最小宽度' }), { target: { value: '40' } })
+    const saveButton = screen.getByRole('button', { name: '保存设置' }) as HTMLButtonElement
+    await waitFor(() => expect(saveButton.disabled).toBe(false))
+    await fireEvent.submit(document.querySelector('#settings-form') as HTMLFormElement)
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0].card_size.width).toBe(40)
+  })
 })
 
 describe('外观分区的高级设置与置灰联动', () => {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ChangePasswordReq } from '../../shared/types'
+  import { CARD_SIZE_LIMITS } from '../../shared/settings'
   import {
     cloneSettingsForm,
     createSettingsFormState,
@@ -68,11 +69,11 @@
   $: backgroundValid = lightBackgroundValid && darkBackgroundValid
   $: cardSizeValid =
     Number.isFinite(normalizedForm.card_size.width) &&
-    normalizedForm.card_size.width >= 44 &&
-    normalizedForm.card_size.width <= 400 &&
+    normalizedForm.card_size.width >= CARD_SIZE_LIMITS.width.min &&
+    normalizedForm.card_size.width <= CARD_SIZE_LIMITS.width.max &&
     Number.isFinite(normalizedForm.card_size.height) &&
-    normalizedForm.card_size.height >= 0 &&
-    normalizedForm.card_size.height <= 300
+    normalizedForm.card_size.height >= CARD_SIZE_LIMITS.height.min &&
+    normalizedForm.card_size.height <= CARD_SIZE_LIMITS.height.max
   $: contentLayoutValid =
     Number.isFinite(normalizedForm.content_layout.max_width) &&
     normalizedForm.content_layout.max_width > 0 &&
