@@ -353,6 +353,8 @@
     window.scrollTo({ top: finalScroll, behavior: 'smooth' })
   }
   async function focusCategory(categoryId: number): Promise<void> {
+    // focus 请求由响应式语句触发；等当前更新结束后再改选择，让分类分组重新派生。
+    await tick()
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const currentForest = homeData.getCategoryForest(categories)
       const selection = resolveHomeCategorySelection(currentForest, categoryId)
