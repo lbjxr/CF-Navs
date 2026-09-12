@@ -109,8 +109,8 @@ async function ensureChrome() {
     if (FORCE_TEMP_CHROME || !ALLOW_EXISTING_CHROME) {
       throw new Error(
         `Chrome debug port ${debugEndpoint} is already in use. ` +
-          'This regression script starts an isolated browser by default. ' +
-          'Set REGRESSION_ALLOW_EXISTING_CHROME=1 only for a browser dedicated to this test, or choose a free CHROME_DEBUG_PORT.',
+        'This regression script starts an isolated browser by default. ' +
+        'Set REGRESSION_ALLOW_EXISTING_CHROME=1 only for a browser dedicated to this test, or choose a free CHROME_DEBUG_PORT.',
       )
     }
     browserConnectionMode = 'dedicated-existing-browser'
@@ -131,7 +131,7 @@ async function ensureChrome() {
   if (!SAFE_TEMP_PROFILE) {
     throw new Error(
       'Refusing to start temporary Chrome with an unsafe profile path. ' +
-        'CHROME_USER_DATA_DIR must end with cf-navs-chrome-profile-<unique-id>.',
+      'CHROME_USER_DATA_DIR must end with cf-navs-chrome-profile-<unique-id>.',
     )
   }
 
@@ -932,15 +932,13 @@ async function runSecurityChecks() {
       return { status: resp.status, code: body?.code, msg: body?.msg, data: body?.data }
     }
 
-    // 1. Invalid token -> 401 / 1002
+    // 1. Invalid token -> 401 / 1001
     const invalidResp = await fetchJson(`${baseUrl}/api/admin/data`, {
       headers: { authorization: "Bearer NOT_A_REAL_TOKEN_DEADBEEF" },
     })
-    // shared/types.ts：UNAUTHORIZED = 1001。此前写的 1002（BAD_REQUEST）是错的期望值，
-    // 只因为同时判了 status === 401 才没暴露。
     const invalidTokenOk = invalidResp.status === 401 || invalidResp.code === 1001
 
-    // 2. Anonymous access -> 401 / 1002
+    // 2. Anonymous access -> 401 / 1001
     const anonResp = await fetchJson(`${baseUrl}/api/admin/data`)
     const anonymousOk = anonResp.status === 401 || anonResp.code === 1001
 
@@ -948,8 +946,8 @@ async function runSecurityChecks() {
     // 默认跳过：这是唯一会改写生产状态的场景，需 REGRESSION_ALLOW_PASSWORD_ROTATION=1 显式开启。
     let pwChangeOk = false
     let pwCleanupOk = false
-    let pwSkipped = __omp_shell("allowPasswordRotation")
-    const tempPass = "SecT_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8)
+    let pwSkipped = !allowPasswordRotation
+    const tempPass = allowPasswordRotation ? `SecT_${crypto.randomUUID()}` : ''
 
     try {
       if (!allowPasswordRotation) throw new Error("__skip_password_rotation__")
@@ -1010,25 +1008,25 @@ async function runSecurityChecks() {
       if (String(e?.message).includes("__skip_password_rotation__")) {
         pwSkipped = true
       } else {
-      // Emergency restore via temp password if possible
-      try {
-        const emerg = await fetchJson(`${baseUrl}/api/login`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ username: adminUser, password: tempPass }),
-        })
-        if (emerg.code === 0 && emerg.data?.token) {
-          await fetchJson(`${baseUrl}/api/password`, {
+        // Emergency restore via temp password if possible
+        try {
+          const emerg = await fetchJson(`${baseUrl}/api/login`, {
             method: "POST",
-            headers: {
-              "content-type": "application/json",
-              authorization: "Bearer " + emerg.data.token,
-            },
-            body: JSON.stringify({ current_password: tempPass, new_password: adminPass }),
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ username: adminUser, password: tempPass }),
           })
-          pwCleanupOk = true
-        }
-      } catch { /* unrecoverable */ }
+          if (emerg.code === 0 && emerg.data?.token) {
+            const emergencyRestore = await fetchJson(`${baseUrl}/api/password`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                authorization: "Bearer " + emerg.data.token,
+              },
+              body: JSON.stringify({ current_password: tempPass, new_password: adminPass }),
+            })
+            pwCleanupOk = emergencyRestore.code === 0
+          }
+        } catch { /* unrecoverable */ }
       }
     }
 
@@ -1041,6 +1039,7 @@ async function runSecurityChecks() {
     if (finalLogin.code === 0 && finalLogin.data) {
       localStorage.setItem("cf-navs.auth", JSON.stringify(finalLogin.data))
     }
+    if (allowPasswordRotation && finalLogin.code !== 0) pwCleanupOk = false
 
     return {
       invalidToken: { ok: invalidTokenOk, status: invalidResp.status, code: invalidResp.code },
@@ -1077,8 +1076,8 @@ function collectChecks(result) {
     check('backup tab rendered', result.admin.backup.rendered && result.admin.backup.sourceSelect && result.admin.backup.importInput, result.admin.backup, 'backup controls'),
     check('bookmark context edit modal works', result.contextMenu.ok, result.contextMenu, 'right-click edit open/cancel'),
     check('logout clears auth', result.logout.logoutButtonFound && result.logout.authCleared, result.logout, 'auth cleared'),
-    check('invalid token returns 401/1002', result.security.invalidToken.ok, result.security.invalidToken, 'HTTP 401 or code 1002'),
-    check('anonymous access returns 401/1002', result.security.anonymousAccess.ok, result.security.anonymousAccess, 'HTTP 401 or code 1002'),
+    check('invalid token returns 401/1001', result.security.invalidToken.ok, result.security.invalidToken, 'HTTP 401 or code 1001'),
+    check('anonymous access returns 401/1001', result.security.anonymousAccess.ok, result.security.anonymousAccess, 'HTTP 401 or code 1001'),
     // 跳过时判为通过并在 actual 里标明 skipped：没执行的写操作不能算「未通过」，
     // 否则默认配置下每次跑都红一片，真失败会被淹没。
     check(

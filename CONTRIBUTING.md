@@ -49,6 +49,8 @@
 
 每个 commit 在信息尾部声明达到的最高级别（`Verified: L0` / `Verified: L0,L1` …）。未达到的级别不是"可以忽略"，而是自动进入发版前清单。
 
+开发工具要求 Node.js **22 或以上**（见 `package.json` 的 `engines.node`）；CI 固定使用 **Node.js 24 LTS**。不要将 CI 降回 Node.js 20：当前 Wrangler / Miniflare 已要求 Node.js 22，L0 通过也不能证明 L1 能启动。
+
 | 级别 | 内容 | 命令 | 前置条件 |
 | --- | --- | --- | --- |
 | **L0** 静态 | 类型、单元测试、构建、空白字符 | `npm run type-check`、`npm test`、`npm run build`、`git diff --check` | 无。CI 已覆盖前三项 |

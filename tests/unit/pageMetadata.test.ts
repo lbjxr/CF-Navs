@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { decodeHtmlEntities } from '../../shared/decodeHtmlEntities'
 import {
   MAX_TITLE_LENGTH,
   decodeHtmlBytes,
-  decodeHtmlEntities,
   extractCharsetLabel,
   extractHeadSection,
   extractIconCandidates,
@@ -205,6 +205,26 @@ describe('pageMetadata html extraction', () => {
 
     expect(extractTitleTag(head)).toBe('Real Title')
     expect(extractMetaContent(head, 'og:title')).toBeNull()
+  })
+
+  it('does not truncate the head at boundaries inside comments', () => {
+    const head = extractHeadSection('<head><!-- </head><body> --><title>Real Title</title></head><body>')
+
+    expect(extractTitleTag(head)).toBe('Real Title')
+  })
+
+  it('does not join markup fragments across removed comments', () => {
+    const head = extractHeadSection('<head><met<!-- gap -->a property="og:title" content="Forged"><title>Real Title</title></head>')
+
+    expect(extractMetaContent(head, 'og:title')).toBeNull()
+    expect(extractTitleTag(head)).toBe('Real Title')
+  })
+
+  it('ignores metadata in an unterminated comment', () => {
+    const head = extractHeadSection('<head><title>Real Title</title><!-- <meta property="og:title" content="Hidden">')
+
+    expect(extractMetaContent(head, 'og:title')).toBeNull()
+    expect(extractTitleTag(head)).toBe('Real Title')
   })
 
   it('still extracts icon candidates after the refactor', () => {

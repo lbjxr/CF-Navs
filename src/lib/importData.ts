@@ -1,5 +1,6 @@
 import type { BackupData, Bookmark, Category, ImportReq, Settings } from '../../shared/types'
 import { normalizeCategories } from '../../shared/categoryHierarchy'
+import { decodeHtmlEntities } from '../../shared/decodeHtmlEntities'
 import { isRecord } from './guards'
 import { iconifyIcon } from './icons'
 
@@ -239,12 +240,9 @@ export function prepareBrowserBookmarkHtml(text: string): PreparedImport {
   const rootByTitle = new Map<string, Category>()
   const childByPath = new Map<string, Category>()
   const nextSort = new Map<number, number>()
-  function decode(value: string): string {
-    return value.replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-  }
   function attribute(tag: string, name: string): string {
     const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'))
-    return decode(match?.[1] ?? match?.[2] ?? match?.[3] ?? '')
+    return decodeHtmlEntities(match?.[1] ?? match?.[2] ?? match?.[3] ?? '')
   }
   function rootCategoryFor(title: string): Category {
     const normalized = title.trim() || '浏览器书签'
@@ -300,7 +298,7 @@ export function prepareBrowserBookmarkHtml(text: string): PreparedImport {
     nextSort.set(categoryId, sort + 1)
     bookmarks.push({
       id: nextBookmarkId++, category_id: categoryId,
-      title: titleFallback(decode(title.replace(/<[^>]+>/g, '')), url), url,
+      title: titleFallback(decodeHtmlEntities(title), url), url,
       icon: safeIcon?.startsWith('data:') ? null : safeIcon,
       icon_source: safeIcon?.startsWith('data:') ? 'custom' : null,
       icon_background_color: null, icon_blob: safeIcon?.startsWith('data:') ? safeIcon : null,
@@ -326,7 +324,9 @@ export function prepareBrowserBookmarkHtml(text: string): PreparedImport {
     return exportContainers.has(first) ? categoryPath.slice(1) : categoryPath
   }
 
-  const tokens = text.match(/<\/?(?:DL|H3|A|DD|DT)\b[^>]*>|[^<]+/gi) ?? []
+  // 注释与标签整体消费，只累计文本 token；不把不可信 HTML 反复删标签再重解析。
+  // 属性引号里的 > 不结束标签，注释里的结构标签也不能成为导入内容。
+  const tokens = text.matchAll(/<!--[\s\S]*?(?:-->|$)|<(?:[^<>"']|"[^"]*"|'[^']*')*>|[^<]+/g)
   type DlContext = { categoryPath: string[] }
   const dlStack: DlContext[] = []
   let pendingHeading = ''
@@ -337,7 +337,8 @@ export function prepareBrowserBookmarkHtml(text: string): PreparedImport {
   let linkText = ''
   let captureDescription = false
   let descriptionText = ''
-  for (const token of tokens) {
+  for (const [token] of tokens) {
+    if (token.startsWith('<!--')) continue
     if (!token.startsWith('<')) {
       if (captureHeading) headingText += token
       if (captureLink) linkText += token
@@ -345,7 +346,7 @@ export function prepareBrowserBookmarkHtml(text: string): PreparedImport {
       continue
     }
     if (/^<H3\b/i.test(token)) { captureHeading = true; headingText = ''; continue }
-    if (/^<\/H3/i.test(token)) { captureHeading = false; pendingHeading = decode(headingText.replace(/<[^>]+>/g, '')).trim(); continue }
+    if (/^<\/H3/i.test(token)) { captureHeading = false; pendingHeading = decodeHtmlEntities(headingText).trim(); continue }
     if (/^<DL\b/i.test(token)) {
       const parent = dlStack[dlStack.length - 1]
       const categoryPath = pendingHeading
@@ -364,9 +365,9 @@ export function prepareBrowserBookmarkHtml(text: string): PreparedImport {
       continue
     }
     if (/^<DD\b/i.test(token)) { captureDescription = true; descriptionText = ''; continue }
-    if (captureDescription) { const description = decode(descriptionText).trim(); if (description && bookmarks.length > 0) bookmarks[bookmarks.length - 1].description = description; captureDescription = false }
+    if (captureDescription) { const description = decodeHtmlEntities(descriptionText).trim(); if (description && bookmarks.length > 0) bookmarks[bookmarks.length - 1].description = description; captureDescription = false }
   }
-  if (captureDescription) { const description = decode(descriptionText).trim(); if (description && bookmarks.length > 0) bookmarks[bookmarks.length - 1].description = description }
+  if (captureDescription) { const description = decodeHtmlEntities(descriptionText).trim(); if (description && bookmarks.length > 0) bookmarks[bookmarks.length - 1].description = description }
   if (bookmarks.length === 0) throw new Error('书签文件中没有有效的 HTTP(S) 链接')
   return { payload: { categories, bookmarks, mode: 'replace' }, categories: categories.length, bookmarks: bookmarks.length, sourceLabel: '浏览器书签 HTML', skipped, retainedIcons }
 }

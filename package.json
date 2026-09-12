@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev:web": "vite",
     "build": "vite build",
@@ -47,11 +50,11 @@
     "typescript": "^5.5.4",
     "vite": "^5.4.6",
     "vitest": "^3.2.6",
-    "wrangler": "^4.119.0",
+    "wrangler": "^4.131.0",
     "ws": "^8.21.0"
   },
   "dependencies": {
-    "hono": "^4.13.0",
+    "hono": "^4.13.5",
     "sortablejs": "^1.15.3"
   }
 }
