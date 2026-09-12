@@ -19,6 +19,12 @@
 - 所有测试 Chrome 均使用本轮专用 profile；清理后独立核对对应进程数为 0、端口关闭、profile 删除。没有复用或关闭用户日常 Chrome。
 - 生产导出探针采样为 1 个分类、0 个书签；非空子分类导出及追加/覆盖回导在临时本地库验证。`PROB-14`、`PROB-34` 及其他未覆盖事项继续保留，`REL-01` 按已批准的单一 v0.4.0 方案完成。
 
+### Issue 生命周期闭环（REL-02）
+
+- 发布与验收完成后，依次向 [#10](https://github.com/lbjxr/CF-Navs/issues/10#issuecomment-5647377841)、[#11](https://github.com/lbjxr/CF-Navs/issues/11#issuecomment-5647378171)、[#12](https://github.com/lbjxr/CF-Navs/issues/12#issuecomment-5647378957)、[#13](https://github.com/lbjxr/CF-Navs/issues/13#issuecomment-5647379242) 及综合反馈 [#9](https://github.com/lbjxr/CF-Navs/issues/9#issuecomment-5647412925) 评论 `v0.4.0` 与实际验证范围，并逐项核实为 `Closed / completed`。
+- 复查时仍开放 [#15（EdgeOne）](https://github.com/lbjxr/CF-Navs/issues/15) 与新增的 [#16（跨设备随手记 / 便签）](https://github.com/lbjxr/CF-Navs/issues/16)；#16 未纳入本版范围，不自动分配 R 编号或承诺实现。
+- `REL-02` 完成并从未完成台账移除，需求文档更新为本次云端快照；实时状态仍以 GitHub Issue 为准。没有修改 Project 或合并 `main`，`PROB-14`、`PROB-34` 及其他未覆盖事项继续保留。
+
 ### 历史批次归并
 
 - 原 `v0.2.0` 批次：R-01～R-08 的书签整理、首页入口、分类定位、视觉参数与部分导出，以及移动端编辑、排序和分类树滚动修复。
