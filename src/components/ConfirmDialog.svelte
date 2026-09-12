@@ -51,7 +51,7 @@
       disabled={loading}
     ></button>
 
-    <section
+    <div
       class="confirm-dialog"
       class:is-danger={isDanger}
       role="alertdialog"
@@ -84,7 +84,7 @@
           {#if loading}处理中...{:else}{confirmLabel}{/if}
         </button>
       </div>
-    </section>
+    </div>
   </div>
 {/if}
 

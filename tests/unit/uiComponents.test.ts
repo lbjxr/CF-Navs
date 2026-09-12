@@ -19,23 +19,26 @@ afterEach(cleanup)
 
 describe('Switch', () => {
   it('暴露 switch 语义与选中状态', async () => {
-    const { component } = render(Switch, { props: { checked: false, ariaLabel: '公开模式' } })
+    render(Switch, { props: { checked: false, ariaLabel: '公开模式' } })
     const el = screen.getByRole('switch', { name: '公开模式' })
 
     expect(el.getAttribute('aria-checked')).toBe('false')
     await fireEvent.click(el)
     // aria-checked 必须跟着状态走，否则读屏用户听到的是错的
     expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true')
-    expect(component.$$.ctx).toBeTruthy()
   })
 
   it('点击派发 change 与 checked 两个事件，值为切换后的状态', async () => {
     // 两个事件都要有：change 供显式监听，checked 让 bind:checked 成立。
     const onChange = vi.fn()
     const onChecked = vi.fn()
-    const { component } = render(Switch, { props: { checked: false, ariaLabel: 'x' } })
-    component.$on('change', (event) => onChange(event.detail))
-    component.$on('checked', (event) => onChecked(event.detail))
+    render(Switch, {
+      props: { checked: false, ariaLabel: 'x' },
+      events: {
+        change: (event) => onChange(event.detail),
+        checked: (event) => onChecked(event.detail),
+      },
+    })
 
     await fireEvent.click(screen.getByRole('switch'))
 
@@ -45,8 +48,10 @@ describe('Switch', () => {
 
   it('空格与回车都能切换，且阻止默认滚动', async () => {
     const onChange = vi.fn()
-    const { component } = render(Switch, { props: { checked: false, ariaLabel: 'x' } })
-    component.$on('change', (event) => onChange(event.detail))
+    render(Switch, {
+      props: { checked: false, ariaLabel: 'x' },
+      events: { change: (event) => onChange(event.detail) },
+    })
     const el = screen.getByRole('switch')
 
     await fireEvent.keyDown(el, { key: ' ' })
@@ -59,8 +64,10 @@ describe('Switch', () => {
 
   it('其它按键不触发切换', async () => {
     const onChange = vi.fn()
-    const { component } = render(Switch, { props: { checked: false, ariaLabel: 'x' } })
-    component.$on('change', (event) => onChange(event.detail))
+    render(Switch, {
+      props: { checked: false, ariaLabel: 'x' },
+      events: { change: (event) => onChange(event.detail) },
+    })
 
     await fireEvent.keyDown(screen.getByRole('switch'), { key: 'a' })
 
@@ -69,8 +76,10 @@ describe('Switch', () => {
 
   it('disabled 时既不可点也不响应键盘', async () => {
     const onChange = vi.fn()
-    const { component } = render(Switch, { props: { checked: false, disabled: true, ariaLabel: 'x' } })
-    component.$on('change', (event) => onChange(event.detail))
+    render(Switch, {
+      props: { checked: false, disabled: true, ariaLabel: 'x' },
+      events: { change: (event) => onChange(event.detail) },
+    })
     const el = screen.getByRole('switch') as HTMLButtonElement
 
     expect(el.disabled).toBe(true)
@@ -195,7 +204,7 @@ describe('Tooltip', () => {
     await fireEvent.click(screen.getByRole('button', { name: '查看说明' }))
     await waitFor(() => expect(screen.getByRole('tooltip')).toBeTruthy())
 
-    unmount()
+    await unmount()
     expect(document.querySelector('.ui-tooltip-bubble')).toBeNull()
   })
 
@@ -210,8 +219,10 @@ describe('Tooltip', () => {
 describe('InputGroup', () => {
   it('number 类型派发数字而不是字符串', async () => {
     const onInput = vi.fn()
-    const { component } = render(InputGroup, { props: { value: 0, type: 'number', ariaLabel: '卡片宽度' } })
-    component.$on('input', (event) => onInput(event.detail))
+    render(InputGroup, {
+      props: { value: 0, type: 'number', ariaLabel: '卡片宽度' },
+      events: { input: (event) => onInput(event.detail) },
+    })
 
     await fireEvent.input(screen.getByLabelText('卡片宽度'), { target: { value: '42' } })
 
@@ -222,8 +233,10 @@ describe('InputGroup', () => {
   it('清空 number 输入派发空串而不是 NaN', async () => {
     // Number('') 是 0，直接转换会把「清空」变成「设成 0」，两者语义不同。
     const onValue = vi.fn()
-    const { component } = render(InputGroup, { props: { value: 42, type: 'number', ariaLabel: '卡片宽度' } })
-    component.$on('value', (event) => onValue(event.detail))
+    render(InputGroup, {
+      props: { value: 42, type: 'number', ariaLabel: '卡片宽度' },
+      events: { value: (event) => onValue(event.detail) },
+    })
 
     await fireEvent.input(screen.getByLabelText('卡片宽度'), { target: { value: '' } })
 
@@ -232,8 +245,10 @@ describe('InputGroup', () => {
 
   it('text 类型保持字符串原样', async () => {
     const onInput = vi.fn()
-    const { component } = render(InputGroup, { props: { value: '', type: 'text', ariaLabel: '站点标题' } })
-    component.$on('input', (event) => onInput(event.detail))
+    render(InputGroup, {
+      props: { value: '', type: 'text', ariaLabel: '站点标题' },
+      events: { input: (event) => onInput(event.detail) },
+    })
 
     await fireEvent.input(screen.getByLabelText('站点标题'), { target: { value: '007' } })
 
@@ -288,8 +303,10 @@ describe('Slider', () => {
 
   it('拖动派发数字，并同步更新显示值', async () => {
     const onValue = vi.fn()
-    const { component } = render(Slider, { props: { value: 10, min: 0, max: 100, label: '模糊' } })
-    component.$on('value', (event) => onValue(event.detail))
+    render(Slider, {
+      props: { value: 10, min: 0, max: 100, label: '模糊' },
+      events: { value: (event) => onValue(event.detail) },
+    })
 
     await fireEvent.input(screen.getByRole('slider'), { target: { value: '75' } })
 

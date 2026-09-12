@@ -5,11 +5,9 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 export default defineConfig(({ mode }) => ({
   plugins: [svelte()],
   resolve: {
-    // Svelte 4 的 package.json 把 `.` 的 browser 条件指向 src/runtime/index.js，
-    // default 指向 src/runtime/ssr.js。Vitest 默认不带 browser 条件，于是解析到 ssr.js——
-    // 那里的 onMount 是空实现，组件在 onMount 里注册的 window/document 监听器全部不生效，
-    // 键盘关闭、外部点击关闭、滚动显隐这类行为在测试里永远观察不到。
-    // 只在测试模式补上 browser 条件；生产构建走 vite build，本来就命中 browser。
+    // Svelte 的 browser 条件提供客户端运行时，default 则落到 SSR 入口。
+    // 只在测试模式补上 browser，确保 onMount 的键盘、外部点击和滚动监听实际注册。
+    // 生产构建原本就使用 browser 条件。
     conditions: mode === 'test' ? ['browser'] : undefined,
   },
   build: {

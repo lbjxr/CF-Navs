@@ -15,9 +15,7 @@
 
 ## 2. 需要裁定
 
-| ID | 类型 | 优先 | 事项 | 下一步 | 详情 |
-| --- | --- | --- | --- | --- | --- |
-| PROB-34 | 依赖安全 | P1 | Svelte / Vite / Vitest 安全版本迁移：兼容补丁更新后，完整 `npm audit` 仍报告 9 项（1 high、8 moderate），涉及前端框架与开发/测试工具链 | 确认大版本迁移范围，联动升级 Svelte 5、匹配的 Vite 插件及 Vitest，再跑 L0 / L1 / L2；不使用 `npm audit fix --force` 强推迁移 | `package-lock.json`；`npm audit --json`。`npm audit --omit=dev` 为 0 不代表浏览器构建产物不受框架漏洞影响 |
+当前没有待裁定条目。
 
 > 2026-09-04 已裁定并落地：PROB-03 / PROB-27（保持现状，回写文档）、PROB-11（移动端收进「更多操作」菜单）、PROB-12（回写文档，确认浮动操作行）、PROB-28（下限继续下调到 40 px）、PROB-29（改写为「无非法目标 + 逐项后果提示」）。
 >

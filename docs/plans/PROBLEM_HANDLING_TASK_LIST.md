@@ -458,6 +458,15 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - 回归证据：`tests/unit/sortableList.test.ts` 延迟模块加载并使用真实 SortableJS，原实现 4 条中 3 条失败，修复后 4 条通过；与 `homeCategoryScopeActions.test.ts` 合跑 25/25 通过。完整 `npm run type-check` 0 errors / 0 warnings、`npm test` 113 files / 845 passed 且无未处理异常、`npm run build` 成功。
 - 直接验证：隔离 Chrome 原生鼠标拖拽确认同列表重排、跨列表的来源/目标分类与两侧顺序、禁用后不重排、重新启用后恢复；销毁后无活动实例，浏览器诊断全为 0，测试 target、浏览器、fixture 与 profile 已清理。该验证为真实 action 的独立浏览器夹具，不代表生产持久化或真机触摸已验证。
 
+### PROB-34（P1）前端框架与构建测试工具链安全迁移
+
+- 来源：兼容补丁升级后完整依赖审计仍有 9 项（1 high、8 moderate），涉及 Svelte、Vite、插件及 Vitest；仅检查 `--omit=dev` 会漏掉被编入浏览器产物的框架风险。
+- 决策（2026-09-13）：迁移 Svelte 5.57.0 / Vite 7.3.6 / 插件 6.2.4 / Vitest 4.1.11，联动 Testing Library 5.4.2 与 Svelte Check 4.7.6。保留受支持的 legacy 组件语法，不引入 `compatibility.componentApi`，不做无关 runes 重写；开发 Node.js 门槛为 22.12+（22.x）或 24+。
+- 接入边界：`src/main.ts` 使用 `mount`；`uiComponents.test.ts` 用挂载 `events` 订阅事件，`topNavigationSubmenu.test.ts` 用 `rerender` 更新属性；保留 `vite.config.ts` 的 test-only `browser` 条件，确保客户端生命周期。Svelte 5 的无障碍检查要求两处对话框使用通用容器，书签卡片明确分组语义。
+- 依赖解析：原锁文件残留的旧插件 / inspector peer 图触发 `ERESOLVE`；在临时目录按同一 manifest 重新解析锁文件，再用 `npm ci` 安装。没有使用 `--force`、`--legacy-peer-deps` 或告警忽略。
+- 证据：完整依赖审计 0；L0 类型检查 0 errors / 0 warnings、115 files / 856 tests、构建通过；隔离 L1 75/75、真实 Chrome 回归 25/25，包含本地密码轮换/恢复、右键编辑、主题、搜索、后台与登出。原生输入另验证安装、子菜单键盘焦点、两种批量弹窗取消与 390px 布局。
+- 限制：一次手动导航调用报告 `net::ERR_FAILED`，但页面实际渲染，后续直接导航成功；独立新 profile 的完整回归网络诊断为 0。所有测试 Chrome 已按精确 profile 核验清理；生产验证在版本发布阶段完成，不以本地证据替代 L3 或真机 L4。
+
 ---
 
 ## 6. E 类：信息不足需澄清
