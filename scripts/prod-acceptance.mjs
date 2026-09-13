@@ -24,6 +24,15 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CdpSession, sleep } from './lib/cdpSession.mjs'
+import {
+  pickExportSample,
+  verifyExportDownload,
+  pageReadExportSource,
+  pageInstallExportCapture,
+  pageReadExportDownload,
+  pageRestoreExportCapture,
+  pageExportControl,
+} from './lib/backupExportProbe.mjs'
 import { redactCredentials, requireAdminCredentials } from './lib/verifyCredentials.mjs'
 import { resolveBaseUrl, resolveChromeProfileRoot, resolveSetting } from './lib/verifyTarget.mjs'
 
@@ -258,42 +267,6 @@ function pageProbeRevoked(origin, token) {
     .catch(() => ({ status: 0, code: null }))
 }
 
-function pageExportSubset(origin, token) {
-  return (async () => {
-    const admin = await fetch(`${origin}/api/admin/data`, {
-      headers: { authorization: `Bearer ${token}` },
-      cache: 'no-store',
-    })
-    const adminBody = await admin.json().catch(() => null)
-    const categories = adminBody?.data?.categories ?? []
-    const roots = categories.filter((item) => item.parent_id == null).slice(0, 1)
-    if (roots.length === 0) return { ok: false, reason: 'no root category' }
-
-    const rootId = Number(roots[0].id)
-    const childIds = categories
-      .filter((item) => Number(item.parent_id) === rootId)
-      .map((item) => Number(item.id))
-    const selected = [rootId, ...childIds]
-
-    // 只读导出：GET 聚合后在前端筛子集，不调用任何写接口
-    const bookmarks = (adminBody?.data?.bookmarks ?? []).filter((item) =>
-      selected.includes(Number(item.category_id)),
-    )
-    const payload = {
-      categories: categories.filter((item) => selected.includes(Number(item.id))),
-      bookmarks,
-    }
-    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' })
-
-    return {
-      ok: payload.categories.length > 0,
-      selectedCategories: payload.categories.length,
-      selectedBookmarks: bookmarks.length,
-      bytes: blob.size,
-      parentIncluded: payload.categories.some((item) => Number(item.id) === rootId),
-    }
-  })()
-}
 
 function pageModalMetrics() {
   return (async () => {
@@ -650,16 +623,77 @@ async function captureViewportScreenshots(session) {
 }
 
 async function runExportCheck(session, token) {
-  phase('PROB-14 部分导出（只读，不导入）')
+  phase('PROB-14 真实导出下载（只读，内容仅驻留内存）')
+  const source = await session.call(pageReadExportSource, TARGET_ORIGIN, token)
+  const sample = pickExportSample(source)
+  if (!sample) {
+    const reason = 'No nonempty child category with excluded bookmarks; complex export remains unverified'
+    skip('partial-export-real-download', 'PROB-14', reason)
+    return { status: 'skip', reason, categories: source.categories.length, bookmarks: source.bookmarks.length }
+  }
 
-  const exported = await session.call(pageExportSubset, TARGET_ORIGIN, token)
-  check(
-    'partial-export-builds-subset-with-parent',
-    'PROB-14',
-    exported.ok === true && exported.parentIncluded === true,
-    `categories=${exported.selectedCategories} bookmarks=${exported.selectedBookmarks} bytes=${exported.bytes}`,
-  )
-  return exported
+  const waitFor = async (read, description) => {
+    const deadline = Date.now() + 10000
+    while (Date.now() < deadline) {
+      const value = await read()
+      if (value) return value
+      await sleep(50)
+    }
+    throw new Error(`Timed out waiting for ${description}`)
+  }
+  const control = (kind) => session.call(pageExportControl, kind, sample)
+  const click = async (kind) => {
+    const target = await waitFor(async () => {
+      const state = await control(kind)
+      return state && !state.disabled ? state : null
+    }, `export control ${kind}`)
+    await session.mouse(target.x, target.y)
+  }
+  const exports = []
+  const download = async (id, selectedIds, includeSettings) => {
+    const settings = await control('settings')
+    if (!settings) throw new Error('Export settings toggle is missing')
+    if (settings.checked !== includeSettings) await click('settings')
+    await click('export')
+    const captured = await waitFor(
+      () => session.call(pageReadExportDownload, exports.length),
+      'the application download Blob',
+    )
+    const result = verifyExportDownload(source, captured, selectedIds, includeSettings)
+    exports.push({ id, ...result })
+    check(id, 'PROB-14', result.passed, JSON.stringify(result))
+  }
+
+  let captureInstalled = false
+  try {
+    await session.setViewport({ width: 1440, height: 900, mobile: false, scale: 1 })
+    await session.navigate(`${TARGET_ORIGIN}/admin`)
+    await click('backup')
+    // Fail closed if capture misses an application download: never save production data to disk.
+    await session.send('Page.setDownloadBehavior', { behavior: 'deny' })
+    captureInstalled = await session.call(pageInstallExportCapture)
+    await click('clear')
+    const empty = await control('export')
+    const emptyRejected = check('partial-export-rejects-empty-selection', 'PROB-14', empty?.disabled === true)
+
+    await click('child')
+    await download('partial-export-child-with-parent-no-settings', [sample.childId], false)
+    await download('partial-export-child-with-settings', [sample.childId], true)
+    await click('root')
+    await download('partial-export-root-includes-children', sample.rootCategoryIds, true)
+    return {
+      status: emptyRejected && exports.every((result) => result.passed) ? 'pass' : 'fail',
+      sourceCategories: source.categories.length,
+      sourceBookmarks: source.bookmarks.length,
+      exports,
+    }
+  } finally {
+    if (captureInstalled && !await session.call(pageRestoreExportCapture)) {
+      throw new Error('Export capture could not be restored')
+    }
+    await session.send('Page.setDownloadBehavior', { behavior: 'default' })
+    await session.clearViewport()
+  }
 }
 
 async function runLogoutRevocationCheck(session, token) {

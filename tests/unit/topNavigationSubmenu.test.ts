@@ -87,22 +87,22 @@ describe('顶部导航子菜单的打开与关闭', () => {
   })
 
   it('打开的父分类从分类树里消失后，子菜单必须跟着关闭', async () => {
-    const { component } = render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    const { rerender } = render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
     await fireEvent.click(expandButton('常用工具'), { detail: 1 })
     expect(submenu()).toBeTruthy()
 
     // 后台删掉该分类后首页会重新下发 items；菜单不关就会留下指向已消失分类的悬空浮层
-    await component.$set({ items: items.filter((item) => item.id !== 'cat-1') })
+    await rerender({ items: items.filter((item) => item.id !== 'cat-1') })
 
     expect(submenu()).toBeNull()
   })
 
   it('打开的父分类被改成没有子分类后，子菜单必须跟着关闭', async () => {
-    const { component } = render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    const { rerender } = render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
     await fireEvent.click(expandButton('常用工具'), { detail: 1 })
     expect(submenu()).toBeTruthy()
 
-    await component.$set({
+    await rerender({
       items: items.map((item) => (item.id === 'cat-1' ? { ...item, children: [] } : item)),
     })
 
@@ -144,10 +144,10 @@ describe('顶部导航子菜单的打开与关闭', () => {
   })
 
   it('切到左侧导航后不再渲染顶部子菜单', async () => {
-    const { component } = render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    const { rerender } = render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
     await fireEvent.click(expandButton('常用工具'), { detail: 1 })
 
-    await component.$set({ navigation: leftNavigation })
+    await rerender({ navigation: leftNavigation })
 
     expect(submenu()).toBeNull()
     expect(screen.queryByTestId('top-navigation')).toBeNull()

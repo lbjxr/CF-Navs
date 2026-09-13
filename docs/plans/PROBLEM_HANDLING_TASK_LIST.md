@@ -222,12 +222,16 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - `S1` 单列为 PROB-07（状态自相矛盾）。
 - 处理动作：部署后按上表逐条真机执行并回写台账；`U1–U4` 与 iOS 放大项需真实 iOS Safari，隔离 Chrome 不可替代。
 
-### PROB-14（P1）R-08 部分导出的部署版本与原作者预期未同步
+### PROB-14（P1）R-08 部分导出的复杂样本与真实下载验收
 
-- 来源映射：`R-08`；`docs/reference/GITHUB_ISSUES_REQUIREMENTS.md:91`、`:351`；`CHANGELOG.md:72`
-- 源码事实：功能存在且成链 —— `src/lib/appBackup.ts:26-76`（子集筛选 + 强制补父分类 + settings 开关）、`src/components/BackupPanel.svelte:22-99,147-207`（三态树 / 默认全选 / 空选拦截）、`src/lib/appImportExport.ts:35-53`（空选报错）、`src/App.svelte:933-936`（接线）；`tests/unit/appBackup.test.ts` 覆盖 helper
-- 欠账：部署版本是否已含该功能、Issue #9 原作者是否认可该形态，均未验证。云端 #9 仍 Open
-- 处理动作：部署后在生产自定义域实测一次导出下载与 replace/merge 导入，再决定是否向 #9 回帖征询原作者确认。**GitHub 写操作需单独授权**
+- 来源映射：R-08；`src/lib/appBackup.ts` 的 `selectBackupSubset`、`createBackupExportArtifact`，`src/lib/appImportExport.ts` 的 `exportDataToFile` / `importDataFromFile`，以及 `BackupPanel.svelte` 的分类树。#8 / #9 已在此前生命周期闭环，本轮只补本地验证欠账，不再次修改 Issue 状态。
+- 根因：旧 `scripts/prod-acceptance.mjs` 的 `pageExportSubset` 只取第一个根分类并自行构造 Blob，没有触发应用导出。复现时 1 个空根分类 / 0 个书签仍返回成功，不能证明真实导出或排除边界。
+- 处理（2026-09-13）：`backupExportProbe.mjs` 选择有书签的子分类，并要求存在未选中的书签；`runExportCheck` 用真实鼠标清空/勾选/切换设置/导出，在应用创建 Blob 和点击下载链接的边界捕获实际内容。禁止原生磁盘下载，正文仅驻留内存；缺样本明确 `skip`，不能据退出码为 0 宣称完成。
+- 判据：分类与书签的 ID、完整字段、数量必须匹配；子分类导出只补父分类元数据，不夹带父级/兄弟书签；父分类整支为父级与直接子级书签并集；设置关闭为 `null`、开启为完整设置。空选按钮禁用。6 条回归包含整站冒充子集、缺父级、重复分类、同 ID 内容变更和设置泄漏反例。
+- 生产证据：被测入口 `/assets/index-3RsEEGMI.js`；47 类 / 601 书签中，子分类实际下载 2 类 / 25 书签，父分类整支 3 类 / 54 书签，设置开关两态正确。整套只读验收 30/30，无失败/跳过；离线阶段的 6 个 `ERR_INTERNET_DISCONNECTED` 为主动断网结果，不写成全程零网络失败。
+- 本地回导：从首页原生入口进入后台，以捕获的真实文件通过文件输入和确认框执行 merge / replace。追加后 3 类 / 3 书签且原记录和重复 URL 保留；覆盖后 2 类 / 1 书签且父子归属、设置与管理员会话正确。原生路径诊断全为 0，浏览器及 profile 清理完成。最初把含 `settings: null` 的文件 JSON 直接 POST API 被拒，是探针跳过 `prepareImportText` 归一化的错误；没有为此放宽 API 校验。
+- 额外观测：本地冷 Service Worker 缓存的 `/index.html` 曾带 `redirected: true`，首次硬跳 `/admin` 的导航返回 `ERR_FAILED`，随后另一 Document 请求 200、后台正常挂载且缓存标记变为 false。该硬导航观测与原生 SPA 入口回导分开记录；本轮未修改 Service Worker，也未证明生产存在同样现象。
+- 完整验证：类型检查 0 errors / 0 warnings，116 files / 862 tests，构建通过；生产没有执行 replace/merge 或设置写入。不承诺自动双向/去重同步，也不代替未完成的真机 L4。
 
 ### PROB-15（P1，已完成）直接刷新 `/admin` 的真实 Chrome 回归待办未闭环
 
@@ -457,6 +461,15 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - 处理（2026-09-12）：action 保存 `destroyed` 与 `initializationVersion`；每次真正重建时推进代次，导入完成后先检查销毁状态与代次，再触碰实例。无配置变化的 `update()` 不使唯一待执行初始化失效；保留动态导入缓存、排序及跨列表回调契约，不吞掉导入错误。
 - 回归证据：`tests/unit/sortableList.test.ts` 延迟模块加载并使用真实 SortableJS，原实现 4 条中 3 条失败，修复后 4 条通过；与 `homeCategoryScopeActions.test.ts` 合跑 25/25 通过。完整 `npm run type-check` 0 errors / 0 warnings、`npm test` 113 files / 845 passed 且无未处理异常、`npm run build` 成功。
 - 直接验证：隔离 Chrome 原生鼠标拖拽确认同列表重排、跨列表的来源/目标分类与两侧顺序、禁用后不重排、重新启用后恢复；销毁后无活动实例，浏览器诊断全为 0，测试 target、浏览器、fixture 与 profile 已清理。该验证为真实 action 的独立浏览器夹具，不代表生产持久化或真机触摸已验证。
+
+### PROB-34（P1）前端框架与构建测试工具链安全迁移
+
+- 来源：兼容补丁升级后完整依赖审计仍有 9 项（1 high、8 moderate），涉及 Svelte、Vite、插件及 Vitest；仅检查 `--omit=dev` 会漏掉被编入浏览器产物的框架风险。
+- 决策（2026-09-13）：迁移 Svelte 5.57.0 / Vite 7.3.6 / 插件 6.2.4 / Vitest 4.1.11，联动 Testing Library 5.4.2 与 Svelte Check 4.7.6。保留受支持的 legacy 组件语法，不引入 `compatibility.componentApi`，不做无关 runes 重写；开发 Node.js 门槛为 22.12+（22.x）或 24+。
+- 接入边界：`src/main.ts` 使用 `mount`；`uiComponents.test.ts` 用挂载 `events` 订阅事件，`topNavigationSubmenu.test.ts` 用 `rerender` 更新属性；保留 `vite.config.ts` 的 test-only `browser` 条件，确保客户端生命周期。Svelte 5 的无障碍检查要求两处对话框使用通用容器，书签卡片明确分组语义。
+- 依赖解析：原锁文件残留的旧插件 / inspector peer 图触发 `ERESOLVE`；在临时目录按同一 manifest 重新解析锁文件，再用 `npm ci` 安装。没有使用 `--force`、`--legacy-peer-deps` 或告警忽略。
+- 证据：完整依赖审计 0；L0 类型检查 0 errors / 0 warnings、115 files / 856 tests、构建通过；隔离 L1 75/75、真实 Chrome 回归 25/25，包含本地密码轮换/恢复、右键编辑、主题、搜索、后台与登出。原生输入另验证安装、子菜单键盘焦点、两种批量弹窗取消与 390px 布局。
+- 限制：一次手动导航调用报告 `net::ERR_FAILED`，但页面实际渲染，后续直接导航成功；独立新 profile 的完整回归网络诊断为 0。所有测试 Chrome 已按精确 profile 核验清理；生产验证在版本发布阶段完成，不以本地证据替代 L3 或真机 L4。
 
 ---
 

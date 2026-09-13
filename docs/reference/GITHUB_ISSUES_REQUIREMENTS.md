@@ -1,28 +1,28 @@
-# Open GitHub Issues 需求与 PC / 移动端规划
+# GitHub Issues 需求与 PC / 移动端规划
 
-> **文档状态：本地实现与历轮验收反馈修复完成；云端 Issue 仍 Open，R-08 部署/原作者预期待同步。**
+> **文档状态：v0.4.0 已发布并完成本版验收；#9～#13 已 Closed / completed，#15、#16 保持 Open。**
 >
-> **数据快照：** 2026-09-03（GitHub 时间统一按 UTC 记录）
-> **查询范围：** `lbjxr/CF-Navs` 仓库 `state=open` 的 Issue，不包含 Pull Request 及 Closed Issue
-> **当前 Open 数量：** 6 个，#9、#10、#11、#12、#13、#15
+> **闭环快照日期：** 2026-09-13；表中 GitHub 时间统一按 UTC 记录。
+> **查询范围：** 本版关联 #9～#13、#15 的实时状态，以及仓库当前 Open Issue 列表；不包含 Pull Request。
+> **当前 Open 数量：** 2 个，#15、#16；#16 为本版范围外的新增需求。
 > **文档目的：** 将云端 Issue 的原始问题、重复关系和待确认信息整理为一份可执行的产品与 UI 规划，并明确 PC、移动端边界。
 
-本文不是实现承诺，也不替 Issue 做关闭或优先级决策。凡标注“建议方案”的内容，都是进入实现前可供确认的设计方案；凡标注“云端已明确”的内容，才是当前 Issue 的原始需求或问题。
+本文保留需求来源、历史建议方案与验收依据，不替后续需求作实现承诺或优先级决策。§1、§3 是本次云端闭环快照，实时状态以 GitHub Issue 为准；§4、§7 的 Tn 记录保留当时进度，不作为当前未完成清单。
 
 ## 1. 范围与状态口径
 
-### 1.1 Open Issue 清单
+### 1.1 本版关联 Issue 清单
 
-| Issue | 标题 | 标签 | 提交者 | 创建时间（UTC） | 最后更新（UTC） | 本文归类 |
+| Issue | 标题 | 标签 | 提交者 | 创建时间（UTC） | 最后更新（UTC） | 本版状态 / 本文归类 |
 | --- | --- | --- | --- | --- | --- | --- |
-| [#9](https://github.com/lbjxr/CF-Navs/issues/9) | 增加功能，反馈 bug! | `bug`, `enhancement` | `pycc169` | 2026-08-29 09:46 | 2026-08-30 01:41 | 综合反馈与拆分需求索引 |
-| [#10](https://github.com/lbjxr/CF-Navs/issues/10) | 跨标签排序无法实现从主分类到子分类的拖动 | `bug` | `lbjxr` | 2026-08-30 01:33 | 2026-08-30 01:33 | 跨分类拖动缺陷 |
-| [#11](https://github.com/lbjxr/CF-Navs/issues/11) | 首页新增分类按钮和跳转逻辑 | `enhancement` | `lbjxr` | 2026-08-30 01:35 | 2026-08-30 01:35 | 首页快捷入口与分类定位 |
-| [#12](https://github.com/lbjxr/CF-Navs/issues/12) | 管理后台书签和分类功能调整 | `enhancement` | `lbjxr` | 2026-08-30 01:38 | 2026-08-30 01:38 | 批量移动与分类视觉属性 |
-| [#13](https://github.com/lbjxr/CF-Navs/issues/13) | 后台管理卡片样式属性阈值调整 | `enhancement` | `lbjxr` | 2026-08-30 01:39 | 2026-08-30 01:39 | 卡片最小宽度评估 |
-| [#15](https://github.com/lbjxr/CF-Navs/issues/15) | [Feature]: 简短描述你的新功能想法 | `enhancement` | `wztx` | 2026-09-02 13:34 | 2026-09-02 14:24 | 部署平台兼容请求，范围待澄清 |
+| [#9](https://github.com/lbjxr/CF-Navs/issues/9) | 增加功能，反馈 bug! | `bug`, `enhancement` | `pycc169` | 2026-08-29 09:46 | 2026-09-12 17:11 | Closed / completed；综合反馈与拆分需求索引 |
+| [#10](https://github.com/lbjxr/CF-Navs/issues/10) | 跨标签排序无法实现从主分类到子分类的拖动 | `bug` | `lbjxr` | 2026-08-30 01:33 | 2026-09-12 17:04 | Closed / completed；跨分类拖动缺陷 |
+| [#11](https://github.com/lbjxr/CF-Navs/issues/11) | 首页新增分类按钮和跳转逻辑 | `enhancement` | `lbjxr` | 2026-08-30 01:35 | 2026-09-12 17:04 | Closed / completed；首页快捷入口与分类定位 |
+| [#12](https://github.com/lbjxr/CF-Navs/issues/12) | 管理后台书签和分类功能调整 | `enhancement` | `lbjxr` | 2026-08-30 01:38 | 2026-09-12 17:04 | Closed / completed；批量移动与分类视觉属性 |
+| [#13](https://github.com/lbjxr/CF-Navs/issues/13) | 后台管理卡片样式属性阈值调整 | `enhancement` | `lbjxr` | 2026-08-30 01:39 | 2026-09-12 17:04 | Closed / completed；卡片最小宽度评估 |
+| [#15](https://github.com/lbjxr/CF-Navs/issues/15) | [Feature]: 简短描述你的新功能想法 | `enhancement` | `wztx` | 2026-09-02 13:34 | 2026-09-02 14:24 | Open；部署平台兼容请求，范围待澄清 |
 
-GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表查询遗漏。本次 Open 查询返回的正式范围是 #9—#13 与 #15。
+GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表查询遗漏。本版关联范围仍为 #9—#13 与 #15；当前开放列表另含 [#16「跨设备轻量随手记 / 极速便签」](https://github.com/lbjxr/CF-Navs/issues/16)，它未纳入本次 R-01～R-08，不因本次发版被关闭或承诺实现。
 
 #15 的标题仍是未替换的模板占位，正文实际诉求是「开发兼容 EdgeOne 部署版本」；维护者已于 2026-09-02 回复「目前没计划…下一个大版本纳入排期」，因此它**尚未获得实现承诺**，也没有分配 R 编号。兼容边界（Workers 运行时 API 差异、D1/KV 等价存储、部署配置、构建产物、CI、文档范围）需先向报告者澄清，未澄清前不进入 R-01～R-08 的正式需求清单；当前跟踪见 `docs/plans/PROBLEM_HANDLING_TASK_LIST.md` 的 PROB-25 与 `docs/plans/REQUIREMENT_DEVELOPMENT_TASK_LIST.md` 的 REQ-12。
 
@@ -82,16 +82,16 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 
 #9 是综合反馈；#10—#13 是从 #9 正文拆出的独立 Issue。下表去除重复计数，但保留每项的全部来源。
 
-| 编号 | 需求 / 问题 | 类型 | 当前状态 | 来源 |
+| 编号 | 需求 / 问题 | 类型 | 发布 / 验收快照 | 来源 |
 | --- | --- | --- | --- | --- |
-| R-01 | 修复一级分类到二级分类的书签移动与排序 | Bug | 云端 Open；T2 与 T15/T16 验收反馈修复已完成本地 PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#10](https://github.com/lbjxr/CF-Navs/issues/10) |
-| R-02 | 登录态首页增加“新建子分类”入口 | Enhancement | 云端 Open；T6 与验收反馈修复已完成本地 PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#11](https://github.com/lbjxr/CF-Navs/issues/11) |
-| R-03 | 登录态首页增加“新增主分类”入口 | Enhancement，原反馈标为可选 | 云端 Open；T7 实现与 PC/移动端回归完成，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#11](https://github.com/lbjxr/CF-Navs/issues/11) |
-| R-04 | 首页编辑书签时分类选择器定位当前分类 | Enhancement | 云端 Open；T3 实现与本地回归完成，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#11](https://github.com/lbjxr/CF-Navs/issues/11) |
-| R-05 | 后台批量移动书签 | Enhancement | 云端 Open；T4/T5 与验收反馈修复已完成本地 PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
-| R-06 | 调整一级/二级分类字体和图标大小 | Enhancement | 云端 Open；T8-R06 与验收反馈修复已完成本地设置/PC/移动端回归，待云端同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
-| R-07 | 评估卡片最小宽度下限是否可下调 | Enhancement | 云端 Open；下限已于 2026-09-04 由 44 降到 40（PROB-28 裁定），L0 通过，40px 真机布局验收待部署 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#13](https://github.com/lbjxr/CF-Navs/issues/13) |
-| R-08 | 部分导出备份，便于多个项目同步维护 | Enhancement | 云端 Open；T9/T9b 本地源码、PC/移动端核对完成，部署与原作者预期待同步 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#8](https://github.com/lbjxr/CF-Navs/issues/8) |
+| R-01 | 修复一级分类到二级分类的书签移动与排序 | Bug | 已发版；真实鼠标跨一级/二级及空目标拖放、取消不写入、保存后刷新和移动端替代操作通过；#9、#10 已关闭 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#10](https://github.com/lbjxr/CF-Navs/issues/10) |
+| R-02 | 登录态首页增加“新建子分类”入口 | Enhancement | 已发版；父级预填、创建后选中与可见性通过，本轮补齐首页定位回归；#9、#11 已关闭 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#11](https://github.com/lbjxr/CF-Navs/issues/11) |
+| R-03 | 登录态首页增加“新增主分类”入口 | Enhancement，原反馈标为可选 | 已发版；默认无上级创建、PC/移动端入口与菜单可见性通过；#9、#11 已关闭 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#11](https://github.com/lbjxr/CF-Navs/issues/11) |
+| R-04 | 首页编辑书签时分类选择器定位当前分类 | Enhancement | 已发版；当前选项展开、可见性及取消不改值通过；#9、#11 已关闭 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#11](https://github.com/lbjxr/CF-Navs/issues/11) |
+| R-05 | 后台批量移动书签 | Enhancement | 已发版；多选移动、保存后刷新与未选书签不变通过；#9、#12 已关闭 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
+| R-06 | 调整一级/二级分类字体和图标大小 | Enhancement | 已发版；四项尺寸持久化、PC 计算样式与移动端 0.88 缩放通过；#9、#12 已关闭 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#12](https://github.com/lbjxr/CF-Navs/issues/12) |
+| R-07 | 评估卡片最小宽度下限是否可下调 | Enhancement | 已发版；40px 输入/保存门禁回归修复，PC 40px 与移动端安全下限布局通过；#9、#13 已关闭 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#13](https://github.com/lbjxr/CF-Navs/issues/13) |
+| R-08 | 部分导出备份，便于多个项目同步维护 | Enhancement | 已发版；PROB-14 补齐真实生产复杂样本下载：子分类 2 类/25 书签、父分类整支 3 类/54 书签；本地原生文件追加/覆盖回导通过；#9 已按批准范围关闭 | [#9](https://github.com/lbjxr/CF-Navs/issues/9)、[#8](https://github.com/lbjxr/CF-Navs/issues/8) |
 
 ## 4. 详细需求与 UI 规划
 
@@ -293,11 +293,13 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 
 **2026-09-05 真机验证与提示修正（PROB-28v）**：隔离临时 headless Chrome 实测 `width=40` + `card_style='info'` + 显示描述。桌面 1280×900：卡片盒 40×60，`.bookmark-title` / `.bookmark-description` 的 `clientWidth` 均为 **0**（`scrollWidth` 分别 52 / 92），即**只显示图标**；横向溢出 0。阈值扫描：≤68 px 文字可用宽度恒为 0，72 px 起为 5 px，80 px 为 12 px，**120 px 标题首次完整显示**，描述到 150 px 仍被截断。移动端 390×844：`--mobile-card-min-width` 实测 `150px`、每行 2 张、卡片 171×60，标题与描述完整显示、无横向溢出、点击区域满足 44 px。据此把原提示「可能无法保证页面美观」改为两档如实文案（40–68 / 69–79），Tooltip 补入实测阈值与移动端安全下限说明；分档已在真实后台逐档输入验证（40、68 → 第一档；69、72、79 → 第二档；80、120 → 无提示）。console error / pageException / failedRequest / 4xx-5xx 全为 0。**未做**：40 px 档是否应自动切换为极简卡片风格属产品决策，未擅自改行为。
 
+**v0.4.0 保存门禁补记**：本轮修复后台保存校验仍使用旧 44px 下限的问题。组件回归和真实本地 Chrome 均确认 40px 可提交并由 API 持久化；PC 卡片实测 40px，移动端仍保留 150px 安全下限、实测 171px。修改设置的验收只在临时本地库进行，没有改动生产设置。
+
 ### R-08：部分导出备份
 
 **云端已明确的场景**：当用户维护两个或多个 CF-Navs 项目时，希望只导出某个分类及其书签，再同步到其他项目，而不是每次导出全部数据。
 
-**当前能力对照**：仓库已有按分类选择导出、自动补齐二级分类所需一级父分类、书签过滤和设置处理；这属于“代码已存在、云端 Issue 仍 Open”的状态，不应再当作未实现功能重复规划。
+**能力对照**：仓库已有按分类选择导出、自动补齐二级分类所需一级父分类、书签过滤和设置处理；本版验证并复用这些能力，不重复实现。#9 已按维护者批准的本版范围完成说明与关闭。
 
 **验收与同步要求**
 
@@ -310,6 +312,10 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 **T9/T9b 核对证据**：既有导出单测 8/8；独立 Chrome PC 选择二级分类实际下载显示“已导出 2 个分类、1 个书签”，证明父分类补全；390×844 移动端分类树可滚动，导出 CTA 位于分类树下方、导入数据卡片上方的正常流式全宽布局，随内容滚动且不遮挡分类树最后一项。隔离 D1 `replace`/`merge` 回导和层级/归属/设置核对通过；导出数据组装与 replace/merge 逻辑未重写；部署版本和原作者预期仍待同步。
 
 **已确认决策**：R-08 以现有“按分类选择导出”能力作为完成结果处理。核对当前部署版本与源码行为、确认与原作者预期一致后，在 #9 云端补充说明并标记该项完成，不重复实现已有能力。
+
+**v0.4.0 闭环补记（REL-02）**：闭环依据为维护者对本版范围的明确批准，而非新增原作者反馈。非空子分类导出及追加/覆盖回导已在临时本地库验证；生产只读导出样本仅 1 个分类、0 个书签，复杂数据样本仍由 `PROB-14` 跟踪。追加导入保留重复链接、覆盖导入替换全部分类和书签，不承诺自动双向或去重同步；这些边界已在 #9 的版本说明中披露。
+
+**复杂样本验收补记（PROB-14，2026-09-13）**：替换旧探针自行构造 Blob 的弱判据，改为真实界面勾选与实际下载内容比对。生产 47 类 / 601 书签中，子分类样本导出 2 类 / 25 书签（分别不含/包含设置），父分类整支 3 类 / 54 书签；只读验收 30/30。实际文件的追加/覆盖回导只在临时本地库执行，确认父子归属、原记录保留/替换、重复 URL 保留、设置及管理员会话边界。不新增原作者认可声明，不再次写入 #8 / #9。
 
 ## 5. #9 评论中的关联内容（非正式验收）
 
@@ -344,9 +350,11 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 6. **R-07 卡片宽度**：以 PC/移动端真实预览和可用性回归决定是否下调，不先改生产范围。
 7. **R-08 状态同步**：核对当前部署与导出行为后更新 #9 说明或关闭该项，不重复实现已有能力。
 
-## 7. 实现前必须补齐的验收信息
+## 7. 历轮验收记录（历史）
 
-| 需求 | 已确认决策 | 仍需实现阶段补齐 |
+下表保留 Tn 各轮当时的完成情况与缺口；“待同步”“待部署”等文字不是当前待办，v0.4.0 闭环结果见 §3。
+
+| 需求 | 已确认决策 | 当时的完成情况与缺口 |
 | --- | --- | --- |
 | R-01 | 移动端首版仅“移动到分类”菜单，预留后续菜单+触控拖动扩展 | 已完成 T2/T15/T16：本地 API 基线、PC 一级→二级/空目标/取消/保存和移动端菜单/分类树/触摸滚动隔离/反馈均有证据；仍待云端同步 |
 | R-02 | 预填当前一级为父分类但可改选；成功后自动滚动到新子分类并高亮 | 已完成 T6：首页入口、父级预填、创建后自动选中/滚动和 PC/移动端触控回归均有证据；仍待云端同步 |
@@ -359,6 +367,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此编号不连续不代表�
 
 ## 8. 追溯与数据来源
 
+- v0.4.0 闭环依据：[正式 Release](https://github.com/lbjxr/CF-Navs/releases/tag/v0.4.0)、[#9 闭环说明](https://github.com/lbjxr/CF-Navs/issues/9#issuecomment-5647412925) 及 [CHANGELOG](../../CHANGELOG.md) 的 REL-01 / REL-02 记录；关闭状态通过 GitHub API 实际读取，不由提交或 tag 推断。
 - Open Issue 清单：`gh issue list --repo lbjxr/CF-Navs --state open --limit 100`
 - Issue 正文：`gh issue view <number> --repo lbjxr/CF-Navs --json body`
 - Issue 元数据：`gh issue list --repo lbjxr/CF-Navs --state all --limit 100 --json number,title,state,labels,author,createdAt,updatedAt,closedAt,url`

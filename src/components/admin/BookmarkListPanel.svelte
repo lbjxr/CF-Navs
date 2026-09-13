@@ -472,7 +472,7 @@
 
 {#if moveModalOpen}
   <div class="batch-move-backdrop">
-    <section class="batch-move-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-move-title">
+    <div class="batch-move-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-move-title">
       <div class="batch-move-header">
         <div>
           <p class="admin-panel-eyebrow">批量操作</p>
@@ -507,7 +507,7 @@
           {moving ? '移动中…' : '确认移动'}
         </button>
       </div>
-    </section>
+    </div>
   </div>
 {/if}
 

@@ -6,7 +6,7 @@
 
   <p>
     <img src="https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers">
-    <img src="https://img.shields.io/badge/Svelte-4-FF3E00?logo=svelte&logoColor=white" alt="Svelte 4">
+    <img src="https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white" alt="Svelte 5">
     <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5">
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-2563EB" alt="MIT License"></a>
   </p>
@@ -165,6 +165,8 @@ npm run deploy                 # Secret 生效后重新部署
 
 ## 本地开发
 
+开发环境使用 Node.js 22.12+（22.x）或 24+，推荐与 CI 一致的 Node.js 24 LTS。
+
 安装依赖：
 
 ```bash
@@ -196,11 +198,11 @@ git diff --check
 
 | 层级 | 技术 |
 |---|---|
-| 前端 | Svelte 4、TypeScript、Vite |
+| 前端 | Svelte 5、TypeScript、Vite 7 |
 | Worker API | Hono、Cloudflare Workers |
 | 数据与会话 | Cloudflare D1、Cloudflare KV |
 | 交互与排序 | SortableJS |
-| 测试 | Vitest、Svelte Check、真实 Chrome 回归脚本 |
+| 测试 | Vitest 4、Svelte Check、真实 Chrome 回归脚本 |
 
 ## 项目结构
 

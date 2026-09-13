@@ -363,6 +363,8 @@
 
 <div
   class="bookmark-card-shell"
+  role="group"
+  aria-label={bookmark.title}
   class:is-info={style === 'info'}
   class:is-icon={style !== 'info'}
   class:sort-mode={sortMode}
