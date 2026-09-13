@@ -87,16 +87,23 @@ npm run perf:audit
 | `anonymous-admin-data-denied` | PROB-20c | 匿名 `/api/admin/data` 得到 401 或 `code=1001` |
 | `anonymous-private-bookmark-icon-denied` | PROB-20c | 匿名取私密分类下书签的图标被拒 |
 | `anonymous-private-category-icon-denied` | PROB-20c | 匿名取私密分类图标被拒 |
-| `partial-export-builds-subset-with-parent` | PROB-14 | 子集导出含被选分类且补齐父分类 |
+| `partial-export-rejects-empty-selection` | PROB-14 | 清空真实分类选择后，导出按钮禁用 |
+| `partial-export-child-with-parent-no-settings` | PROB-14 | 实际下载只含所选非空子分类、必要父分类及该子分类的全部书签，设置为 `null` |
+| `partial-export-child-with-settings` | PROB-14 | 同一子集在设置开关开启后带出完整设置，分类与书签内容不变 |
+| `partial-export-root-includes-children` | PROB-14 | 选择父分类时，下载包含该父分类、全部直接子分类及其书签并集 |
 | `bookmark-modal-*`（3 项） | PROB-13 U1–U4 | 桌面与 390x844 下弹窗渲染、圆角一致、不溢出视口 |
 | `bookmark-modal-actions-single-row-on-mobile` | PROB-13 U1–U4 | 移动端底部操作栏所有按钮同一行且不溢出 |
 | `viewport-screenshots-captured` | PROB-17 | 430x932 / 768x1024 / 1440x900 三档截图落盘 |
 | `logout-accepted` + `revoked-token-rejected-within-window` | PROB-19v | 登出后旧 token 在窗口内被拒，并记录实际生效毫秒数 |
 | `no-page-exceptions` / `no-console-errors` | PROB-13 | 全程无页面异常与 console error |
 
+导出验证通过真实鼠标操作备份面板，在应用的下载边界捕获实际 Blob；不由探针自行构造备份。按 ID 和完整字段比对分类、书签及设置，整站备份冒充子集、缺失父分类、混入父级/兄弟书签、丢记录或设置开关失效都会失败。生产备份正文只驻留内存，原生磁盘下载被禁止，报告只保存计数与判定，不保存书签内容。
+
 报告与截图写到 `tmp/acceptance/`（该目录已被 Git 忽略）。报告在落盘前过一遍脱敏，凭据不会出现在文件里。
 
 **`SKIP` 不是失败。** 实例上不存在被测对象（例如一个私密分类都没有）时记为 skip 并说明原因，不计入失败，也不影响退出码 —— 否则真失败会被噪声淹没。要验证私密对象的匿名边界，实例上至少得有一个私密分类和一个挂在它下面的书签。
+
+PROB-14 还要求至少有一个带书签的二级分类，并有不属于该子分类的书签用于验证排除边界。找不到该样本时，`partial-export-real-download` 记为 `skip`，该项仍未验收；不要因脚本退出码为 0 而关闭验证欠账。追加/覆盖回导仍只在隔离本地实例中，通过实际文件导入流程验证。
 
 ## 5. Tier 0 覆盖不到的，仍然要人工
 

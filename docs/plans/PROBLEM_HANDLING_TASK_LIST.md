@@ -222,12 +222,16 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 - `S1` 单列为 PROB-07（状态自相矛盾）。
 - 处理动作：部署后按上表逐条真机执行并回写台账；`U1–U4` 与 iOS 放大项需真实 iOS Safari，隔离 Chrome 不可替代。
 
-### PROB-14（P1）R-08 部分导出的部署版本与原作者预期未同步
+### PROB-14（P1）R-08 部分导出的复杂样本与真实下载验收
 
-- 来源映射：`R-08`；`docs/reference/GITHUB_ISSUES_REQUIREMENTS.md:91`、`:351`；`CHANGELOG.md:72`
-- 源码事实：功能存在且成链 —— `src/lib/appBackup.ts:26-76`（子集筛选 + 强制补父分类 + settings 开关）、`src/components/BackupPanel.svelte:22-99,147-207`（三态树 / 默认全选 / 空选拦截）、`src/lib/appImportExport.ts:35-53`（空选报错）、`src/App.svelte:933-936`（接线）；`tests/unit/appBackup.test.ts` 覆盖 helper
-- 欠账：部署版本是否已含该功能、Issue #9 原作者是否认可该形态，均未验证。云端 #9 仍 Open
-- 处理动作：部署后在生产自定义域实测一次导出下载与 replace/merge 导入，再决定是否向 #9 回帖征询原作者确认。**GitHub 写操作需单独授权**
+- 来源映射：R-08；`src/lib/appBackup.ts` 的 `selectBackupSubset`、`createBackupExportArtifact`，`src/lib/appImportExport.ts` 的 `exportDataToFile` / `importDataFromFile`，以及 `BackupPanel.svelte` 的分类树。#8 / #9 已在此前生命周期闭环，本轮只补本地验证欠账，不再次修改 Issue 状态。
+- 根因：旧 `scripts/prod-acceptance.mjs` 的 `pageExportSubset` 只取第一个根分类并自行构造 Blob，没有触发应用导出。复现时 1 个空根分类 / 0 个书签仍返回成功，不能证明真实导出或排除边界。
+- 处理（2026-09-13）：`backupExportProbe.mjs` 选择有书签的子分类，并要求存在未选中的书签；`runExportCheck` 用真实鼠标清空/勾选/切换设置/导出，在应用创建 Blob 和点击下载链接的边界捕获实际内容。禁止原生磁盘下载，正文仅驻留内存；缺样本明确 `skip`，不能据退出码为 0 宣称完成。
+- 判据：分类与书签的 ID、完整字段、数量必须匹配；子分类导出只补父分类元数据，不夹带父级/兄弟书签；父分类整支为父级与直接子级书签并集；设置关闭为 `null`、开启为完整设置。空选按钮禁用。6 条回归包含整站冒充子集、缺父级、重复分类、同 ID 内容变更和设置泄漏反例。
+- 生产证据：被测入口 `/assets/index-3RsEEGMI.js`；47 类 / 601 书签中，子分类实际下载 2 类 / 25 书签，父分类整支 3 类 / 54 书签，设置开关两态正确。整套只读验收 30/30，无失败/跳过；离线阶段的 6 个 `ERR_INTERNET_DISCONNECTED` 为主动断网结果，不写成全程零网络失败。
+- 本地回导：从首页原生入口进入后台，以捕获的真实文件通过文件输入和确认框执行 merge / replace。追加后 3 类 / 3 书签且原记录和重复 URL 保留；覆盖后 2 类 / 1 书签且父子归属、设置与管理员会话正确。原生路径诊断全为 0，浏览器及 profile 清理完成。最初把含 `settings: null` 的文件 JSON 直接 POST API 被拒，是探针跳过 `prepareImportText` 归一化的错误；没有为此放宽 API 校验。
+- 额外观测：本地冷 Service Worker 缓存的 `/index.html` 曾带 `redirected: true`，首次硬跳 `/admin` 的导航返回 `ERR_FAILED`，随后另一 Document 请求 200、后台正常挂载且缓存标记变为 false。该硬导航观测与原生 SPA 入口回导分开记录；本轮未修改 Service Worker，也未证明生产存在同样现象。
+- 完整验证：类型检查 0 errors / 0 warnings，116 files / 862 tests，构建通过；生产没有执行 replace/merge 或设置写入。不承诺自动双向/去重同步，也不代替未完成的真机 L4。
 
 ### PROB-15（P1，已完成）直接刷新 `/admin` 的真实 Chrome 回归待办未闭环
 
