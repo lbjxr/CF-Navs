@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
   import {
+    findCategoryTreeOption,
     getCategoryTreeExpandedRootIds,
     getCategoryTreeOptionLabel,
     type CategoryTreeOption,
@@ -19,12 +20,16 @@
   let root: HTMLElement | null = null
   let open = false
   let trigger: HTMLButtonElement | null = null
+  let treeMenu: HTMLDivElement | null = null
   let expandedRootIds = new Set<string>()
 
   $: selectedOptionLabel = getCategoryTreeOptionLabel(items, value)
-  $: selectedLabel = value == null && rootOptionLabel
-    ? rootOptionLabel
-    : selectedOptionLabel ?? placeholder
+  $: currentCategoryUnavailable = value != null && value !== '' && !findCategoryTreeOption(items, value)
+  $: selectedLabel = currentCategoryUnavailable
+    ? '当前分类不可用'
+    : value == null && rootOptionLabel
+      ? rootOptionLabel
+      : selectedOptionLabel ?? placeholder
   $: hasOptions = Boolean(rootOptionLabel) || items.length > 0
 
   function closeMenu(focusTrigger = false): void {
@@ -32,10 +37,22 @@
     if (focusTrigger) trigger?.focus()
   }
 
-  function toggleMenu(): void {
+  async function toggleMenu(): Promise<void> {
     if (disabled || !hasOptions) return
-    if (!open) expandedRootIds = getCategoryTreeExpandedRootIds(items, value)
-    open = !open
+    if (open) {
+      closeMenu()
+      return
+    }
+    expandedRootIds = getCategoryTreeExpandedRootIds(items, value)
+    open = true
+    await revealSelectedOption()
+  }
+
+  async function revealSelectedOption(focus = false): Promise<void> {
+    await tick()
+    const selected = treeMenu?.querySelector<HTMLButtonElement>('[role="treeitem"][aria-selected="true"]')
+    selected?.scrollIntoView({ block: 'nearest' })
+    if (focus) selected?.focus()
   }
 
   function selectValue(nextValue: string | number | null): void {
@@ -115,6 +132,7 @@
     if (!open) {
       expandedRootIds = getCategoryTreeExpandedRootIds(items, value)
       open = true
+      void revealSelectedOption()
     }
     requestAnimationFrame(() => {
       const options = getTreeItems()
@@ -166,11 +184,12 @@
     bind:this={trigger}
     data-testid={testId || undefined}
     aria-label={ariaLabel}
+    aria-describedby={currentCategoryUnavailable ? `${testId || 'category-tree-select'}-unavailable` : undefined}
     title={hasOptions ? selectedLabel : emptyLabel}
     aria-haspopup="tree"
     aria-expanded={open}
     {disabled}
-    on:click={toggleMenu}
+    on:click={() => void toggleMenu()}
     on:keydown={handleTriggerKeyDown}
   >
     <span>{hasOptions ? selectedLabel : emptyLabel}</span>
@@ -178,7 +197,10 @@
   </button>
 
   {#if open}
-    <div class="category-tree-menu" role="tree" aria-label="分类目录" tabindex="-1" on:keydown={handleTreeKeyDown}>
+    <div class="category-tree-menu" role="tree" aria-label="分类目录" tabindex="-1" bind:this={treeMenu} on:keydown={handleTreeKeyDown}>
+      {#if currentCategoryUnavailable}
+        <p id={`${testId || 'category-tree-select'}-unavailable`} class="category-unavailable" role="status">当前分类不可用，请重新选择有效分类。</p>
+      {/if}
       {#if rootOptionLabel}
         <button
           type="button"
@@ -216,15 +238,20 @@
               type="button"
               class="tree-option tree-root-option"
               class:selected={String(value) === String(item.id)}
+              class:has-notice={!!item.notice}
               data-tree-root-id={item.id}
               role="treeitem"
               aria-level="1"
               aria-expanded={item.children.length > 0 ? expandedRootIds.has(String(item.id)) : undefined}
               aria-selected={String(value) === String(item.id)}
+              aria-describedby={item.notice ? `category-tree-notice-${item.id}` : undefined}
               on:click={() => selectValue(item.id)}
             >
               <span class="tree-folder-mark" aria-hidden="true"></span>
               <span>{item.title}</span>
+              {#if item.notice}
+                <span class="tree-option-notice" id={`category-tree-notice-${item.id}`}>{item.notice}</span>
+              {/if}
             </button>
           </div>
 
@@ -235,14 +262,19 @@
                   type="button"
                   class="tree-option tree-child-option"
                   class:selected={String(value) === String(child.id)}
+                  class:has-notice={!!child.notice}
                   data-tree-parent-id={item.id}
                   role="treeitem"
                   aria-level="2"
                   aria-selected={String(value) === String(child.id)}
+                  aria-describedby={child.notice ? `category-tree-notice-${child.id}` : undefined}
                   on:click={() => selectValue(child.id)}
                 >
                   <span class="tree-branch-mark" aria-hidden="true"></span>
                   <span>{child.title}</span>
+                  {#if child.notice}
+                    <span class="tree-option-notice" id={`category-tree-notice-${child.id}`}>{child.notice}</span>
+                  {/if}
                 </button>
               {/each}
             </div>
@@ -358,11 +390,20 @@
     max-height: min(320px, 45vh);
     box-sizing: border-box;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
     padding: 6px;
     border: 1px solid #dbe3ee;
     border-radius: 10px;
     background: #ffffff;
     box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16);
+  }
+  .category-unavailable {
+    margin: 4px 6px 8px;
+    color: #b45309;
+    font-size: 12px;
+    line-height: 1.4;
   }
 
   .tree-group + .tree-group {
@@ -447,6 +488,20 @@
     background: #eff6ff;
     color: #1d4ed8;
     font-weight: 600;
+  }
+
+  .tree-option.has-notice {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .tree-option-notice {
+    flex: 1 0 100%;
+    padding-left: 20px;
+    color: #b45309;
+    font-size: var(--font-size-xs);
+    font-weight: 400;
+    line-height: 1.4;
   }
 
   .tree-root-option {

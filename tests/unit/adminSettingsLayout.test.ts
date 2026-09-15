@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
+// 行为部分（折叠/切换/保存等交互）已迁到 tests/unit/adminSettingsBehavior.test.ts；此处保留的是无法挂载验证的
+// 三类源码契约：① CSS grid 规则——`.settings-panel-wrap`/`.settings-form`/`.settings-submenu`/`.settings-workspace`
+// 的 `grid-template-columns/rows`、`grid-column: 1 / -1`、`clamp(0px, calc(100dvh - 180px), 960px)` 高度与
+// `@media (max-width: 1320px/720px)` 折叠；② 分区归属——各 `form.*` 绑定落在哪个 `settings/*Section.svelte`、
+// 预览 iframe 的 `sandbox=""`/`script-src 'none'` 安全属性；③ 模板与菜单渲染顺序（组件标签、`indexOf` 先后）。
+// jsdom 不做 grid 布局、不评估媒体查询，挂载既拿不到这些计算值，跨文件归属/顺序也非单组件可观测。（PROB-18）
+
 describe('admin settings layout', () => {
   it('aligns the settings panel with category and bookmark content', () => {
     const source = readFileSync('src/components/admin/AdminTabContent.svelte', 'utf8')
@@ -9,24 +16,6 @@ describe('admin settings layout', () => {
     expect(settingsRule).toContain('width: 100%')
     expect(settingsRule).toContain('margin: 0 0 24px')
     expect(settingsRule).not.toContain('margin: 0 auto')
-  })
-
-  it('associates the public mode switch with its label', () => {
-    const source = readFileSync('src/components/settings/BasicSettingsSection.svelte', 'utf8')
-
-    expect(source).toContain('公开模式')
-    expect(source).toContain('checked={form.public_mode}')
-    expect(source).toContain("on:change={(event) => { form.public_mode = event.detail; void syncForm() }}")
-  })
-
-  it('provides navigation position and persistent-left controls', () => {
-    const source = readFileSync('src/components/settings/NavigationSettingsSection.svelte', 'utf8')
-    const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
-
-    expect(panel).toContain('<NavigationSettingsSection bind:form {saving} />')
-    expect(source).toContain('bind:group={form.navigation.position}')
-    expect(source).toContain('checked={form.navigation.always_expanded}')
-    expect(source).toContain('disabled={saving || !isLeft}')
   })
 
   it('places the secondary settings menu above the workspace', () => {
@@ -205,15 +194,14 @@ describe('admin settings layout', () => {
     const advanced = readFileSync('src/components/settings/AdvancedSettingsSection.svelte', 'utf8')
     const backgroundCard = readFileSync('src/components/settings/ThemeBackgroundCard.svelte', 'utf8')
 
-    expect(panel).toContain('appearanceAdvancedOpen = shouldAutoExpandAppearanceAdvanced(initialForm)')
-    expect(advanced).toContain('data-testid="appearance-advanced-toggle"')
-    expect(advanced).toContain('{#if advancedOpen}')
     expect(advanced).toContain('class="advanced-settings-section"')
     expect(advanced).toContain('aria-label="高级设置"')
     expect(advanced).not.toContain('class="group group-wide')
     expect(advanced).not.toContain('<legend>高级设置</legend>')
     expect(advanced).toContain('<h3>尺寸与密度</h3>')
     expect(advanced).toContain('<h3>卡片表面</h3>')
+    expect(advanced).toContain("import CategoryDisplaySettingsSection from './CategoryDisplaySettingsSection.svelte'")
+    expect(advanced).toContain('<CategoryDisplaySettingsSection bind:form {saving} />')
     expect(appearance).not.toContain('{#if advancedOpen}')
     expect(card).not.toContain('{#if advancedOpen}')
     expect(card).not.toContain('<h3>尺寸与密度</h3>')
@@ -228,6 +216,22 @@ describe('admin settings layout', () => {
     expect(backgroundCard.indexOf('startLabel="起始颜色"')).toBeLessThan(backgroundCard.indexOf('endLabel="结束颜色"'))
     expect(backgroundCard.indexOf('endLabel="结束颜色"')).toBeLessThan(backgroundCard.indexOf('<div class="background-range-grid">'))
     expect(backgroundCard.indexOf('<div class="background-range-grid">')).toBeLessThan(backgroundCard.indexOf('遮罩颜色'))
+  })
+  it('exposes category-level visual controls in the advanced section', () => {
+    const panel = readFileSync('src/components/SettingsPanel.svelte', 'utf8')
+    const categoryDisplay = readFileSync('src/components/settings/CategoryDisplaySettingsSection.svelte', 'utf8')
+    const advanced = readFileSync('src/components/settings/AdvancedSettingsSection.svelte', 'utf8')
+    const home = readFileSync('src/views/Home.svelte', 'utf8')
+
+    expect(panel).not.toContain('<CategoryDisplaySettingsSection bind:form {saving} />')
+    expect(advanced).toContain("import CategoryDisplaySettingsSection from './CategoryDisplaySettingsSection.svelte'")
+    expect(advanced).toContain('<CategoryDisplaySettingsSection bind:form {saving} />')
+    expect(categoryDisplay).toContain('一级分类标题字号')
+    expect(categoryDisplay).toContain('二级分类标题字号')
+    expect(categoryDisplay).toContain('min={12}')
+    expect(categoryDisplay).toContain('min={11}')
+    expect(home).toContain('--category-root-font-size-base')
+    expect(home).toContain('* 0.88')
   })
 
   it('collapses built-in presets, removes manual gradient values, and binds card controls to style', () => {

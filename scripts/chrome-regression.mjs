@@ -18,6 +18,7 @@
 //   REGRESSION_ALLOW_EXISTING_CHROME=1  # opt in only for a dedicated existing test browser
 //   REGRESSION_FORCE_TEMP_CHROME=1
 //   REGRESSION_ALLOW_FAILURES=1
+//   REGRESSION_ALLOW_PASSWORD_ROTATION=1  # 真实改写并还原管理员密码；生产上请三思
 //   REGRESSION_MIN_BOOKMARK_CARDS=1
 //   REGRESSION_MIN_CATEGORIES=1
 //   REGRESSION_MIN_BOOKMARKS=1
@@ -28,6 +29,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import WebSocket from 'ws'
+import { requireAdminCredentials } from './lib/verifyCredentials.mjs'
 import { resolveBaseUrl, resolveChromeProfileRoot, resolveSetting } from './lib/verifyTarget.mjs'
 
 const BASE_URL = resolveBaseUrl()
@@ -39,12 +41,15 @@ const CHROME_USER_DATA_DIR =
   resolveSetting('CHROME_USER_DATA_DIR', 'chromeUserDataDir') ||
   path.join(resolveChromeProfileRoot(), `cf-navs-chrome-profile-${CHROME_DEBUG_PORT}`)
 const SAFE_TEMP_PROFILE = /^cf-navs-chrome-profile-[a-z0-9_-]+$/i.test(path.basename(path.resolve(CHROME_USER_DATA_DIR)))
-const ADMIN_USER = process.env.ADMIN_USER || ''
-const ADMIN_PASS = process.env.ADMIN_PASS || ''
+const { username: ADMIN_USER, password: ADMIN_PASS } = requireAdminCredentials()
 const CHROME_NO_SANDBOX = process.env.CHROME_NO_SANDBOX === '1'
 const ALLOW_EXISTING_CHROME = process.env.REGRESSION_ALLOW_EXISTING_CHROME === '1'
 const FORCE_TEMP_CHROME = process.env.REGRESSION_FORCE_TEMP_CHROME === '1'
 const ALLOW_FAILURES = process.env.REGRESSION_ALLOW_FAILURES === '1'
+// 密码轮换是 Tier 1 写操作，默认不做：它先把管理员密码改成随机临时值再还原，
+// 中途被 Ctrl+C / 断网 / Chrome 崩溃打断就会把实例锁在只存在于内存里的密码上。
+// 只读的登出撤销验证由 scripts/prod-acceptance.mjs 覆盖，不需要动密码。
+const ALLOW_PASSWORD_ROTATION = process.env.REGRESSION_ALLOW_PASSWORD_ROTATION === '1'
 const MIN_BOOKMARK_CARDS = readIntegerEnv('REGRESSION_MIN_BOOKMARK_CARDS', 1)
 const MIN_CATEGORIES = readIntegerEnv('REGRESSION_MIN_CATEGORIES', 1)
 const MIN_BOOKMARKS = readIntegerEnv('REGRESSION_MIN_BOOKMARKS', 1)
@@ -71,16 +76,6 @@ const events = []
 const network = new Map()
 const consoleMessages = []
 const pageExceptions = []
-
-if (!ADMIN_USER || !ADMIN_PASS) {
-  usageError('Missing credentials.')
-}
-
-function usageError(message) {
-  console.error(message)
-  console.error('Required: ADMIN_USER and ADMIN_PASS environment variables.')
-  process.exit(2)
-}
 
 function readIntegerEnv(name, fallback) {
   const parsed = Number.parseInt(process.env[name] || '', 10)
@@ -114,8 +109,8 @@ async function ensureChrome() {
     if (FORCE_TEMP_CHROME || !ALLOW_EXISTING_CHROME) {
       throw new Error(
         `Chrome debug port ${debugEndpoint} is already in use. ` +
-          'This regression script starts an isolated browser by default. ' +
-          'Set REGRESSION_ALLOW_EXISTING_CHROME=1 only for a browser dedicated to this test, or choose a free CHROME_DEBUG_PORT.',
+        'This regression script starts an isolated browser by default. ' +
+        'Set REGRESSION_ALLOW_EXISTING_CHROME=1 only for a browser dedicated to this test, or choose a free CHROME_DEBUG_PORT.',
       )
     }
     browserConnectionMode = 'dedicated-existing-browser'
@@ -136,7 +131,7 @@ async function ensureChrome() {
   if (!SAFE_TEMP_PROFILE) {
     throw new Error(
       'Refusing to start temporary Chrome with an unsafe profile path. ' +
-        'CHROME_USER_DATA_DIR must end with cf-navs-chrome-profile-<unique-id>.',
+      'CHROME_USER_DATA_DIR must end with cf-navs-chrome-profile-<unique-id>.',
     )
   }
 
@@ -929,7 +924,7 @@ function summarizeNetwork(expectedContext = {}) {
 
 
 async function runSecurityChecks() {
-  return pageFunction(async function securityChecks(baseUrl, adminUser, adminPass) {
+  return pageFunction(async function securityChecks(baseUrl, adminUser, adminPass, allowPasswordRotation) {
     const fetchJson = async (url, options = {}) => {
       const resp = await fetch(url, options)
       let body = null
@@ -937,22 +932,25 @@ async function runSecurityChecks() {
       return { status: resp.status, code: body?.code, msg: body?.msg, data: body?.data }
     }
 
-    // 1. Invalid token -> 401 / 1002
+    // 1. Invalid token -> 401 / 1001
     const invalidResp = await fetchJson(`${baseUrl}/api/admin/data`, {
       headers: { authorization: "Bearer NOT_A_REAL_TOKEN_DEADBEEF" },
     })
-    const invalidTokenOk = invalidResp.status === 401 || invalidResp.code === 1002
+    const invalidTokenOk = invalidResp.status === 401 || invalidResp.code === 1001
 
-    // 2. Anonymous access -> 401 / 1002
+    // 2. Anonymous access -> 401 / 1001
     const anonResp = await fetchJson(`${baseUrl}/api/admin/data`)
-    const anonymousOk = anonResp.status === 401 || anonResp.code === 1002
+    const anonymousOk = anonResp.status === 401 || anonResp.code === 1001
 
-    // 3. Password change invalidates old sessions (with guaranteed restore)
+    // 3. Password change invalidates old sessions (with guaranteed restore).
+    // 默认跳过：这是唯一会改写生产状态的场景，需 REGRESSION_ALLOW_PASSWORD_ROTATION=1 显式开启。
     let pwChangeOk = false
     let pwCleanupOk = false
-    const tempPass = "SecT_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8)
+    let pwSkipped = !allowPasswordRotation
+    const tempPass = allowPasswordRotation ? `SecT_${crypto.randomUUID()}` : ''
 
     try {
+      if (!allowPasswordRotation) throw new Error("__skip_password_rotation__")
       // Login to get a fresh token
       const l1 = await fetchJson(`${baseUrl}/api/login`, {
         method: "POST",
@@ -977,7 +975,7 @@ async function runSecurityChecks() {
       const oldCheck = await fetchJson(`${baseUrl}/api/admin/data`, {
         headers: { authorization: "Bearer " + oldToken },
       })
-      pwChangeOk = oldCheck.status === 401 || oldCheck.code === 1002
+      pwChangeOk = oldCheck.status === 401 || oldCheck.code === 1001
 
       // Login with new password
       const l2 = await fetchJson(`${baseUrl}/api/login`, {
@@ -1007,25 +1005,29 @@ async function runSecurityChecks() {
       })
       if (l3.code !== 0) throw new Error("restore verify failed: " + JSON.stringify(l3))
     } catch (e) {
-      // Emergency restore via temp password if possible
-      try {
-        const emerg = await fetchJson(`${baseUrl}/api/login`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ username: adminUser, password: tempPass }),
-        })
-        if (emerg.code === 0 && emerg.data?.token) {
-          await fetchJson(`${baseUrl}/api/password`, {
+      if (String(e?.message).includes("__skip_password_rotation__")) {
+        pwSkipped = true
+      } else {
+        // Emergency restore via temp password if possible
+        try {
+          const emerg = await fetchJson(`${baseUrl}/api/login`, {
             method: "POST",
-            headers: {
-              "content-type": "application/json",
-              authorization: "Bearer " + emerg.data.token,
-            },
-            body: JSON.stringify({ current_password: tempPass, new_password: adminPass }),
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ username: adminUser, password: tempPass }),
           })
-          pwCleanupOk = true
-        }
-      } catch { /* unrecoverable */ }
+          if (emerg.code === 0 && emerg.data?.token) {
+            const emergencyRestore = await fetchJson(`${baseUrl}/api/password`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                authorization: "Bearer " + emerg.data.token,
+              },
+              body: JSON.stringify({ current_password: tempPass, new_password: adminPass }),
+            })
+            pwCleanupOk = emergencyRestore.code === 0
+          }
+        } catch { /* unrecoverable */ }
+      }
     }
 
     // Restore localStorage session for subsequent regression checks
@@ -1037,13 +1039,14 @@ async function runSecurityChecks() {
     if (finalLogin.code === 0 && finalLogin.data) {
       localStorage.setItem("cf-navs.auth", JSON.stringify(finalLogin.data))
     }
+    if (allowPasswordRotation && finalLogin.code !== 0) pwCleanupOk = false
 
     return {
       invalidToken: { ok: invalidTokenOk, status: invalidResp.status, code: invalidResp.code },
       anonymousAccess: { ok: anonymousOk, status: anonResp.status, code: anonResp.code },
-      passwordChange: { ok: pwChangeOk, cleanupOk: pwCleanupOk },
+      passwordChange: { ok: pwChangeOk, cleanupOk: pwCleanupOk, skipped: pwSkipped },
     }
-  }, TARGET_ORIGIN, ADMIN_USER, ADMIN_PASS)
+  }, TARGET_ORIGIN, ADMIN_USER, ADMIN_PASS, ALLOW_PASSWORD_ROTATION)
 }
 
 function check(name, passed, actual, expected) {
@@ -1073,10 +1076,22 @@ function collectChecks(result) {
     check('backup tab rendered', result.admin.backup.rendered && result.admin.backup.sourceSelect && result.admin.backup.importInput, result.admin.backup, 'backup controls'),
     check('bookmark context edit modal works', result.contextMenu.ok, result.contextMenu, 'right-click edit open/cancel'),
     check('logout clears auth', result.logout.logoutButtonFound && result.logout.authCleared, result.logout, 'auth cleared'),
-    check('invalid token returns 401/1002', result.security.invalidToken.ok, result.security.invalidToken, 'HTTP 401 or code 1002'),
-    check('anonymous access returns 401/1002', result.security.anonymousAccess.ok, result.security.anonymousAccess, 'HTTP 401 or code 1002'),
-    check('password change invalidates old session', result.security.passwordChange.ok, result.security.passwordChange, 'old token rejected after pw change'),
-    check('password restored after test', result.security.passwordChange.cleanupOk, result.security.passwordChange, 'original password restored'),
+    check('invalid token returns 401/1001', result.security.invalidToken.ok, result.security.invalidToken, 'HTTP 401 or code 1001'),
+    check('anonymous access returns 401/1001', result.security.anonymousAccess.ok, result.security.anonymousAccess, 'HTTP 401 or code 1001'),
+    // 跳过时判为通过并在 actual 里标明 skipped：没执行的写操作不能算「未通过」，
+    // 否则默认配置下每次跑都红一片，真失败会被淹没。
+    check(
+      'password change invalidates old session',
+      result.security.passwordChange.skipped || result.security.passwordChange.ok,
+      result.security.passwordChange,
+      'old token rejected after pw change (skipped unless REGRESSION_ALLOW_PASSWORD_ROTATION=1)',
+    ),
+    check(
+      'password restored after test',
+      result.security.passwordChange.skipped || result.security.passwordChange.cleanupOk,
+      result.security.passwordChange,
+      'original password restored (skipped unless REGRESSION_ALLOW_PASSWORD_ROTATION=1)',
+    ),
   ]
 }
 

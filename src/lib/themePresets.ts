@@ -208,6 +208,10 @@ type GradientPresetStyle = {
   lightMask: number
   darkMask: number
   cardBackgroundOpacity: number
+  /** 浅色强调色：按该预设的主色相取深档，保证在白色玻璃卡片上可读。 */
+  accent: string
+  /** 深色强调色：同色相取浅档，保证在 #0f172a 深色卡片上可读。 */
+  darkAccent: string
 }
 
 function createGradientPreset(
@@ -229,8 +233,8 @@ function createGradientPreset(
     cardTextColor: '',
     siteTitleColor: '',
     surface: 'glass',
-    accentColor: '#2563eb',
-    darkAccentColor: '#7dd3fc',
+    accentColor: style.accent,
+    darkAccentColor: style.darkAccent,
     darkCardBackgroundColor: '#0f172a',
     lightCardTitleColor: '#0f172a',
     lightCardDescriptionColor: '#475569',
@@ -315,17 +319,17 @@ export const gradientPresets: ThemeGradientPreset[] = [
     accent: '#bd8b42', darkAccent: '#e3c188',
     title: '#372d1d', description: '#6f5b3b', darkTitle: '#f7f0e3', darkDescription: '#cbbda3',
   }),
-  createGradientPreset('clear-teal', '清透蓝绿', '清爽的蓝绿冷调，玻璃卡片映出水色高光。', clearTealLightGradient, clearTealDarkGradient, { lightMask: 0.06, darkMask: 0.12, cardBackgroundOpacity: 0.42 }),
-  createGradientPreset('mist-slate', '晨雾石青', '石青与浅绿的柔和薄雾，安静而不寡淡。', mistSlateLightGradient, mistSlateDarkGradient, { lightMask: 0.08, darkMask: 0.14, cardBackgroundOpacity: 0.42 }),
-  createGradientPreset('coral-sky', '珊瑚晴空', '珊瑚、天空蓝和薄荷绿的轻快组合，明亮有活力。', coralSkyLightGradient, coralSkyDarkGradient, { lightMask: 0.06, darkMask: 0.14, cardBackgroundOpacity: 0.44 }),
-  createGradientPreset('sage-graphite', '鼠尾草石墨', '低饱和绿与石墨灰，耐看的日常工作配色。', sageGraphiteLightGradient, sageGraphiteDarkGradient, { lightMask: 0.08, darkMask: 0.14, cardBackgroundOpacity: 0.42 }),
-  createGradientPreset('lumen-amber', '琥珀晨光', '琥珀暖光配天空蓝高光，明亮但不刺眼。', lumenAmberLightGradient, lumenAmberDarkGradient, { lightMask: 0.07, darkMask: 0.14, cardBackgroundOpacity: 0.46 }),
-  createGradientPreset('ember-night', '余烬夜航', '余烬红与海松绿对撞，深色模式层次分明。', emberNightLightGradient, emberNightDarkGradient, { lightMask: 0.08, darkMask: 0.13, cardBackgroundOpacity: 0.44 }),
-  createGradientPreset('violet-dawn', '紫晶破晓', '薰衣草紫与玫瑰高光，冷暖分明且克制。', violetDawnLightGradient, violetDawnDarkGradient, { lightMask: 0.06, darkMask: 0.12, cardBackgroundOpacity: 0.44 }),
-  createGradientPreset('ocean-depths', '深海蔚蓝', '高辨识度的湛蓝与海松绿，像清澈的深海水面。', oceanDepthsLightGradient, oceanDepthsDarkGradient, { lightMask: 0.06, darkMask: 0.12, cardBackgroundOpacity: 0.42 }),
-  createGradientPreset('aurora-borealis', '极光苔原', '酸橙、青绿与淡紫的极光层次，玻璃折射感最强。', auroraBorealisLightGradient, auroraBorealisDarkGradient, { lightMask: 0.08, darkMask: 0.13, cardBackgroundOpacity: 0.42 }),
-  createGradientPreset('citrus-sunset', '柑橘日落', '琥珀、珊瑚与奶油底色，日落般的暖色选择。', citrusSunsetLightGradient, citrusSunsetDarkGradient, { lightMask: 0.08, darkMask: 0.14, cardBackgroundOpacity: 0.46 }),
-  createGradientPreset('rose-orbit', '玫瑰星轨', '洋红、紫罗兰和杏色点光，柔和浪漫。', roseOrbitLightGradient, roseOrbitDarkGradient, { lightMask: 0.07, darkMask: 0.13, cardBackgroundOpacity: 0.44 }),
-  createGradientPreset('indigo-noir', '靛蓝秘境', '靛蓝与电光蓝构建冷静有纵深的夜间氛围。', indigoNoirLightGradient, indigoNoirDarkGradient, { lightMask: 0.06, darkMask: 0.12, cardBackgroundOpacity: 0.42 }),
-  createGradientPreset('terracotta-dune', '陶土沙丘', '陶土、赭金与苔绿的自然土色，低刺激暖调。', terracottaDuneLightGradient, terracottaDuneDarkGradient, { lightMask: 0.08, darkMask: 0.14, cardBackgroundOpacity: 0.44 }),
+  createGradientPreset('clear-teal', '清透蓝绿', '清爽的蓝绿冷调，玻璃卡片映出水色高光。', clearTealLightGradient, clearTealDarkGradient, { lightMask: 0.06, darkMask: 0.12, cardBackgroundOpacity: 0.42, accent: '#155e75', darkAccent: '#67e8f9' }),
+  createGradientPreset('mist-slate', '晨雾石青', '石青与浅绿的柔和薄雾，安静而不寡淡。', mistSlateLightGradient, mistSlateDarkGradient, { lightMask: 0.08, darkMask: 0.14, cardBackgroundOpacity: 0.42, accent: '#0f766e', darkAccent: '#5eead4' }),
+  createGradientPreset('coral-sky', '珊瑚晴空', '珊瑚、天空蓝和薄荷绿的轻快组合，明亮有活力。', coralSkyLightGradient, coralSkyDarkGradient, { lightMask: 0.06, darkMask: 0.14, cardBackgroundOpacity: 0.44, accent: '#be123c', darkAccent: '#fda4af' }),
+  createGradientPreset('sage-graphite', '鼠尾草石墨', '低饱和绿与石墨灰，耐看的日常工作配色。', sageGraphiteLightGradient, sageGraphiteDarkGradient, { lightMask: 0.08, darkMask: 0.14, cardBackgroundOpacity: 0.42, accent: '#3f6212', darkAccent: '#bef264' }),
+  createGradientPreset('lumen-amber', '琥珀晨光', '琥珀暖光配天空蓝高光，明亮但不刺眼。', lumenAmberLightGradient, lumenAmberDarkGradient, { lightMask: 0.07, darkMask: 0.14, cardBackgroundOpacity: 0.46, accent: '#92400e', darkAccent: '#fcd34d' }),
+  createGradientPreset('ember-night', '余烬夜航', '余烬红与海松绿对撞，深色模式层次分明。', emberNightLightGradient, emberNightDarkGradient, { lightMask: 0.08, darkMask: 0.13, cardBackgroundOpacity: 0.44, accent: '#b91c1c', darkAccent: '#fca5a5' }),
+  createGradientPreset('violet-dawn', '紫晶破晓', '薰衣草紫与玫瑰高光，冷暖分明且克制。', violetDawnLightGradient, violetDawnDarkGradient, { lightMask: 0.06, darkMask: 0.12, cardBackgroundOpacity: 0.44, accent: '#6d28d9', darkAccent: '#c4b5fd' }),
+  createGradientPreset('ocean-depths', '深海蔚蓝', '高辨识度的湛蓝与海松绿，像清澈的深海水面。', oceanDepthsLightGradient, oceanDepthsDarkGradient, { lightMask: 0.06, darkMask: 0.12, cardBackgroundOpacity: 0.42, accent: '#0369a1', darkAccent: '#7dd3fc' }),
+  createGradientPreset('aurora-borealis', '极光苔原', '酸橙、青绿与淡紫的极光层次，玻璃折射感最强。', auroraBorealisLightGradient, auroraBorealisDarkGradient, { lightMask: 0.08, darkMask: 0.13, cardBackgroundOpacity: 0.42, accent: '#047857', darkAccent: '#6ee7b7' }),
+  createGradientPreset('citrus-sunset', '柑橘日落', '琥珀、珊瑚与奶油底色，日落般的暖色选择。', citrusSunsetLightGradient, citrusSunsetDarkGradient, { lightMask: 0.08, darkMask: 0.14, cardBackgroundOpacity: 0.46, accent: '#9a3412', darkAccent: '#fdba74' }),
+  createGradientPreset('rose-orbit', '玫瑰星轨', '洋红、紫罗兰和杏色点光，柔和浪漫。', roseOrbitLightGradient, roseOrbitDarkGradient, { lightMask: 0.07, darkMask: 0.13, cardBackgroundOpacity: 0.44, accent: '#be185d', darkAccent: '#f9a8d4' }),
+  createGradientPreset('indigo-noir', '靛蓝秘境', '靛蓝与电光蓝构建冷静有纵深的夜间氛围。', indigoNoirLightGradient, indigoNoirDarkGradient, { lightMask: 0.06, darkMask: 0.12, cardBackgroundOpacity: 0.42, accent: '#4338ca', darkAccent: '#a5b4fc' }),
+  createGradientPreset('terracotta-dune', '陶土沙丘', '陶土、赭金与苔绿的自然土色，低刺激暖调。', terracottaDuneLightGradient, terracottaDuneDarkGradient, { lightMask: 0.08, darkMask: 0.14, cardBackgroundOpacity: 0.44, accent: '#7c2d12', darkAccent: '#fed7aa' }),
 ]

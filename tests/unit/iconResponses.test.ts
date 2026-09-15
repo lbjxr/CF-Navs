@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
 import {
   ICON_BROWSER_CACHE_SECONDS,
   ICON_EDGE_CACHE_SECONDS,
@@ -50,12 +49,11 @@ describe('icon proxy cache key', () => {
     expect(key('https://nav.example.com/api/icon/1')).not.toBe(key('https://nav.example.com/api/category-icon/1'))
   })
 
-  it('is used by every icon proxy route', () => {
-    // 读写必须用同一个键，漏掉任何一处都会让缓存永远 miss
-    const source = readFileSync('worker/routes/icon.ts', 'utf8')
-
-    expect(source.match(/iconCacheKey\(c\.req\.raw\)/g)).toHaveLength(3)
-    expect(source).not.toContain('cacheResponse(c, c.req.raw')
-    expect(source).not.toContain('getCachedResponse(c.req.raw)')
+  it('namespaces the key so pre-PROB-20 cache entries become unreachable', () => {
+    // 旧条目是在没有可见性判定的情况下写入的，而命中查询发生在判定之前；
+    // 递增命名空间后旧键不可达，之后写入的条目一定过了可见性判定。
+    expect(key('https://nav.example.com/api/icon/1')).toContain('ns=2')
+    expect(key('https://nav.example.com/api/category-icon/1')).toContain('ns=2')
+    expect(key('https://nav.example.com/api/iconify/mdi/home.svg')).toContain('ns=2')
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gradientPresets } from '../../src/lib/themePresets'
+import { gradientPresets, type ThemeGradientPreset } from '../../src/lib/themePresets'
 import {
   applyBackgroundPreset,
   applyCustomThemeBackground,
@@ -42,6 +42,47 @@ function contrastRatio(foreground: string, background: [number, number, number])
   const backgroundLuminance = relativeLuminance(background)
   return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
     / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+}
+
+/**
+ * 毛玻璃预设的强调色画在半透明卡片上，卡片底下是渐变背景。
+ * 最坏可读性出现在「最暗的可见背景区域」：先取 linear stop 中最暗的一档，
+ * 再让每个 radial 的 rgba 按自身 alpha 叠上去取最暗结果，然后叠遮罩层，
+ * 最后按 cardBackgroundOpacity 合成卡片色。
+ */
+function worstGlassCardColor(preset: ThemeGradientPreset, mode: 'light' | 'dark'): [number, number, number] {
+  const background = mode === 'light' ? preset.light : preset.dark
+  const maskColor = mode === 'light' ? '#ffffff' : '#000000'
+  const cardColor = mode === 'light' ? preset.cardBackgroundColor : preset.darkCardBackgroundColor
+
+  const stops = [...background.value.matchAll(/#([0-9a-f]{6})/g)].map((match) => hexToRgb(`#${match[1]}`))
+  const darkestStop = stops.reduce((darkest, stop) => (
+    relativeLuminance(stop) < relativeLuminance(darkest) ? stop : darkest
+  ))
+
+  const hotspots = [...background.value.matchAll(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/g)]
+    .map((match) => mixRgb(
+      [Number(match[1]), Number(match[2]), Number(match[3])],
+      darkestStop,
+      Number(match[4]),
+    ))
+
+  const darkestPage = [darkestStop, ...hotspots].reduce((darkest, candidate) => (
+    relativeLuminance(candidate) < relativeLuminance(darkest) ? candidate : darkest
+  ))
+
+  const maskedPage = mixRgb(hexToRgb(maskColor), darkestPage, background.mask)
+  return mixRgb(hexToRgb(cardColor), maskedPage, preset.cardBackgroundOpacity)
+}
+
+function mixRgb(
+  foreground: [number, number, number],
+  background: [number, number, number],
+  alpha: number,
+): [number, number, number] {
+  return foreground.map((channel, index) => (
+    Math.round(channel * alpha + background[index] * (1 - alpha))
+  )) as [number, number, number]
 }
 
 describe('settings form model', () => {
@@ -106,6 +147,22 @@ describe('settings form model', () => {
     }
   })
 
+  it('gives every glass preset its own readable accent instead of one shared cold blue', () => {
+    const glassPresets = gradientPresets.filter((preset) => preset.surface === 'glass')
+
+    expect(glassPresets).toHaveLength(13)
+    // 回归护栏：13 套毛玻璃预设曾共用 accentColor '#2563eb' / darkAccentColor '#7dd3fc'。
+    expect(glassPresets.filter((preset) => preset.accentColor === '#2563eb')).toHaveLength(0)
+    expect(new Set(glassPresets.map((preset) => preset.accentColor)).size).toBe(glassPresets.length)
+    expect(new Set(glassPresets.map((preset) => preset.darkAccentColor)).size).toBe(glassPresets.length)
+
+    for (const preset of glassPresets) {
+      // 毛玻璃卡片是半透明的，纯实底卡片色只是最好情况；这里按最暗可见区域合成出最坏背景再断言。
+      expect(contrastRatio(preset.accentColor, worstGlassCardColor(preset, 'light'))).toBeGreaterThanOrEqual(4.5)
+      expect(contrastRatio(preset.darkAccentColor, worstGlassCardColor(preset, 'dark'))).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
   it('creates a complete editable form from partial settings', () => {
     const form = createSettingsFormState({
       site_title: 'My Nav',
@@ -120,7 +177,7 @@ describe('settings form model', () => {
     expect(form.backgrounds.light.value).toBe('#ffffff')
     expect(form.backgrounds.dark.value).toBe('#ffffff')
     expect(form.search_engine.current).toBe('Kagi')
-    expect(form.card_size).toEqual({ width: 80, height: 60 })
+    expect(form.card_size).toEqual({ width: 160, height: 60 })
     expect(form.navigation).toEqual({ position: 'left', always_expanded: false, top_layout: 'scroll' })
   })
 
@@ -130,6 +187,8 @@ describe('settings form model', () => {
       site_title_font_size: 200,
       theme: 'dark',
       custom_css: '  body{}  ',
+      custom_accent_color: '  #123456  ',
+      custom_dark_accent_color: '  #abcdef  ',
       image_host_url: '  https://img.example.com  ',
       search_engine: {
         current: 'Missing',
@@ -149,6 +208,8 @@ describe('settings form model', () => {
     expect(normalized.site_title).toBe('CF-Navs')
     expect(normalized.site_title_font_size).toBe(72)
     expect(normalized.custom_css).toBe('body{}')
+    expect(normalized.custom_accent_color).toBe('#123456')
+    expect(normalized.custom_dark_accent_color).toBe('#abcdef')
     expect(normalized.image_host_url).toBe('https://img.example.com')
     expect(normalized.search_engine.current).toBe('Google')
     expect(normalized.search_engine.engines[0]).toEqual({
@@ -156,8 +217,9 @@ describe('settings form model', () => {
       icon: 'icon',
       url_template: 'https://google.com/search?q={q}',
     })
-    expect(normalized.card_size).toEqual({ width: 80, height: 300 })
+    expect(normalized.card_size).toEqual({ width: 40, height: 300 })
     expect(normalized.card_icon_size).toBe(100)
+    expect(normalized.category_display).toEqual({ root_font_size: 16, root_icon_size: 20, child_font_size: 14, child_icon_size: 18 })
     expect(normalized.card_background_color).toBe('#123456')
     expect(normalized.card_background_opacity).toBe(0.4)
     expect(normalized.content_layout.max_width).toBe(40)

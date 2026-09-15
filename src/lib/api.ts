@@ -3,6 +3,8 @@ import {
   type AdminData,
   type BatchDeleteBookmarksResp,
   type BatchDeleteCategoriesResp,
+  type BookmarkBatchMoveReq,
+  type BookmarkBatchMoveResp,
   type BookmarkReorganizeReq,
   type ApiResponse,
   type Bookmark,
@@ -13,6 +15,7 @@ import {
   type ChangePasswordReq,
   type DataVersionResp,
   type FaviconResp,
+  type IconAccessResp,
   type IconifySearchResp,
   type ImportReq,
   type ImportResp,
@@ -20,6 +23,7 @@ import {
   type InstallStatusResp,
   type LoginReq,
   type LoginResp,
+  type LogoutResp,
   type PublicData,
   type Settings,
   type SettingsUpdateReq,
@@ -351,7 +355,8 @@ export const adminApi = {
 export const authApi = {
   login: (payload: LoginReq) => jsonRequest<LoginResp>('/login', 'POST', payload),
   changePassword: (payload: ChangePasswordReq) => jsonRequest<null>('/password', 'POST', payload, true),
-  logout: () => jsonRequest<null>('/logout', 'POST', undefined, true),
+  logout: () => jsonRequest<LogoutResp>('/logout', 'POST', undefined, true),
+  iconAccess: () => request<IconAccessResp>('/icon-access', { auth: true, cache: 'no-store' }),
 }
 
 export const categoriesApi = {
@@ -370,6 +375,7 @@ export const bookmarksApi = {
     jsonRequest<{ icon_blob: string | null }>(`/bookmarks/${id}/icon-cache/refresh`, 'POST', undefined, true),
   remove: (id: number) => request<null>(`/bookmarks/${id}`, { method: 'DELETE', auth: true }),
   batchDelete: (ids: number[]) => jsonRequest<BatchDeleteBookmarksResp>('/bookmarks/batch-delete', 'POST', { ids }, true),
+  batchMove: (payload: BookmarkBatchMoveReq) => jsonRequest<BookmarkBatchMoveResp>('/bookmarks/batch-move', 'POST', payload, true),
   sort: (ids: SortReq['ids']) => jsonRequest<null>('/bookmarks/sort', 'POST', { ids }, true),
   reorganize: (category_orders: BookmarkReorganizeReq['category_orders']) =>
     jsonRequest<null>('/bookmarks/reorganize', 'POST', { category_orders }, true),

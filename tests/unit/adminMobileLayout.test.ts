@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
+// 只保留必须靠源码文本才能锁住的**纯 CSS 布局**约定（grid 模板、padding、position、
+// safe-area-inset）——它们要 computed style 才能真正证明，属 PROB-18c 的范围。
+//
+// 「移动端截断标题/URL 但保留完整值」两组已迁到 adminMobileTruncation.test.ts，在真实
+// DOM 上断言 title / aria-label / href（PROB-18b 第 2 个文件）。
 describe('admin mobile layout contracts', () => {
   it('keeps the page header actions in normal document flow', () => {
     const header = readFileSync('src/components/admin/AdminPageHeader.svelte', 'utf8')
@@ -27,30 +32,6 @@ describe('admin mobile layout contracts', () => {
 
     expect(mobileStyles).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))')
     expect(mobileStyles).toContain('min-width: 0')
-  })
-
-  it('provides compact bookmark metadata and preserves full values accessibly', () => {
-    const bookmarks = readFileSync('src/components/admin/BookmarkListPanel.svelte', 'utf8')
-
-    expect(bookmarks).toContain('import { truncateUnicodeText }')
-    expect(bookmarks).toContain('truncateUnicodeText(bookmark.title, 12)')
-    expect(bookmarks).toContain('class="admin-bookmark-meta"')
-    expect(bookmarks).toContain('class="admin-bookmark-mobile-url"')
-    expect(bookmarks).toContain('title={bookmark.title}')
-    expect(bookmarks).toContain('title={bookmark.url}')
-    expect(bookmarks).toContain('min-width: 0')
-    expect(bookmarks).toContain('width: 144px !important')
-    expect(bookmarks).toContain('.admin-bookmark-table .col-open_method')
-  })
-
-  it('bounds zero-visit title and URL display without changing link targets', () => {
-    const analytics = readFileSync('src/components/admin/AnalyticsPanel.svelte', 'utf8')
-
-    expect(analytics).toContain('truncateUnicodeText(bookmark.title, 20)')
-    expect(analytics).toContain('truncateUnicodeText(bookmark.url, 20)')
-    expect(analytics).toContain('href={bookmark.url}')
-    expect(analytics).toContain('title={bookmark.url}')
-    expect(analytics).toContain('overflow: hidden')
   })
 
   it('removes the settings helper description and grids mobile import controls', () => {

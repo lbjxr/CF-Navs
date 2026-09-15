@@ -73,6 +73,8 @@ const settings: Settings = {
   public_mode: true,
   theme: 'auto',
   background_preset_id: 'custom',
+  custom_accent_color: '#112233',
+  custom_dark_accent_color: '#ddeeff',
   background: { type: 'color', value: '#0f172a', blur: 0, mask: 0.3, maskColor: '#000000' },
   backgrounds: {
     light: { type: 'image', value: 'https://example.com/bg.png', blur: 8, mask: 0.25, maskColor: '#ffffff' },
@@ -88,7 +90,9 @@ const settings: Settings = {
   card_size: { width: 80, height: 60 },
   card_style: 'info',
   card_icon_size: 60,
+  category_display: { root_font_size: 16, root_icon_size: 20, child_font_size: 14, child_icon_size: 18 },
   card_show_description: true,
+  card_description_mode: 'always',
   card_background_color: '#123456',
   card_background_opacity: 0.75,
   card_icon_show_title: true,
@@ -96,7 +100,7 @@ const settings: Settings = {
   search_box_show: true,
   search_engine_selector_show: true,
   content_layout: { max_width: 1200, max_width_unit: 'px', margin_x: 0, margin_top: 0, margin_bottom: 0 },
-  navigation: { position: 'top', always_expanded: true },
+  navigation: { position: 'top', always_expanded: true, top_layout: 'scroll' },
   footer_html: '<p>Footer</p>',
   most_visited_count: 8,
   site_title_show: true,
@@ -169,6 +173,7 @@ describe('app data adapters', () => {
 
   it('builds home background CSS variables from themed settings', () => {
     const cssVars = buildHomeBackground(toPublicSettings(settings), 'light')
+    expect(cssVars).toContain('--theme-accent-color: #112233;')
 
     expect(cssVars).toContain('--home-background: url("https://example.com/bg.png") center / cover no-repeat;')
     expect(cssVars).toContain('--home-background-blur: 8px;')
@@ -213,6 +218,18 @@ describe('app data adapters', () => {
     expect(customizedCssVars).toContain('--card-title-color: #112233;')
     expect(customizedCssVars).toContain('--card-description-color: #112233;')
   })
+  it('ignores custom accents while a built-in preset is active', () => {
+    const presetSettings = toPublicSettings({
+      ...settings,
+      background_preset_id: 'paper-indigo',
+      custom_accent_color: '#123456',
+      custom_dark_accent_color: '#abcdef',
+    })
+
+    const cssVars = buildHomeBackground(presetSettings, 'light')
+    expect(cssVars).toContain('--theme-accent-color: #5f769b;')
+    expect(cssVars).not.toContain('#123456')
+  })
 
   it('returns the editable settings form subset', () => {
     expect(toSettingsForm(settings)).toEqual({
@@ -222,6 +239,8 @@ describe('app data adapters', () => {
       public_mode: settings.public_mode,
       theme: settings.theme,
       background_preset_id: settings.background_preset_id,
+      custom_accent_color: settings.custom_accent_color,
+      custom_dark_accent_color: settings.custom_dark_accent_color,
       custom_css: settings.custom_css,
       custom_js: settings.custom_js,
       image_host_url: settings.image_host_url,
@@ -231,6 +250,7 @@ describe('app data adapters', () => {
       card_size: settings.card_size,
       card_style: settings.card_style,
       card_icon_size: settings.card_icon_size,
+      category_display: settings.category_display,
       card_description_mode: settings.card_description_mode,
       card_show_description: settings.card_show_description,
       card_background_color: settings.card_background_color,

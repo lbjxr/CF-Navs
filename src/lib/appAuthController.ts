@@ -1,3 +1,4 @@
+import type { LogoutResp, LogoutRevocationFailure } from '../../shared/types'
 import { createHomeGateState, type AppView } from './appNavigation'
 
 export interface AuthUIRegion {
@@ -46,6 +47,26 @@ export function targetAfterLogout(publicMode: boolean | undefined): AuthUIRegion
     authenticated: false,
   })
   return { loginModalOpen: homeGate.loginModalOpen, currentView: homeGate.view }
+}
+
+const LOGOUT_REVOCATION_CAUSE: Record<LogoutRevocationFailure, string> = {
+  store_unavailable: '会话存储暂时不可用',
+  store_unconfigured: '部署缺少 SESSION 绑定',
+}
+
+/**
+ * Warning to surface when logout cleared the local session but the server could
+ * not revoke the token. Returns null when nothing needs saying.
+ *
+ * 会话是无状态 JWT：撤销名单没写进去，旧 token 就一直有效到 exp（部署默认 30 天）。
+ * 本地登录态照常清除，所以这不是失败，但共享设备上必须让用户知道。
+ */
+export function logoutRevocationWarning(result: LogoutResp | null): string | null {
+  if (!result || result.revoked) return null
+
+  // reason 来自网络响应，可能是本客户端还不认识的取值，因此不硬取索引。
+  const cause: string | undefined = LOGOUT_REVOCATION_CAUSE[result.reason]
+  return `已退出登录，但服务端未能作废旧的登录令牌${cause ? `（${cause}）` : ''}。这台设备上的登录态已清除；如果担心令牌被别人复用，请修改密码——改密码会立即作废全部会话。`
 }
 
 /**

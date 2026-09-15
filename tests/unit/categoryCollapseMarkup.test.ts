@@ -1,13 +1,22 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
+// PROB-18b：折叠行为的两组断言已迁到 categoryCollapseBehavior.test.ts（后台分类面板 +
+// 左侧导航）与 categoryTreeSelect.test.ts（分类选择器），在真实 DOM 上验证默认收起、
+// 点箭头独立展开、搜索自动展开、换关键词重置、当前子分类自动揭示父级。
+//
+// 这里留下的是**跨组件接线巡检**：Home 是否把某个 prop 传给了 CategorySection、
+// sortableList 的 filter 选项是否设了、卡片网格的 CSS 变量与断点是否还在。它们的价值是
+// 「防止重构时静默断链」，不是证明行为；用组件测试重写需要挂载整个首页且断言不会更强。
 describe('category hierarchy visibility markup', () => {
   it('shows every root group with direct bookmarks and per-group child tabs', () => {
     const section = readFileSync('src/components/CategorySection.svelte', 'utf8')
     const card = readFileSync('src/components/BookmarkCard.svelte', 'utf8')
+    const contextMenu = readFileSync('src/components/BookmarkContextMenu.svelte', 'utf8')
+    const treeSelect = readFileSync('src/components/CategoryTreeSelect.svelte', 'utf8')
+    const sortable = readFileSync('src/lib/sortableList.ts', 'utf8')
     const home = readFileSync('src/views/Home.svelte', 'utf8')
     const scope = readFileSync('src/components/HomeCategoryScope.svelte', 'utf8')
-
     expect(section).not.toContain('export let expanded')
     expect(section).not.toContain('section-expand-button')
     expect(section).toContain('class:has-display-title={Boolean(displayTitle)}')
@@ -19,13 +28,18 @@ describe('category hierarchy visibility markup', () => {
     expect(section).toContain('role="group"')
     expect(section).toContain('{#if bookmarks.length > 0 || activeSortMode}')
     expect(section).toContain('class:is-info-grid={cardStyle === \'info\'}')
-    expect(section).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))')
-    expect(card).toContain('--card-configured-min-width: ${Math.max(0, width)}px')
+    expect(section).toContain('getInfoCardTrackWidth(cardWidth)')
+    expect(section).toContain('getInfoCardMobileTrackWidth(cardWidth)')
+    expect(section).toContain('min(var(--mobile-card-min-width, 150px), 100%)')
+    expect(section).not.toContain('grid-template-columns: repeat(2, minmax(0, 1fr))')
+    expect(card).toContain('safeInfoCardWidth = getInfoCardTrackWidth(width)')
+    expect(card).toContain('--card-configured-min-width: ${safeInfoCardWidth}px')
     expect(card).toContain('min-width: var(--card-configured-min-width, 200px)')
+    expect(card).toContain('.bookmark-card-shell.is-info {\n    width: 100%;')
     expect(card).toContain('.bookmark-card-shell.is-info {\n      min-width: 0;')
     expect(home).not.toContain('expandedCategoryIds')
     expect(home).toContain('<HomeCategoryScope')
-    expect(home).toContain('$: categoryGroups = getHomeCategoryGroups(categoryForest, selectedCategoryIds)')
+    expect(home).toContain('$: categoryGroups = getHomeCategoryGroups(categoryForest, selectedCategoryIds, allCategoryBookmarks)')
     expect(home).toContain('{#each categoryGroups as group (group.root.id)}')
     expect(home).toContain('{@const selectedCategory = group.selected}')
     expect(home).toContain('bookmarks={selectedBookmarks}')
@@ -33,6 +47,7 @@ describe('category hierarchy visibility markup', () => {
     expect(home).toContain('inlineActions={true}')
     expect(home).toContain('class:has-inline-actions={isAuthenticated}')
     expect(home).toContain('reserveActions={isAuthenticated}')
+    expect(home).toContain('onCreateSubcategory={isAuthenticated && onOpenCreateCategory ? () => onOpenCreateCategory?.(category.id) : undefined}')
     expect(home).toContain('children={category.children.map((child) => ({')
     expect(scope).toContain('scope-title-row')
     expect(scope).toContain('class="scope-tabs"')
@@ -43,30 +58,29 @@ describe('category hierarchy visibility markup', () => {
     expect(scope).toContain('（{totalCount}）')
     expect(scope).not.toContain('个站点')
     expect(scope).toContain('title={title}')
-    expect(scope).toContain('$: rootActive = activeId == null || String(activeId) === String(rootId)')
-    expect(scope).toContain('aria-selected={rootActive}')
-    expect(scope).toContain('<span>本分类</span>')
     expect(scope).toContain('<CategoryIcon')
-  })
-
-  it('collapses selector and admin child categories behind independent arrows', () => {
-    const treeSelect = readFileSync('src/components/CategoryTreeSelect.svelte', 'utf8')
-    const adminCategories = readFileSync('src/components/admin/CategoryListPanel.svelte', 'utf8')
-
-    expect(treeSelect).toContain('expandedRootIds = getCategoryTreeExpandedRootIds(items, value)')
-    expect(treeSelect).toContain('item.children.length > 0 && expandedRootIds.has(String(item.id))')
-    expect(treeSelect).toContain('toggleRootExpansion(item.id, event)')
-    expect(adminCategories).toContain('let expandedRootIds = new Set<string>()')
-    expect(adminCategories).toContain('{#if displayedExpandedRootIds.has(rootId)}')
-    expect(adminCategories).toContain('data-testid={`admin-category-expand-${rootId}`}')
-  })
-
-  it('keeps navigation collapsed by default and reveals the active child path', () => {
-    const sidebar = readFileSync('src/components/Sidebar.svelte', 'utf8')
-
-    expect(sidebar).toContain('let expandedParentIds = new Set<string>()')
-    expect(sidebar).toContain('activeParentId != null')
-    expect(sidebar).toContain('expandedParentIds = new Set([...expandedParentIds, revealedActiveParentId])')
-    expect(sidebar).toContain('on:click={() => toggleParent(item)}')
+    expect(scope).toContain('on:wheel={handleTabWheel}')
+    expect(scope).toContain('class="scope-action-icon"')
+    expect(card).toContain('canMove={sortMode}')
+    expect(card).toContain('{#if sortMode && onMoveBookmark}')
+    expect(card).toContain('on:touchstart={handleTouchStart}')
+    expect(card).toContain('function handleTouchStart(event: TouchEvent)')
+    expect(card).toContain('withinTouchGuard')
+    expect(card).toContain('onEdit={sortMode ? undefined : handleEditClick}')
+    expect(card).toContain('class:context-menu-open={contextMenuOpen}')
+    expect(card).toContain('on:pointerdown|stopPropagation')
+    expect(contextMenu).toContain('left: 8px;')
+    expect(contextMenu).toContain('right: 8px;')
+    expect(contextMenu).toContain('on:pointerdown|stopPropagation')
+    expect(contextMenu).toContain('on:touchstart|stopPropagation')
+    expect(contextMenu).toContain('on:touchmove|stopPropagation')
+    expect(treeSelect).toContain('overscroll-behavior: contain;')
+    expect(treeSelect).toContain('touch-action: pan-y;')
+    expect(sortable).toContain('filter?: string')
+    expect(sortable).toContain('preventOnFilter?: boolean')
+    expect(sortable).toContain('filter: options.filter')
+    expect(sortable).toContain('preventOnFilter: options.preventOnFilter ?? true')
+    expect(section).toContain("filter: '.bookmark-context-menu, .category-tree-menu, .bookmark-mobile-menu-trigger'")
+    expect(section).toContain('preventOnFilter: false')
   })
 })

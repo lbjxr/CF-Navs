@@ -4,6 +4,7 @@ import type {
   Bookmark,
   Category,
   LoginResp,
+  LogoutResp,
   PublicData,
   Settings,
   SiteConfig,
@@ -16,6 +17,7 @@ import {
   isUnauthorizedError,
   setStoredAuthSession,
 } from './api'
+import { clearIconAccessKey } from './iconAccessKey'
 
 export interface LoadableState<T> {
   data: T
@@ -132,6 +134,8 @@ function createAuthStore() {
       setStoredAuthSession(session)
     } else {
       clearStoredAuthSession()
+      // 图标授权 key 跟着会话走：登出或 401 后不能继续把过期 key 挂在 URL 上。
+      clearIconAccessKey()
     }
 
     set({
@@ -168,12 +172,16 @@ function createAuthStore() {
     }
   }
 
-  async function logout(): Promise<void> {
+  // 返回服务端的撤销结果，让调用方能区分「token 真的作废了」和「只清了本地登录态」。
+  // 没有本地会话可退、或请求本身失败时返回 null——此时无从判断服务端状态。
+  async function logout(): Promise<LogoutResp | null> {
     update((state) => ({ ...state, loading: true, error: null }))
+
+    let result: LogoutResp | null = null
 
     try {
       if (getStoredAuthSession()) {
-        await authApi.logout()
+        result = await authApi.logout()
       }
     } catch (error) {
       if (!isUnauthorizedError(error)) {
@@ -183,6 +191,7 @@ function createAuthStore() {
     }
 
     applySession(null)
+    return result
   }
 
   return {

@@ -3,10 +3,14 @@
 // - App shell and hashed assets: cache first.
 // - Navigations: stale-while-revalidate — serve the cached shell immediately, refresh in the background.
 // - /api/category-icon/*: cache first because category icons are low volume.
+// - Any icon response marked `no-store` (private objects fetched with a signed access key)
+//   is never written to Cache Storage — Cache Storage does not honour Cache-Control on its own.
 // - /api/icon/* and /api/iconify/*: do not write to Cache Storage; rely on HTTP and edge caching.
 // - Other /api/* requests: network only.
 
-const CACHE = 'cf-navs-v15'
+// Vite replaces this marker with a fingerprint of the built shell, SW, and chunks.
+// The source fallback keeps the unbuilt public file usable during local development.
+const CACHE = 'cf-navs-v16'
 const RUNTIME_CACHE_PREFIX = 'cf-navs-v'
 const APP_SHELL = ['/index.html', '/manifest.webmanifest', '/icon.ico', '/icon.png']
 const ICON_FALLBACK_TTL_MS = 5 * 60 * 1000
@@ -14,8 +18,48 @@ const ICON_FALLBACK_CACHED_AT = 'X-CF-Navs-Fallback-Cached-At'
 const MAX_ICON_CACHE_BYTES = 512 * 1024
 const SHELL_URL = '/index.html'
 
+function isBuildAsset(request) {
+  const pathname = new URL(
+    typeof request === 'string' ? request : request.url,
+    self.location.origin,
+  ).pathname
+  return pathname === '/assets' || pathname.startsWith('/assets/')
+}
+
+function isHtmlResponse(response) {
+  const contentType = response.headers.get('content-type') || ''
+  return contentType.toLowerCase().includes('text/html')
+}
+
+function isCacheableResponse(request, response) {
+  if (!response.ok) return false
+  if (!isBuildAsset(request)) return true
+  return !isHtmlResponse(response)
+}
+
+function assetNotFoundResponse() {
+  return new Response(null, {
+    status: 404,
+    statusText: 'Not Found',
+    headers: {
+      'Cache-Control': 'no-store',
+      'Content-Type': 'text/plain; charset=utf-8',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  })
+}
+
+function normalizeBuildAssetResponse(request, response) {
+  if (!isBuildAsset(request) || !isHtmlResponse(response)) return response
+  return assetNotFoundResponse()
+}
+
+function matchCurrentCache(request) {
+  return caches.open(CACHE).then((cache) => cache.match(request))
+}
+
 function cacheResponse(request, response) {
-  if (!response.ok) return
+  if (!isCacheableResponse(request, response)) return
 
   const copy = response.clone()
   caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => undefined)
@@ -36,7 +80,7 @@ function fallbackResponseForCache(response) {
 }
 
 async function matchCachedIcon(request) {
-  const cached = await caches.match(request)
+  const cached = await matchCurrentCache(request)
   if (!cached) return null
 
   if (!isIconFallback(cached)) {
@@ -55,6 +99,10 @@ async function matchCachedIcon(request) {
 function cacheIconResponse(request, response) {
   if (!response.ok) return
   if (response.type === 'opaque') return
+  // 私密对象的图标带签名授权，服务端标记 `private, no-store`。Cache Storage 不会自己
+  // 遵守 Cache-Control，写进去就等于把私密图标留在这台机器上、并让下一个访客（同一
+  // 浏览器 profile 下的访客态）cache-first 命中它。必须显式拒收。
+  if ((response.headers.get('Cache-Control') || '').includes('no-store')) return
 
   const contentLength = Number(response.headers.get('Content-Length') || '0')
   if (contentLength > MAX_ICON_CACHE_BYTES) return
@@ -94,6 +142,22 @@ self.addEventListener('activate', (event) => {
 // 一个构建产物都没有，`/assets/*` 的 cache-first 要到第三次访问才真正生效。
 //
 // 让页面把自己实际用到的资源清单发过来，不需要构建插件，也不会因为 hash 变化失效。
+async function precacheAsset(cache, url) {
+  const request = new Request(new URL(url, self.location.origin))
+  const cached = await cache.match(request)
+  if (cached) {
+    if (isCacheableResponse(request, cached)) return
+    await cache.delete(request)
+  }
+
+  try {
+    const response = normalizeBuildAssetResponse(request, await fetch(request))
+    if (isCacheableResponse(request, response)) await cache.put(request, response)
+  } catch {
+    // 预缓存是 best-effort；失败不应影响页面或其余资源。
+  }
+}
+
 self.addEventListener('message', (event) => {
   const data = event.data
   if (!data || data.type !== 'precache-assets' || !Array.isArray(data.urls)) return
@@ -113,12 +177,9 @@ self.addEventListener('message', (event) => {
   if (urls.length === 0) return
 
   event.waitUntil(
-    caches.open(CACHE).then(async (cache) => {
-      // 逐个写入而不是 addAll：任何一个失败都不该让整批预热落空。
-      await Promise.all(urls.map((url) => cache.match(url).then((hit) => (
-        hit ? undefined : cache.add(url).catch(() => undefined)
-      ))))
-    }).catch(() => undefined),
+    caches.open(CACHE)
+      .then((cache) => Promise.all(urls.map((url) => precacheAsset(cache, url))))
+      .catch(() => undefined),
   )
 })
 
@@ -134,7 +195,7 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('.svg')
   if (isIconifyAsset) {
     event.respondWith(
-      caches.match(request).then(
+      matchCurrentCache(request).then(
         (cached) =>
           cached ||
           fetch(request).then((response) => {
@@ -165,17 +226,33 @@ self.addEventListener('fetch', (event) => {
 
   if (url.pathname.startsWith('/api/')) return
 
+  const isStatic = isBuildAsset(request) || APP_SHELL.includes(url.pathname)
+  if (isStatic) {
+    event.respondWith(
+      matchCachedStatic(request).then(
+        (cached) =>
+          cached ||
+          fetch(request).then((response) => {
+            const safeResponse = normalizeBuildAssetResponse(request, response)
+            cacheResponse(request, safeResponse)
+            return safeResponse
+          }),
+      ),
+    )
+    return
+  }
+
   // 导航请求：stale-while-revalidate。
   //
   // 之前是 network-first，加上 HTML 的 `no-cache, must-revalidate`，等于每次打开
   // 页面都必须先等一个完整网络往返才能开始渲染，本地缓存只在离线时才用得上。
   //
-  // 代价：部署新版本后用户下一次打开看到的仍是旧版，再刷一次才更新。因为
-  // /assets/* 是 hash 文件名且同样被缓存，旧 HTML 引用的旧 JS/CSS 仍然取得到，
-  // 不会白屏。检测到新版本时会通知页面，由页面决定怎么提示。
+  // 代价：部署新版本后用户下一次打开看到的仍是旧版，再刷一次才更新。
+  // 发布会替换 dist 并移除旧 hash 资源，因此 CACHE 版本必须随构建产物递增，
+  // 否则旧 HTML 会引用已经不存在的 chunk。检测到新版本时会通知页面，由页面决定怎么提示。
   if (request.mode === 'navigate') {
     event.respondWith(
-      caches.match(SHELL_URL).then((cached) => {
+      matchCurrentCache(SHELL_URL).then((cached) => {
         const network = fetch(request)
           .then(async (response) => {
             if (response.ok && response.headers.get('content-type')?.includes('text/html')) {
@@ -194,23 +271,17 @@ self.addEventListener('fetch', (event) => {
         return cached
       }),
     )
-    return
-  }
-
-  const isStatic = url.pathname.startsWith('/assets/') || APP_SHELL.includes(url.pathname)
-  if (isStatic) {
-    event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((response) => {
-            cacheResponse(request, response)
-            return response
-          }),
-      ),
-    )
   }
 })
+
+async function matchCachedStatic(request) {
+  const cached = await matchCurrentCache(request)
+  if (!cached) return null
+  if (isCacheableResponse(request, cached)) return cached
+
+  await caches.open(CACHE).then((cache) => cache.delete(request)).catch(() => undefined)
+  return null
+}
 
 async function shellChanged(cached, response) {
   try {

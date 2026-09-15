@@ -36,6 +36,7 @@ import {
 import { clearCachedPublicData, readCachedPublicDataEntry, writeCachedPublicData } from './publicDataCache'
 import { isPublicModeForbidden, siteConfigFromForbiddenError } from './publicMode'
 import { createBookmarkIconCacheKey, writeBookmarkIconDataUri } from './localBookmarkIconCache'
+import { ensureIconAccessKey } from './iconAccessKey'
 import { adminStore, authStore, configStore, publicStore } from './stores'
 
 type DataServiceHooks = {
@@ -377,6 +378,8 @@ export async function persistCurrentAdminData(): Promise<void> {
 }
 
 export async function refreshLoggedInData(forceRemote = false): Promise<void> {
+  // 后台预览私密对象图标需要短期授权 key。失败只降级成兜底图标，不影响数据刷新。
+  void ensureIconAccessKey(() => api.auth.iconAccess())
   const cached = !forceRemote ? await readCachedAdminDataEntry() : null
 
   if (cached?.data.settings) {

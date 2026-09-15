@@ -70,7 +70,9 @@ describe('settings length limits', () => {
     expect(Object.keys(SETTINGS_MAX_LENGTHS).sort()).toEqual([
       'card_background_color',
       'card_text_color',
+      'custom_accent_color',
       'custom_css',
+      'custom_dark_accent_color',
       'custom_js',
       'footer_html',
       'image_host_url',

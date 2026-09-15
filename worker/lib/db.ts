@@ -26,13 +26,19 @@ export {
   batchDeleteBookmarks,
   sortBookmarks,
   reorganizeBookmarks,
+  batchMoveBookmarks,
   BookmarkReorganizeError,
   setIconBlob,
   incrementBookmarkClick,
   type BookmarkIconData,
 } from './db/bookmarks'
 
-export { getPublicDataSource, getAdminData } from './db/aggregates'
+export {
+  getPublicDataSource,
+  getAdminData,
+  getPublicCategoryIds,
+  isBookmarkIconAnonymouslyVisible,
+} from './db/aggregates'
 
 export {
   getSettings,

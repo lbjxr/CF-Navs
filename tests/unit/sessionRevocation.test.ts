@@ -159,20 +159,55 @@ describe('POST /api/logout', () => {
     expect(await validateSession(env, session.token)).toBeNull()
   })
 
-  it('still succeeds when the session store is unavailable', async () => {
-    // KV 挂了不该让用户卡在登录态里退不出去：前端仍会清本地登录态，
-    // token 只是回到改动前的状态。
+  it('reports the revocation as done when the tombstone lands', async () => {
     const env = createEnv()
     const session = await createSession(env, 'admin')
+
+    const body = await (await logout(env, session.token)).json()
+    expect(body).toEqual({ code: 0, msg: 'ok', data: { revoked: true } })
+  })
+
+  it('still succeeds but reports the failure when the session store is unavailable', async () => {
+    // KV 挂了不该让用户卡在登录态里退不出去：前端仍会清本地登录态，
+    // token 只是回到改动前的状态。但接口不能谎称撤销成功——共享设备上的用户
+    // 会以为已经退出，而 token 还能用到 exp。
+    const env = createEnv()
+    const session = await createSession(env, 'admin')
+    // 假实现必须提供 get/put/delete 三个方法：真实 KVNamespace 一定有它们，少写一个
+    // 就会被绑定判定当成「缺绑定」，测出的是 store_unconfigured 而不是这条要测的写失败。
     const broken = {
       ...env,
       SESSION: {
         async get() { return null },
         async put() { throw new Error('kv down') },
+        async delete() {},
       },
     } as unknown as Env
 
-    expect((await logout(broken, session.token)).status).toBe(200)
+    const response = await logout(broken, session.token)
+    expect(response.status).toBe(200)
+    expect((await response.json() as { data: unknown }).data).toEqual({
+      revoked: false,
+      reason: 'store_unavailable',
+    })
+  })
+
+  it('reports the missing binding when the deployment has no session store', async () => {
+    // 撤销被整体跳过，和「写失败」的后果一样但原因不同，前端要能分辨。
+    //
+    // PROB-31 之后这条路径只在一个窄窗口里可达：createSession 会把 token 写进 isolate
+    // 内存缓存，validateSession 命中缓存时提前返回、不复查绑定，所以「验过 → 绑定被移除
+    // → 15 秒内 logout」能走到这里。缓存过期后 authRequired 会直接 401。
+    const env = createEnv()
+    const session = await createSession(env, 'admin')
+    const unbound = { DB: env.DB } as unknown as Env
+
+    const response = await logout(unbound, session.token)
+    expect(response.status).toBe(200)
+    expect((await response.json() as { data: unknown }).data).toEqual({
+      revoked: false,
+      reason: 'store_unconfigured',
+    })
   })
 
   it('rejects a logout without a valid token', async () => {

@@ -13,7 +13,7 @@ CF-Navs 支持多种图标来源：
 - 自定义文字或表情
 - 基于完整书签标题生成的本地 SVG 文字图标，长标题按字符宽度自动换行到最多 4 行
 
-新增或编辑书签时，普通 HTTP(S) 图标会通过刷新接口写入书签图标缓存。刷新接口使用短超时抓取外站图标，避免保存流程被慢速 favicon 服务长时间阻塞；抓取失败时保留已有 `icon_blob`，没有缓存则返回 `null`。首页普通渲染优先使用聚合接口返回的 `icon_blob`，只有聚合数据没有可用图标时才读取浏览器本地图标缓存；两者都缺失时再回退到已保存的普通 HTTP(S) 图标 URL，避免可直连的 favicon 保存后变成文字图标。后台列表仍可使用同源图标代理作为管理预览入口。
+新增或编辑书签时，普通 HTTP(S) 图标会通过刷新接口写入书签图标缓存。刷新接口使用短超时抓取外站图标，避免保存流程被慢速 favicon 服务长时间阻塞；抓取失败时保留已有 `icon_blob`，没有缓存则返回 `null`。**聚合接口不返回二进制 `icon_blob`，而返回 `icon_cached` 轻量标志**；首页普通渲染据此配合浏览器本地图标缓存和已保存的普通 HTTP(S) 图标 URL，必要时使用兼容代理获取图标。后台列表或显式刷新结果可以使用完整实体中的 `icon_blob`。
 
 相关接口：
 
@@ -22,7 +22,7 @@ CF-Navs 支持多种图标来源：
 - `GET /api/category-icon/:id`
 - `GET /api/iconify/:set/:name.svg`
 
-`/api/icon/:id` 主要保留为后台预览、兼容和兜底代理。它会优先读取 Cloudflare edge cache 和 D1 中的 `icon_blob`，cache miss 时再尝试抓取外站图标。首页普通书签卡片不会把 `/api/icon/:id` 按书签数量挂到 `<img>` 上；它优先使用聚合 `icon_blob`，再读本地图标缓存，缺失时直接回退已保存的 HTTP(S) 图标 URL，原始 URL 也加载失败后才显示文字 fallback。分类图标和 Iconify 图标失败时会返回短 TTL 的临时 SVG fallback。
+`/api/icon/:id` 主要保留为后台预览、兼容和兜底代理。它会优先读取 Cloudflare edge cache 和 D1 中的 `icon_blob`，cache miss 时再尝试抓取外站图标。首页普通书签卡片不会把 `/api/icon/:id` 按书签数量挂到 `<img>` 上；它根据聚合数据的 `icon_cached` 标志选择本地缓存、已保存的 HTTP(S) 图标 URL 或兼容路径，原始 URL 也加载失败后才显示文字 fallback。分类图标和 Iconify 图标失败时会返回短 TTL 的临时 SVG fallback。
 
 图标相关 worker 逻辑按职责拆分：
 
@@ -159,9 +159,9 @@ Worker 和前端共同承担缓存：
 - `/assets/*` 构建产物设置一年 immutable 缓存。
 - HTML 和 `sw.js` 使用 no-cache 重验证。
 - Service Worker 预缓存 `/index.html` 作为离线导航回退。
-- Service Worker 对同源图标代理和构建资源采用 cache-first 策略；跨域 Iconify SVG 只在响应可读且不超过 512KB 时写入 Cache Storage，不缓存 `opaque` 响应。
+Service Worker 对构建资源采用 cache-first；分类图标和可读且不超过 512KB 的跨域 Iconify SVG 可写入 Cache Storage；同源 `/api/icon/*` 与 `/api/iconify/*` 不写入 Cache Storage，跨域 `opaque` 响应也不缓存。
 
-浏览器本地存储只保留必要副本：后台聚合数据快照会清理旧登录态对应的同源快照；后台书签列表已有 `icon_blob` 时直接展示并删除同 key 的本地图标副本，不在翻页预览时把 data URI 再复制到 `cf-navs-bookmark-icons-v1`。
+浏览器本地存储只保留必要副本：后台聚合数据快照会清理旧登录态对应的同源快照；后台书签列表在**完整实体**已有 `icon_blob` 时直接展示并删除同 key 的本地图标副本，不在翻页预览时把 data URI 再复制到 `cf-navs-bookmark-icons-v1`。
 
 部署新版后，如果浏览器仍使用旧逻辑，可以强制刷新一次页面，让新版 Service Worker 接管。
 

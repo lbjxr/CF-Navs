@@ -268,6 +268,23 @@
     updateTopMenuPosition()
   }
 
+  function handleTopTrackWheel(event: WheelEvent): void {
+    if (isWrap || !topTrack) return
+
+    const track = topTrack
+    if (track.scrollWidth <= track.clientWidth) return
+
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+    if (delta === 0) return
+
+    const maxScrollLeft = track.scrollWidth - track.clientWidth
+    const nextScrollLeft = Math.min(maxScrollLeft, Math.max(0, track.scrollLeft + delta))
+    if (nextScrollLeft === track.scrollLeft) return
+
+    event.preventDefault()
+    track.scrollLeft = nextScrollLeft
+  }
+
   function handleDocumentPointerDown(event: PointerEvent): void {
     if (openTopMenuId && navigationRoot && !navigationRoot.contains(event.target as Node)) {
       closeTopMenu()
@@ -440,6 +457,7 @@
       class:dragging
       bind:this={topTrack}
       on:scroll={handleTopTrackScroll}
+      on:wheel={handleTopTrackWheel}
       on:pointerdown={handlePointerDown}
       on:pointermove={handlePointerMove}
       on:pointerup={finishPointerDrag}
@@ -456,7 +474,7 @@
             on:click={() => handleItemClick(item.id)}
           >
             {#if item.icon}
-              <CategoryIcon category={getCategoryIconValue(item)} size={22} className="top-category-icon" />
+              <CategoryIcon category={getCategoryIconValue(item)} size="var(--category-root-icon-size, 22px)" className="top-category-icon" />
             {/if}
             <span>{item.title}</span>
             {#if item.count != null}<small>{item.count}</small>{/if}
@@ -510,7 +528,7 @@
             >
               <span class="top-submenu-title">
                 {#if child.icon}
-                  <CategoryIcon category={getCategoryIconValue(child)} size={22} className="top-submenu-icon" />
+                  <CategoryIcon category={getCategoryIconValue(child)} size="var(--category-child-icon-size, 22px)" className="top-submenu-icon" />
                 {/if}
                 <span>{child.title}</span>
               </span>
@@ -578,7 +596,7 @@
             >
               {#if item.icon}
                 <span class="toc-icon-slot">
-                  <CategoryIcon category={getCategoryIconValue(item)} size={26} className="toc-category-icon" />
+                  <CategoryIcon category={getCategoryIconValue(item)} size="var(--category-root-icon-size, 26px)" className="toc-category-icon" />
                 </span>
               {:else}
                 <span class="toc-slip"></span>
@@ -611,7 +629,7 @@
                 >
                   <span class="toc-child-title">
                     {#if child.icon}
-                      <CategoryIcon category={getCategoryIconValue(child)} size={21} className="toc-child-icon" />
+                      <CategoryIcon category={getCategoryIconValue(child)} size="var(--category-child-icon-size, 21px)" className="toc-child-icon" />
                     {/if}
                     <span>{child.title}</span>
                   </span>
@@ -639,7 +657,7 @@
     --toc-text: var(--home-text-color, #0f172a);
     --toc-accent: var(--home-accent-color, #2563eb);
     --toc-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
-    --toc-slip: rgba(15, 23, 42, 0.72);
+    --toc-slip: rgba(248, 250, 252, 0.9);
   }
 
   :global([data-theme='dark']) .toc-mobile-btn,
@@ -769,7 +787,7 @@
     background: transparent;
     color: var(--toc-text);
     font: inherit;
-    font-size: 14px;
+    font-size: var(--category-root-font-size, 14px);
     white-space: nowrap;
     cursor: pointer;
   }
@@ -793,10 +811,15 @@
 
   .top-item :global(.top-category-icon),
   .top-submenu-title :global(.top-submenu-icon) {
-    width: 22px;
-    height: 22px;
-    min-width: 22px;
+    width: var(--category-root-icon-size, 22px);
+    height: var(--category-root-icon-size, 22px);
+    min-width: var(--category-root-icon-size, 22px);
     border-radius: 6px;
+  }
+  .top-submenu-title :global(.top-submenu-icon) {
+    width: var(--category-child-icon-size, 22px);
+    height: var(--category-child-icon-size, 22px);
+    min-width: var(--category-child-icon-size, 22px);
   }
 
   .top-submenu-toggle {
@@ -847,7 +870,7 @@
     padding: 0 10px;
     background: transparent;
     color: var(--toc-text);
-    text-align: left;
+    font-size: var(--category-child-font-size, 14px);
     cursor: pointer;
   }
 
@@ -1088,6 +1111,7 @@
     padding: 0 8px;
     background: transparent;
     color: var(--toc-text);
+    font-size: var(--category-child-font-size, 14px);
     text-align: left;
     cursor: pointer;
   }
@@ -1116,9 +1140,9 @@
   }
 
   .toc-child-title :global(.toc-child-icon) {
-    width: 21px;
-    height: 21px;
-    min-width: 21px;
+    width: var(--category-child-icon-size, 21px);
+    height: var(--category-child-icon-size, 21px);
+    min-width: var(--category-child-icon-size, 21px);
     border-radius: 6px;
   }
 
@@ -1151,8 +1175,13 @@
     transform: scaleX(1);
   }
 
+  .toc-sidebar.expanded .toc-item:not(.active) .toc-slip {
+    background: transparent;
+  }
+
   .toc-item.active .toc-slip {
     background: var(--toc-accent);
+    transform: scaleX(1);
   }
 
   .toc-icon-slot {
@@ -1165,9 +1194,9 @@
   }
 
   .toc-icon-slot :global(.toc-category-icon) {
-    width: 26px;
-    height: 26px;
-    min-width: 26px;
+    width: var(--category-root-icon-size, 26px);
+    height: var(--category-root-icon-size, 26px);
+    min-width: var(--category-root-icon-size, 26px);
     border-radius: 7px;
     transition: border-color var(--transition-base), transform var(--transition-base);
   }
@@ -1209,7 +1238,7 @@
     }
 
     .top-track {
-      width: calc(100% - 8.5rem);
+      width: 100%;
       justify-self: start;
       box-sizing: border-box;
       gap: 4px;

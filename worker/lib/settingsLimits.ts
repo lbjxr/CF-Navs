@@ -15,6 +15,8 @@ export const SETTINGS_MAX_LENGTHS = {
   site_title_color: 64,
   card_background_color: 64,
   card_text_color: 64,
+  custom_accent_color: 64,
+  custom_dark_accent_color: 64,
   image_host_url: 2048,
   custom_css: 65_536,
   custom_js: 65_536,

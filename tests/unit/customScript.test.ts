@@ -127,6 +127,12 @@ describe('custom script injection', () => {
   })
 })
 
+// 下面这一组是**接线断言**，不迁移到组件层（PROB-18）。它守的是一个已发生过的回归形态：
+// `custom_js` 一旦被写进主题那条响应式语句，用户脚本就会跟着 `activeTheme` / 背景样式每次变化
+// 重跑一遍。要用真 DOM 证明「切主题不会重跑用户脚本」得挂载 `src/App.svelte`（约 1100 行，
+// 同时编排认证、CRUD、弹窗与备份接线）并 mock 整个 `src/lib/api`，属 PROB-24 的编排拆分前置。
+// 在那之前，「`custom_js` 在 App.svelte 里只出现一次、且不在主题块内」这个源码事实是唯一可及的证据。
+
 describe('app wiring', () => {
   const source = readFileSync('src/App.svelte', 'utf8')
 

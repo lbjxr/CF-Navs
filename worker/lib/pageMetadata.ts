@@ -2,6 +2,8 @@
 // 从 routes/favicon.ts 抽出，供图标解析和站点名称解析共用：
 // 路由只负责编排，这里只负责抓取和纯文本解析。
 
+import { decodeHtmlEntities } from '../../shared/decodeHtmlEntities'
+
 export const HTML_ACCEPT = 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1'
 export const MAX_HTML_BYTES = 131_072
 export const FETCH_TIMEOUT_MS = 3000
@@ -59,7 +61,7 @@ export async function readHtmlHeadBytes(
       if (indexOfAsciiSequence(buffer, HEAD_END, searchFrom, length) >= 0) break
     }
   } finally {
-    void reader.cancel().catch(() => {})
+    void reader.cancel().catch(() => { })
   }
 
   return buffer.subarray(0, length)
@@ -339,66 +341,6 @@ export async function fetchPageHtml(url: string): Promise<PageFetchResult | null
 
 // ========== 标题解析 ==========
 
-// 只覆盖 <title> / og 内容里实际会出现的实体，不引入完整的 WHATWG 实体表。
-const NAMED_ENTITIES: Record<string, string> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: '\u00a0',
-  ensp: '\u2002',
-  emsp: '\u2003',
-  thinsp: '\u2009',
-  hellip: '\u2026',
-  mdash: '\u2014',
-  ndash: '\u2013',
-  lsquo: '\u2018',
-  rsquo: '\u2019',
-  ldquo: '\u201c',
-  rdquo: '\u201d',
-  laquo: '\u00ab',
-  raquo: '\u00bb',
-  middot: '\u00b7',
-  bull: '\u2022',
-  copy: '\u00a9',
-  reg: '\u00ae',
-  trade: '\u2122',
-  deg: '\u00b0',
-  times: '\u00d7',
-  divide: '\u00f7',
-  euro: '\u20ac',
-  pound: '\u00a3',
-  yen: '\u00a5',
-  cent: '\u00a2',
-  sect: '\u00a7',
-  para: '\u00b6',
-}
-
-function safeFromCodePoint(code: number, fallback: string): string {
-  // 代理区码位不是合法字符，String.fromCodePoint 会返回孤立代理项而不是抛错。
-  if (!Number.isFinite(code) || code <= 0 || code > 0x10ffff) return fallback
-  if (code >= 0xd800 && code <= 0xdfff) return fallback
-
-  try {
-    return String.fromCodePoint(code)
-  } catch {
-    return fallback
-  }
-}
-
-// 单次扫描替换，避免链式 replace 造成 `&amp;lt;` 被二次解码成 `<`。
-export function decodeHtmlEntities(text: string): string {
-  return text.replace(
-    /&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([a-zA-Z][a-zA-Z0-9]{1,31}));/g,
-    (match, dec: string | undefined, hex: string | undefined, named: string | undefined) => {
-      if (dec !== undefined) return safeFromCodePoint(Number.parseInt(dec, 10), match)
-      if (hex !== undefined) return safeFromCodePoint(Number.parseInt(hex, 16), match)
-      return (named !== undefined ? NAMED_ENTITIES[named] : undefined) ?? match
-    },
-  )
-}
-
 export function normalizeTitleText(raw: string | null | undefined): string {
   if (!raw) return ''
 
@@ -476,12 +418,14 @@ export function isJunkTitle(value: string): boolean {
 // 先切到 <head>，再解析：既排除正文里 <svg><title>Logo</title></svg> 的误命中，
 // 也把正则输入从 256KB 缩到通常 20KB 以内。
 export function extractHeadSection(html: string): string {
-  const lower = html.toLowerCase()
+  // 用空格保留分隔，避免移除注释后把两侧片段拼成新的标签或注释起始符。
+  // 先排除注释，再找 head/body 边界；未闭合注释持续到输入末尾。
+  const uncommented = html.replace(/<!--[\s\S]*?(?:-->|$)/g, ' ')
+  const lower = uncommented.toLowerCase()
   const headEnd = lower.indexOf('</head>')
   const bodyStart = lower.indexOf('<body')
   const candidates = [headEnd, bodyStart].filter((index) => index >= 0)
-  const head = candidates.length > 0 ? html.slice(0, Math.min(...candidates)) : html
-  return head.replace(/<!--[\s\S]*?-->/g, '')
+  return candidates.length > 0 ? uncommented.slice(0, Math.min(...candidates)) : uncommented
 }
 
 export function extractTitleTag(html: string): string | null {

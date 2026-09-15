@@ -2,7 +2,14 @@ import {
   BUILTIN_BACKGROUND_PRESET_IDS,
   type Settings,
 } from '../../shared/types'
-import { SETTINGS_KEYS } from '../../shared/settings'
+import {
+  SETTINGS_KEYS,
+  CARD_SIZE_DEFAULTS,
+  CATEGORY_DISPLAY_DEFAULTS,
+  normalizeCardIconSize,
+  normalizeCardSizeSetting,
+  normalizeCategoryDisplaySetting,
+} from '../../shared/settings'
 
 // Keep these defaults aligned with schema.sql seed settings.
 export const DEFAULT_SETTINGS: Settings = {
@@ -13,6 +20,8 @@ export const DEFAULT_SETTINGS: Settings = {
   browser_sync_enabled: false,
   theme: 'light',
   background_preset_id: 'ocean-depths',
+  custom_accent_color: '',
+  custom_dark_accent_color: '',
   background: {
     type: 'gradient',
     value: 'radial-gradient(circle at 16% 12%, rgba(56, 189, 248, 0.5), transparent 44%), radial-gradient(circle at 84% 18%, rgba(45, 212, 191, 0.42), transparent 46%), radial-gradient(circle at 52% 96%, rgba(147, 197, 253, 0.46), transparent 50%), linear-gradient(145deg, #eff9ff 0%, #e7f5fe 46%, #e9f9f8 100%)',
@@ -46,9 +55,10 @@ export const DEFAULT_SETTINGS: Settings = {
       { name: 'Bing', icon: '', url_template: 'https://www.bing.com/search?q={q}' },
     ],
   },
-  card_size: { width: 80, height: 60 },
+  card_size: { ...CARD_SIZE_DEFAULTS },
   card_style: 'info',
   card_icon_size: 60,
+  category_display: { ...CATEGORY_DISPLAY_DEFAULTS },
   card_show_description: true,
   card_description_mode: 'always',
   card_background_color: '#ffffff',
@@ -108,23 +118,26 @@ function normalizeBackgroundPresetId(value: unknown): Settings['background_prese
     : 'custom'
 }
 
+/** 谓词只证明 position/always_expanded，对 top_layout 不作断言。 */
+type ValidatedNavigationSetting = Pick<Settings['navigation'], 'position' | 'always_expanded'> & {
+  top_layout?: unknown
+}
+
 function normalizeNavigationSetting(value: unknown): Settings['navigation'] {
   if (!isValidNavigationSetting(value)) return { ...DEFAULT_SETTINGS.navigation }
   return {
     position: value.position,
     always_expanded: value.always_expanded,
-    top_layout: value.top_layout,
+    // 旧数据无 top_layout：缺失/非法安全降级为 'scroll'，不丢弃 navigation
+    top_layout: value.top_layout === 'wrap' ? 'wrap' : 'scroll',
   }
 }
 
-export function isValidNavigationSetting(value: unknown): value is Settings['navigation'] {
+/** 纯类型谓词：不读取也不改写入参，`top_layout` 归一化由 `normalizeNavigationSetting` 负责。 */
+export function isValidNavigationSetting(value: unknown): value is ValidatedNavigationSetting {
   if (!isRecord(value)) return false
   if (value.position !== 'left' && value.position !== 'top') return false
-  if (typeof value.always_expanded !== 'boolean') return false
-  // 旧数据无 top_layout：缺失/非法安全降级为 'scroll'，不丢弃 navigation
-  if (value.top_layout === undefined) value.top_layout = 'scroll'
-  else if (value.top_layout !== 'scroll' && value.top_layout !== 'wrap') value.top_layout = 'scroll'
-  return true
+  return typeof value.always_expanded === 'boolean'
 }
 
 export function readRawSettingsRows(rows: Array<{ key: string; value: string | null }>): Map<string, unknown> {
@@ -149,6 +162,8 @@ export function settingsFromRawMap(raw: Map<string, unknown>): Settings {
   }
   for (const key of SETTINGS_KEYS) assignSetting(key)
   out.background_preset_id = normalizeBackgroundPresetId(out.background_preset_id)
+  out.custom_accent_color = typeof out.custom_accent_color === 'string' ? out.custom_accent_color.trim() : ''
+  out.custom_dark_accent_color = typeof out.custom_dark_accent_color === 'string' ? out.custom_dark_accent_color.trim() : ''
   const rawMode = raw.get('card_description_mode')
   const rawLegacy = raw.get('card_show_description')
   out.card_description_mode = rawMode === 'hover' || rawMode === 'hidden' || rawMode === 'always'
@@ -156,6 +171,9 @@ export function settingsFromRawMap(raw: Map<string, unknown>): Settings {
     : rawLegacy === false ? 'hidden' : 'always'
   out.card_show_description = out.card_description_mode === 'always'
   out.background = normalizeBackgroundSetting(out.background, DEFAULT_SETTINGS.background)
+  out.card_size = normalizeCardSizeSetting(raw.get('card_size'))
+  out.card_icon_size = normalizeCardIconSize(raw.get('card_icon_size'))
+  out.category_display = normalizeCategoryDisplaySetting(raw.get('category_display'))
   out.backgrounds = normalizeThemeBackgroundSettings(raw.get('backgrounds'), out.background)
   out.navigation = normalizeNavigationSetting(raw.get('navigation'))
   out.most_visited_count = Math.min(20, Math.max(0, Math.round(Number(out.most_visited_count) || 0)))

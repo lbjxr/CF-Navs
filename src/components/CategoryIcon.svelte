@@ -8,7 +8,7 @@
   } from '../lib/categoryIconDisplay'
 
   export let category: CategoryIconValue
-  export let size = 36
+  export let size: number | string = 36
   export let className = ''
   export let label = ''
 
@@ -31,7 +31,7 @@
 {#if iconValue}
   <span
     class={`category-icon ${className}`.trim()}
-    style={`--category-icon-size: ${size}px`}
+    style={`--category-icon-size: ${typeof size === 'number' ? `${size}px` : size}`}
     data-category-icon
     aria-hidden={label ? undefined : 'true'}
     aria-label={label || undefined}

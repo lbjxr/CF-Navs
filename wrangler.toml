@@ -10,11 +10,12 @@ type = "Text"
 globs = ["**/schema.sql"]
 fallthrough = true
 
-# 编译后的 Svelte 静态资源；SPA 模式，未命中的路径回退到 index.html
+# Keep missing hashed chunks as 404s. The Worker applies the SPA shell fallback
+# only to document navigations, so a missing /assets/* request cannot receive index.html.
 [assets]
 directory = "./dist"
 binding = "ASSETS"
-not_found_handling = "single-page-application"
+not_found_handling = "none"
 
 [vars]
 # 管理员用户名在 /install 首次安装时设置；下列变量仅用于本地/CLI 兼容流程。

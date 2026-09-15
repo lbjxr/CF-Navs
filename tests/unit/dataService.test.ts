@@ -83,6 +83,8 @@ const settings: Settings = {
   public_mode: true,
   theme: 'auto',
   background_preset_id: 'custom',
+  custom_accent_color: '',
+  custom_dark_accent_color: '',
   background: { type: 'color', value: '#0f172a', blur: 0, mask: 0.3, maskColor: '#000000' },
   backgrounds: {
     light: { type: 'color', value: '#f8fafc', blur: 0, mask: 0.18, maskColor: '#ffffff' },
@@ -98,7 +100,9 @@ const settings: Settings = {
   card_size: { width: 80, height: 60 },
   card_style: 'info',
   card_icon_size: 60,
+  category_display: { root_font_size: 16, root_icon_size: 20, child_font_size: 14, child_icon_size: 18 },
   card_show_description: true,
+  card_description_mode: 'always',
   card_background_color: '#ffffff',
   card_background_opacity: 0.9,
   card_icon_show_title: true,
@@ -106,7 +110,7 @@ const settings: Settings = {
   search_box_show: true,
   search_engine_selector_show: true,
   content_layout: { max_width: 1200, max_width_unit: 'px', margin_x: 0, margin_top: 0, margin_bottom: 0 },
-  navigation: { position: 'left', always_expanded: false },
+  navigation: { position: 'left', always_expanded: false, top_layout: 'scroll' },
   footer_html: '',
 }
 

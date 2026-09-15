@@ -9,6 +9,8 @@ export type CategoryTreeOption = {
   id: string | number
   title: string
   children: CategoryTreeOption[]
+  /** 逐项后果提示。有值时选项仍可选，但必须把该文案渲染在选项内并接入无障碍描述。 */
+  notice?: string
 }
 
 function compareCategories(a: CategorySelectSource, b: CategorySelectSource): number {

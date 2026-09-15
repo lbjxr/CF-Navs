@@ -41,6 +41,10 @@ export type SortableListOptions = {
   onSort?: SortHandler
   /** 仅允许通过带该属性的元素发起拖拽，例如 "[data-drag-handle]"；不传则整项可拖 */
   handle?: string
+  /** 过滤不应启动拖拽的交互区域，例如菜单、输入控件 */
+  filter?: string
+  /** 过滤区域是否阻止浏览器默认行为；关闭以保留原生触摸滚动 */
+  preventOnFilter?: boolean
   /** 同一组的多个列表可以相互放置，适合跨分类移动书签 */
   group?: string
   /** 跨列表移动完成后的回调 */
@@ -87,6 +91,8 @@ export const sortableList = (
 ): ActionReturn<SortableListOptions> => {
   let sortable: SortableInstance | null = null
   let options = initialOptions
+  let destroyed = false
+  let initializationVersion = 0
 
   const destroySortable = () => {
     sortable?.destroy()
@@ -94,12 +100,16 @@ export const sortableList = (
   }
 
   const initSortable = async () => {
-    if (!options.enabled || !options.onSort) {
+    const version = ++initializationVersion
+    if (destroyed || !options.enabled || !options.onSort) {
       destroySortable()
       return
     }
 
     const { default: SortableCtor } = await loadSortable()
+
+    // 过期初始化不能创建实例，也不能销毁后来生效的实例。
+    if (destroyed || version !== initializationVersion) return
 
     // await 期间选项可能已变化，重新校验。
     if (!options.enabled || !options.onSort) {
@@ -114,6 +124,8 @@ export const sortableList = (
       easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
       draggable: '[data-sortable-item]',
       handle: options.handle,
+      filter: options.filter,
+      preventOnFilter: options.preventOnFilter ?? true,
       group: options.group ? { name: options.group, pull: true, put: true } : undefined,
       // 关键：不启用 fallbackOnBody，保持拖拽项留在原容器内。
       forceFallback: true,
@@ -162,6 +174,8 @@ export const sortableList = (
         nextOptions.enabled !== options.enabled ||
         nextOptions.onSort !== options.onSort ||
         nextOptions.handle !== options.handle ||
+        nextOptions.filter !== options.filter ||
+        nextOptions.preventOnFilter !== options.preventOnFilter ||
         nextOptions.group !== options.group ||
         nextOptions.onTransfer !== options.onTransfer
       options = nextOptions
@@ -170,6 +184,7 @@ export const sortableList = (
       }
     },
     destroy() {
+      destroyed = true
       destroySortable()
     },
   }

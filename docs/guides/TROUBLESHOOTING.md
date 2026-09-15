@@ -26,7 +26,19 @@ npm run build && npx wrangler deploy
 
 这通常表示 Cloudflare 正在执行预览分支的 `wrangler versions upload`。首次创建 D1/KV 资源时，请确认 Cloudflare Workers Builds 的生产分支是 `main`，Build command 为 `npm run build`，Deploy command 为 `npx wrangler deploy`，然后从 `main` 重新触发部署。资源创建完成后再按需开启预览分支部署。
 
-### `/install` 提示安装令牌无效
+### `/install` 配置提示与对应小节
+
+`GET /api/install/status` 始终返回成功包络（`code=0`、`msg="ok"`），真正的状态在 `data` 里；`/install` 页面据此显示提示。按页面上看到的标题或状态字面量查下表，再看对应小节：
+
+| 页面标题 | `data.state` / `data.reason` | 触发条件 | 排障小节 |
+| --- | --- | --- | --- |
+| 还缺少部署密钥 | `configuration_required` / `setup_token_missing` | 绑定齐全、D1 与 KV 均可达、站点未安装，但 Worker 读不到非空 `SETUP_TOKEN` | 「`/install` 提示安装令牌无效」 |
+| 还缺少存储绑定 | `bindings_missing`，`missing` 列出 `DB` / `SESSION` | Worker 缺少 `DB` D1 绑定或 `SESSION` KV 绑定 | 「Missing binding」 |
+| 数据库暂时不可用 | `unavailable` / `database_unreachable` | `DB` 绑定存在但 D1 探测查询失败，或读取安装状态时抛错 | 「`/install` 提示数据库初始化失败」 |
+| 会话存储暂时不可用 | `unavailable` / `session_store_unreachable` | `SESSION` 绑定存在但 KV 读取失败 | 「`/install` 提示会话存储暂时不可用」 |
+| 无法检查安装状态 | 无对应后端状态；前端 `status_error`，状态探测本身失败 | `/api/install/status` 请求没有返回任何状态 | 先确认部署成功，再按上面四条逐项排查绑定与可达性 |
+
+### `/install` 提示安装令牌无效（页面显示「还缺少部署密钥」）
 
 1. 确认当前访问的域名属于正在部署的同一个 Worker，不是另一个 Worker、Pages 项目或旧的自定义域名路由。
 2. 确认 Worker 的 **设置 → 变量和密钥** 中选择的是**生产环境**，存在类型为**密钥**的变量 `SETUP_TOKEN`，名称大小写完全一致；预览环境的 Secret 不会自动提供给生产流量。
@@ -35,13 +47,24 @@ npm run build && npx wrangler deploy
 5. 可直接请求 `GET /api/install/status` 检查运行时状态：返回 `needs_install` 表示 Worker 已读到 Secret；返回 `configuration_required` / `setup_token_missing` 表示当前处理请求的 Worker 环境没有读到 Secret。
 6. 如果站点已经安装完成，则不再需要 `SETUP_TOKEN`。安装状态检查不要求令牌，删除 Secret 不影响运行；后续安装请求仍会被永久拒绝。
 
-### `/install` 提示数据库初始化失败
+### `/install` 提示数据库初始化失败或「数据库暂时不可用」
 
 先确认 Worker 的 `DB` D1 和 `SESSION` KV 绑定存在。正常安装由 `/install` 自动初始化 schema；如果安装器仍失败，可在 D1 SQL Console 手动执行 [schema.sql](../../schema.sql) 后返回 `/install` 重试。手动 SQL 是恢复手段，不是正常部署步骤。
 
-### Missing binding
+页面标题为「数据库暂时不可用」时是另一种情况：`GET /api/install/status` 返回 `unavailable` / `database_unreachable`，即 `DB` 绑定存在但 D1 探测查询失败，或读取安装状态时抛错。这不是 schema 缺失，手动执行 `schema.sql` 修不好它 —— 先确认 `DB` 指向的 D1 数据库仍然存在、选择的是生产环境绑定，再用页面上的「重试数据库检查」重新探测。
 
-通常是 D1 或 KV 绑定没有写入本地部署配置。
+### `/install` 提示会话存储暂时不可用
+
+页面标题为「会话存储暂时不可用」，`GET /api/install/status` 返回 `unavailable` / `session_store_unreachable`：`SESSION` KV 绑定存在，但当前读不到 KV。
+
+1. 在 Worker 的 **设置 → 绑定** 中确认 `SESSION` 指向的 KV 命名空间仍然存在，没有被删除或改名。
+2. 确认使用的是**生产环境**绑定；预览环境的 KV 命名空间不会提供给生产流量。
+3. 排除 Cloudflare KV 侧的临时故障后，用页面上的「重试会话存储检查」重新探测。
+4. 安装完成后 `SESSION` 仍被登录限流与会话撤销名单使用。绑定不可用时**登录会直接失败**（`code=1500` + `required SESSION binding is unavailable`），已登录请求返回 401，而不是静默降级；公开首页读取与点击计数不受影响（见 [API 契约](../reference/API_CONTRACT.md) 的鉴权规则）。
+
+### Missing binding（页面显示「还缺少存储绑定」）
+
+`GET /api/install/status` 返回 `bindings_missing`，`missing` 列出缺失的 `DB`（D1）或 `SESSION`（KV）。通常是绑定没有写入本地部署配置。
 
 1. 确认已经创建 D1 和 KV。
 2. 运行 `npm run setup:wrangler`。
@@ -63,12 +86,14 @@ npm run db:init:remote
 
 如果仍能登录后台，进入 **站点设置 → 账号安全**，输入当前密码后更新管理员密码。修改成功后，现有登录会话会失效，需要使用新密码重新登录。
 
-如果已经无法登录，以下 `INIT_ADMIN_*` 流程仅用于已完成初始化的旧数据库升级或凭据恢复，不适用于全新部署。修改 `INIT_ADMIN_USER` 和 `INIT_ADMIN_PASSWORD` 后重新部署，下一次登录会自动用新值覆盖 D1 中的管理员凭据。确认当前 Wrangler 指向正确的 Worker、D1 和账号后再执行：
+如果已经无法登录，以下 `INIT_ADMIN_*` 流程仅用于已完成初始化的旧数据库升级或凭据恢复，不适用于全新部署。修改 `INIT_ADMIN_USER` 和 `INIT_ADMIN_PASSWORD` 后重新部署，下一次登录会自动用新值覆盖 D1 中的管理员凭据。确认当前 Wrangler 指向正确的 Worker、D1 和账号后再执行；本地 CLI 场景优先使用项目脚本生成的 `wrangler.local.toml`：
 
 ```bash
-npx wrangler secret put INIT_ADMIN_PASSWORD
-npx wrangler deploy
+npm run wrangler -- secret put INIT_ADMIN_PASSWORD
+npm run deploy
 ```
+
+如果不使用项目脚本，必须显式传入包含真实 D1/KV ID 的本地配置（例如 `--config wrangler.local.toml`），不得用不带资源 ID 的公共 `wrangler.toml` 误部署。恢复变量修改后重新部署，成功登录并确认恢复后及时移除临时变量。
 
 升级前已经创建的旧数据库可能还没有初始化标记。此时再设置一个新的 `RESET_ADMIN_CREDENTIALS` 变量值，例如 `reset-2026-07-12`，重新部署并登录一次即可。成功登录后可以移除该变量；同一个标记不会重复重置，以后再次强制重置时请使用新的标记值。
 
@@ -76,11 +101,19 @@ Cloudflare Secret 生效可能需要等待片刻。执行重置前请确认 Wran
 
 ### KV 相关错误
 
-`SESSION` KV 不保存登录会话本身。登录使用无状态 JWT；该命名空间用于登录/点击限流和 JWT 撤销名单。请检查：
+`SESSION` KV 不保存登录会话本身。登录使用无状态 JWT；该命名空间用于登录/点击限流和 JWT 撤销名单。
+
+**绑定缺失或不可用时的可见症状**（2026-09-05 起统一为下列口径，见 [API 契约](../reference/API_CONTRACT.md) 的鉴权规则）：
+
+- `POST /api/login` 返回 `code=1500`、`msg` 为 `required SESSION binding is unavailable`。**看到这条文案就说明是绑定问题**，不需要再猜；此前它表现为笼统的 `internal server error`。
+- 已登录的请求返回 `401` / `code=1001`：撤销名单读不到时会拒绝会话，而不是放行。这是刻意的——放行等于「撤销名单不存在」而调用方无从得知。
+- 公开首页与点击计数**不受影响**：匿名读取正常，点击仍然计数，只是失去限流保护。
+
+请检查：
 
 1. `npx wrangler kv namespace create SESSION` 是否已执行。
 2. `npm run setup:wrangler` 是否已生成最新绑定。
-3. Worker 日志中是否出现 KV binding 错误；KV 缺失会影响限流和登出撤销，JWT 本身仍按签名和 `exp` 校验。
+3. Worker 日志中是否出现 KV binding 错误。
 
 查看日志：
 
@@ -156,7 +189,7 @@ https://icon-sets.iconify.design/mdi/home/
 常见原因：
 
 - 旧 Service Worker 仍在缓存跨域 `opaque` Iconify 响应，Chrome 会对这类响应按较大配额计入 Cache Storage。
-- 后台书签列表预览把聚合数据里的 `icon_blob` 又复制到浏览器本地图标缓存。
+- 旧实现曾把完整后台聚合数据中的 `icon_blob` 又复制到浏览器本地图标缓存；当前聚合响应只提供 `icon_cached`，该条仅用于识别旧版本遗留数据。
 - 多次登录留下旧 `AdminData` 快照。
 
 当前实现会跳过跨域 `opaque` 响应、限制图标响应写入体积、清理旧登录态快照，并在后台已有 `icon_blob` 时清理同 key 的本地图标副本。
@@ -189,10 +222,9 @@ https://icon-sets.iconify.design/mdi/home/
 npx wrangler tail
 npm run type-check
 npm run build
-npx wrangler d1 execute cf-navs-db --remote --command "SELECT key, value FROM settings LIMIT 20"
 ```
 
-涉及线上数据的命令请先确认当前 Cloudflare 账号和 Wrangler 配置指向正确项目。
+不要直接查询并打印 `settings.value`。其中可能包含 `custom_js`、`footer_html`、`image_host_url` 等站点内容；如需确认配置是否存在，只查询非敏感元数据或键名，并先确认当前 Cloudflare 账号、Worker、D1 和 Wrangler 配置指向正确项目。
 
 ## 线上 Chrome 验证异常
 

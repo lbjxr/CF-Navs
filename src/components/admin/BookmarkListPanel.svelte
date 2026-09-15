@@ -1,11 +1,15 @@
 <script lang="ts">
   import type { AdminBookmarkSummary, AdminCategorySummary } from '../../lib/appData'
+  import { buildBookmarkBatchMoveRequest } from '../../lib/batchMove'
+  import type { BookmarkBatchMovePosition, BookmarkBatchMoveReq } from '../../../shared/types'
   import {
     clampAdminListPage,
     createAdminListPage,
     createAdminSortDraft,
     filterAdminBookmarks,
     getAdminCategoryTitle,
+    getAdminBookmarkCategoryOptions,
+    pickMajorityCategoryId,
     getAdminListTotalPages,
     getAdminSortIds,
     cycleAdminBookmarkSort,
@@ -15,10 +19,14 @@
     reorderAdminSortDraft,
   } from '../../lib/adminListState'
   import { getBookmarkFallbackIcon, getBookmarkIconUrl, hasBookmarkImageIcon } from '../../lib/bookmarkIconDisplay'
+  import { iconAccessKey, withIconAccessKey } from '../../lib/iconAccessKey'
+  import { findCategoryTreeOption } from '../../lib/categorySelect'
+  import CategoryTreeSelect from '../CategoryTreeSelect.svelte'
   import { truncateUnicodeText } from '../../lib/truncateUnicodeText'
   import { sortableList, type SortHandler } from '../../lib/sortableList'
   import CachedBookmarkIcon from '../CachedBookmarkIcon.svelte'
   import './adminListPanels.css'
+  import { DEFAULT_PAGE_SIZE } from '../../lib/pagination'
 
   type AsyncVoid<T = void> = T | Promise<T>
   type AdminCategory = AdminCategorySummary
@@ -34,6 +42,7 @@
   export let onEditBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
   export let onDeleteBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
   export let onBatchDeleteBookmarks: ((ids: number[]) => AsyncVoid) | undefined = undefined
+  export let onBatchMoveBookmarks: ((payload: BookmarkBatchMoveReq) => AsyncVoid) | undefined = undefined
   export let onSortBookmarks: SortHandler | undefined = undefined
 
   let sortMode = false
@@ -57,6 +66,27 @@
   $: selectedIds = new Set([...selectedIds].filter((id) => bookmarks.some((bookmark) => Number(bookmark.id) === id)))
   $: pageIds = pagedBookmarks.map((bookmark) => Number(bookmark.id))
   $: pageSelectedCount = pageIds.filter((id) => selectedIds.has(id)).length
+  $: moveCategoryOptions = getAdminBookmarkCategoryOptions(categories, selectedBookmarks)
+  $: selectedBookmarks = bookmarks.filter((bookmark) => selectedIds.has(Number(bookmark.id)))
+  $: moveTargetTitle = moveTargetId == null ? '未选择分类' : getCategoryTitle(moveTargetId)
+  $: moveTargetNotice = moveTargetId == null
+    ? ''
+    : findCategoryTreeOption(moveCategoryOptions, moveTargetId)?.notice ?? ''
+  $: selectedPageCount = new Set(
+    selectedBookmarks
+      .map((bookmark) => {
+        const index = filteredBookmarks.findIndex((item) => Number(item.id) === Number(bookmark.id))
+        return index >= 0 ? Math.floor(index / DEFAULT_PAGE_SIZE) + 1 : null
+      })
+      .filter((pageNumber): pageNumber is number => pageNumber !== null),
+  ).size
+  $: selectionPageSummary = selectedPageCount > 0 ? `（跨 ${selectedPageCount} 页）` : '（当前筛选外仍保留）'
+
+  let moveModalOpen = false
+  let moveTargetId: number | null = null
+  let movePosition: BookmarkBatchMovePosition = 'end'
+  let moveError = ''
+  let moving = false
 
   const getCategoryTitle = (categoryId: string | number) =>
     getAdminCategoryTitle(categories, categoryId)
@@ -120,13 +150,48 @@
       savingSort = false
     }
   }
+  function openMoveModal(): void {
+    if (selectedIds.size === 0 || moveCategoryOptions.length === 0) return
+    moveError = ''
+    movePosition = 'end'
+    moveTargetId = pickMajorityCategoryId(selectedBookmarks, categories)
+    moveModalOpen = true
+  }
+
+  function closeMoveModal(): void {
+    if (moving) return
+    moveModalOpen = false
+    moveError = ''
+  }
+
+  async function submitBatchMove(): Promise<void> {
+    if (moving || !onBatchMoveBookmarks || selectedBookmarks.length === 0 || moveTargetId == null) return
+
+    const payload = buildBookmarkBatchMoveRequest(selectedBookmarks, moveTargetId, movePosition)
+    if (!payload) {
+      moveError = '书签排序状态不可用，请刷新后台数据后重试。'
+      return
+    }
+
+    moving = true
+    moveError = ''
+    try {
+      await onBatchMoveBookmarks(payload)
+      selectedIds = new Set()
+      moveModalOpen = false
+    } catch (error) {
+      moveError = getErrorMessage(error)
+    } finally {
+      moving = false
+    }
+  }
 
   function handleSearchInput(event: Event) {
     search = (event.currentTarget as HTMLInputElement).value
     page = 1
   }
 
-  import { api } from '../../lib/api'
+  import { api, getErrorMessage } from '../../lib/api'
 
   let checkingHealth = false
   let healthProgress = 0
@@ -193,8 +258,6 @@
             检测链接健康
           </button>
         {/if}
-        <button type="button" class="admin-danger-button" on:click={() => onBatchDeleteBookmarks?.([...selectedIds])} disabled={!isAuthenticated || selectedIds.size === 0}>删除已选 ({selectedIds.size})</button>
-        {#if selectedIds.size > 0}<button type="button" class="admin-ghost-button" on:click={() => selectedIds = new Set()}>清除选择</button>{/if}
         <button
           type="button"
           class="admin-primary-button"
@@ -205,8 +268,9 @@
         </button>
       </div>
     </div>
+    <div class="admin-bookmark-list-content" class:has-batch-selection={selectedIds.size > 0}>
+      <div class="admin-panel-scroll-body admin-table-scroll-body">
 
-    <div class="admin-panel-scroll-body admin-table-scroll-body">
       {#if bookmarksLoading}
         <div class="admin-empty-state">
           <span class="admin-empty-state-icon">📑</span>
@@ -279,7 +343,7 @@
                             icon={bookmark.icon ?? ''}
                             iconSource={bookmark.icon_source}
                             iconBlob={bookmark.icon_blob ?? ''}
-                            src={getBookmarkIconUrl(bookmark)}
+                            src={withIconAccessKey(getBookmarkIconUrl(bookmark), $iconAccessKey)}
                             alt=""
                             fallback={getBookmarkFallbackIcon(bookmark)}
                             style="width: 100%; height: 100%; object-fit: contain;"
@@ -366,6 +430,7 @@
         </div>
       {/if}
     </div>
+      </div>
 
     {#if bookmarks.length > 0}
       <div class="admin-panel-footer">
@@ -386,6 +451,15 @@
   </section>
 </div>
 
+
+{#if selectedIds.size > 0 && !sortMode}
+  <div class="batch-selection-toolbar" role="toolbar" aria-label="批量书签操作">
+    <span>已选 {selectedIds.size} 项{selectionPageSummary}</span>
+    <button type="button" class="admin-primary-button" on:click={openMoveModal} disabled={!isAuthenticated || moveCategoryOptions.length === 0}>移动到分类</button>
+    <button type="button" class="admin-danger-button" on:click={() => onBatchDeleteBookmarks?.([...selectedIds])} disabled={!isAuthenticated}>删除已选 ({selectedIds.size})</button>
+    <button type="button" class="admin-ghost-button" on:click={() => selectedIds = new Set()}>清除选择</button>
+  </div>
+{/if}
 {#if sortMode}
   <div class="admin-sort-bar" role="toolbar" aria-label="排序操作">
     <span class="admin-sort-hint-inline">正在排序书签，拖动调整顺序后保存。</span>
@@ -396,11 +470,58 @@
   </div>
 {/if}
 
+{#if moveModalOpen}
+  <div class="batch-move-backdrop">
+    <div class="batch-move-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-move-title">
+      <div class="batch-move-header">
+        <div>
+          <p class="admin-panel-eyebrow">批量操作</p>
+          <h2 id="batch-move-title">移动到分类</h2>
+        </div>
+        <button type="button" class="admin-icon-button" aria-label="关闭批量移动" on:click={closeMoveModal} disabled={moving}>×</button>
+      </div>
+      {#if moveError}
+        <p class="batch-move-error" role="alert">{moveError}</p>
+      {/if}
+      <p class="batch-move-summary">将移动 <strong>{selectedIds.size}</strong> 个书签到「{moveTargetTitle}」</p>
+      {#if moveTargetNotice}
+        <p class="batch-move-notice" role="status">{moveTargetNotice}。私密书签不受影响，可随时把分类改回公开。</p>
+      {/if}
+      <div class="batch-move-field">
+        <span id="batch-move-category-label">目标分类</span>
+        <CategoryTreeSelect
+          bind:value={moveTargetId}
+          items={moveCategoryOptions}
+          ariaLabel="选择目标分类"
+          testId="batch-move-category-select"
+        />
+      </div>
+      <fieldset class="batch-move-position">
+        <legend>目标分类内位置</legend>
+        <label><input type="radio" bind:group={movePosition} value="end" disabled={moving} /> 追加到末尾</label>
+        <label><input type="radio" bind:group={movePosition} value="start" disabled={moving} /> 插入到顶部</label>
+      </fieldset>
+      <div class="batch-move-actions">
+        <button type="button" class="admin-ghost-button" on:click={closeMoveModal} disabled={moving}>取消</button>
+        <button type="button" class="admin-primary-button" on:click={submitBatchMove} disabled={moving || moveTargetId == null}>
+          {moving ? '移动中…' : '确认移动'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   .admin-bookmark-list-panel {
     height: min(760px, calc(100vh - 220px));
     grid-template-rows: auto minmax(0, 1fr) auto;
     min-width: 0;
+  }
+  .admin-bookmark-list-content {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 0;
+    overflow: hidden;
   }
 
   .admin-title-row { display: flex; align-items: center; gap: 14px; }
@@ -412,6 +533,32 @@
 
   .admin-inline-actions.compact {
     justify-content: flex-end;
+  }
+  .batch-selection-toolbar {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-width: calc(100vw - 32px);
+    min-width: 0;
+    padding: 10px 14px;
+    border: 1px solid var(--admin-border);
+    border-radius: 16px;
+    background: var(--admin-sticky-bg);
+    color: var(--admin-text);
+    box-shadow: var(--admin-shadow);
+  }
+
+  .batch-selection-toolbar > span {
+    margin-right: auto;
+    color: var(--admin-muted);
+    font-size: 13px;
+    font-weight: 700;
   }
 
   .admin-table-wrap {
@@ -594,6 +741,52 @@
       width: 100%;
       overflow: hidden;
     }
+    .admin-bookmark-list-panel {
+      height: auto;
+    }
+
+    .admin-bookmark-list-content {
+      overflow: visible;
+    }
+
+    .admin-bookmark-list-content.has-batch-selection ~ .admin-panel-footer {
+      margin-bottom: 104px;
+    }
+
+    .admin-table-scroll-body {
+      overflow: visible;
+    }
+
+    .batch-selection-toolbar {
+      position: fixed;
+      z-index: 1001;
+      right: 12px;
+      bottom: calc(60px + max(10px, env(safe-area-inset-bottom)));
+      left: 12px;
+      max-width: none;
+      transform: none;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px 8px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.24);
+    }
+
+    .batch-selection-toolbar > span {
+      width: 100%;
+      margin-right: 0;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .batch-selection-toolbar .admin-primary-button,
+    .batch-selection-toolbar .admin-danger-button,
+    .batch-selection-toolbar .admin-ghost-button {
+      padding: 6px 10px;
+      font-size: 12px;
+      min-height: 32px;
+    }
 
     .admin-bookmark-table {
       width: 100%;
@@ -734,6 +927,118 @@
       padding-right: 3px;
       font-size: 11px;
       white-space: nowrap;
+    }
+  }
+  .batch-move-backdrop {
+    position: fixed;
+    z-index: 200;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.48);
+  }
+
+  .batch-move-dialog {
+    width: min(100%, 480px);
+    max-height: min(720px, calc(100dvh - 40px));
+    overflow: auto;
+    box-sizing: border-box;
+    padding: 22px;
+    border: 1px solid var(--admin-border);
+    border-radius: 18px;
+    background: var(--admin-surface-strong);
+    color: var(--admin-text);
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.3);
+  }
+
+  .batch-move-header,
+  .batch-move-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .batch-move-header h2 {
+    margin: 0;
+    font-size: 20px;
+  }
+
+  .batch-move-summary {
+    margin: 18px 0;
+    color: var(--admin-muted);
+  }
+
+  .batch-move-summary + .batch-move-notice {
+    margin-top: -10px;
+  }
+
+  .batch-move-notice {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--admin-warning-border, #fcd34d);
+    border-radius: var(--radius-md);
+    background: var(--admin-warning-soft, rgba(252, 211, 77, 0.14));
+    color: var(--admin-warning-text, #92400e);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+  }
+
+  .batch-move-field,
+  .batch-move-position {
+    display: grid;
+    gap: 8px;
+    margin: 0 0 16px;
+  }
+
+  .batch-move-field > span,
+  .batch-move-position legend {
+    color: var(--admin-muted);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .batch-move-position {
+    padding: 0;
+    border: 0;
+  }
+
+  .batch-move-position label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    color: var(--admin-text);
+    font-size: 14px;
+  }
+
+  .batch-move-error {
+    margin: 14px 0 0;
+    padding: 10px 12px;
+    border: 1px solid var(--admin-danger-border);
+    border-radius: 10px;
+    background: var(--admin-danger-bg);
+    color: var(--admin-danger);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .batch-move-actions {
+    justify-content: flex-end;
+    margin-top: 20px;
+  }
+
+  @media (max-width: 700px) {
+    .batch-move-backdrop {
+      align-items: end;
+      padding: 12px;
+    }
+
+    .batch-move-dialog {
+      max-height: calc(100dvh - 24px);
+      padding: 18px;
+      border-radius: 18px 18px 12px 12px;
     }
   }
 </style>

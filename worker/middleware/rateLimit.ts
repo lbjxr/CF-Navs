@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono'
 import { ErrCode } from '../../shared/types'
 import { fail } from '../lib/response'
+import { hasSessionBinding } from '../lib/sessionStore'
 import type { Env, HonoEnv, LoginRateLimitState } from '../types'
 
 const LOGIN_RATE_LIMIT_PREFIX = 'rl:login:'
@@ -51,6 +52,13 @@ export async function clearLoginFailures(env: Env, ip: string): Promise<void> {
 }
 
 export const loginRateLimit: MiddlewareHandler<HonoEnv> = async (c, next) => {
+  // 缺 `SESSION` 绑定时给出可定位的错误，而不是让 `env.SESSION.get` 抛 TypeError 由
+  // 全局 onError 兜成 `code=1500 internal server error`（PROB-31）。登录限流的整个意义
+  // 就是那个 KV，没有它不能假装限流成功——口径与 `/install` 的 `bindings_missing` 一致。
+  if (!hasSessionBinding(c.env)) {
+    return c.json(fail(ErrCode.SERVER_ERROR, 'required SESSION binding is unavailable'))
+  }
+
   const ip = getClientIp(c)
   const state = await readRateLimitState(c.env, ip)
   c.set('loginRateLimitState', state)

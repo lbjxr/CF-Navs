@@ -52,6 +52,19 @@ describe('worker settings data helpers', () => {
     expect(settings.background_preset_id).toBe('custom')
     expect(settings.search_engine.current).toBe(DEFAULT_SETTINGS.search_engine.current)
   })
+  it('trims custom accent values and preserves blank fallback defaults', () => {
+    expect(settingsFromRows([])).toMatchObject({
+      custom_accent_color: '',
+      custom_dark_accent_color: '',
+    })
+    expect(settingsFromRows([
+      { key: 'custom_accent_color', value: JSON.stringify('  #123456  ') },
+      { key: 'custom_dark_accent_color', value: JSON.stringify('  #abcdef  ') },
+    ])).toMatchObject({
+      custom_accent_color: '#123456',
+      custom_dark_accent_color: '#abcdef',
+    })
+  })
 
   it('parses raw rows with base overrides and malformed JSON fallback', () => {
     const raw = readRawSettingsRows([
@@ -127,13 +140,41 @@ describe('worker settings data helpers', () => {
     ]).navigation).toEqual({ position: 'top', always_expanded: false, top_layout: 'scroll' })
   })
 
-  it('validates complete navigation payloads for settings updates', () => {
+  it('normalizes category display and card size boundaries from persisted settings', () => {
+    expect(settingsFromRows([]).card_size).toEqual({ width: 160, height: 60 })
+    expect(settingsFromRows([]).category_display).toEqual({
+      root_font_size: 16,
+      root_icon_size: 20,
+      child_font_size: 14,
+      child_icon_size: 18,
+    })
+    expect(settingsFromRows([
+      {
+        key: 'category_display',
+        value: JSON.stringify({ root_font_size: 40, root_icon_size: 8, child_font_size: 'bad', child_icon_size: 40 }),
+      },
+      { key: 'card_size', value: JSON.stringify({ width: 20, height: 500 }) },
+      { key: 'card_icon_size', value: JSON.stringify(20) },
+    ])).toMatchObject({
+      category_display: { root_font_size: 28, root_icon_size: 14, child_font_size: 14, child_icon_size: 32 },
+      card_size: { width: 40, height: 300 },
+      card_icon_size: 40,
+    })
+  })
+
+  it('validates navigation payloads without mutating them', () => {
     expect(isValidNavigationSetting({ position: 'left', always_expanded: false })).toBe(true)
     expect(isValidNavigationSetting({ position: 'top', always_expanded: true })).toBe(true)
-    expect(isValidNavigationSetting({ position: 'left', always_expanded: false, top_layout: 'scroll' })).toBe(true)
-    expect(isValidNavigationSetting({ position: 'top', always_expanded: true, top_layout: 'wrap' })).toBe(true)
-    expect(isValidNavigationSetting({ position: 'top', always_expanded: true, top_layout: 'grid' })).toBe(true)
     expect(isValidNavigationSetting({ position: 'bottom', always_expanded: false })).toBe(false)
     expect(isValidNavigationSetting({ position: 'left' })).toBe(false)
+
+    // 谓词对 top_layout 不作断言，也不得就地补写：归一化只体现在 normalizeNavigationSetting 的返回值上
+    const legacy: Record<string, unknown> = { position: 'top', always_expanded: true }
+    const illegal: Record<string, unknown> = { position: 'top', always_expanded: true, top_layout: 'grid' }
+
+    expect(isValidNavigationSetting(legacy)).toBe(true)
+    expect(isValidNavigationSetting(illegal)).toBe(true)
+    expect(legacy).toEqual({ position: 'top', always_expanded: true })
+    expect(illegal).toEqual({ position: 'top', always_expanded: true, top_layout: 'grid' })
   })
 })

@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import type { CardStyle, DescriptionDisplayMode, PublicBookmark } from '../../shared/types'
+  import type { CategoryTreeOption } from '../lib/categorySelect'
   import BookmarkCardCompact from './BookmarkCardCompact.svelte'
   import { publicStore } from '../lib/stores'
   import { api } from '../lib/api'
   import BookmarkCardInfo from './BookmarkCardInfo.svelte'
   import BookmarkContextMenu from './BookmarkContextMenu.svelte'
   import BookmarkLinkModal from './BookmarkLinkModal.svelte'
-  import { getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
+  import { getInfoCardTrackWidth, getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
   import { buildIconStyle } from '../lib/bookmarkIconDisplay'
   import {
     BOOKMARK_CONTEXT_MENU_OPEN_EVENT,
@@ -43,6 +44,8 @@
   export let preview = false
   export let themeOverride: 'light' | 'dark' | null = null
   export let onEdit: ((bookmark: PublicBookmark) => AsyncVoid) | undefined = undefined
+  export let moveCategories: CategoryTreeOption[] = []
+  export let onMoveBookmark: ((bookmark: PublicBookmark, categoryId: number) => AsyncVoid) | undefined = undefined
 
   let cachedIconFailed = false
   let fallbackFailed = false
@@ -58,6 +61,12 @@
   let iconStateKey = ''
   let windowListenersAttached = false
   let contextMenuInstanceId = Math.random().toString(36).slice(2)
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null
+  let contextMenuOpenedAt = 0
+  const TOUCH_CLICK_GUARD_MS = 700
+  let touchStartX = 0
+  let touchStartY = 0
+  const LONG_PRESS_MS = 500
 
   $: openInNewTab = bookmark.open_method === 1
   $: iconBaseState = deriveBookmarkCardIconBase({
@@ -85,8 +94,9 @@
   $: iconUrl = iconUrlState.iconUrl
   $: hasRenderableIcon = iconUrlState.hasRenderableIcon
   $: infoCardHeight = height > 0 ? height : 70
+  $: safeInfoCardWidth = getInfoCardTrackWidth(width)
   $: infoIconInset = infoCardHeight <= 56 ? 6 : 8
-  $: infoIconSize = Math.max(32, Math.min(infoCardHeight - infoIconInset * 2, width - infoIconInset * 2))
+  $: infoIconSize = Math.max(32, Math.min(infoCardHeight - infoIconInset * 2, safeInfoCardWidth - infoIconInset * 2))
   $: compactIconSize = Math.max(0, iconSize)
   $: compactShellWidth = getIconCardTrackWidth(compactIconSize, showIconTitle)
   $: iconBackgroundColor = bookmark.icon_background_color || ''
@@ -99,7 +109,7 @@
   $: tooltipText = bookmark.description ? `${bookmark.title}\n${bookmark.description}` : bookmark.title
   $: cardShellStyle =
     style === 'info'
-      ? `--card-configured-min-width: ${Math.max(0, width)}px; ${height > 0 ? `height: ${height}px;` : ''}`
+      ? `--card-configured-min-width: ${safeInfoCardWidth}px; ${height > 0 ? `height: ${height}px;` : ''}`
       : `width: ${compactShellWidth}px;`
   $: cardLinkStyle = height > 0 ? `height: ${height}px;` : ''
   $: if (nextIconStateKey !== iconStateKey) {
@@ -170,23 +180,101 @@
   }
 
   function handleContextMenu(event: MouseEvent) {
-    if (shouldBlockCardNavigation(sortMode)) {
+    if (shouldBlockCardNavigation(sortMode) && !onMoveBookmark) {
       event.preventDefault()
       return
     }
-    if (!canOpenBookmarkContextMenu({ sortMode, canEdit, hasEditHandler: Boolean(onEdit) })) return
+    if (!canOpenBookmarkContextMenu({
+      sortMode,
+      canEdit,
+      hasEditHandler: Boolean(onEdit),
+      hasMoveHandler: Boolean(onMoveBookmark),
+    })) return
     event.preventDefault()
     event.stopPropagation()
     notifyContextMenuOpen()
     contextMenuOpen = true
+  }
+  function handleMobileMenuClick() {
+    if (!canOpenBookmarkContextMenu({
+      sortMode,
+      canEdit,
+      hasEditHandler: Boolean(onEdit),
+      hasMoveHandler: Boolean(onMoveBookmark),
+    })) return
+    notifyContextMenuOpen()
+    contextMenuOpen = true
+  }
+
+  function clearLongPress() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer)
+      longPressTimer = null
+    }
+  }
+
+  function openContextMenuFromTouch() {
+    if (!canOpenBookmarkContextMenu({
+      sortMode,
+      canEdit,
+      hasEditHandler: Boolean(onEdit),
+      hasMoveHandler: Boolean(onMoveBookmark),
+    })) return
+    contextMenuOpenedAt = Date.now()
+    notifyContextMenuOpen()
+    contextMenuOpen = true
+  }
+
+  function handleTouchStart(event: TouchEvent) {
+    if (preview || contextMenuOpen) return
+    if (!canOpenBookmarkContextMenu({
+      sortMode,
+      canEdit,
+      hasEditHandler: Boolean(onEdit),
+      hasMoveHandler: Boolean(onMoveBookmark),
+    })) return
+    const touch = event.touches[0]
+    if (!touch) return
+    touchStartX = touch.clientX
+    touchStartY = touch.clientY
+    clearLongPress()
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null
+      openContextMenuFromTouch()
+    }, LONG_PRESS_MS)
+  }
+
+  function handleTouchMove(event: TouchEvent) {
+    if (!longPressTimer) return
+    const touch = event.touches[0]
+    if (!touch) return
+    if (Math.abs(touch.clientX - touchStartX) > 10 || Math.abs(touch.clientY - touchStartY) > 10) {
+      clearLongPress()
+    }
+  }
+
+  function handleTouchEnd() {
+    clearLongPress()
   }
 
   async function handleEditClick() {
     closeContextMenu()
     await onEdit?.(bookmark)
   }
+  async function handleMoveBookmark(categoryId: number): Promise<void> {
+    closeContextMenu()
+    await onMoveBookmark?.(bookmark, categoryId)
+  }
+
+  function withinTouchGuard(): boolean {
+    return contextMenuOpenedAt > 0 && Date.now() - contextMenuOpenedAt < TOUCH_CLICK_GUARD_MS
+  }
 
   function handleLinkClick(event: MouseEvent) {
+    if (withinTouchGuard()) {
+      event.preventDefault()
+      return
+    }
     if (preview) {
       event.preventDefault()
       return
@@ -210,7 +298,9 @@
   }
 
   function handleWindowClick() {
-    if (contextMenuOpen) closeContextMenu()
+    if (!contextMenuOpen) return
+    if (withinTouchGuard()) return
+    closeContextMenu()
   }
 
   function handleDocumentKeydown(event: KeyboardEvent) {
@@ -267,16 +357,24 @@
     disconnectIconObserver()
     resetLocalCachedIconUrl()
     syncWindowListeners(false)
+    clearLongPress()
   })
 </script>
 
 <div
   class="bookmark-card-shell"
+  role="group"
+  aria-label={bookmark.title}
   class:is-info={style === 'info'}
   class:is-icon={style !== 'info'}
   class:sort-mode={sortMode}
   style={cardShellStyle}
   bind:this={shellElement}
+  class:context-menu-open={contextMenuOpen}
+  on:touchstart={handleTouchStart}
+  on:touchmove={handleTouchMove}
+  on:touchend={handleTouchEnd}
+  on:touchcancel={handleTouchEnd}
 >
   {#if style === 'info'}
     <BookmarkCardInfo
@@ -320,8 +418,30 @@
     />
   {/if}
 
+  {#if sortMode && onMoveBookmark}
+    <button
+      type="button"
+      class="bookmark-mobile-menu-trigger"
+      aria-label={`移动「${bookmark.title}」`}
+      title="移动"
+      on:pointerdown|stopPropagation
+      on:touchstart|stopPropagation
+      on:click|stopPropagation={handleMobileMenuClick}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="bookmark-mobile-menu-icon">
+        <path d="M4 5h9M4 12h9M4 19h9M17 8l4 4-4 4M21 12h-8" />
+      </svg>
+    </button>
+  {/if}
+
   {#if contextMenuOpen}
-    <BookmarkContextMenu onEdit={handleEditClick} />
+    <BookmarkContextMenu
+      categories={moveCategories}
+      currentCategoryId={bookmark.category_id}
+      canMove={sortMode}
+      onEdit={sortMode ? undefined : handleEditClick}
+      onMoveBookmark={onMoveBookmark ? handleMoveBookmark : undefined}
+    />
   {/if}
 
   {#if modalOpen}
@@ -335,6 +455,51 @@
     z-index: 0;
     min-width: 0;
     contain: layout style;
+  }
+
+  .bookmark-card-shell.context-menu-open {
+    z-index: 130;
+  }
+  .bookmark-mobile-menu-trigger {
+    display: none;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 3;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 10px;
+    background: rgb(var(--card-bg-rgb, 255 255 255) / 0.86);
+    color: var(--card-text-color, currentColor);
+    cursor: pointer;
+    font-size: 22px;
+    line-height: 1;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  }
+
+  .bookmark-mobile-menu-icon {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .bookmark-mobile-menu-trigger:focus-visible {
+    outline: 3px solid rgb(var(--theme-accent-rgb, 37 99 235) / 0.32);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 799px) {
+    .bookmark-mobile-menu-trigger {
+      display: inline-flex;
+    }
   }
 
   .bookmark-card-shell:hover,

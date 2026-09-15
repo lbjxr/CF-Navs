@@ -1,12 +1,12 @@
 <div align="center">
   <img src="public/icon.png" alt="CF-Navs 项目图标" width="112" height="112">
   <h1>CF-Navs</h1>
-  <p>运行在 Cloudflare Workers 上的轻量个人导航面板</p>
-  <p>在一个清爽、响应式的界面中管理分类、书签、主题、搜索服务与数据备份。</p>
+  <p><strong>把常用网站、工作工具和私密收藏，收进自己的起始页。</strong></p>
+  <p>运行在 Cloudflare Workers 上，无需自建服务器。导入已有书签，选好主题，在电脑和手机上打开同一个导航空间。</p>
 
   <p>
     <img src="https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers">
-    <img src="https://img.shields.io/badge/Svelte-4-FF3E00?logo=svelte&logoColor=white" alt="Svelte 4">
+    <img src="https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white" alt="Svelte 5">
     <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5">
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-2563EB" alt="MIT License"></a>
   </p>
@@ -28,28 +28,34 @@
 
 ## 功能
 
+**收藏得多，也能找得快、理得清。** CF-Navs 将两级分类、全站搜索、批量整理和数据备份放在一起，适合作为个人起始页、工作工具箱或公开资源导航。访客浏览公开内容，管理员登录后管理全部收藏，不必为私密链接再维护另一套站点。
+
 | | 能力 | 说明 |
 |---|---|---|
-| ☁️ | 边缘全栈 | 前端、API、D1 数据库与 KV 限流/撤销状态均运行在 Cloudflare，无需自建服务器 |
-| 🧭 | 导航首页 | 所有一级分组同时展示，组内二级分类横向切换；支持按书签标题、URL、描述和完整分类路径搜索，并提供一致的左侧、顶部和移动端层级导航 |
-| 🏠 | 首页设置 | 管理员可配置站点标题与是否显示标题、搜索框和搜索引擎选择器，设置首页“经常访问”区域展示数量（可关闭），并在保存前通过实时预览检查未保存配置 |
-| 🛠️ | 后台管理 | 一级/二级分类编辑移动、根级分页、同级排序、删除保护和完整路径书签管理；设置页集中管理站点信息、外观、布局、导航、搜索、页脚脚本与账号安全 |
+| ☁️ | 边缘全栈 | Workers、D1 与 KV 托管整站，代码和数据留在你自己的 GitHub / Cloudflare 账号下，无需租用 VPS 或维护数据库服务 |
+| 🧭 | 导航首页 | 一级分组与二级分类清晰呈现，支持标题、URL、描述和完整分类路径搜索；左侧、顶部与移动端导航适配不同屏幕，顶部导航可分行展示 |
+| 🏠 | 首页设置 | 站点标题、搜索框、搜索引擎选择器和“经常访问”数量均可配置，保存前可实时预览；登录后可直接在首页新建主分类与子分类 |
+| 🛠️ | 后台管理 | 分类编辑、移动、同级排序与删除保护，配合完整路径定位和书签批量移动，减少逐条编辑；站点、布局、搜索、备份与账号安全集中管理 |
 | 🔒 | 私密书签 | 新增或编辑书签时可标记为“私密链接（仅登录可见）”；普通访客不会收到私密书签数据，管理员登录后可正常浏览和管理 |
 | 🗂️ | 私密分类 | 分类可设置为“访客不可见（仅登录可见）”；访客不会看到该分类、子分类及其中的书签，管理员登录后仍可正常管理 |
-| ↕️ | 跨分类排序 | 管理员可直接在首页进入排序模式，将书签从分类 A 拖到分类 B，也可以调整分类内顺序；点击“保存排序”后统一提交，取消则不修改数据 |
+| ↕️ | 跨分类排序 | 支持一级、二级及空分类目标之间移动书签，也能调整分类内顺序；PC 使用拖拽，手机提供“移动到分类”入口，统一保存或取消 |
 | 🔄 | 浏览器书签同步 | 可在后台开启单向同步；Chrome/Edge 扩展将之后新增的书签统一放入“浏览器新增收藏”，不改变现有分类，也不会删除导航页书签 |
 | 📊 | 访问分析 | 首页书签点击会累计访问次数，后台提供总点击、已访问/零访问书签统计、最常访问 Top 20 排行和零访问书签分页列表；进入分析页时会刷新最新数据 |
-| 🎨 | 外观定制 | 22 套内置主题、亮暗模式、背景、遮罩、卡片尺寸、透明度与图标大小设置；支持自定义页脚 HTML、CSS 和 JavaScript，CSS 与页脚可在隔离预览中检查 |
+| 🎨 | 外观定制 | 22 套内置主题、亮暗模式、背景与强调色，分类字号和图标尺寸可按一级/二级分别设置；卡片尺寸、透明度与页脚 HTML / CSS / JavaScript 均可定制，CSS 与页脚支持隔离预览 |
 | 🔎 | 搜索与图标 | 全站分组搜索、可配置的外部搜索引擎，以及书签 Favicon / Iconify 与分类图片、文字和表情图标展示 |
-| 💾 | 数据迁移 | JSON 备份与恢复，支持 Sun-Panel 数据和浏览器书签 HTML 导入 |
-| 🔐 | 安全认证 | PBKDF2 密码哈希、Bearer Session Token、严格 CSP、管理员接口鉴权与登录失败限流 |
+| 💾 | 数据迁移 | 全量或按分类导出备份，按需携带站点设置；JSON 追加合并或覆盖恢复，兼容 Sun-Panel 数据与浏览器书签 HTML |
+| 🔐 | 安全认证 | PBKDF2 密码哈希、Bearer Session Token、CSP、管理员接口鉴权与登录失败限流；私密图标有访问授权和缓存隔离 |
 | ⚡ | 加载优化 | 代码分割、边缘缓存、本地快照、图标懒加载与基础 PWA 离线回退；后台直达刷新不会先闪现首页 |
+
+喜欢紧凑布局？桌面详情卡片宽度最低可设为 **40 px**，移动端仍保留 **150 px** 安全下限。极窄卡片会压缩标题和描述，更适合以图标为主的导航。
 
 ### 书签隐私与跨分类排序
 
+- **首页直接整理**：登录后可新建主分类，或在当前分组下新建子分类；创建后自动定位。编辑书签时，分类选择器会展开并定位当前分类，减少反复查找。
 - **私密链接**：管理员在新增或编辑书签时勾选“设为私密链接（仅登录可见）”。未登录访客的公开数据接口会过滤这类书签；管理员登录后仍可在首页和后台查看、编辑与删除。
 - **私密分类**：管理员在后台编辑分类时勾选“访客不可见（仅登录可见）”。未登录访客不会收到该分类、其子分类及其中书签的数据；管理员登录后仍可正常查看和管理。旧分类默认保持访客可见。
-- **跨分类拖拽**：管理员登录后，在首页任意分类点击“排序”，页面会进入统一排序会话。将书签拖入其他分类即可完成归类，同时可以调整目标分类中的位置；点击底部“保存排序”后一次性保存分类和顺序，点击“取消”则放弃本次修改。
+- **跨分类拖拽**：管理员登录后，在首页任意分类点击“排序”，进入统一排序会话。PC 可将书签拖入一级、二级或空分类并调整位置；手机可通过“移动到分类”选择目标。点击底部“保存排序”后统一保存分类和顺序，点击“取消”则放弃本次修改。
+- **批量移动**：大量书签需要重新归类时，在后台筛选、勾选多条书签，再选择目标分类并确认完整路径，一次完成移动，不必逐条打开编辑框。
 - **浏览器书签同步**：在后台“设置 → 站点设置”开启“浏览器书签同步”后，会自动创建“浏览器新增收藏”分类。安装 [`browser-extension`](browser-extension/) 中的 Chrome/Edge 扩展并登录后，浏览器之后新增的网页书签会统一同步到该分类，并按默认图标策略保存 `https://favicon.im/<hostname>?larger=true` 图标候选。扩展不按浏览器收藏夹文件夹创建导航分类，只做“浏览器 → 导航页”单向新增，不删除或反向覆盖导航页已有书签；整理时可直接在首页排序模式中拖到其他分类。
 
 ## 界面预览
@@ -58,35 +64,41 @@
   <tr>
     <td align="center" width="50%">
       <strong>亮色首页</strong><br>
-      <img src="docs/screenshots/cf-navs-light.jpg" alt="CF-Navs 亮色首页">
+      <img src="docs/screenshots/cf-navs-light.webp" alt="CF-Navs 亮色首页：护眼与毛玻璃对角线对比">
     </td>
     <td align="center" width="50%">
       <strong>暗色首页</strong><br>
-      <img src="docs/screenshots/cf-navs-dark.jpg" alt="CF-Navs 暗色首页">
+      <img src="docs/screenshots/cf-navs-dark.webp" alt="CF-Navs 暗色首页：护眼与毛玻璃对角线对比">
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
       <strong>移动端亮色</strong><br>
-      <img src="docs/screenshots/cf-navs-light-mobile.jpg" alt="CF-Navs 移动端亮色首页" width="260">
+      <img src="docs/screenshots/cf-navs-light-mobile.webp" alt="CF-Navs 移动端亮色首页：护眼与毛玻璃对角线对比" width="260">
     </td>
     <td align="center" width="50%">
       <strong>移动端暗色</strong><br>
-      <img src="docs/screenshots/cf-navs-dark-mobile.jpg" alt="CF-Navs 移动端暗色首页" width="260">
+      <img src="docs/screenshots/cf-navs-dark-mobile.webp" alt="CF-Navs 移动端暗色首页：护眼与毛玻璃对角线对比" width="260">
     </td>
   </tr>
 </table>
 
+首页预览以对角线对比两种外观：左下为护眼主题，右上为毛玻璃主题。
+
 <p align="center">
   <strong>主题与站点设置</strong><br>
-  <img src="docs/screenshots/cf-navs-admin-setting.jpg" alt="CF-Navs 主题与站点设置">
+  <img src="docs/screenshots/cf-navs-admin-setting.webp" alt="CF-Navs 主题与站点设置">
 </p>
 
 更多界面截图位于 [`docs/screenshots`](docs/screenshots)。
 
 ## 快速部署
 
-如果你第一次使用 Cloudflare，建议先选择一种部署方式并完整走完，不要混用两套流程。两种方式最终都会通过 `/install` 初始化数据库和管理员账号。
+**不想折腾服务器？推荐从控制台部署开始。** 准备好 GitHub 和 Cloudflare 账号，按“Fork → 关联仓库 → 设置安装令牌 → 网页初始化”完成部署。正常安装无需手动执行 SQL，也无需填写 Cloudflare API Token。
+
+可从 Cloudflare 免费计划起步，但免费额度并非无限用量；请求、数据库与 KV 操作各有配额，具体以 [Workers](https://developers.cloudflare.com/workers/platform/pricing/)、[D1](https://developers.cloudflare.com/d1/platform/pricing/) 和 [KV](https://developers.cloudflare.com/kv/platform/pricing/) 官方说明为准。
+
+第一次使用时，请选一种部署方式完整走完，不要混用两套流程。两种方式最终都会通过 `/install` 初始化数据库和管理员账号。
 
 CF-Navs 需要以下 Cloudflare 资源：
 
@@ -98,18 +110,19 @@ CF-Navs 需要以下 Cloudflare 资源：
 
 ### 方式一：Cloudflare 控制台部署（推荐）
 
-适合不想在本地安装 Wrangler 的用户。Cloudflare 会从 GitHub 的 `main` 分支自动构建和部署。
+适合希望全程在浏览器中操作、不想安装本地工具的用户。Cloudflare 关联你的 GitHub Fork 后，会从 `main` 生产分支自动构建和部署；以后同步上游更新时，也请更新这个分支。
 
-1. [Fork 本仓库](https://github.com/lbjxr/CF-Navs/fork)，并确认 Fork 的默认分支为 `main`。
+1. [Fork 本仓库](https://github.com/lbjxr/CF-Navs/fork)，保留 `main` 分支，并确认后续 Cloudflare 构建使用的是你的 Fork。
 2. 在 Cloudflare 控制台打开 **Workers & Pages → Create application → Import a repository**，授权 Cloudflare 访问 GitHub，并选择你的 Fork。
 3. 在构建配置中填写：
    - 生产分支：`main`
    - 根目录：`/`
    - Build command：`npm run build`
    - Deploy command：`npx wrangler deploy`
+   - Node.js：推荐 24 LTS；如需指定版本，在**构建变量**中设置 `NODE_VERSION=24`（[官方说明](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/)）
 4. 保存并完成第一次 **Production** 部署。正常情况下，Cloudflare 会根据 [`wrangler.toml`](wrangler.toml) 创建并绑定 `DB` D1 数据库和 `SESSION` KV 命名空间。
 
-   首次部署后应能看到这两个绑定。如果出现 missing binding 或资源创建权限错误，先确认部署来自 `main`、Cloudflare 当前选择的是正确账号，并查看[故障排查](docs/guides/TROUBLESHOOTING.md)；不要在没有确认账号和资源的情况下重复创建数据库或 KV。
+   首次部署后应能看到这两个绑定。如果出现 missing binding 或资源创建权限错误，先确认部署来自 `main` 的 **Production** 环境、Cloudflare 当前选择的是正确账号，并查看[故障排查](docs/guides/TROUBLESHOOTING.md)；不要在没有确认账号和资源的情况下重复创建数据库或 KV。
 
 
 5. 第一次生产部署完成后，在 Worker 的 **设置 → 变量和密钥** 中选择**生产环境**，配置 `SETUP_TOKEN`：
@@ -123,11 +136,12 @@ CF-Navs 需要以下 Cloudflare 资源：
 
 ### 方式二：Wrangler CLI 部署
 
-前置条件：Node.js 18+、npm 和 Cloudflare 账号。所有资源命令都会作用于当前 Wrangler 登录的账号；如果你有多个 Cloudflare 账号，先用 `npx wrangler whoami` 确认账号。
+前置条件：Node.js **22.12+（22.x）或 24+**、npm 和 Cloudflare 账号，推荐 Node.js 24 LTS。所有资源命令都会作用于当前 Wrangler 登录的账号；如果你有多个 Cloudflare 账号，先用 `npx wrangler whoami` 确认账号。
 
 ```bash
 git clone https://github.com/lbjxr/CF-Navs.git
 cd CF-Navs
+git switch develop
 npm install
 
 npx wrangler login
@@ -157,13 +171,17 @@ npm run deploy                 # Secret 生效后重新部署
 - 如果页面仍显示旧版本，先强制刷新，让新版 Service Worker 接管。
 - 如果安装或绑定失败，查看 Worker 日志：`npx wrangler tail`。涉及线上数据的命令前，先确认当前 Cloudflare 账号和目标 Worker。
 
-完整步骤与故障排查请阅读：
+**让导航页马上用起来**：在后台导入一份现有书签，选一套主题，设置需要隐藏的分类或链接，再将站点设为浏览器起始页。之后可以通过浏览器扩展收集新增书签，通过首页排序或后台批量移动持续整理。
+
+更多配置与故障排查请阅读下列文档；部署分支和 Node.js 要求请按本页执行：
 
 - [快速开始](docs/guides/QUICKSTART.md)
 - [完整部署指南](docs/guides/DEPLOYMENT.md)
 - [常见问题排查](docs/guides/TROUBLESHOOTING.md)
 
 ## 本地开发
+
+开发环境使用 Node.js 22.12+（22.x）或 24+，推荐与 CI 一致的 Node.js 24 LTS。
 
 安装依赖：
 
@@ -196,11 +214,11 @@ git diff --check
 
 | 层级 | 技术 |
 |---|---|
-| 前端 | Svelte 4、TypeScript、Vite |
+| 前端 | Svelte 5、TypeScript、Vite 7 |
 | Worker API | Hono、Cloudflare Workers |
 | 数据与会话 | Cloudflare D1、Cloudflare KV |
 | 交互与排序 | SortableJS |
-| 测试 | Vitest、Svelte Check、真实 Chrome 回归脚本 |
+| 测试 | Vitest 4、Svelte Check、真实 Chrome 回归脚本 |
 
 ## 项目结构
 
@@ -236,17 +254,21 @@ CF-Navs/
 
 ## 数据导入
 
-后台支持以下数据格式：
+已有收藏不用重新录入，后台支持以下数据格式：
 
-- CF-Navs JSON 备份：保存两层分类关系，支持按完整路径追加合并或覆盖恢复。
-- Sun-Panel 数据：分类按一级导入，并转换书签与兼容图标字段。
-- 浏览器书签 HTML：导入浏览器导出的标准文件，有效文件夹映射为两层分类，更深路径压平到二级标题。
+- **CF-Navs JSON 备份**：支持全量或按分类导出，保留两层分类关系，并可选择是否携带站点设置；导入时支持按完整路径追加合并或覆盖恢复。
+- **Sun-Panel 数据**：分类按一级导入，并转换书签与兼容图标字段，迁移现有导航不必从零开始。
+- **浏览器书签 HTML**：导入浏览器导出的标准文件，有效文件夹映射为两层分类，更深路径压平到二级标题。
+
+**只搬需要的那一部分**：可以导出某个主分类及其子分类，也可以只选二级分类，系统会补齐必需的父分类记录，不夹带未选分类的书签。适合把一组工作资源迁到另一套 CF-Navs，或为重点分类单独留一份备份。
+
+导入前请先备份现有数据：**追加模式保留重复链接，覆盖模式会替换全部分类与书签**。部分导出是备份与迁移能力，不是自动去重或双向同步；备份可能包含私密链接和站点设置，请妥善保管。
 
 参阅 [Sun-Panel 数据导入](docs/guides/SUNPANEL_IMPORT.md) 和 [浏览器书签导入](docs/guides/BROWSER_BOOKMARK_IMPORT.md)。
 
 ## 贡献
 
-欢迎通过 Issue 或 Pull Request 提交问题与改进。请保持改动范围明确，并在提交前运行与改动相关的类型检查、测试和构建。
+欢迎通过 Issue 反馈使用体验、通过 Pull Request 贡献改进。开始前请阅读 [参与开发](CONTRIBUTING.md)，按改动范围完成验证；安全问题请使用 [私密报告渠道](SECURITY.md)，不要在公开 Issue 中粘贴凭据或私密书签。
 
 ## 致谢
 

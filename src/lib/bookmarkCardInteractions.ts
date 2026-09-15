@@ -4,6 +4,7 @@ export type BookmarkContextMenuInput = {
   sortMode: boolean
   canEdit: boolean
   hasEditHandler: boolean
+  hasMoveHandler?: boolean
 }
 
 export type BookmarkModalInput = {
@@ -16,7 +17,8 @@ export function shouldBlockCardNavigation(sortMode: boolean): boolean {
 }
 
 export function canOpenBookmarkContextMenu(input: BookmarkContextMenuInput): boolean {
-  return !input.sortMode && input.canEdit && input.hasEditHandler
+  if (input.sortMode) return Boolean(input.hasMoveHandler)
+  return input.canEdit && input.hasEditHandler
 }
 
 export function shouldOpenBookmarkModal(input: BookmarkModalInput): boolean {

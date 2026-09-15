@@ -90,7 +90,7 @@ npm run build
 
 - [ ] 构建成功
 - [ ] `dist/` 目录已生成
-- [ ] 无 TypeScript 错误
+- [ ] 如需检查 TypeScript/Svelte 类型，另运行 `npm run type-check`；`npm run build` 本身只执行 Vite 构建（`package.json:7-8`）。
 
 ## 🚀 开始部署
 
@@ -100,14 +100,7 @@ npm run build
 npm run deploy
 ```
 
-预期输出：
-```
-✨ Built successfully!
-Total Upload: xx.xx KiB / gzip: xx.xx KiB
-Uploaded cf-navs (x.xx sec)
-Published cf-navs (x.xx sec)
-  https://cf-navs.your-subdomain.workers.dev
-```
+部署命令成功退出并显示部署 URL。具体 Wrangler 输出格式和耗时由当前 Wrangler 版本及 Cloudflare 环境决定，不把固定日志样例当作验收证据。
 
 - [ ] 部署成功
 - [ ] 获得访问 URL

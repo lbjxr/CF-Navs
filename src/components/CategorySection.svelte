@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { CardStyle, DescriptionDisplayMode, PublicBookmark, PublicCategory } from '../../shared/types'
+  import type { CategoryTreeOption } from '../lib/categorySelect'
   import { resolveBookmarkDescriptionMode } from '../lib/descriptionMode'
   import BookmarkCard from './BookmarkCard.svelte'
   import CategoryIcon from './CategoryIcon.svelte'
-  import { getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
+  import { getInfoCardMobileTrackWidth, getInfoCardTrackWidth, getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
   import { sortableList, type SortTransfer } from '../lib/sortableList'
 
   type AsyncVoid<T = void> = T | Promise<T>
@@ -17,6 +18,7 @@
   export let inlineActions = false
   export let showCategoryIcon = true
   export let canAddBookmark = false
+  export let onCreateSubcategory: (() => AsyncVoid) | undefined = undefined
   export let canSort = false
   /** 传入后由页面统一控制排序会话，支持多个分类列表互相拖放。 */
   export let controlledSortMode: boolean | undefined = undefined
@@ -30,6 +32,8 @@
   export let cardShowDescription = true
   export let cardDescriptionMode: DescriptionDisplayMode = cardShowDescription ? 'always' : 'hidden'
   export let cardIconShowTitle = true
+  export let moveCategories: CategoryTreeOption[] = []
+  export let onMoveBookmark: ((bookmark: PublicBookmark, categoryId: number) => AsyncVoid) | undefined = undefined
   export let onAddBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
   export let onEditBookmark: ((bookmark: PublicBookmark) => AsyncVoid) | undefined = undefined
   export let onRequestSort: (() => AsyncVoid) | undefined = undefined
@@ -44,7 +48,7 @@
   $: activeSortMode = controlledSortMode ?? false
   // 跨分类拖放时单个甚至零个书签也需要入口，把书签拖出或拖入本分类。
   $: canEnterSort = canSort && controlledSortMode !== undefined
-  $: showActions = activeSortMode || canAddBookmark || canEnterSort
+  $: showActions = activeSortMode || canAddBookmark || canEnterSort || Boolean(onCreateSubcategory)
 
   function handleReorder(orderedIds: Array<string | number>) {
     void onSortDraft?.(category.id, orderedIds.map(Number))
@@ -66,8 +70,9 @@
   $: sectionId = `category-${category.id}`
   $: heading = displayTitle || category.title
   $: iconGridTrackWidth = getIconCardTrackWidth(cardIconSize, cardIconShowTitle)
-  $: gridMinWidth = cardStyle === 'info' ? 200 : iconGridTrackWidth // Sun-Panel 标准值
-  $: mobileGridMinWidth = cardStyle === 'info' ? 150 : iconGridTrackWidth
+  $: infoCardTrackWidth = getInfoCardTrackWidth(cardWidth)
+  $: gridMinWidth = cardStyle === 'info' ? infoCardTrackWidth : iconGridTrackWidth
+  $: mobileGridMinWidth = cardStyle === 'info' ? getInfoCardMobileTrackWidth(cardWidth) : iconGridTrackWidth
   $: gridGap = cardStyle === 'info' ? '18px' : '22px 24px'
   $: mobileGridGap = cardStyle === 'info' ? '1rem' : '14px 16px'
   async function handleAddBookmark() {
@@ -81,7 +86,7 @@
       {#if showHeading}
         <div class="section-title-wrap">
           {#if showCategoryIcon && category.icon}
-            <CategoryIcon category={category} size={level === 2 ? 30 : 38} className="section-icon" />
+            <CategoryIcon category={category} size={level === 2 ? 'var(--category-child-icon-size, 30px)' : 'var(--category-root-icon-size, 38px)'} className="section-icon" />
           {/if}
           <div class="section-copy">
             <div class="section-heading-row">
@@ -92,7 +97,7 @@
         </div>
       {/if}
       {#if showActions}
-        <div class="section-actions" role="group" aria-label={`${heading} 操作`}>
+        <div class="section-actions" class:sorting={activeSortMode} role="group" aria-label={`${heading} 操作`}>
           {#if activeSortMode && showSortActions}
             <button
               type="button"
@@ -117,6 +122,22 @@
               <span class="action-label">{savingSort ? '保存中' : '保存排序'}</span>
             </button>
           {:else if !activeSortMode}
+            {#if onCreateSubcategory}
+              <button
+                type="button"
+                class="add-link-button"
+                on:click={() => void onCreateSubcategory?.()}
+                aria-label="新建子分类"
+                title="新建子分类"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" class="action-symbol action-icon">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v3" />
+                  <path d="M3 7v10a2 2 0 0 0 2 2h6" />
+                  <path d="M16 15h6M19 12v6" />
+                </svg>
+                <span class="action-label">新建子分类</span>
+              </button>
+            {/if}
             {#if canAddBookmark}
               <button
                 type="button"
@@ -125,7 +146,11 @@
                 aria-label="新增书签"
                 title="新增书签"
               >
-                <span aria-hidden="true" class="action-symbol">＋</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true" class="action-symbol action-icon">
+                  <path d="M6 4h8l4 4v3" />
+                  <path d="M6 4a1 1 0 0 0-1 1v15l7-4 3 1.7" />
+                  <path d="M17 15v6M14 18h6" />
+                </svg>
                 <span class="action-label">新增书签</span>
               </button>
             {/if}
@@ -137,7 +162,10 @@
                 aria-label="排序"
                 title="排序"
               >
-                <span aria-hidden="true" class="action-symbol">↕</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true" class="action-symbol action-icon">
+                  <path d="M8 4v16M8 4 5 7M8 4l3 3" />
+                  <path d="M16 20V4M16 20l-3-3M16 20l3-3" />
+                </svg>
                 <span class="action-label">排序</span>
               </button>
             {/if}
@@ -160,6 +188,8 @@
       use:sortableList={{
         enabled: activeSortMode,
         onSort: handleReorder,
+        filter: '.bookmark-context-menu, .category-tree-menu, .bookmark-mobile-menu-trigger',
+        preventOnFilter: false,
         group: sortGroup || undefined,
         onTransfer: handleTransfer,
       }}
@@ -177,7 +207,9 @@
             height={cardHeight}
             canEdit={Boolean(onEditBookmark)}
             sortMode={activeSortMode}
+            moveCategories={moveCategories}
             onEdit={onEditBookmark}
+            onMoveBookmark={onMoveBookmark}
           />
         </div>
       {/each}
@@ -205,8 +237,9 @@
     gap: 0.68rem;
   }
 
+  .category-section.child-category .section-heading-row h3,
   .category-section.has-display-title .section-heading-row h3 {
-    font-size: 0.92rem;
+    font-size: var(--category-child-font-size, 0.92rem);
     font-weight: 600;
     letter-spacing: 0.01em;
   }
@@ -226,9 +259,11 @@
 
   .section-header.no-heading.inline-actions {
     position: absolute;
-    top: 0.12rem;
+    top: 0.15rem;
     right: 0;
     z-index: 2;
+    height: max(36px, var(--category-root-icon-size, 40px));
+    align-items: center;
   }
 
   .section-title-wrap {
@@ -257,7 +292,7 @@
     min-width: 0;
     flex: 1 1 auto;
     color: var(--home-text-color, currentColor);
-    font-size: 1.02rem;
+    font-size: var(--category-root-font-size, 1.02rem);
     font-weight: 650;
     line-height: 1.15;
     overflow: hidden;
@@ -299,21 +334,30 @@
     line-height: 1;
   }
 
+
+  .section-actions .action-icon {
+    width: 1.05rem;
+    height: 1.05rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
   .section-actions .action-label {
     white-space: nowrap;
   }
 
   .section-title-wrap :global(.section-icon) {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    border-radius: 10px;
+    width: var(--category-root-icon-size, 38px);
+    height: var(--category-root-icon-size, 38px);
+    min-width: var(--category-root-icon-size, 38px);
   }
 
   .category-section.child-category .section-title-wrap :global(.section-icon) {
-    width: 30px;
-    height: 30px;
-    min-width: 30px;
+    width: var(--category-child-icon-size, 30px);
+    height: var(--category-child-icon-size, 30px);
+    min-width: var(--category-child-icon-size, 30px);
     border-radius: 8px;
   }
 
@@ -433,12 +477,8 @@
   /* 移动端响应式 */
   @media (max-width: 500px) {
     .bookmark-grid {
-      grid-template-columns: repeat(auto-fill, minmax(var(--mobile-card-min-width, 150px), 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(var(--mobile-card-min-width, 150px), 100%), 1fr));
       gap: var(--mobile-bookmark-grid-gap, 1rem);
-    }
-
-    .bookmark-grid.is-info-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .bookmark-grid.is-icon-grid {
@@ -526,6 +566,15 @@
 
     .section-actions {
       gap: 0.28rem;
+    }
+
+    /*
+     * 首页主分类区（inlineActions）在移动端把「新增书签」「排序」交给
+     * HomeCategoryScope 的「更多操作」菜单承载（PROB-11），这里隐藏重复入口。
+     * 排序会话中的提示文案不隐藏，否则移动端拖拽时没有任何说明。
+     */
+    .section-header.inline-actions .section-actions:not(.sorting) {
+      display: none;
     }
   }
 </style>

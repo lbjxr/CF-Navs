@@ -1,4 +1,5 @@
 import './app.css'
+import { mount } from 'svelte'
 import { initErrorReporting } from './lib/errorMonitor'
 import {
   collectPrecacheAssetUrls,
@@ -10,7 +11,7 @@ import App from './App.svelte'
 
 initErrorReporting()
 
-const app = new App({
+const app = mount(App, {
   target: document.getElementById('app')!,
 })
 

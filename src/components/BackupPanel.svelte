@@ -541,6 +541,10 @@
       gap: 12px;
     }
 
+    .export-operation > .primary-button {
+      width: 100%;
+    }
+
     .import-actions {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -576,6 +580,5 @@
       white-space: nowrap;
     }
 
-    .primary-button { align-self: flex-start; }
   }
 </style>

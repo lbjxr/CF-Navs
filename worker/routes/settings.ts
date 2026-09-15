@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { BUILTIN_BACKGROUND_PRESET_IDS, ErrCode, type Settings, type SettingsUpdateReq } from '../../shared/types'
 import { SETTINGS_KEYS } from '../../shared/settings'
+import { normalizeCardIconSize, normalizeCardSizeSetting, normalizeCategoryDisplaySetting } from '../../shared/settings'
 import { invalidatePublicDataCache, invalidateSiteConfigCache } from '../lib/cache'
 import { ensureBrowserSyncCategory, getSettings, settingsFromPatchDefaults, touchDataVersion, updateSettings, writeSettingsPatch } from '../lib/db'
 import { fail, ok } from '../lib/response'
@@ -55,6 +56,12 @@ settingsRoutes.put('/', async (c) => {
     !BUILTIN_BACKGROUND_PRESET_IDS.includes(body.background_preset_id)
   ) {
     return badRequest(c, 'invalid background_preset_id')
+  }
+  if (body.custom_accent_color !== undefined && typeof body.custom_accent_color !== 'string') {
+    return badRequest(c, 'invalid custom_accent_color')
+  }
+  if (body.custom_dark_accent_color !== undefined && typeof body.custom_dark_accent_color !== 'string') {
+    return badRequest(c, 'invalid custom_dark_accent_color')
   }
   if (body.public_mode !== undefined && typeof body.public_mode !== 'boolean') {
     return badRequest(c, 'invalid public_mode')
@@ -118,6 +125,9 @@ settingsRoutes.put('/', async (c) => {
   if (body.card_icon_show_title !== undefined && typeof body.card_icon_show_title !== 'boolean') {
     return badRequest(c, 'invalid card_icon_show_title')
   }
+  if (body.card_style !== undefined && body.card_style !== 'info' && body.card_style !== 'icon') {
+    return badRequest(c, 'invalid card_style')
+  }
   if (body.card_text_color !== undefined && typeof body.card_text_color !== 'string') {
     return badRequest(c, 'invalid card_text_color')
   }
@@ -171,6 +181,9 @@ settingsRoutes.put('/', async (c) => {
 
   try {
     const settingsPatch: SettingsUpdateReq = { ...body }
+    if (body.card_size !== undefined) settingsPatch.card_size = normalizeCardSizeSetting(body.card_size)
+    if (body.card_icon_size !== undefined) settingsPatch.card_icon_size = normalizeCardIconSize(body.card_icon_size)
+    if (body.category_display !== undefined) settingsPatch.category_display = normalizeCategoryDisplaySetting(body.category_display)
     if (body.browser_sync_enabled === true) {
       await ensureBrowserSyncCategory(c.env.DB)
     }

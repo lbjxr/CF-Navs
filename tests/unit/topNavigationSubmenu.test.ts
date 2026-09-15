@@ -1,0 +1,262 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte'
+import { tick } from 'svelte'
+import Sidebar from '../../src/components/Sidebar.svelte'
+
+// 顶部导航子菜单的可观察契约。此前只有源码文本断言（`toContain("if (event?.detail === 0)")`、
+// `toContain('getTopMenuItems()[0]?.focus()')`、`toContain('if (!item.children?.length) return')`）：
+// 那些能证明模板里写了这些标识符，证明不了键盘打开后焦点真的进了菜单、无子项的项真的不弹菜单。
+//
+// Escape 关闭与点外部关闭依赖 Sidebar 在 `onMount` 里注册到 `document` 的监听。这些监听一度在
+// 测试里完全不生效：Svelte 4 的 `exports["."]` 只在 `browser` 条件下指向 src/runtime/index.js，
+// Vitest 默认解析到 src/runtime/ssr.js，那里的 `onMount` 是空实现。`vite.config.ts` 在 test 模式
+// 补上 `resolve.conditions: ['browser']` 之后才能观察到这两条行为。
+
+const items = [
+  {
+    id: 'cat-1',
+    categoryId: 1,
+    title: '常用工具',
+    icon: null,
+    count: 2,
+    children: [
+      { id: 'cat-11', categoryId: 11, title: '编辑器', icon: null, count: 1, children: [] },
+      { id: 'cat-12', categoryId: 12, title: '设计', icon: null, count: 1, children: [] },
+    ],
+  },
+  { id: 'cat-2', categoryId: 2, title: '学习资料', icon: null, count: 1, children: [] },
+]
+
+const topNavigation = { position: 'top' as const, always_expanded: false, top_layout: 'scroll' as const }
+const leftNavigation = { position: 'left' as const, always_expanded: true, top_layout: 'scroll' as const }
+
+afterEach(cleanup)
+
+/** 顶部父项的展开按钮：aria-label 随开合状态在「展开/收起」之间切换。 */
+const expandButton = (title: string, expanded = false) =>
+  screen.getByRole('button', { name: `${expanded ? '收起' : '展开'} ${title} 的子分类` })
+
+const submenu = () => screen.queryByRole('menu', { name: '常用工具 子分类' })
+
+const menuItems = () => screen.queryAllByRole('menuitem')
+
+describe('顶部导航子菜单的打开与关闭', () => {
+  it('默认不渲染子菜单', () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+
+    expect(submenu()).toBeNull()
+    expect(expandButton('常用工具').getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('点展开按钮打开子菜单，再点一次关闭', async () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+
+    await fireEvent.click(expandButton('常用工具'), { detail: 1 })
+
+    expect(submenu()).toBeTruthy()
+    expect(menuItems().map((node) => node.querySelector('.top-submenu-title,span')?.textContent?.trim()))
+      .toEqual(['编辑器', '设计'])
+    expect(expandButton('常用工具', true).getAttribute('aria-expanded')).toBe('true')
+
+    await fireEvent.click(expandButton('常用工具', true), { detail: 1 })
+
+    expect(submenu()).toBeNull()
+  })
+
+  it('无子分类的顶部项不弹子菜单', async () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+
+    // 「学习资料」没有子项，因此连展开按钮都不该渲染
+    expect(screen.queryByRole('button', { name: /学习资料 的子分类/ })).toBeNull()
+
+    await fireEvent.click(screen.getByTitle('学习资料'), { detail: 1 })
+
+    expect(submenu()).toBeNull()
+  })
+
+  it('选中子菜单项后关闭菜单并上报导航目标', async () => {
+    const onNavigate = vi.fn()
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation, onNavigate } })
+    await fireEvent.click(expandButton('常用工具'), { detail: 1 })
+
+    await fireEvent.click(screen.getByRole('menuitem', { name: /编辑器/ }))
+
+    expect(onNavigate).toHaveBeenCalledWith('cat-11')
+    expect(submenu()).toBeNull()
+  })
+
+  it('打开的父分类从分类树里消失后，子菜单必须跟着关闭', async () => {
+    const { rerender } = render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    await fireEvent.click(expandButton('常用工具'), { detail: 1 })
+    expect(submenu()).toBeTruthy()
+
+    // 后台删掉该分类后首页会重新下发 items；菜单不关就会留下指向已消失分类的悬空浮层
+    await rerender({ items: items.filter((item) => item.id !== 'cat-1') })
+
+    expect(submenu()).toBeNull()
+  })
+
+  it('打开的父分类被改成没有子分类后，子菜单必须跟着关闭', async () => {
+    const { rerender } = render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    await fireEvent.click(expandButton('常用工具'), { detail: 1 })
+    expect(submenu()).toBeTruthy()
+
+    await rerender({
+      items: items.map((item) => (item.id === 'cat-1' ? { ...item, children: [] } : item)),
+    })
+
+    expect(submenu()).toBeNull()
+  })
+
+  it('Escape 关闭菜单并把焦点还给展开按钮', async () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    await fireEvent.click(expandButton('常用工具'), { detail: 0 })
+    await tick()
+
+    await fireEvent.keyDown(document, { key: 'Escape' })
+    await tick()
+
+    expect(submenu()).toBeNull()
+    // 焦点不还回去的话，键盘用户按完 Escape 会掉到文档开头
+    expect(document.activeElement).toBe(expandButton('常用工具'))
+  })
+
+  it('点浮层外部关闭菜单', async () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    await fireEvent.click(expandButton('常用工具'), { detail: 1 })
+    expect(submenu()).toBeTruthy()
+
+    await fireEvent.pointerDown(document.body)
+    await tick()
+
+    expect(submenu()).toBeNull()
+  })
+
+  it('点菜单内部不关闭菜单', async () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    await fireEvent.click(expandButton('常用工具'), { detail: 1 })
+
+    await fireEvent.pointerDown(submenu() as HTMLElement)
+    await tick()
+
+    expect(submenu()).toBeTruthy()
+  })
+
+  it('切到左侧导航后不再渲染顶部子菜单', async () => {
+    const { rerender } = render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    await fireEvent.click(expandButton('常用工具'), { detail: 1 })
+
+    await rerender({ navigation: leftNavigation })
+
+    expect(submenu()).toBeNull()
+    expect(screen.queryByTestId('top-navigation')).toBeNull()
+  })
+})
+
+
+describe('顶部导航滚轮横向滚动', () => {
+  it('垂直滚轮推进横向列表并在滚动边界放行页面事件', () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    const track = screen.getByTestId('top-navigation').querySelector('.top-track') as HTMLElement
+    Object.defineProperty(track, 'scrollWidth', { configurable: true, value: 320 })
+    Object.defineProperty(track, 'clientWidth', { configurable: true, value: 120 })
+    track.scrollLeft = 0
+
+    const atLeftEdge = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -60 })
+    track.dispatchEvent(atLeftEdge)
+
+    expect(track.scrollLeft).toBe(0)
+    expect(atLeftEdge.defaultPrevented).toBe(false)
+
+    const horizontal = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: 45, deltaY: 3 })
+    track.dispatchEvent(horizontal)
+
+    expect(track.scrollLeft).toBe(45)
+    expect(horizontal.defaultPrevented).toBe(true)
+
+    track.scrollLeft = 200
+    const atRightEdge = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 60 })
+    track.dispatchEvent(atRightEdge)
+
+    expect(track.scrollLeft).toBe(200)
+    expect(atRightEdge.defaultPrevented).toBe(false)
+  })
+
+  it('桌面分行模式不拦截滚轮', () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: { ...topNavigation, top_layout: 'wrap' } } })
+    const track = screen.getByTestId('top-navigation').querySelector('.top-track') as HTMLElement
+    Object.defineProperty(track, 'scrollWidth', { configurable: true, value: 320 })
+    Object.defineProperty(track, 'clientWidth', { configurable: true, value: 120 })
+
+    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 60 })
+    track.dispatchEvent(wheel)
+
+    expect(track.scrollLeft).toBe(0)
+    expect(wheel.defaultPrevented).toBe(false)
+  })
+
+  it('移动端即使配置分行也保留横向滚轮', () => {
+    const previousWidth = window.innerWidth
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
+    try {
+      render(Sidebar, { props: { items, activeId: null, navigation: { ...topNavigation, top_layout: 'wrap' } } })
+      const track = screen.getByTestId('top-navigation').querySelector('.top-track') as HTMLElement
+      Object.defineProperty(track, 'scrollWidth', { configurable: true, value: 320 })
+      Object.defineProperty(track, 'clientWidth', { configurable: true, value: 120 })
+
+      const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 60 })
+      track.dispatchEvent(wheel)
+
+      expect(track.scrollLeft).toBe(60)
+      expect(wheel.defaultPrevented).toBe(true)
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: previousWidth })
+    }
+  })
+})
+describe('顶部导航子菜单的键盘可达性', () => {
+  it('键盘触发（detail 为 0）把焦点送进菜单第一项', async () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+
+    // Enter/Space 触发的 click 事件 detail 为 0
+    await fireEvent.click(expandButton('常用工具'), { detail: 0 })
+    await tick()
+
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: /编辑器/ }))
+  })
+
+  it('鼠标点击打开时不抢焦点——指针用户不需要焦点跳走', async () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+
+    await fireEvent.click(expandButton('常用工具'), { detail: 1 })
+    await tick()
+
+    expect(document.activeElement).not.toBe(screen.getByRole('menuitem', { name: /编辑器/ }))
+  })
+
+  it('方向键在菜单内循环，Home 与 End 跳到两端', async () => {
+    render(Sidebar, { props: { items, activeId: null, navigation: topNavigation } })
+    await fireEvent.click(expandButton('常用工具'), { detail: 0 })
+    await tick()
+
+    const menu = submenu() as HTMLElement
+    const [first, second] = menuItems()
+
+    await fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(second)
+
+    // 末项再按 ArrowDown 回到首项
+    await fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(first)
+
+    await fireEvent.keyDown(menu, { key: 'End' })
+    expect(document.activeElement).toBe(second)
+
+    await fireEvent.keyDown(menu, { key: 'Home' })
+    expect(document.activeElement).toBe(first)
+
+    await fireEvent.keyDown(menu, { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(second)
+  })
+})

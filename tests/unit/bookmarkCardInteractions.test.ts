@@ -14,12 +14,21 @@ describe('bookmark card interaction helpers', () => {
     expect(shouldBlockCardNavigation(false)).toBe(false)
   })
 
-  it('does not open the context menu while sorting', () => {
+  it('does not open the context menu while sorting without a move handler', () => {
     expect(canOpenBookmarkContextMenu({
       sortMode: true,
       canEdit: true,
       hasEditHandler: true,
     })).toBe(false)
+  })
+
+  it('opens the move menu while sorting when a move handler exists', () => {
+    expect(canOpenBookmarkContextMenu({
+      sortMode: true,
+      canEdit: false,
+      hasEditHandler: false,
+      hasMoveHandler: true,
+    })).toBe(true)
   })
 
   it('does not open the context menu outside editable cards', () => {

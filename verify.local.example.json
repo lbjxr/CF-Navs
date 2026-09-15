@@ -1,8 +1,12 @@
 {
-  "_comment": "复制为 verify.local.json 后填入真实值。该文件被 Git 忽略，不会进入提交。环境变量优先级高于此文件。管理员凭据不要写入文件，只在当前验证任务中通过 ADMIN_USER / ADMIN_PASS 环境变量提供。",
-
+  "_comment": "复制为 verify.local.json 后填入真实值。该文件被 Git 忽略，不会进入提交。环境变量优先级高于此文件。",
+  "_credentials": "管理员凭据可以写在这里（adminUser / adminPass），也可以只通过 ADMIN_USER / ADMIN_PASS 环境变量提供。写进文件的前提是它确实未被 Git 跟踪——脚本每次运行都会用 git ls-files 复核，一旦发现被跟踪就拒绝执行并提示轮换密码。",
+  "_ports": "两个验证脚本用不同的调试端口，避免同时跑时互相抢占：regression:chrome 用 chromeDebugPort，accept:prod 用 acceptDebugPort。端口被占用时脚本默认拒绝复用未知浏览器。",
   "baseUrl": "https://your-cf-navs-domain.example",
-  "chromeDebugPort": "9223",
+  "adminUser": "",
+  "adminPass": "",
+  "chromeDebugPort": "9228",
+  "acceptDebugPort": "9231",
   "chromeExe": "",
   "chromeProfileRoot": ""
 }

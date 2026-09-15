@@ -84,4 +84,38 @@ describe('browser bookmark import', () => {
     ])
     expect(result.payload.bookmarks.map((bookmark) => bookmark.category_id)).toEqual([1, 2, 3])
   })
+
+  it('decodes bookmark fields once without interpreting escaped markup', () => {
+    const result = prepareBrowserBookmarkHtml(`<DL>
+<DT><H3>&amp;lt;Work&amp;gt;</H3><DL>
+<DT><A HREF="https://example.com/?q=&amp;lt;x&amp;gt;">&amp;lt;b&amp;gt; &amp;#39; &#x1D11E;</A>
+<DD>Literal &amp;lt;tag&amp;gt;
+</DL></DL>`)
+
+    expect(result.payload.categories[0].title).toBe('&lt;Work&gt;')
+    expect(result.payload.bookmarks[0]).toMatchObject({
+      title: '&lt;b&gt; &#39; \u{1d11e}',
+      url: 'https://example.com/?q=&lt;x&gt;',
+      description: 'Literal &lt;tag&gt;',
+    })
+  })
+
+  it('preserves invalid character references instead of aborting the import', () => {
+    const result = prepareBrowserBookmarkHtml('<DL><A HREF="https://example.com/">&#999999999; &#xD800; &#0; &unknown;</A></DL>')
+
+    expect(result.payload.bookmarks[0].title).toBe('&#999999999; &#xD800; &#0; &unknown;')
+  })
+
+  it('extracts text tokens without importing commented links or rebuilding tags', () => {
+    const result = prepareBrowserBookmarkHtml(`<DL>
+<!-- <A HREF="https://comment.example/">Hidden</A> -->
+<DT><H3>Work <b>tools</b></H3><DL>
+<DT><A HREF="https://example.com/?q=1>2"><em>Useful</em> &lt;script&gt;</A>
+</DL></DL>`)
+
+    expect(result.payload.categories.map(category => category.title)).toEqual(['Work tools'])
+    expect(result.payload.bookmarks.map(bookmark => ({ title: bookmark.title, url: bookmark.url }))).toEqual([
+      { title: 'Useful <script>', url: 'https://example.com/?q=1>2' },
+    ])
+  })
 })
