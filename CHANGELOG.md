@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+### 修复登录态下切回页面后退化为未登录视图（Issue #25 回归）
+
+- 现象：登录后在首页能看到全部（含私密）书签；点开任意书签切回页面、或页面切走再切回后，首页只剩公开书签，看着像掉回未登录；整页刷新后恢复，再切一次又复现。
+- 根因：`src/App.svelte` 的焦点刷新（Issue #25 跨标签页同步引入）无条件调用 `refreshPublicData()`，它走匿名 `GET /api/public/data`（`auth=false`）。已登录时该响应不含私密书签，`applyPublicData` 用 `mergeRowsById` 以「服务端返回的列表为准」合并，于是私密书签被整批抹掉，`configStore.public_mode` 也被写成 `true`。整页刷新走 `initializeApp → refreshLoggedInData`，才把完整数据重新灌回来——这就是「刷新又好、切一下又坏」的原因。
+- 修复：`dataService` 新增 `refreshCurrentData()`——按登录态分派（已登录走 `refreshLoggedInData()` 后台路径，未登录走 `refreshPublicData()`）；会话失效（401）时静默降级为未登录视图并清理后台快照；网络异常保留现有数据、不弹错打断当前页面。焦点刷新改挂 `refreshCurrentData`，并把这条分派规则写进注释。
+- 验证：`tests/unit/dataService.test.ts` 新增 4 条回归（登录态走后台取数且不调用匿名公开接口、私密书签仍在；未登录走公开接口；401 静默降级；网络异常保留数据）；`tests/unit/publicDataFocusRefresh.test.ts` 的 App 接线断言同步到新入口。`npx vitest run` 963 passed（`verifyTarget.test.ts` 2 条失败与本次改动无关，系本地环境无法派生子进程）。
+- 追加：`BookmarkCard.svelte` / `SearchSpotlight.svelte` 的点击计数 `void api.public.registerClick(...)` 补 `.catch(() => undefined)`。计数是 fire-and-forget（服务端限流时本就静默忽略），此前请求失败会冒泡成 `unhandledrejection` 被全局错误监控当成前端异常上报，属于噪音。
+
 ### Spotlight 结果显示真实书签图标
 
 - Spotlight 结果行接入首页书签图标解析、Iconify 代理、本地缓存、缓存图标代理和失败回退链路；有真实图标时显示图片，图标加载失败或无图片时回退到书签自定义文字/标题首字符。

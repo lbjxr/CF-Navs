@@ -310,7 +310,9 @@
 
     // Register click both locally and on server
     publicStore.incrementClick(bookmark.id)
-    void api.public.registerClick(bookmark.id)
+    // 点击计数是 fire-and-forget：丢了只是统计偏低，不该冒泡成 unhandledrejection
+    // 被全局错误监控当成前端异常上报。
+    void api.public.registerClick(bookmark.id).catch(() => undefined)
 
     if (!shouldOpenBookmarkModal({ sortMode, openMethod: bookmark.open_method })) return
     event.preventDefault()

@@ -97,6 +97,7 @@
     isLoggedIn,
     persistCurrentAdminData,
     refreshBookmarkIconCacheInBackground,
+    refreshCurrentData,
     refreshLoggedInData,
     refreshPublicData,
   } from './lib/dataService'
@@ -1117,8 +1118,9 @@
     }
     void initializeApp()
     scheduleBookmarkIconCachePrune()
-    // 切回已打开的标签页时按版本门控刷新公开数据（Issue #25 跨标签页设置同步）。
-    stopPublicDataFocusRefresh = installPublicDataFocusRefresh(() => refreshPublicData())
+    // 切回已打开的标签页时按版本门控刷新数据（Issue #25 跨标签页设置同步）。
+    // 登录态下必须走登录路径：匿名公开数据会把私密书签从首页抹掉。
+    stopPublicDataFocusRefresh = installPublicDataFocusRefresh(() => refreshCurrentData())
   })
 
   onDestroy(() => {

@@ -71,6 +71,7 @@ import {
   configureDataService,
   getCurrentDataVersion,
   isLoggedIn,
+  refreshCurrentData,
   refreshLoggedInData,
   refreshPublicData,
 } from '../../src/lib/dataService'
@@ -392,6 +393,63 @@ describe('dataService local mutations', () => {
     expect(get(adminStore).data.bookmarks.map((item) => [item.id, item.sort])).toEqual([[11, 0], [10, 1]])
     expect(get(publicStore).data?.bookmarks.map((item) => [item.id, item.sort])).toEqual([[11, 0], [10, 1]])
     expect(adminCache.writeCachedAdminData).not.toHaveBeenCalled()
+  })
+})
+
+// 窗口切回/跨标签页同步用的例行刷新入口。历史上它无条件走匿名公开数据，
+// 登录状态下会把首页覆盖成「未登录看到的样子」，这里锁住按登录态分派的行为。
+describe('dataService.refreshCurrentData', () => {
+  it('刷新登录态时走后台取数，不把首页覆盖成匿名公开数据', async () => {
+    authStore.setSession(session)
+    publicStore.setData({
+      ...makePublicData(),
+      bookmarks: [makePublicBookmark(bookmark)],
+    })
+    adminCache.readCachedAdminDataEntry.mockResolvedValue({ data: makeAdminData(), version: 'old' })
+    api.data.version.mockResolvedValue({ version: 'new', site_title: 'CF-Navs', public_mode: true })
+    api.admin.getData.mockResolvedValue(makeAdminData('new'))
+
+    await refreshCurrentData()
+
+    expect(api.admin.getData).toHaveBeenCalledOnce()
+    expect(api.public.getData).not.toHaveBeenCalled()
+    expect(get(publicStore).data?.bookmarks.map((item) => item.id)).toEqual([bookmark.id])
+  })
+
+  it('未登录时刷新公开数据', async () => {
+    api.public.getData.mockResolvedValue(makePublicData('v9'))
+
+    await refreshCurrentData()
+
+    expect(api.public.getData).toHaveBeenCalledWith(false)
+    expect(api.admin.getData).not.toHaveBeenCalled()
+  })
+
+  it('会话失效时静默降级为未登录视图，不向上抛错', async () => {
+    authStore.setSession(session)
+    adminStore.replaceData(makeAdminData())
+    api.admin.getData.mockRejectedValue(
+      new ApiError('unauthorized', { status: 401, code: ErrCode.UNAUTHORIZED }),
+    )
+    api.public.getData.mockResolvedValue(makePublicData('v9'))
+
+    await expect(refreshCurrentData()).resolves.toBeUndefined()
+
+    expect(get(authStore).session).toBeNull()
+    expect(adminCache.clearCachedAdminData).toHaveBeenCalledOnce()
+    expect(onRootError).not.toHaveBeenCalled()
+  })
+
+  it('网络异常时保留现有数据，不打扰当前页面', async () => {
+    authStore.setSession(session)
+    adminStore.replaceData(makeAdminData())
+    api.admin.getData.mockRejectedValue(new Error('network timeout'))
+
+    await expect(refreshCurrentData()).resolves.toBeUndefined()
+
+    expect(get(authStore).session).toEqual(session)
+    expect(get(adminStore).data.settings).toEqual(settings)
+    expect(onRootError).not.toHaveBeenCalled()
   })
 })
 

@@ -180,6 +180,31 @@ export async function refreshPublicData(progressive = false): Promise<PublicData
   }
 }
 
+// 例行/后台刷新入口（窗口切回、跨标签页同步等）：按当前登录态分派到正确的取数路径。
+//
+// 不能直接调 refreshPublicData——它走匿名 /api/public/data，登录时会把 publicStore
+// 覆盖成不含私密书签的公开快照，首页瞬间退化成「未登录看到的样子」，只有整页刷新
+// 才会重新走 refreshLoggedInData 恢复（Issue：点开书签切回来 / 放一会就掉回未登录态）。
+export async function refreshCurrentData(): Promise<void> {
+  if (!isLoggedIn()) {
+    await refreshPublicData()
+    return
+  }
+
+  try {
+    await refreshLoggedInData()
+  } catch (error) {
+    // 后台刷新不该弹错误打断当前页面：数据保留现状，等下一次机会。
+    // 只有会话确实失效时才降级成未登录视图。
+    if (isUnauthorizedError(error)) {
+      authStore.setSession(null)
+      adminStore.reset()
+      await clearCachedAdminData()
+      await refreshPublicData()
+    }
+  }
+}
+
 function updatePublicDataLocally(transform: (data: PublicData) => PublicData): boolean {
   const current = get(publicStore).data
   if (!current) return false

@@ -75,7 +75,7 @@ describe('installPublicDataFocusRefresh', () => {
 describe('app wiring', () => {
   it('App.svelte 安装焦点刷新并在卸载时清理', () => {
     const source = readFileSync('src/App.svelte', 'utf8')
-    expect(source).toContain('installPublicDataFocusRefresh(() => refreshPublicData())')
+    expect(source).toContain('installPublicDataFocusRefresh(() => refreshCurrentData())')
     expect(source).toContain('stopPublicDataFocusRefresh?.()')
   })
 })
