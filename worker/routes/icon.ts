@@ -184,7 +184,7 @@ iconRoutes.get('/icon/:id', objectIconClientCache, async (c) => {
       }
     }
 
-    const bookmark = await getBookmarkIconData(c.env.DB, id)
+    let bookmark = await getBookmarkIconData(c.env.DB, id)
     if (!bookmark) {
       return fallbackIconResponse('', '', fallbackCache)
     }
@@ -192,7 +192,9 @@ iconRoutes.get('/icon/:id', objectIconClientCache, async (c) => {
     if (bookmark.icon_blob) {
       const response = dataUriToResponse(bookmark.icon_blob, successCache)
       if (!response) {
-        await setIconBlob(c.env.DB, id, null)
+        await setIconBlob(c.env.DB, id, null, bookmark)
+        bookmark = await getBookmarkIconData(c.env.DB, id)
+        if (!bookmark) return fallbackIconResponse('', '', fallbackCache)
       } else {
         cacheResponse(c, cacheKey, response)
         return response
@@ -204,7 +206,7 @@ iconRoutes.get('/icon/:id', objectIconClientCache, async (c) => {
     }
 
     if (bookmark.icon.startsWith('data:image/')) {
-      await setIconBlob(c.env.DB, id, bookmark.icon)
+      await setIconBlob(c.env.DB, id, bookmark.icon, bookmark)
       const response = dataUriToResponse(bookmark.icon, successCache)
       if (!response) return cachedFallbackIconResponse(c, cacheKey, bookmark.title, bookmark.url, fallbackCache)
       cacheResponse(c, cacheKey, response)
@@ -227,7 +229,7 @@ iconRoutes.get('/icon/:id', objectIconClientCache, async (c) => {
       return response
     }
 
-    await setIconBlob(c.env.DB, id, iconBytesToDataUri(fetchedIcon))
+    await setIconBlob(c.env.DB, id, iconBytesToDataUri(fetchedIcon), bookmark)
     const response = iconBytesToResponse(fetchedIcon, successCache)
     cacheResponse(c, cacheKey, response)
     return response

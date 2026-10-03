@@ -16,6 +16,7 @@ import faviconRoutes from './routes/favicon'
 import installRoutes from './routes/install'
 import recoverRoutes from './routes/recover'
 import { iconRoutes } from './routes/icon'
+import { iconLocalCopyRoutes } from './routes/iconLocalCopy'
 import publicRoutes from './routes/public'
 import settingsRoutes from './routes/settings'
 import type { HonoEnv } from './types'
@@ -65,6 +66,7 @@ app.route('/api', faviconRoutes)
 app.use('/api/iconify-search', authRequired)
 app.use('/api/icon-access', authRequired)
 app.route('/api', iconRoutes)
+app.route('/api', iconLocalCopyRoutes)
 
 app.use('/api/settings', authRequired)
 app.use('/api/settings/*', authRequired)

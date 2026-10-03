@@ -1,3 +1,4 @@
+import { iconAuthReceipt } from '../lib/iconCopyMetadata'
 import { Hono } from 'hono'
 import {
   ErrCode,
@@ -14,7 +15,7 @@ import {
   matchPublicDataCache,
   matchSiteConfigCache,
 } from '../lib/cache'
-import { getDataVersion, getPublicDataSource, getSiteConfig, getSiteConfigWithDataVersion, incrementBookmarkClick } from '../lib/db'
+import { getPublicDataSource, getSiteConfig, getSiteConfigWithDataVersion, incrementBookmarkClick } from '../lib/db'
 import { shouldBypassRequestCache } from '../lib/requestCache'
 import { fail } from '../lib/response'
 import { ok } from '../lib/response'
@@ -80,7 +81,9 @@ publicRoutes.get('/config', async (c) => {
 publicRoutes.get('/data/version', async (c) => {
   const token = extractBearerToken(c.req.header('Authorization'))
   // 每次页面加载都会走这里，所以站点配置和数据版本合并成一条 D1 查询。
-  const { config: siteConfig, version } = await getSiteConfigWithDataVersion(c.env.DB)
+  const { config: siteConfig, version, ...iconMetadata } = await getSiteConfigWithDataVersion(c.env.DB)
+  const session = token ? await validateSession(c.env, token) : null
+  if (token && !session) return unauthorizedResponse()
 
   if (!siteConfig.public_mode) {
     if (!token) {
@@ -95,16 +98,13 @@ publicRoutes.get('/data/version', async (c) => {
       })
     }
 
-    const session = await validateSession(c.env, token)
-    if (!session) {
-      return unauthorizedResponse()
-    }
-
-    c.set('username', session.username)
+    c.set('username', session!.username)
   }
 
   const data: DataVersionResp = {
     version,
+    ...iconMetadata,
+    ...(session && token ? { auth_receipt: await iconAuthReceipt(token, session.exp) } : {}),
     site_title: siteConfig.site_title,
     public_mode: siteConfig.public_mode,
   }
@@ -151,6 +151,7 @@ publicRoutes.get('/public/data', async (c) => {
     }
 
     c.set('username', session.username)
+    c.set('sessionExpiresAt', session.exp)
     privateAccessAllowed = true
   } else if (token) {
     // 公开模式下，普通访客无需登录；但携带有效管理员会话时，额外返回私密书签。
@@ -158,6 +159,7 @@ publicRoutes.get('/public/data', async (c) => {
     const session = await validateSession(c.env, token)
     if (!session) return unauthorizedResponse()
     c.set('username', session.username)
+    c.set('sessionExpiresAt', session.exp)
     privateAccessAllowed = true
   }
 
@@ -190,6 +192,7 @@ publicRoutes.get('/public/data', async (c) => {
     }
 
     c.set('username', session.username)
+    c.set('sessionExpiresAt', session.exp)
     privateAccessAllowed = true
   }
 
@@ -199,7 +202,9 @@ publicRoutes.get('/public/data', async (c) => {
     categories: publicDataSource.categories,
     bookmarks: publicDataSource.bookmarks,
     settings: toPublicSettings(publicSettings),
-    version: await getDataVersion(c.env.DB),
+    version: publicDataSource.version,
+    ...(publicDataSource.dataset_epoch ? { dataset_epoch: publicDataSource.dataset_epoch, icon_local_copy_protocol: publicDataSource.icon_local_copy_protocol } : {}),
+    ...(privateAccessAllowed && token ? { auth_receipt: await iconAuthReceipt(token, c.get('sessionExpiresAt')) } : {}),
   }
 
   const response = c.json(ok(data), 200, {

@@ -2,6 +2,7 @@
 
 import { type Bookmark, type Category, type Settings } from '../../../shared/types'
 import { ensureSchema } from './schema'
+import { REPLACE_ICON_DATASET_SQL } from './iconSchema'
 import { settingsPatchStatement } from './settings'
 import { chunkImportRows, remapImportRecords } from './importHelpers'
 
@@ -15,7 +16,10 @@ export async function importData(
 ): Promise<{ categories: number; bookmarks: number; importedCategories: Category[]; importedBookmarks: Bookmark[] }> {
   await ensureSchema(db)
   const now = Date.now()
-  const stmts: D1PreparedStatement[] = []
+  const stmts: D1PreparedStatement[] = [
+    db.prepare(REPLACE_ICON_DATASET_SQL),
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('data_version', json_quote(lower(hex(randomblob(16)))))"),
+  ]
   const remapped = remapImportRecords(data.categories, data.bookmarks, now)
   const importedCategories = remapped.categories
   const importedBookmarks = remapped.bookmarks

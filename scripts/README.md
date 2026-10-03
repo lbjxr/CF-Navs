@@ -10,8 +10,10 @@
 
 ## 测试与审计
 
+- `npm test` 使用 Node 内置 SQLite 执行图标版本/迁移的真实 SQL 单元测试，传入 `--experimental-sqlite` 以兼容 Node 22.12；无需安装额外数据库依赖。Worker/D1 平台差异仍由 L1 检查。
+
 - `smoke-local.mjs`：**L1 一键闸门（`npm run smoke`）**。用独立的 `.wrangler/state-smoke` 起一个隔离本地 Worker，自动选空闲端口、造一次性管理员密码，跑完 `smoke-test.mjs` 再拆掉。不碰开发者日常的 `.wrangler/state`，也不与 `npm run dev` 抢 8787。CI 在 Build 之后跑这一步。
-- `smoke-test.mjs`：API 冒烟断言本体（75 项），需要一个已运行的实例与**干净**数据库。直接跑它要自己准备环境，日常用 `npm run smoke`。
+- `smoke-test.mjs`：API 冒烟断言本体（包括可信图标物化、描述冲突与临时数据清理），需要一个已运行的实例与**干净**数据库。直接跑它要自己准备环境，日常用 `npm run smoke`。
 - `prod-acceptance.mjs`：**L3 部署后验收（`npm run accept:prod`）**。零写入的只读探针，覆盖首访/二访安装探测、Service Worker 与预缓存、离线可打开、匿名边界、导出子集、桌面与移动弹窗尺寸、三档截图、登出撤销生效窗口。报告与截图落 `tmp/acceptance/`（已忽略），落盘前脱敏。流程与分层见 [部署后验收](../docs/guides/PRODUCTION_ACCEPTANCE.md)。
 - `chrome-regression.mjs`：基于 Chrome DevTools Protocol 的生产回归测试；默认启动隔离 Chrome，复用现有 DevTools 端点必须显式授权且只用于专用测试浏览器，用户浏览器只关闭专用测试 tab，自启浏览器按精确 profile 清理并验证进程归零。**密码轮换场景默认关闭**——它会真实改写再还原管理员密码，进程中途被打断就会把实例锁在只存在于内存里的临时密码上；需要时用 `REGRESSION_ALLOW_PASSWORD_ROTATION=1` 显式开启。
 - `perf-audit.mjs`：生产性能与资源加载审计；始终创建并关闭专用测试 tab，不复用或关闭用户已有页面。

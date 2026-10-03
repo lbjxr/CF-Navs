@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { ErrCode, type ImportReq, type ImportResp } from '../../shared/types'
 import { invalidatePublicDataCache, invalidateSiteConfigCache } from '../lib/cache'
-import { getSettings, importData, listBookmarks, listCategories, touchDataVersion } from '../lib/db'
+import { getAdminData, getSettings, importData, listBookmarks, listCategories } from '../lib/db'
 import { mergeImportData } from '../lib/db/importMerge'
 import { validateImportPayload } from '../lib/importValidation'
 import { fail, ok } from '../lib/response'
@@ -27,14 +27,8 @@ dataRoutes.post('/import', async (c) => {
       bookmarks: payload.bookmarks,
       settings: payload.settings,
     })
-    const settings = await getSettings(c.env.DB)
-    const version = await touchDataVersion(c.env.DB)
-    const data = {
-      categories: result.importedCategories,
-      bookmarks: result.importedBookmarks,
-      settings,
-      version,
-    }
+    // Import reconstructs IDs (including current merge mode); return its new dataset and versions.
+    const data = await getAdminData(c.env.DB)
     invalidateRuntimeDataCache()
     invalidatePublicDataCache(c, c.req.url)
     invalidateSiteConfigCache(c, c.req.url)

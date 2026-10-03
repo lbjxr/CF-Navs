@@ -218,3 +218,11 @@ Worker 对 HTML 响应设置基础安全头：
 Sun-Panel 导入会转换分类、书签、打开方式和图标字段。Iconify 图标会尽量规范化为 CF-Navs 的标准保存格式；后台预览使用 `/api/iconify/*` 代理，首页展示优先复用浏览器本地缓存的 Iconify SVG。
 
 更完整的迁移步骤见 [SUNPANEL_IMPORT.md](../guides/SUNPANEL_IMPORT.md)。
+
+## 可信图标服务端版本边界
+
+- `worker/lib/db/iconSchema.ts` 与 `schema.sql` 的安装 DDL 对齐；新增 icon_revision、icon_write_epoch 和内部数据集代次，迁移不读取/散列全库图片。首次按需取得成功图片时补版本。
+- `worker/lib/iconRevision.ts` 只认证识别的图片字节，浏览器持久化前还必须实际解码。`boundedBody.ts` 限制请求/外源响应的累积缓冲，失败与 fallback 不成为成功副本。
+- `worker/lib/bookmarkIconCopy.ts` 编排授权后的单对象取得，不从普通代理或 edge 响应克隆图片；`worker/routes/iconLocalCopy.ts` 负责独立鉴权、请求和传输边界。普通 `/api/icon/*` 权限及 no-store 保持原样。
+- 显式刷新先取得写入代次；后台抓取、惰性补全和旧源响应通过条件 SQL 提交。旧 SQL 写入由触发器作废摘要/旧源正文，已发布图片的版本变化同步发布 data_version。聚合本身返回同批版本，不再另查一个较新的版本拼到旧数据上。
+- 原生 SQLite 测试验证实际事务/触发器与竞态；L1 仍用隔离 Wrangler/D1 验证平台契约，不能只用 SQLite 通过推断 Cloudflare 行为。

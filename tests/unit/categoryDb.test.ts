@@ -50,7 +50,8 @@ function createDb(handlerForSql: (sql: string) => StatementHandler) {
       return statement
     },
     async batch(statements: Array<{ sql?: string }>) {
-      if (!statements.every((statement) => statement.sql?.startsWith('CREATE INDEX'))) batchCalls += 1
+      // Schema DDL/internal initialization is not a category mutation. Count actual business DML.
+      if (statements.some((statement) => /^\s*(?:UPDATE|DELETE FROM|INSERT INTO) categories\b/.test(statement.sql ?? ''))) batchCalls += 1
       return statements.map(() => ({ meta: { changes: 1 }, results: [] }))
     },
   }

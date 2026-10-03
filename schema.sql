@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS bookmarks (
   icon         TEXT,                      -- 图标 URL（cftc 直链 / 自动获取结果）
   icon_source  TEXT,                      -- 图标获取方式：direct/favicon_im/logo_surf/google/iconify/custom
   icon_background_color TEXT,             -- 单个图标背景色
+  icon_revision TEXT,                      -- verified content revision, independent of app releases
+  icon_write_epoch INTEGER NOT NULL DEFAULT 0, -- delayed-write fence
   icon_blob    TEXT,                      -- 图标 base64 缓存（本地回退方案）
   description  TEXT,
   description_mode TEXT,
@@ -83,3 +85,35 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('content_layout', '{"max_width":1200,"max_width_unit":"px","margin_x":0,"margin_top":0,"margin_bottom":0}'),
   ('navigation', '{"position":"left","always_expanded":false,"top_layout":"scroll"}'),
   ('footer_html', '""');
+
+-- Versioned bookmark images: installation DDL mirrors worker/lib/db/iconSchema.ts.
+INSERT OR IGNORE INTO settings (key, value)
+  VALUES ('icon_dataset_epoch', json_quote(lower(hex(randomblob(16)))));
+
+CREATE TRIGGER IF NOT EXISTS bookmark_icon_legacy_body
+  AFTER UPDATE OF icon_blob ON bookmarks
+  WHEN NEW.icon_blob IS NOT OLD.icon_blob
+    AND NEW.icon_revision IS OLD.icon_revision
+    AND NEW.icon_write_epoch = OLD.icon_write_epoch
+  BEGIN
+    UPDATE bookmarks SET icon_revision = NULL, icon_write_epoch = OLD.icon_write_epoch + 1
+      WHERE id = NEW.id;
+  END;
+
+CREATE TRIGGER IF NOT EXISTS bookmark_icon_legacy_source
+  AFTER UPDATE OF icon, icon_source ON bookmarks
+  WHEN (NEW.icon IS NOT OLD.icon OR NEW.icon_source IS NOT OLD.icon_source)
+    AND NEW.icon_write_epoch = OLD.icon_write_epoch
+  BEGIN
+    UPDATE bookmarks SET icon_blob = NULL, icon_revision = NULL, icon_write_epoch = OLD.icon_write_epoch + 1
+      WHERE id = NEW.id;
+  END;
+
+CREATE TRIGGER IF NOT EXISTS bookmark_icon_publish
+  AFTER UPDATE OF icon_revision, icon, icon_source ON bookmarks
+  WHEN (OLD.icon_revision IS NOT NULL AND NEW.icon_revision IS NOT OLD.icon_revision)
+    OR NEW.icon IS NOT OLD.icon OR NEW.icon_source IS NOT OLD.icon_source
+  BEGIN
+    INSERT OR REPLACE INTO settings (key, value)
+      VALUES ('data_version', json_quote(lower(hex(randomblob(16)))));
+  END;

@@ -1,3 +1,5 @@
+import type { IconCopyMetadata } from './iconLocalCopy'
+
 // CF-Navs 前后端共享类型与 API 契约（单一事实来源）
 // 前端 src/ 与后端 worker/ 都从这里 import，禁止各自重新定义。
 
@@ -22,6 +24,8 @@ export interface Bookmark {
   icon_source: IconSource | null // 图标获取方式（direct/favicon_im/logo_surf/google/iconify/custom）
   icon_background_color: string | null
   icon_blob: string | null // 图标 data URI 缓存（优先用于本地加载）
+  icon_revision?: string | null // Verified image content identity, not the source URL.
+  icon_write_epoch?: number // Fences delayed image writes and source ABA changes.
   icon_cached?: boolean | number | null // Aggregate responses use this lightweight flag instead of sending icon_blob.
   description: string | null
   description_mode?: DescriptionDisplayMode | null
@@ -250,7 +254,7 @@ export interface RecoverReq {
 }
 
 // GET /api/public/data  （公开只读聚合）
-export interface PublicData {
+export interface PublicData extends IconCopyMetadata {
   categories: PublicCategory[]
   bookmarks: PublicBookmark[]
   settings: PublicSettings
@@ -258,7 +262,7 @@ export interface PublicData {
 }
 
 // GET /api/admin/data  登录态后台聚合数据
-export interface AdminData {
+export interface AdminData extends IconCopyMetadata {
   categories: Category[]
   bookmarks: Bookmark[]
   settings: Settings | null
@@ -266,7 +270,7 @@ export interface AdminData {
 }
 
 // GET /api/data/version  lightweight data version check
-export interface DataVersionResp {
+export interface DataVersionResp extends IconCopyMetadata {
   version: string
   site_title: string
   public_mode: boolean

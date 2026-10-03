@@ -1,3 +1,4 @@
+import { bookmarkIconDescriptor } from '../lib/bookmarkIconCopy'
 import { Hono } from 'hono'
 import {
  ErrCode,
@@ -235,17 +236,20 @@ bookmarksRoutes.post('/:id/icon-cache/refresh', async (c) => {
    ICON_CACHE_REFRESH_TIMEOUT_MS,
   )
 
-  const iconBlob = iconCache.reuseExisting ? bookmark.icon_blob : iconCache.iconBlob
-
-  if (iconCache.wrote && iconBlob !== bookmark.icon_blob) {
-   await touchDataVersion(c.env.DB)
+  // Re-read after asynchronous work; a newer edit/refresh may have won the conditional write.
+  const current = await getBookmarkIconData(c.env.DB, id)
+  if (!current) return c.json(fail(ErrCode.NOT_FOUND, 'bookmark not found'))
+  if (iconCache.wrote && current.icon_revision !== bookmark.icon_revision) {
    invalidateRuntimeDataCache()
    invalidatePublicDataCache(c, c.req.url)
   }
-
   return c.json(ok({
-   icon_blob: iconBlob,
-  }))
+   icon_blob: current.icon_blob,
+   icon_descriptor: bookmarkIconDescriptor(id, current),
+   icon_update: iconCache.wrote
+    ? current.icon_revision === bookmark.icon_revision ? 'unchanged' : current.icon_blob ? 'updated' : 'cleared'
+    : 'unavailable',
+  }), 200, { 'Cache-Control': 'private, no-store' })
  } catch {
   return c.json(fail(ErrCode.SERVER_ERROR, 'failed to refresh bookmark icon cache'))
  }

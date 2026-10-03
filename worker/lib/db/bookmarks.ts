@@ -3,6 +3,7 @@
 import { type Bookmark, type BookmarkBatchMoveReq, type BookmarkUpsertReq } from '../../../shared/types'
 import { BOOKMARK_LIST_SQL } from './sql'
 import { withSchemaRetry } from './schema'
+import { decodeVersionedIcon, iconContentRevision } from '../iconRevision'
 import { buildColumnUpdateChunks, runUpdateChunks, sortRowsByIds, type RowUpdateEntry } from './sort'
 
 export async function listBookmarks(db: D1Database): Promise<Bookmark[]> {
@@ -15,6 +16,9 @@ export async function listBookmarks(db: D1Database): Promise<Bookmark[]> {
 }
 
 export interface BookmarkIconData {
+ icon_revision: string | null
+ icon_write_epoch: number
+ dataset_epoch: string
  title: string
  url: string
  icon: string | null
@@ -25,10 +29,18 @@ export interface BookmarkIconData {
  is_private: Bookmark['is_private']
 }
 
-export async function getBookmarkIconData(db: D1Database, id: number): Promise<BookmarkIconData | null> {
+const BOOKMARK_ICON_FIELDS = `title, url, icon, icon_source, icon_blob, category_id, is_private,
+ icon_revision, icon_write_epoch,
+ (SELECT json_extract(value, '$') FROM settings WHERE key = 'icon_dataset_epoch') AS dataset_epoch`
+
+export async function getBookmarkIconData(
+ db: D1Database, id: number, beginWrite = false,
+): Promise<BookmarkIconData | null> {
  return await withSchemaRetry(db, async () => (
   await db
-   .prepare('SELECT title, url, icon, icon_source, icon_blob, category_id, is_private FROM bookmarks WHERE id = ?')
+   .prepare(beginWrite
+    ? 'UPDATE bookmarks SET icon_write_epoch = icon_write_epoch + 1 WHERE id = ? RETURNING ' + BOOKMARK_ICON_FIELDS
+    : 'SELECT ' + BOOKMARK_ICON_FIELDS + ' FROM bookmarks WHERE id = ?')
    .bind(id)
    .first<BookmarkIconData>()
  ))
@@ -85,7 +97,7 @@ export async function createBookmark(db: D1Database, req: BookmarkUpsertReq): Pr
          )
          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT MAX(sort) FROM bookmarks WHERE category_id = ?), -1) + 1, ?
          WHERE EXISTS (SELECT 1 FROM categories WHERE id = ?)
-         RETURNING id, category_id, title, url, icon, icon_source, icon_background_color, icon_blob, description, description_mode, open_method, is_private, sort, click_count, created_at`,
+         RETURNING id, category_id, title, url, icon, icon_source, icon_background_color, icon_blob, icon_revision, icon_write_epoch, description, description_mode, open_method, is_private, sort, click_count, created_at`,
    )
    .bind(
     req.category_id,
@@ -120,7 +132,9 @@ export async function updateBookmark(
   await db
    .prepare(
     `UPDATE bookmarks
-         SET category_id = ?,
+         SET icon_revision = CASE WHEN icon IS ? AND icon_source IS ? THEN icon_revision ELSE NULL END,
+             icon_write_epoch = icon_write_epoch + CASE WHEN icon IS ? AND icon_source IS ? THEN 0 ELSE 1 END,
+             category_id = ?,
              title = ?,
              url = ?,
              icon_blob = CASE
@@ -137,9 +151,10 @@ export async function updateBookmark(
              open_method = COALESCE(?, open_method),
              is_private = ?
          WHERE id = ? AND EXISTS (SELECT 1 FROM categories WHERE id = ?)
-         RETURNING id, category_id, title, url, icon, icon_source, icon_background_color, icon_blob, description, description_mode, open_method, is_private, sort, click_count, created_at`,
+         RETURNING id, category_id, title, url, icon, icon_source, icon_background_color, icon_blob, icon_revision, icon_write_epoch, description, description_mode, open_method, is_private, sort, click_count, created_at`,
    )
    .bind(
+    nextIcon, nextIconSource, nextIcon, nextIconSource,
     req.category_id,
     req.title,
     req.url,
@@ -292,11 +307,22 @@ export async function batchMoveBookmarks(db: D1Database, req: BookmarkBatchMoveR
  return ids.length
 }
 
-export async function setIconBlob(db: D1Database, id: number, blob: string | null): Promise<void> {
- await db
-  .prepare("UPDATE bookmarks SET icon_blob = ? WHERE id = ?")
-  .bind(blob, id)
+/** Commit only to the exact object/source generation read before the asynchronous work. */
+export async function setIconBlob(
+ db: D1Database, id: number, blob: string | null, expected: BookmarkIconData,
+): Promise<boolean> {
+ const icon = blob === null ? null : decodeVersionedIcon(blob)
+ if (blob !== null && !icon) return false
+ const revision = icon ? await iconContentRevision(icon) : null
+ const result = await db.prepare(`UPDATE bookmarks SET icon_blob = ?, icon_revision = ?,
+    icon_write_epoch = icon_write_epoch + CASE WHEN icon_blob IS ? AND icon_revision IS ? THEN 0 ELSE 1 END
+  WHERE id = ? AND icon_write_epoch = ? AND icon IS ? AND icon_source IS ?
+    AND icon_blob IS ? AND icon_revision IS ?
+    AND (SELECT json_extract(value, '$') FROM settings WHERE key = 'icon_dataset_epoch') = ?`)
+  .bind(blob, revision, blob, revision, id, expected.icon_write_epoch, expected.icon, expected.icon_source,
+   expected.icon_blob, expected.icon_revision, expected.dataset_epoch)
   .run()
+ return (result.meta.changes ?? 0) > 0
 }
 
 export async function incrementBookmarkClick(db: D1Database, id: number): Promise<boolean> {

@@ -1,3 +1,5 @@
+import { BOOKMARK_ICON_TRIGGERS, INITIALIZE_ICON_DATASET_SQL } from './iconSchema'
+
 // schema 迁移（幂等，仅缺列时添加）与旧库缺列时的重试封装
 
 function isRecoverableSchemaError(error: unknown): boolean {
@@ -19,11 +21,24 @@ export async function withSchemaRetry<T>(db: D1Database, operation: () => Promis
   }
 }
 
-let _schemaChecked = false
+const checkedSchemas = new WeakSet<D1Database>()
+const pendingSchemas = new WeakMap<D1Database, Promise<void>>()
 
 export async function ensureSchema(db: D1Database, force = false): Promise<void> {
-  if (_schemaChecked && !force) return
-  _schemaChecked = true
+  const pending = pendingSchemas.get(db)
+  if (pending) return pending
+  if (checkedSchemas.has(db) && !force) return
+  const operation = migrateSchema(db)
+  pendingSchemas.set(db, operation)
+  try {
+    await operation
+    checkedSchemas.add(db)
+  } finally {
+    pendingSchemas.delete(db)
+  }
+}
+
+async function migrateSchema(db: D1Database): Promise<void> {
 
   // 判断列是否存在，不存在则 ADD COLUMN（D1/SQLite 允许）
   const { results: bookmarkCols } = await db
@@ -37,6 +52,12 @@ export async function ensureSchema(db: D1Database, force = false): Promise<void>
   const categoryColNames = new Set((categoryCols ?? []).map((c) => c.name))
 
   const stmts: D1PreparedStatement[] = []
+  if (!bookmarkColNames.has("icon_revision")) {
+    stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN icon_revision TEXT"))
+  }
+  if (!bookmarkColNames.has("icon_write_epoch")) {
+    stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN icon_write_epoch INTEGER NOT NULL DEFAULT 0"))
+  }
   if (!bookmarkColNames.has("icon_source")) {
     stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN icon_source TEXT"))
   }
@@ -65,5 +86,6 @@ export async function ensureSchema(db: D1Database, force = false): Promise<void>
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_categories_sort_id ON categories(sort, id)"))
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_categories_parent_sort_id ON categories(parent_id, sort, id)"))
 
-  if (stmts.length > 0) await db.batch(stmts)
+  stmts.push(db.prepare(INITIALIZE_ICON_DATASET_SQL), ...BOOKMARK_ICON_TRIGGERS.map((sql) => db.prepare(sql)))
+  await db.batch(stmts)
 }

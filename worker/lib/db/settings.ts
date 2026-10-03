@@ -1,3 +1,5 @@
+import type { IconCopyMetadata } from '../../../shared/iconLocalCopy'
+import { iconMetadataFromRows } from '../iconCopyMetadata'
 // settings 聚合读取、单键读写、data_version 维护与部分更新
 
 import { type Settings, type SiteConfig } from '../../../shared/types'
@@ -31,13 +33,14 @@ export async function getSiteConfig(db: D1Database): Promise<SiteConfig> {
 // getDataVersion，两条串行的 D1 往返读的都是 settings 表。合并成一条。
 export async function getSiteConfigWithDataVersion(
   db: D1Database,
-): Promise<{ config: SiteConfig; version: string }> {
+): Promise<{ config: SiteConfig; version: string } & IconCopyMetadata> {
   const { results } = await db
-    .prepare(`SELECT key, value FROM settings WHERE key IN ('site_title', 'public_mode', '${DATA_VERSION_KEY}')`)
+    .prepare(`SELECT key, value FROM settings WHERE key IN ('site_title', 'public_mode', '${DATA_VERSION_KEY}', 'icon_dataset_epoch')`)
     .all<{ key: string; value: string | null }>()
 
   const rows = results ?? []
   return {
+    ...iconMetadataFromRows(rows),
     config: siteConfigFromRows(rows),
     version: dataVersionFromValue(rows.find((row) => row.key === DATA_VERSION_KEY)?.value ?? null),
   }
@@ -113,7 +116,7 @@ export async function getDataVersion(db: D1Database): Promise<string> {
   return dataVersionFromValue(row?.value ?? null)
 }
 
-function dataVersionFromValue(raw: string | null): string {
+export function dataVersionFromValue(raw: string | null): string {
   if (!raw) return '0'
 
   try {

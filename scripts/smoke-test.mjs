@@ -167,6 +167,40 @@ async function main() {
     check('排序后 bm2 在前', list[0]?.id === bm2.id, `first=${list[0]?.id}`)
   }
 
+  // REQ-15: use only generated local data; this fixture is removed before later CRUD assertions.
+  section('REQ-15 受保护图标副本协议')
+  {
+    const icon = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="red"/></svg>').toString('base64')
+    const created = await call('/api/bookmarks', { method: 'POST', token, body: { category_id: catA.id, title: 'Local copy fixture', url: 'https://example.com', icon, icon_source: 'custom', is_private: true } })
+    check('副本 fixture 创建成功', created.json?.code === 0 && Boolean(created.json?.data?.id))
+    const id = created.json?.data?.id
+    if (id) {
+      try {
+        const version = await call('/api/data/version', { token })
+        check('公开模式的版本接口提供真实会话回执', version.json?.data?.auth_receipt?.expires_at > Date.now() && /^[a-f0-9]{64}$/.test(version.json?.data?.auth_receipt?.cache_scope ?? ''))
+        const request = { protocol: 1, object_type: 'bookmark', object_id: id, dataset_epoch: version.json?.data?.dataset_epoch, expected_write_epoch: created.json?.data?.icon_write_epoch, expected_content_revision: null }
+        const anonymous = await call('/api/icon-local-copy', { method: 'POST', body: request })
+        check('副本接口匿名拒绝且不缓存', anonymous.status === 401 && anonymous.headers.get('cache-control') === 'private, no-store')
+        const copy = await call('/api/icon-local-copy', { method: 'POST', token, body: request })
+        check('副本协议返回授权成功图片及真实版本', copy.status === 200 && copy.json?.data?.persistence === 'session-scoped' && /^sha256-[a-f0-9]{64}$/.test(copy.json?.data?.descriptor?.content_revision ?? ''))
+        check('副本传输禁止浏览器与 CDN 自动缓存', copy.headers.get('cache-control') === 'private, no-store' && copy.headers.get('cdn-cache-control') === 'no-store')
+        check('副本正文与长度一致', Buffer.from(copy.json?.data?.image?.base64 ?? '', 'base64').byteLength === copy.json?.data?.image?.byte_length)
+        const admin = await call('/api/admin/data', { token, headers: { 'cache-control': 'no-cache' } })
+        const row = admin.json?.data?.bookmarks?.find(item => item.id === id)
+        check('聚合返回轻量版本而非完整 icon_blob', row?.icon_blob === null && row?.icon_revision === copy.json?.data?.descriptor?.content_revision && admin.json?.data?.dataset_epoch === request.dataset_epoch)
+        const changed = await call('/api/bookmarks/' + id, { method: 'PUT', token, body: { category_id: catA.id, title: 'Changed local fixture', url: 'https://example.com', icon: null, is_private: true } })
+        check('清空图片成功', changed.json?.code === 0)
+        const conflict = await call('/api/icon-local-copy', { method: 'POST', token, body: request })
+        check('旧描述请求不能保存到新对象版本', conflict.status === 409 && conflict.json?.data?.reason === 'conflict' && !conflict.json?.data?.image)
+        const empty = await call('/api/icon-local-copy', { method: 'POST', token, body: { ...request, expected_write_epoch: changed.json?.data?.icon_write_epoch } })
+        check('清空与失败语义分离', empty.status === 200 && empty.json?.data?.descriptor?.state === 'empty' && empty.json?.data?.image === null)
+      } finally {
+        const removed = await call('/api/bookmarks/' + id, { method: 'DELETE', token })
+        check('副本 fixture 已清理', removed.json?.code === 0)
+      }
+    }
+  }
+
   // 8. PROB-38 图标隐私缓存回归：公开 → 私密、分类公开 → 私密必须阻断旧 edge 正文。
   section('PROB-38 图标隐私缓存')
   const PROB38_ICON = 'data:image/svg+xml;base64,PHN2Zy8+'
@@ -387,6 +421,7 @@ async function main() {
     check('合法导入 code=0', r.json?.code === 0, JSON.stringify(r.json))
     check('导入返回 2 分类', r.json?.data?.categories === 2, `got=${r.json?.data?.categories}`)
     check('导入返回 2 书签', r.json?.data?.bookmarks === 2)
+    check('导入响应包含新数据集身份', /^[a-f0-9]{32}$/.test(r.json?.data?.data?.dataset_epoch ?? ''))
 
     const cats = (await call('/api/categories', { token })).json?.data || []
     const bms = (await call('/api/bookmarks', { token })).json?.data || []

@@ -65,7 +65,8 @@ function createDb(rows: {
                 return { visible: categoryVisible(Number(args[0])) ? 1 : 0 }
               }
               if (sql.includes('FROM bookmarks WHERE id = ?')) {
-                return rows.bookmarks.find((item) => item.id === Number(args[0])) ?? null
+                const bookmark = rows.bookmarks.find((item) => item.id === Number(args[0]))
+                return bookmark ? { ...bookmark, icon_source: null, icon_revision: null, icon_write_epoch: 0, dataset_epoch: 'a'.repeat(32) } : null
               }
               if (sql.includes('FROM categories WHERE id = ?')) {
                 return rows.categories.find((item) => item.id === Number(args[0])) ?? null
@@ -76,7 +77,7 @@ function createDb(rows: {
               if (sql.startsWith('INSERT INTO settings')) {
                 settings.set(String(args[0]), String(args[1]))
               }
-              return { success: true }
+              return { success: true, meta: { changes: 1 } }
             },
           }
         },
@@ -88,7 +89,7 @@ function createDb(rows: {
           return { results: [] }
         },
         async run() {
-          return { success: true }
+          return { success: true, meta: { changes: 1 } }
         },
       }
     },
