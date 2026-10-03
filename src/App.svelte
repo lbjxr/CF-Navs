@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { startIconDevice } from './lib/iconDeviceState'
+  let stopIconDevice: (() => void) | undefined
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import { fade } from 'svelte/transition'
@@ -1098,6 +1100,7 @@
   }
 
   onMount(() => {
+    stopIconDevice = startIconDevice()
     preferredThemeMode = readPreferredThemeMode()
     customScriptController = createCustomScriptController(createBrowserCustomScriptHost())
 
@@ -1124,6 +1127,7 @@
   })
 
   onDestroy(() => {
+    stopIconDevice?.()
     if (mediaQuery && handleSystemThemeChange) {
       mediaQuery.removeEventListener('change', handleSystemThemeChange)
     }
@@ -1269,6 +1273,7 @@
         onBatchDeleteBookmarks={handleBatchDeleteBookmarks}
         onBatchMoveBookmarks={handleBatchMoveBookmarks}
         onSubmitSettings={handleSubmitSettings}
+        onVerifyDevice={() => refreshLoggedInData(true)}
         onChangePassword={handleChangePassword}
         onSortCategories={handleSortCategories}
         onSortBookmarks={handleSortBookmarks}

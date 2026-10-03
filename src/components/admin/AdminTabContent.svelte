@@ -45,6 +45,7 @@
   export let onBatchDeleteBookmarks: ((ids: number[]) => AsyncVoid) | undefined = undefined
   export let onBatchMoveBookmarks: ((payload: BookmarkBatchMoveReq) => AsyncVoid) | undefined = undefined
   export let onSubmitSettings: ((payload: SettingsFormValue) => AsyncVoid) | undefined = undefined
+  export let onVerifyDevice: (() => Promise<void>) | undefined = undefined
   export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
   export let onSortCategories: CategorySortHandler | undefined = undefined
   export let onSortBookmarks: SortHandler | undefined = undefined
@@ -98,6 +99,7 @@
           saving={settingsSaving}
           error={settingsError}
           onSubmit={onSubmitSettings}
+          onVerifyDevice={onVerifyDevice}
           onChangePassword={onChangePassword}
         />
       {:else}

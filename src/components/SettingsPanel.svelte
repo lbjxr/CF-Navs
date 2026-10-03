@@ -1,4 +1,5 @@
 <script lang="ts">
+  import DeviceIconCachePanel from './DeviceIconCachePanel.svelte'
   import type { ChangePasswordReq } from '../../shared/types'
   import { CARD_SIZE_LIMITS } from '../../shared/settings'
   import {
@@ -28,6 +29,7 @@
   export let saving = false
   export let error = ''
   export let onSubmit: ((payload: SettingsPanelValue) => AsyncVoid) | undefined = undefined
+  export let onVerifyDevice: (() => Promise<void>) | undefined = undefined
   export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
 
   const settingsSections = [
@@ -37,6 +39,7 @@
     { id: 'layout', label: '布局与导航', hint: '内容宽度、边距与导航位置' },
     { id: 'search', label: '搜索设置', hint: '默认引擎与搜索服务' },
     { id: 'footer', label: '自定义样式/脚本', hint: '页脚、CSS 与 JavaScript' },
+    { id: 'device', label: '设备缓存', hint: '仅此浏览器的图标副本与清理' },
     { id: 'account', label: '账号安全', hint: '修改管理员密码' },
   ]
 
@@ -156,6 +159,8 @@
             <SearchEngineSettingsSection bind:form {saving} {enginesValid} />
           {:else if activeSectionId === 'footer'}
             <FooterSettingsSection bind:form {saving} />
+          {:else if activeSectionId === 'device'}
+            <DeviceIconCachePanel onVerify={onVerifyDevice} />
           {:else if activeSectionId === 'account'}
             <PasswordChangePanel {saving} {onChangePassword} />
           {/if}

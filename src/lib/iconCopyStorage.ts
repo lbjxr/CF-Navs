@@ -7,7 +7,7 @@ import {
 export const ICON_COPY_DATABASE = 'cf-navs-object-icons-v1'
 const STORES = ['control', 'entries', 'bodies'] as const
 const ACTIVE_KEY = 'active'
-interface Control extends IconStorageTotals, IconStorageLease { key: typeof ACTIVE_KEY; schema: 1; enabled: boolean }
+interface Control extends IconStorageTotals, IconStorageLease { key: typeof ACTIVE_KEY; schema: 1; enabled: boolean; revokedScope?: string | null }
 export type IconStorageFailure = 'unavailable' | 'quota' | 'stale' | 'corrupt' | 'cleanup-failed'
 export class IconStorageError extends Error {
   constructor(readonly reason: IconStorageFailure, cause?: unknown) { super('Icon storage: ' + reason, { cause }); this.name = 'IconStorageError' }
@@ -110,6 +110,7 @@ export function createIconCopyStorage(options: { factory?: IDBFactory; name?: st
     await run('readwrite', async tx => {
       const control = await controlFor(tx)
       if (!allowed()) throw new IconStorageError('stale')
+      if (control?.revokedScope === lease.scope.split(':')[1]) throw new IconStorageError('stale')
       if (current(control, lease)) { if (!validTotals(control!)) throw new IconStorageError('corrupt'); return }
       if (control && (!previous || previous.scope !== control.scope || previous.generation !== control.generation)) throw new IconStorageError('stale')
       // Revoked generations may never be reopened by a delayed initialization.
@@ -183,14 +184,14 @@ export function createIconCopyStorage(options: { factory?: IDBFactory; name?: st
     touches.delete(key)
   }
 
-  async function clear(lease?: IconStorageLease): Promise<void> {
+  async function clear(lease?: IconStorageLease, revokeSession = false): Promise<void> {
     try {
       await run('readwrite', async tx => {
         const control = await controlFor(tx)
         if (lease && control && (lease.scope !== control.scope || lease.generation !== control.generation)) return
         await result(tx.objectStore('entries').clear())
         await result(tx.objectStore('bodies').clear())
-        if (control) await result(tx.objectStore('control').put({ ...control, enabled: false, ...emptyTotals() }))
+        if (control) await result(tx.objectStore('control').put({ ...control, enabled: false, revokedScope: revokeSession ? control.scope.split(':')[1] : control.revokedScope, ...emptyTotals() }))
       })
       touches.clear()
     } catch (error) { throw new IconStorageError('cleanup-failed', error) }

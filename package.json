@@ -15,6 +15,7 @@
     "test:icon-storage": "node scripts/icon-storage-regression.mjs",
     "smoke": "node scripts/smoke-local.mjs",
     "perf:audit": "node scripts/perf-audit.mjs",
+    "regression:icons:local": "node scripts/smoke-local.mjs --icons",
     "regression:chrome": "node scripts/chrome-regression.mjs",
     "accept:prod": "node scripts/prod-acceptance.mjs",
     "setup:wrangler": "node scripts/create-wrangler-local.mjs",

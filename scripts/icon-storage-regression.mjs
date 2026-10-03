@@ -191,6 +191,13 @@ try {
     try { await store.activate(lease, allow) } catch (error) { rejected = error.reason === 'stale' }
     return rejected && (await store.state()).scope === next.scope
   }))
+  check('durable logout blocks the same session even if an old tab rewrites its preference', await primary.call(async function () {
+    const control = await store.state()
+    await store.clear(control, true)
+    let rejected = false
+    try { await store.activate({ scope: control.scope, generation: 'stale-tab-new-generation' }, allow, control) } catch (error) { rejected = error.reason === 'stale' }
+    return rejected && !(await store.state()).enabled && (await store.state()).entries === 0
+  }))
   check('no duplicate body in localStorage or Cache Storage', await primary.call(async function () { return localStorage.length === 0 && (await caches.keys()).length === 0 }))
 } catch (error) {
   report.errors.push(error.stack || error.message)

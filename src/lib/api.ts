@@ -59,7 +59,20 @@ export class ApiError extends Error {
   }
 }
 
-const AUTH_STORAGE_KEY = 'cf-navs.auth'
+export const AUTH_STORAGE_KEY = 'cf-navs.auth'
+const browserStorageSubscribers = new Set<(key: string | null) => void>()
+export function notifyBrowserStorageChange(key: string | null): void {
+  for (const listener of browserStorageSubscribers) listener(key)
+}
+export function subscribeBrowserStorageChanges(listener: (key: string | null) => void): () => void {
+  ensureAuthStorageListener()
+  browserStorageSubscribers.add(listener)
+  return () => browserStorageSubscribers.delete(listener)
+}
+export function refreshStoredAuthSession(): void {
+  cachedAuthSession = undefined
+  notifyBrowserStorageChange(AUTH_STORAGE_KEY)
+}
 const JSON_HEADERS = {
   accept: 'application/json',
   'content-type': 'application/json',
@@ -83,9 +96,8 @@ function ensureAuthStorageListener(): void {
   }
 
   window.addEventListener('storage', (event) => {
-    if (event.key === AUTH_STORAGE_KEY) {
-      cachedAuthSession = undefined
-    }
+    if (event.key === AUTH_STORAGE_KEY || event.key === null) cachedAuthSession = undefined
+    notifyBrowserStorageChange(event.key)
   })
   authStorageListenerAttached = true
 }
@@ -169,6 +181,7 @@ export function getStoredAuthSession(): StoredAuthSession | null {
 
   ensureAuthStorageListener()
 
+  if (cachedAuthSession === null) return null
   if (cachedAuthSession !== undefined) {
     const session = normalizeStoredAuthSession(cachedAuthSession)
     if (!session) {
@@ -206,6 +219,7 @@ export function setStoredAuthSession(session: StoredAuthSession): void {
 
   ensureAuthStorageListener()
   localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session))
+  notifyBrowserStorageChange(AUTH_STORAGE_KEY)
 }
 
 export function clearStoredAuthSession(): void {
@@ -216,6 +230,7 @@ export function clearStoredAuthSession(): void {
 
   ensureAuthStorageListener()
   localStorage.removeItem(AUTH_STORAGE_KEY)
+  notifyBrowserStorageChange(AUTH_STORAGE_KEY)
 }
 
 export function getAuthToken(): string | null {

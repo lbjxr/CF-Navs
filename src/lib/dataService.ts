@@ -1,3 +1,5 @@
+import { iconDevice } from './iconDeviceState'
+import { getAuthToken } from './api'
 // 前端数据编排层：公开/后台聚合数据的获取、版本确认、本地增量更新与浏览器快照持久化。
 // 只操作 store、API、缓存与本地图标缓存，不持有任何视图状态；需要向界面反馈的错误
 // 通过 configureDataService 注入的回调上报，视图切换/登录 UI 编排仍留在 App.svelte。
@@ -68,6 +70,7 @@ let refreshEpoch = 0
 authStore.subscribe(({ session }) => {
   if (session === activeSession) return
   activeSession = session
+  iconDevice.authChanged()
   sessionEpoch += 1
   refreshEpoch += 1
   currentDataVersion = null
@@ -111,6 +114,7 @@ function applyConfigFromPublicData(data: PublicData): void {
 }
 
 export function applyPublicData(data: PublicData, version = getDataVersion(data), progressive = false): PublicData {
+  iconDevice.setDataset(data.dataset_epoch)
   const cleanData = stripPublicDataVersion(data)
   const currentState = get(publicStore)
   const merged = mergePublicData(currentState.data, cleanData)
@@ -412,6 +416,7 @@ export async function applyLocalSettings(settings: Settings): Promise<void> {
 }
 
 export function applyLoggedInData(data: AdminData, version = getDataVersion(data)): void {
+  iconDevice.setDataset(data.dataset_epoch)
   const cleanData = stripAdminDataVersion(data)
   if (!cleanData.settings) {
     throw new Error('failed to load admin settings')
@@ -445,6 +450,7 @@ export function refreshLoggedInData(forceRemote = false): Promise<void> {
 
 async function loadLoggedInData(forceRemote: boolean, isCurrent: IsCurrent): Promise<void> {
   if (!isCurrent() || !isLoggedIn()) return
+  const requestToken = getAuthToken()
   // 后台预览私密对象图标需要短期授权 key。失败只降级成兜底图标，不影响数据刷新。
   void ensureIconAccessKey(() => api.auth.iconAccess())
   const cached = !forceRemote ? await readCachedAdminDataEntry(isCurrent) : null
@@ -459,8 +465,10 @@ async function loadLoggedInData(forceRemote: boolean, isCurrent: IsCurrent): Pro
     if (cached?.version) {
       const remoteVersion = await api.data.version(true)
       if (!isCurrent()) return
+      await iconDevice.acceptMetadata(remoteVersion, requestToken, isCurrent)
+      if (!isCurrent()) return
       currentDataVersion = remoteVersion.version
-      if (remoteVersion.version === cached.version) {
+      if (remoteVersion.version === cached.version && remoteVersion.dataset_epoch === cached.data.dataset_epoch) {
         return
       }
     }
@@ -469,6 +477,8 @@ async function loadLoggedInData(forceRemote: boolean, isCurrent: IsCurrent): Pro
     const data = await api.admin.getData({ keepSessionOnUnauthorized: true })
     if (!isCurrent()) return
     applyLoggedInData(data)
+    await iconDevice.acceptMetadata(data, requestToken, isCurrent)
+    if (!isCurrent()) return
     await persistCurrentAdminData(isCurrent)
   } catch (error) {
     if (!isCurrent()) return

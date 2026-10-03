@@ -24,6 +24,8 @@ export type AdminBookmarkSummary = {
   icon_source?: string
   icon_background_color?: string
   icon_blob?: string
+  icon_revision?: string | null
+  icon_write_epoch?: number
   icon_cached?: boolean | number | null
   description?: string
   description_mode?: 'always' | 'hover' | 'hidden' | null
@@ -69,6 +71,7 @@ export function toAdminBookmarks(bookmarks: Bookmark[]): AdminBookmarkSummary[] 
     icon_background_color: bookmark.icon_background_color ?? '',
     icon_blob: bookmark.icon_blob ?? '',
     icon_cached: bookmark.icon_cached ?? false,
+    ...(bookmark.icon_revision !== undefined ? { icon_revision: bookmark.icon_revision, icon_write_epoch: bookmark.icon_write_epoch } : {}),
     description: bookmark.description ?? '',
     description_mode: bookmark.description_mode ?? null,
     open_method: bookmark.open_method === 2 ? 'same_tab' : bookmark.open_method === 3 ? 'modal' : 'new_tab',
@@ -89,6 +92,7 @@ export function toPublicBookmark(bookmark: Bookmark): PublicBookmark {
     icon_background_color: bookmark.icon_background_color,
     icon_blob: bookmark.icon_blob,
     icon_cached: bookmark.icon_cached,
+    ...(bookmark.icon_revision !== undefined ? { icon_revision: bookmark.icon_revision, icon_write_epoch: bookmark.icon_write_epoch } : {}),
     description: bookmark.description,
     description_mode: bookmark.description_mode ?? null,
     open_method: bookmark.open_method,
@@ -146,12 +150,12 @@ export function getDataVersion(data: { version?: string } | null | undefined): s
 }
 
 export function stripPublicDataVersion(data: PublicData): PublicData {
-  const { version: _version, ...rest } = data
+  const { version: _version, auth_receipt: _receipt, ...rest } = data
   return rest as PublicData
 }
 
 export function stripAdminDataVersion(data: AdminData): AdminData {
-  const { version: _version, ...rest } = data
+  const { version: _version, auth_receipt: _receipt, ...rest } = data
   return rest as AdminData
 }
 
@@ -203,11 +207,12 @@ export function mergePublicData(current: PublicData | null, next: PublicData): P
   const bookmarks = mergeRowsById(current.bookmarks, next.bookmarks)
   const settings = jsonEqual(current.settings, next.settings) ? current.settings : next.settings
 
-  if (categories === current.categories && bookmarks === current.bookmarks && settings === current.settings) {
+  if (categories === current.categories && bookmarks === current.bookmarks && settings === current.settings &&
+    current.dataset_epoch === next.dataset_epoch && current.icon_local_copy_protocol === next.icon_local_copy_protocol) {
     return current
   }
 
-  return { categories, bookmarks, settings }
+  return { ...next, categories, bookmarks, settings }
 }
 
 export function mergeAdminData(current: AdminData, next: AdminData): AdminData {
@@ -215,15 +220,17 @@ export function mergeAdminData(current: AdminData, next: AdminData): AdminData {
   const bookmarks = mergeRowsById(current.bookmarks, next.bookmarks)
   const settings = jsonEqual(current.settings, next.settings) ? current.settings : next.settings
 
-  if (categories === current.categories && bookmarks === current.bookmarks && settings === current.settings) {
+  if (categories === current.categories && bookmarks === current.bookmarks && settings === current.settings &&
+    current.dataset_epoch === next.dataset_epoch && current.icon_local_copy_protocol === next.icon_local_copy_protocol) {
     return current
   }
 
-  return { categories, bookmarks, settings }
+  return { ...next, categories, bookmarks, settings }
 }
 
 export function adminDataToPublicData(data: AdminData, settings: Settings): PublicData {
   return {
+    ...(data.dataset_epoch ? { dataset_epoch: data.dataset_epoch, icon_local_copy_protocol: data.icon_local_copy_protocol } : {}),
     categories: data.categories,
     bookmarks: toPublicBookmarks(data.bookmarks),
     settings: toPublicSettings(settings),

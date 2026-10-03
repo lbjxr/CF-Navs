@@ -7,7 +7,7 @@
 // 五步，漏掉清库会得到 5 条与代码无关的失败。本脚本让本地与 CI 共用同一条 L1 闸门。
 //
 // 隔离策略：
-//   - 每次用**独立的** persist 目录（默认 .wrangler/state-smoke），不碰开发者日常的
+//   - 每次用**独立的** persist 目录（默认唯一 .wrangler/state-smoke-<id>），不碰开发者日常的
 //     .wrangler/state，跑 L1 不会清掉本地开发数据。
 //   - 每次运行前删掉该目录，保证数据库是干净的。
 //   - 端口由系统分配，不与正在运行的 npm run dev 抢 8787。
@@ -15,12 +15,12 @@
 //
 // 环境变量（都可不设）：
 //   SMOKE_PORT           固定端口，默认自动选一个空闲端口
-//   SMOKE_PERSIST_TO     wrangler 本地状态目录，默认 .wrangler/state-smoke
+//   SMOKE_PERSIST_TO     wrangler 本地状态目录，默认唯一 .wrangler/state-smoke-<id>
 //   SMOKE_READY_TIMEOUT  等待服务就绪的秒数，默认 90
 //   SMOKE_WRANGLER_CONFIG 指定 wrangler 配置，默认沿用 scripts/wrangler-config.mjs 的选择
 
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, realpathSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { randomBytes } from 'node:crypto'
 import path from 'node:path'
@@ -32,7 +32,15 @@ const localConfig = path.join(rootDir, 'wrangler.local.toml')
 const publicConfig = path.join(rootDir, 'wrangler.toml')
 const configPath =
   process.env.SMOKE_WRANGLER_CONFIG || (existsSync(localConfig) ? localConfig : publicConfig)
-const persistTo = process.env.SMOKE_PERSIST_TO || path.join(rootDir, '.wrangler', 'state-smoke')
+const persistParent = path.join(rootDir, '.wrangler')
+const persistTo = path.resolve(process.env.SMOKE_PERSIST_TO || path.join(persistParent, 'state-smoke-' + randomBytes(6).toString('hex')))
+function verifyOwnedPersistPath() {
+  mkdirSync(persistParent, { recursive: true })
+  if (lstatSync(persistParent).isSymbolicLink() || realpathSync(persistParent).toLowerCase() !== path.resolve(persistParent).toLowerCase() ||
+      path.dirname(persistTo).toLowerCase() !== persistParent.toLowerCase() || !/^state-smoke(?:-[a-z0-9]+)*$/i.test(path.basename(persistTo))) {
+    throw new Error('Smoke state must be a dedicated state-smoke-* child of the workspace .wrangler directory')
+  }
+}
 const readyTimeoutMs = Number.parseInt(process.env.SMOKE_READY_TIMEOUT || '90', 10) * 1000
 
 // 管理员用户名必须与 wrangler 配置里的 INIT_ADMIN_USER 一致，密码则由本次运行现造。
@@ -106,7 +114,9 @@ async function main() {
   }
 
   // 干净数据库是 smoke-test.mjs 的前提，它的第一条断言就是「初始分类列表为空」。
-  rmSync(persistTo, { recursive: true, force: true })
+  verifyOwnedPersistPath()
+  if (existsSync(persistTo)) throw new Error('Refusing to delete a pre-existing smoke directory; choose a fresh SMOKE_PERSIST_TO')
+  console.log('smoke: owned state ' + persistTo)
   runWrangler(['d1', 'execute', 'DB', '--local', '--file=./schema.sql', '--persist-to', persistTo], 'db:init')
 
   const port = process.env.SMOKE_PORT || String(await findFreePort())
@@ -132,7 +142,7 @@ async function main() {
   try {
     await waitForHealth(baseUrl, child)
     console.log(`smoke: local worker ready at ${baseUrl}`)
-    const smoke = spawnSync(process.execPath, [path.join(rootDir, 'scripts', 'smoke-test.mjs')], {
+    const smoke = spawnSync(process.execPath, [path.join(rootDir, 'scripts', process.argv.includes('--icons') ? 'icon-ui-regression.mjs' : 'smoke-test.mjs')], {
       cwd: rootDir,
       stdio: 'inherit',
       env: { ...process.env, BASE_URL: baseUrl, ADMIN_USER, ADMIN_PASS, SETUP_TOKEN },
@@ -140,6 +150,7 @@ async function main() {
     exitCode = smoke.status ?? 1
   } finally {
     killTree(child)
+    verifyOwnedPersistPath()
     rmSync(persistTo, { recursive: true, force: true })
   }
 
