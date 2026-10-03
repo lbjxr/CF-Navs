@@ -11,7 +11,7 @@
 
 | ID | 优先 | 事项 | 当前边界 | 详情 |
 | --- | --- | --- | --- | --- |
-| REQ-15 | P1 | 可信设备图标本地优先：一期书签、二期分类 | 服务端 IC-P02 已通过 L0/L1（1123 单测、109 冒烟）；接续 IC-P03 存储/策略、P04～P07 和分类 Q01～Q04。尚未推送或完成测试站点回归，完整验收前不标完成 | [需求](plans/BOOKMARK_ICON_LOCAL_FIRST_REQUIREMENTS.md) / [开发计划](plans/BOOKMARK_ICON_LOCAL_FIRST_DEVELOPMENT.md) |
+| REQ-15 | P1 | 可信设备图标本地优先：一期书签、二期分类 | IC-P02 服务端通过 L0/L1；IC-P03 策略/单一 IndexedDB 基础通过 1132 单测与 15 项原生浏览器存储验证，尚未接入生产 UI。接续 P04～P07 和分类 Q01～Q04；尚未推送或完成测试站点回归 | [需求](plans/BOOKMARK_ICON_LOCAL_FIRST_REQUIREMENTS.md) / [开发计划](plans/BOOKMARK_ICON_LOCAL_FIRST_DEVELOPMENT.md) |
 
 ## 2. 需要裁定
 
