@@ -24,6 +24,7 @@ export interface Bookmark {
   icon_source: IconSource | null // 图标获取方式（direct/favicon_im/logo_surf/google/iconify/custom）
   icon_background_color: string | null
   icon_blob: string | null // 图标 data URI 缓存（优先用于本地加载）
+  icon_display?: 'image' | 'text' | 'empty' // Snapshot projection preserves the kind without duplicating embedded bytes.
   icon_revision?: string | null // Verified image content identity, not the source URL.
   icon_write_epoch?: number // Fences delayed image writes and source ABA changes.
   icon_cached?: boolean | number | null // Aggregate responses use this lightweight flag instead of sending icon_blob.

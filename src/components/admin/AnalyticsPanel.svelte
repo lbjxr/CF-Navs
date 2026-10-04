@@ -85,6 +85,9 @@
                       id={bookmark.id}
                       icon={bookmark.icon ?? ''}
                       iconSource={bookmark.icon_source}
+                      iconRevision={bookmark.icon_revision}
+                      iconWriteEpoch={bookmark.icon_write_epoch}
+                      iconDisplay={bookmark.icon_display}
                       iconBlob={bookmark.icon_blob ?? ''}
                       src={withIconAccessKey(getBookmarkIconUrl(bookmark), needsIconKey ? $iconAccessKey : '')}
                       alt=""
@@ -138,6 +141,9 @@
                       id={bookmark.id}
                       icon={bookmark.icon ?? ''}
                       iconSource={bookmark.icon_source}
+                      iconRevision={bookmark.icon_revision}
+                      iconWriteEpoch={bookmark.icon_write_epoch}
+                      iconDisplay={bookmark.icon_display}
                       iconBlob={bookmark.icon_blob ?? ''}
                       src={withIconAccessKey(getBookmarkIconUrl(bookmark), needsIconKey ? $iconAccessKey : '')}
                       alt=""

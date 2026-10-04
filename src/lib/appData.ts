@@ -24,6 +24,7 @@ export type AdminBookmarkSummary = {
   icon_source?: string
   icon_background_color?: string
   icon_blob?: string
+  icon_display?: 'image' | 'text' | 'empty'
   icon_revision?: string | null
   icon_write_epoch?: number
   icon_cached?: boolean | number | null
@@ -71,6 +72,7 @@ export function toAdminBookmarks(bookmarks: Bookmark[]): AdminBookmarkSummary[] 
     icon_background_color: bookmark.icon_background_color ?? '',
     icon_blob: bookmark.icon_blob ?? '',
     icon_cached: bookmark.icon_cached ?? false,
+    ...(bookmark.icon_display ? { icon_display: bookmark.icon_display } : {}),
     ...(bookmark.icon_revision !== undefined ? { icon_revision: bookmark.icon_revision, icon_write_epoch: bookmark.icon_write_epoch } : {}),
     description: bookmark.description ?? '',
     description_mode: bookmark.description_mode ?? null,
@@ -92,6 +94,7 @@ export function toPublicBookmark(bookmark: Bookmark): PublicBookmark {
     icon_background_color: bookmark.icon_background_color,
     icon_blob: bookmark.icon_blob,
     icon_cached: bookmark.icon_cached,
+    ...(bookmark.icon_display ? { icon_display: bookmark.icon_display } : {}),
     ...(bookmark.icon_revision !== undefined ? { icon_revision: bookmark.icon_revision, icon_write_epoch: bookmark.icon_write_epoch } : {}),
     description: bookmark.description,
     description_mode: bookmark.description_mode ?? null,

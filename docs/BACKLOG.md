@@ -11,7 +11,7 @@
 
 | ID | 优先 | 事项 | 当前边界 | 详情 |
 | --- | --- | --- | --- | --- |
-| REQ-15 | P1 | 可信设备图标本地优先：一期书签、二期分类 | IC-P02～P04 已实现服务端、事务存储及设备/会话控制；1146 单测、16 原生存储检查、8 实际页面联调通过。下一步 P05 全书签展示/编辑接入，再做 P06/P07 与分类 Q01～Q04；尚未推送或完成测试站点回归 | [需求](plans/BOOKMARK_ICON_LOCAL_FIRST_REQUIREMENTS.md) / [开发计划](plans/BOOKMARK_ICON_LOCAL_FIRST_DEVELOPMENT.md) |
+| REQ-15 | P1 | 可信设备图标本地优先：一期书签、二期分类 | IC-P02～P05 本地实现与验证完成；P05 接通完整书签展示、编辑与快照投影。剩余 P06 迁移/兼容回滚、P07 全量审计、规模数据及测试站点/生产部署后验证；分类 Q01～Q04 待 P07 安全门通过并另获授权启动 | [需求](plans/BOOKMARK_ICON_LOCAL_FIRST_REQUIREMENTS.md) / [开发计划](plans/BOOKMARK_ICON_LOCAL_FIRST_DEVELOPMENT.md) |
 
 ## 2. 需要裁定
 

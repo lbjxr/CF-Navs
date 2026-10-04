@@ -116,6 +116,22 @@ describe('bookmark card icon state', () => {
     expect(result.shouldUseIconProxy).toBe(true)
   })
 
+  it('restores images omitted from snapshots through the ordinary bookmark proxy', () => {
+    const result = state({
+      icon: null,
+      icon_blob: null,
+      icon_cached: false,
+      icon_display: 'image',
+    })
+
+    expect(result.hasProjectedImageIcon).toBe(true)
+    expect(result.shouldUseIconProxy).toBe(true)
+    expect(result.iconUrl).toBe(result.proxiedHttpIconUrl)
+    expect(result.iconUrl).toContain('/api/icon/42?v=')
+    expect(result.shouldReadLocalIconCache).toBe(false)
+    expect(result.canUseRawHttpIconFallback).toBe(false)
+  })
+
 
   it('falls back to the saved HTTP icon after the bookmark proxy fails', () => {
     const result = state({
@@ -241,6 +257,7 @@ describe('bookmark card icon state', () => {
     expect(createBookmarkCardIconStateKey({ ...original, icon_cached: false }, true)).toBe(key)
     expect(createBookmarkCardIconStateKey({ ...original, icon_cached: null }, true)).toBe(key)
     expect(createBookmarkCardIconStateKey({ ...original, icon_cached: true }, true)).not.toBe(key)
+    expect(createBookmarkCardIconStateKey({ ...original, icon_display: 'image' }, true)).not.toBe(key)
     expect(createBookmarkCardIconStateKey({ ...original, icon_cached: 1 }, true)).toBe(
       createBookmarkCardIconStateKey({ ...original, icon_cached: true }, true),
     )

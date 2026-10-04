@@ -1,4 +1,4 @@
-import { ICON_COPY_MAX_BYTES } from '../../shared/iconLocalCopy'
+import { ICON_COPY_MAX_BYTES, iconBytesRevision } from '../../shared/iconLocalCopy'
 import { sniffImageContentType, type FetchedIcon } from './iconData'
 
 // A persisted revision certifies recognized image bytes, not a URL or HTTP success.
@@ -21,10 +21,5 @@ export function decodeVersionedIcon(dataUri: string): FetchedIcon | null {
 }
 
 export async function iconContentRevision(icon: FetchedIcon): Promise<string> {
-  const header = new TextEncoder().encode(`cf-navs-icon-v1\n${icon.contentType}\n`)
-  const payload = new Uint8Array(header.length + icon.bytes.length)
-  payload.set(header)
-  payload.set(icon.bytes, header.length)
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', payload))
-  return `sha256-${Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+  return iconBytesRevision(icon.bytes, icon.contentType)
 }

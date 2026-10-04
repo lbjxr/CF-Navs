@@ -152,6 +152,7 @@ export function createIconCopyStorage(options: { factory?: IDBFactory; name?: st
       const store = tx.objectStore('entries')
       const previous: StoredIconEntry | undefined = await result(store.get(entry.key))
       if (previous && !validStoredIcon(previous, lease)) throw new IconStorageError('corrupt')
+      if (previous && previous.descriptor.write_epoch > descriptor.write_epoch) throw new IconStorageError('stale')
       let totals: IconStorageTotals = {
         bodyBytes: control.bodyBytes - (previous?.byte_length ?? 0) + entry.byte_length,
         entries: control.entries + (previous ? 0 : 1),

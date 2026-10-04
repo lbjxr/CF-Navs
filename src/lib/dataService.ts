@@ -1,3 +1,5 @@
+import { objectIconLoader } from './objectIconLoader'
+import type { IconDescriptor } from '../../shared/iconLocalCopy'
 import { iconDevice } from './iconDeviceState'
 import { getAuthToken } from './api'
 // 前端数据编排层：公开/后台聚合数据的获取、版本确认、本地增量更新与浏览器快照持久化。
@@ -37,7 +39,6 @@ import {
 } from './appLocalData'
 import { clearCachedPublicData, readCachedPublicDataEntry, writeCachedPublicData } from './publicDataCache'
 import { isPublicModeForbidden, siteConfigFromForbiddenError } from './publicMode'
-import { createBookmarkIconCacheKey, writeBookmarkIconDataUri } from './localBookmarkIconCache'
 import { ensureIconAccessKey } from './iconAccessKey'
 import { adminStore, authStore, configStore, publicStore } from './stores'
 
@@ -339,28 +340,20 @@ export async function applyLocalBookmarkIconBlob(bookmarkId: number, iconBlob: s
     bookmarks: updateBookmarkIconBlob(data.bookmarks, bookmarkId, iconBlob),
   }))
 
-  if (iconBlob?.startsWith('data:image/')) {
-    const current =
-      get(adminStore).data.bookmarks.find((bookmark) => bookmark.id === bookmarkId) ??
-      get(publicStore).data?.bookmarks.find((bookmark) => bookmark.id === bookmarkId)
-    if (current) {
-      await writeBookmarkIconDataUri(
-        createBookmarkIconCacheKey({
-          id: current.id,
-          icon: current.icon ?? '',
-          iconSource: current.icon_source,
-        }),
-        iconBlob,
-      )
-    }
-  }
-
   await persistCurrentAdminData()
 }
 
 export async function refreshBookmarkIconCache(bookmarkId: number): Promise<string | null> {
+  const isCurrent = captureSession()
   const result = await api.bookmarks.refreshIconCache(bookmarkId)
-  await applyLocalBookmarkIconBlob(bookmarkId, result.icon_blob)
+  if (!isCurrent()) return null
+  const descriptor = result.icon_descriptor
+  if (descriptor) applyIconDescriptor(descriptor)
+  if (result.icon_update !== 'unavailable') await applyLocalBookmarkIconBlob(bookmarkId, result.icon_blob)
+  if (isCurrent() && descriptor?.state === 'ready' && result.icon_blob && iconDevice.capture()) {
+    const handle = objectIconLoader.acquire(descriptor, result.icon_blob)
+    try { await handle.result } finally { handle.release() }
+  }
   return result.icon_blob
 }
 
@@ -490,3 +483,26 @@ async function loadLoggedInData(forceRemote: boolean, isCurrent: IsCurrent): Pro
     throw error
   }
 }
+
+let iconSnapshotTimer: ReturnType<typeof setTimeout> | null = null
+function applyIconDescriptor(next: IconDescriptor, expected?: IconDescriptor): void {
+  if (next.object_type !== 'bookmark' || get(adminStore).data.dataset_epoch !== next.dataset_epoch) return
+  const patch = <T extends Bookmark>(rows: T[]): T[] => rows.map(row => {
+    if (row.id !== next.object_id || (row.icon_write_epoch ?? 0) > next.write_epoch || expected && (row.icon_write_epoch ?? 0) !== expected.write_epoch && row.icon_revision !== next.content_revision) return row
+    const display = next.state === 'ready' || next.state === 'unknown' ? 'image' : next.state
+    if (row.icon_revision === next.content_revision && row.icon_write_epoch === next.write_epoch && row.icon_display === display) return row
+    return { ...row, icon_revision: next.content_revision, icon_write_epoch: next.write_epoch, icon_display: display,
+      ...(display === 'empty' ? { icon: null, icon_blob: null, icon_cached: false } : {}) }
+  })
+  const before = get(adminStore).data.bookmarks
+  const after = patch(before)
+  if (after.every((row, index) => row === before[index])) return
+  adminStore.setBookmarks(after)
+  const visible = get(publicStore).data
+  if (visible) publicStore.setData({ ...visible, bookmarks: patch(visible.bookmarks as Bookmark[]) })
+  if (!iconSnapshotTimer) {
+    const valid = captureSession()
+    iconSnapshotTimer = setTimeout(() => { iconSnapshotTimer = null; void persistCurrentAdminData(valid).catch(error => hooks.onRootError(getErrorMessage(error), error)) }, 250)
+  }
+}
+objectIconLoader.configure((next, expected) => applyIconDescriptor(next, expected))

@@ -120,13 +120,16 @@ describe('local bookmark icon cache', () => {
     expect(isDataImage('https://example.com/icon.png')).toBe(false)
   })
 
-  it('writes and reads cached data URIs through localStorage', async () => {
+  it('does not persist embedded data URIs through the legacy unscoped writer', async () => {
+    const storage = setupLocalStorage()
+    const entries = setupCacheStorage()
     const cacheKey = createBookmarkIconCacheKey({ id: 1, icon: 'data:image/png;base64,a', iconSource: 'custom' })
 
     await writeBookmarkIconDataUri(cacheKey, 'data:image/png;base64,a')
 
-    expect(readCachedBookmarkIconDataUri(cacheKey)).toBe('data:image/png;base64,a')
-    await expect(readCachedBookmarkIconUrl(cacheKey)).resolves.toBe('data:image/png;base64,a')
+    expect(storage.getItem(storageKey(cacheKey))).toBeNull()
+    expect(readCachedBookmarkIconDataUri(cacheKey)).toBeNull()
+    expect(entries.size).toBe(0)
   })
 
   it('ignores non-image data URIs', async () => {
@@ -137,17 +140,19 @@ describe('local bookmark icon cache', () => {
     expect(readCachedBookmarkIconDataUri(cacheKey)).toBeNull()
   })
 
-  it('removes stale localStorage entries for the same bookmark id', async () => {
+  it('removes old localStorage entries without writing an unscoped replacement', async () => {
     const localStorage = setupLocalStorage()
     const firstKey = createBookmarkIconCacheKey({ id: 9, icon: 'data:image/png;base64,old', iconSource: 'custom' })
     const secondKey = createBookmarkIconCacheKey({ id: 9, icon: 'data:image/png;base64,new', iconSource: 'custom' })
 
+    localStorage.setItem(storageKey(firstKey), 'data:image/png;base64,old')
+    localStorage.setItem(storageKey(secondKey), 'data:image/png;base64,stale')
     await writeBookmarkIconDataUri(firstKey, 'data:image/png;base64,old')
     await writeBookmarkIconDataUri(secondKey, 'data:image/png;base64,new')
 
     expect(localStorage.getItem(storageKey(firstKey))).toBeNull()
-    expect(localStorage.getItem(storageKey(secondKey))).toBe('data:image/png;base64,new')
-    expect(localStorage.keys().filter((key) => key.startsWith(`${STORAGE_PREFIX}9-`))).toHaveLength(1)
+    expect(localStorage.getItem(storageKey(secondKey))).toBeNull()
+    expect(localStorage.keys().filter((key) => key.startsWith(`${STORAGE_PREFIX}9-`))).toHaveLength(0)
   })
 
   it('deletes cached localStorage entries and degrades without Cache Storage', async () => {
@@ -341,19 +346,23 @@ describe('fetchCachedBookmarkIconUrl', () => {
 
   it('returns the cached URL and marks it as fresh when no race occurs', async () => {
     const cacheKey = createBookmarkIconCacheKey({ id: 1, icon: 'data:image/png;base64,a', iconSource: 'custom' })
-    await writeBookmarkIconDataUri(cacheKey, 'data:image/png;base64,a')
+    localStorage.setItem(storageKey(cacheKey), 'data:image/png;base64,a')
+    const entries = setupCacheStorage()
+    entries.set(`https://cf-navs.local/bookmark-icon/${encodeURIComponent(cacheKey)}`, new Response('a', { headers: { 'content-type': 'image/png' } }))
 
     const seq = { current: 0 }
     const result = await fetchCachedBookmarkIconUrl(cacheKey, seq)
 
     expect(result.stale).toBe(false)
-    expect(result.url).toBe('data:image/png;base64,a')
+    expect(result.url).toBe('blob:test')
     expect(seq.current).toBe(1)
   })
 
   it('returns stale=true and revokes URL when request counter has changed', async () => {
     const cacheKey = createBookmarkIconCacheKey({ id: 2, icon: 'data:image/png;base64,b', iconSource: 'custom' })
-    await writeBookmarkIconDataUri(cacheKey, 'data:image/png;base64,b')
+    localStorage.setItem(storageKey(cacheKey), 'data:image/png;base64,b')
+    const entries = setupCacheStorage()
+    entries.set(`https://cf-navs.local/bookmark-icon/${encodeURIComponent(cacheKey)}`, new Response('b', { headers: { 'content-type': 'image/png' } }))
 
     const seq = { current: 0 }
 
@@ -378,7 +387,9 @@ describe('fetchCachedBookmarkIconUrl', () => {
 
   it('increments the request sequence counter', async () => {
     const cacheKey = createBookmarkIconCacheKey({ id: 3, icon: 'data:image/png;base64,c', iconSource: 'custom' })
-    await writeBookmarkIconDataUri(cacheKey, 'data:image/png;base64,c')
+    localStorage.setItem(storageKey(cacheKey), 'data:image/png;base64,c')
+    const entries = setupCacheStorage()
+    entries.set(`https://cf-navs.local/bookmark-icon/${encodeURIComponent(cacheKey)}`, new Response('c', { headers: { 'content-type': 'image/png' } }))
 
     const seq = { current: 5 }
     await fetchCachedBookmarkIconUrl(cacheKey, seq)

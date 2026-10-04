@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { createTrustedIconView, emptyTrustedIcon } from '../lib/trustedIconView'
+  let trustedImage = emptyTrustedIcon
+  const trustedView = createTrustedIconView(value => { trustedImage = value })
   import { onDestroy, onMount } from 'svelte'
   import type { CardStyle, DescriptionDisplayMode, PublicBookmark } from '../../shared/types'
   import type { CategoryTreeOption } from '../lib/categorySelect'
@@ -82,6 +85,7 @@
   const LONG_PRESS_MS = 500
 
   $: openInNewTab = bookmark.open_method === 1
+  $: trustedView.set({ ...bookmark, visible: iconInView, preview })
   $: iconBaseState = deriveBookmarkCardIconBase({
     bookmark,
     iconInView,
@@ -89,7 +93,7 @@
     iconAccessKey,
   })
   $: iconText = iconBaseState.iconText
-  $: nextIconStateKey = iconBaseState.nextIconStateKey
+  $: nextIconStateKey = iconBaseState.nextIconStateKey + ':' + trustedImage.active
   $: localCacheKey = iconBaseState.localCacheKey
   $: shouldReadLocalIconCache = iconBaseState.shouldReadLocalIconCache
   $: shouldWaitForLocalIconCache = iconBaseState.shouldWaitForLocalIconCache
@@ -105,8 +109,8 @@
     localCachedIconUrl,
     localCachePending,
   })
-  $: iconUrl = iconUrlState.iconUrl
-  $: hasRenderableIcon = iconUrlState.hasRenderableIcon
+  $: iconUrl = trustedImage.active ? trustedImage.url : iconUrlState.iconUrl
+  $: hasRenderableIcon = trustedImage.active ? Boolean(trustedImage.url) : iconUrlState.hasRenderableIcon
   $: infoCardHeight = height > 0 ? height : 70
   $: safeInfoCardWidth = getInfoCardTrackWidth(width)
   $: infoIconInset = infoCardHeight <= 56 ? 6 : 8
@@ -133,7 +137,7 @@
     localIconReady = false
     iconRetry.reset()
     resetLocalCachedIconUrl()
-    if (shouldReadLocalIconCache) {
+    if (shouldReadLocalIconCache && !trustedImage.active) {
       void loadLocalCachedIcon(
         localCacheKey,
         shouldWaitForLocalIconCache,
@@ -154,6 +158,7 @@
   }
 
   async function loadLocalCachedIcon(cacheKey: string, waitForLocalCache: boolean, remoteUrl: string) {
+    if (trustedImage.active) return
     if (waitForLocalCache) {
       localCachePending = true
     }
@@ -193,6 +198,7 @@
   }
 
   function handleIconError() {
+    if (trustedImage.active) { trustedView.failed(); return }
     if (localCachedIconUrl) {
       resetLocalCachedIconUrl()
       localIconReady = false
@@ -416,6 +422,7 @@
   })
 
   onDestroy(() => {
+    trustedView.destroy()
     iconRetry.dispose()
     localCacheRequest.current += 1
     disconnectIconObserver()

@@ -33,6 +33,7 @@ export type BookmarkCardIconBaseState = {
   iconText: string
   localCacheKey: string
   hasEmbeddedIcon: boolean
+  hasProjectedImageIcon: boolean
   hasCachedRemoteIcon: boolean
   iconifyRemoteUrl: string
   canUseRawHttpIconFallback: boolean
@@ -67,7 +68,7 @@ export function createBookmarkCardIconStateKey(
 ): string {
   // key 参与状态键：续签、过期或清除时必须重置 cachedIconFailed/fallbackFailed 并重新加载，
   // 否则第一次匿名失败态会一直挡住带 key 的真实图标。
-  return `${bookmark.id}:${bookmark.icon_source ?? ''}:${bookmark.icon ?? ''}:${bookmark.icon_blob ?? ''}:${Boolean(bookmark.icon_cached)}:${bookmark.title}:${bookmark.url}:${iconInView}:${iconAccessKey}`
+  return `${bookmark.id}:${bookmark.icon_source ?? ''}:${bookmark.icon ?? ''}:${bookmark.icon_blob ?? ''}:${Boolean(bookmark.icon_cached)}:${bookmark.icon_display ?? ''}:${bookmark.title}:${bookmark.url}:${iconInView}:${iconAccessKey}`
 }
 
 export function deriveBookmarkCardIconBase(input: BookmarkCardIconBaseInput): BookmarkCardIconBaseState {
@@ -91,6 +92,7 @@ export function deriveBookmarkCardIconBase(input: BookmarkCardIconBaseInput): Bo
   })
   const hasEmbeddedIcon = /^data:image\//i.test(cachedIcon)
   const hasCachedRemoteIcon = Boolean(bookmark.icon_cached) && !hasEmbeddedIcon
+  const hasProjectedImageIcon = bookmark.icon_display === 'image' && !rawIcon && !cachedIcon && Number.isInteger(bookmark.id) && bookmark.id > 0
   const iconifyRemoteUrl =
     bookmark.icon_source === 'iconify' || isIconifyIconUrl(rawIcon)
       ? iconifyProxyIcon(rawIcon)
@@ -105,7 +107,9 @@ export function deriveBookmarkCardIconBase(input: BookmarkCardIconBaseInput): Bo
     !iconifyRemoteUrl &&
     !hasEmbeddedIcon &&
     !customTextIcon
-  const shouldUseIconProxy = hasCachedRemoteIcon
+  // Local snapshots omit image bytes but preserve this display marker. A rollback
+  // build has no trusted local copy, so restore those images through the ordinary proxy.
+  const shouldUseIconProxy = hasCachedRemoteIcon || hasProjectedImageIcon
   // 私密对象的代理响应是 `private, no-store`，必须带 key 才能拿到真实图标；
   // 公开对象 iconAccessKey 为空，URL 保持匿名以便命中 Worker edge cache，Service Worker 不接管对象代理。
   // Keep the successful uncached path as a direct <img> (no extra request and no
@@ -127,6 +131,7 @@ export function deriveBookmarkCardIconBase(input: BookmarkCardIconBaseInput): Bo
     iconText,
     localCacheKey,
     hasEmbeddedIcon,
+    hasProjectedImageIcon,
     hasCachedRemoteIcon,
     iconifyRemoteUrl,
     canUseRawHttpIconFallback,
@@ -157,7 +162,6 @@ export function deriveBookmarkCardIconUrl(input: BookmarkCardIconUrlInput): Book
     cachedIcon,
     customTextIcon,
     hasEmbeddedIcon,
-    hasCachedRemoteIcon,
     iconifyRemoteUrl,
     shouldUseIconProxy,
     shouldWaitForLocalIconCache,
@@ -172,7 +176,7 @@ export function deriveBookmarkCardIconUrl(input: BookmarkCardIconUrlInput): Book
     if (syncLocalCachedIconUrl) return syncLocalCachedIconUrl
     if (localCachedIconUrl) return localCachedIconUrl
     if (localCachePending && shouldWaitForLocalIconCache) return ''
-    if ((!rawIcon && !hasCachedRemoteIcon) || customTextIcon) return ''
+    if ((!rawIcon && !baseState.shouldUseIconProxy) || customTextIcon) return ''
     if (iconifyRemoteUrl) return iconifyRemoteUrl
     if (/^data:image\//i.test(rawIcon)) return rawIcon
     if (shouldUseIconProxy && !cachedIconFailed) return proxiedHttpIconUrl

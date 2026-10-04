@@ -23,6 +23,18 @@ await new Promise(resolve => probe.close(resolve))
 const cdp = new CdpSession({ chromeExe, debugPort, userDataDir: profile, headless: true })
 const report = { checks: [], ownership: { profile, debugPort }, errors: [], cleanup: null }
 let apiToken = ''
+let firstDisplayCopyCount = null
+let firstDisplayObjectIconCount = null
+let firstDisplayRefreshCount = null
+let firstDisplayCopyTraffic = null
+const iconCopyRequests = []
+const iconCopyResponses = []
+const inspectedIconCopyResponses = new Map()
+const objectIconRequests = []
+const iconRefreshRequests = []
+const bookmarkUpdateRequests = []
+const aggregateResponses = []
+const validatedProtocolConflictResponseIds = new Set()
 const redact = value => String(value).replaceAll(process.env.ADMIN_PASS, '[redacted]').replaceAll(apiToken || '\u0000', '[redacted]').replace(/([?&](?:key|token)=)[^\s&"']+/g, '$1[redacted]')
 const check = (name, value) => { report.checks.push({ name, passed: Boolean(value) }); assert.ok(value, name); console.log('PASS ' + name) }
 async function api(route, body, method = 'POST') {
@@ -31,32 +43,157 @@ async function api(route, body, method = 'POST') {
   if (!response.ok || envelope.code !== 0) throw new Error('Fixture API failed: ' + route + ' (' + response.status + ')')
   return envelope.data
 }
-async function until(fn, message, timeout = 20000) {
+async function until(fn, message, timeout = 20000, ...args) {
   const start = Date.now()
-  while (Date.now() - start < timeout) { if (await cdp.call(fn).catch(() => false)) return; await sleep(100) }
+  while (Date.now() - start < timeout) { if (await cdp.call(fn, ...args).catch(() => false)) return; await sleep(100) }
   throw new Error('Timed out: ' + message)
+}
+async function readFixtureImage(title) {
+  return cdp.call(function (label) {
+    const card = [...document.querySelectorAll('.bookmark-card-shell')].find(item => item.getAttribute('aria-label') === label)
+    const image = card?.querySelector('img')
+    return { found: Boolean(card), src: image?.src ?? '', loaded: Boolean(image?.complete && image?.naturalWidth > 0) }
+  }, title)
+}
+async function scrollFixtureIntoView(title) {
+  return cdp.call(function (label) {
+    const card = [...document.querySelectorAll('.bookmark-card-shell')].find(item => item.getAttribute('aria-label') === label)
+    if (!card) return false
+    card.scrollIntoView({ block: 'center', behavior: 'instant' })
+    return true
+  }, title)
+}
+async function inspectAggregateResponses(responses, label, expectedBody) {
+  return Promise.all(responses.map(async response => {
+    let body
+    try {
+      body = await cdp.send('Network.getResponseBody', { requestId: response.requestId })
+    } catch (error) {
+      throw new Error('Unable to inspect ' + response.path + ' response body: ' + String(error?.message ?? error))
+    }
+    const text = body.base64Encoded ? Buffer.from(body.body, 'base64').toString('utf8') : body.body
+    return text.includes(expectedBody)
+  }))
 }
 async function click(selector, text = null) {
   const bounds = await cdp.call(function (query, label) {
     const element = [...document.querySelectorAll(query)].find(item => !label || item.textContent.includes(label))
     if (!element) return null
-    element.scrollIntoView({ block: 'center' })
+    element.scrollIntoView({ block: 'center', behavior: 'instant' })
     const r = element.getBoundingClientRect()
-    return r.width && r.height ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null
+    if (!r.width || !r.height) return null
+    const x = r.left + r.width / 2
+    const y = r.top + r.height / 2
+    const hit = document.elementFromPoint(x, y)
+    return { x, y, hitIsTarget: hit === element || Boolean(hit && element.contains(hit)), hitTag: hit?.tagName ?? null, hitText: hit?.textContent?.trim().slice(0, 80) ?? '' }
   }, selector, text)
   assert.ok(bounds, 'Visible target ' + selector)
+  assert.ok(bounds.hitIsTarget, `Click intercepted for ${selector}: ${bounds.hitTag} ${bounds.hitText}`)
   await cdp.mouse(bounds.x, bounds.y)
+}
+async function replaceText(selector, text) {
+  await click(selector)
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17 })
+  if (text) await cdp.send('Input.insertText', { text })
+  else {
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 })
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 })
+  }
+}
+async function openSecondaryTab(url) {
+  const created = await cdp.send('Target.createTarget', { url: 'about:blank' })
+  const attached = await cdp.send('Target.attachToTarget', { targetId: created.targetId, flatten: true })
+  const tab = { targetId: created.targetId, sessionId: attached.sessionId }
+  const send = (method, params = {}) => new Promise((resolve, reject) => {
+    const id = cdp.nextId++
+    const timer = setTimeout(() => { cdp.pending.delete(id); reject(new Error('CDP timeout: ' + method)) }, 30000)
+    cdp.pending.set(id, { resolve, reject, timer })
+    cdp.ws.send(JSON.stringify({ id, method, params, sessionId: tab.sessionId }))
+  })
+  tab.send = send
+  tab.evaluate = async (fn, ...args) => {
+    const expression = `(${fn.toString()})(${args.map(arg => JSON.stringify(arg)).join(', ')})`
+    const response = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
+    if (response.exceptionDetails) throw new Error(response.exceptionDetails.exception?.description ?? response.exceptionDetails.text ?? 'secondary page evaluation failed')
+    return response.result?.value
+  }
+  await send('Page.enable')
+  await send('Runtime.enable')
+  await send('Page.navigate', { url })
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await tab.evaluate(() => ({ href: location.href, readyState: document.readyState })).catch(() => null)
+    if (state?.href.startsWith(new URL(url).origin) && state.readyState === 'complete') return tab
+    await sleep(100)
+  }
+  throw new Error('Secondary tab did not finish navigating')
+}
+async function inspectIconCopyResponse(response) {
+  if (!inspectedIconCopyResponses.has(response.requestId)) {
+    inspectedIconCopyResponses.set(response.requestId, (async () => {
+      const request = iconCopyRequests.find(item => item.requestId === response.requestId) ?? null
+      try {
+        const body = await cdp.send('Network.getResponseBody', { requestId: response.requestId })
+        const text = body.base64Encoded ? Buffer.from(body.body, 'base64').toString('utf8') : body.body
+        const payload = JSON.parse(text)?.data
+        const descriptor = payload?.descriptor
+        const summary = { protocol: payload?.protocol ?? null, persistence: payload?.persistence ?? null,
+          hasImage: Object.prototype.hasOwnProperty.call(payload ?? {}, 'image'),
+          image: payload?.image && typeof payload.image === 'object' ? { mime: payload.image.mime ?? null,
+            byteLength: payload.image.byte_length ?? null, base64Length: typeof payload.image.base64 === 'string' ? payload.image.base64.length : null } : null,
+          descriptor: descriptor ? { object_type: descriptor.object_type, object_id: descriptor.object_id,
+            dataset_epoch: descriptor.dataset_epoch, write_epoch: descriptor.write_epoch,
+            content_revision: descriptor.content_revision, state: descriptor.state } : null }
+        if (response.status === 409) return { status: response.status, request, conflict: { ...summary, reason: payload?.reason ?? null } }
+        return { status: response.status, request, result: summary }
+      } catch { return { status: response.status, request, ...(response.status === 409
+        ? { conflict: { protocol: null, reason: 'unreadable-response', hasImage: true, descriptor: null } }
+        : { result: null }) }
+      }
+    })())
+  }
+  return inspectedIconCopyResponses.get(response.requestId)
+}
+async function readIconCopyTraffic(requestStart = 0, responseStart = 0) {
+  const requests = iconCopyRequests.slice(requestStart)
+  return Promise.all(iconCopyResponses.slice(responseStart).map(async response => {
+    const detail = await inspectIconCopyResponse(response)
+    return { ...detail, request: requests.find(item => item.requestId === response.requestId) ?? detail.request }
+  }))
 }
 try {
   const login = await api('/login', { username: process.env.ADMIN_USER, password: process.env.ADMIN_PASS })
   apiToken = login.token
   const category = await api('/categories', { title: 'Local icon fixture', icon: '📁' })
   const icon = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="green"/></svg>').toString('base64')
-  await api('/bookmarks', { category_id: category.id, title: 'Local private icon', url: 'https://example.com', icon, icon_source: 'custom', is_private: true })
+  let fixtureTitle = 'Local trusted icon'
+  const bookmark = await api('/bookmarks', { category_id: category.id, title: fixtureTitle, url: 'https://example.com', icon, icon_source: 'custom', is_private: false })
+  await api(`/public/bookmarks/${bookmark.id}/click`)
   await cdp.start(); report.ownership.pid = cdp.chromeProcess.pid; report.ownership.browserStartedByTest = cdp.startedByTest
   await writeFile(output + '.ownership.json', JSON.stringify(report.ownership, null, 2))
   await cdp.attach(); report.ownership.targetId = cdp.targetId
+  report.ownership.sessionId = cdp.sessionId
   await writeFile(output + '.ownership.json', JSON.stringify(report.ownership, null, 2))
+  cdp.on('Network.requestWillBeSent', event => {
+    const url = new URL(event.request.url)
+    if (url.pathname === '/api/icon-local-copy') {
+      let payload = null
+      try { payload = JSON.parse(event.request.postData ?? 'null') } catch { /* Retain only recognized descriptor fields. */ }
+      iconCopyRequests.push({ method: event.request.method, path: url.pathname, requestId: event.requestId,
+        descriptor: payload ? { object_id: payload.object_id, dataset_epoch: payload.dataset_epoch, expected_write_epoch: payload.expected_write_epoch,
+          expected_content_revision: payload.expected_content_revision } : null })
+    }
+    if (url.pathname.startsWith('/api/icon/')) objectIconRequests.push({ method: event.request.method, path: url.pathname })
+    if (/^\/api\/bookmarks\/\d+\/icon-cache\/refresh$/.test(url.pathname)) iconRefreshRequests.push({ method: event.request.method, path: url.pathname })
+    if (url.pathname === '/api/bookmarks/' + bookmark.id) bookmarkUpdateRequests.push({ method: event.request.method, path: url.pathname })
+  })
+  cdp.on('Network.responseReceived', event => {
+    const url = new URL(event.response.url)
+    if (url.pathname === '/api/icon-local-copy') iconCopyResponses.push({ requestId: event.requestId, status: event.response.status })
+    if (url.pathname === '/api/public/data' || url.pathname === '/api/admin/data') aggregateResponses.push({ requestId: event.requestId, path: url.pathname })
+  })
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 900, deviceScaleFactor: 1, mobile: false })
   await cdp.navigate(base)
   await cdp.call(async function (username, password) {
@@ -95,9 +232,272 @@ try {
   await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 })
   await until(() => document.querySelector('.device-status')?.textContent.startsWith('已启用'), 'keyboard enable')
   check('keyboard toggling is functional', await cdp.call(() => document.querySelector('.device-cache input').checked))
+  const aggregateStart = aggregateResponses.length
+  const copyStart = iconCopyRequests.length
+  const copyResponseStart = iconCopyResponses.length
+  const objectIconStart = objectIconRequests.length
+  const refreshStart = iconRefreshRequests.length
+  await cdp.navigate(base)
+  await scrollFixtureIntoView(fixtureTitle)
+  await until(function (title) {
+    const card = [...document.querySelectorAll('.bookmark-card-shell')].find(item => item.getAttribute('aria-label') === title)
+    const image = card?.querySelector('img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'trusted homepage icon materialization', 20000, fixtureTitle)
+  await cdp.waitForNetworkIdle(500)
+  const warmImage = await readFixtureImage(fixtureTitle)
+  const warmStorage = await cdp.call(async function (id) {
+    const request = indexedDB.open('cf-navs-object-icons-v1')
+    const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    try {
+      const tx = db.transaction(['control', 'entries', 'bodies'], 'readonly')
+      const read = (store, key) => new Promise((resolve, reject) => { const item = tx.objectStore(store).get(key); item.onsuccess = () => resolve(item.result); item.onerror = () => reject(item.error) })
+      const [control, entry, body] = await Promise.all([read('control', 'active'), read('entries', 'bookmark:' + id), read('bodies', 'bookmark:' + id)])
+      return { enabled: control?.enabled === true, entry: entry?.descriptor?.state === 'ready', bodyBytes: body?.size ?? 0 }
+    } finally { db.close() }
+  }, bookmark.id)
+  warmStorage.revision = await cdp.call(async function (id) {
+    const request = indexedDB.open('cf-navs-object-icons-v1')
+    const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    try {
+      const tx = db.transaction('entries', 'readonly')
+      const item = tx.objectStore('entries').get('bookmark:' + id)
+      const entry = await new Promise((resolve, reject) => { item.onsuccess = () => resolve(item.result); item.onerror = () => reject(item.error) })
+      return entry?.descriptor?.content_revision ?? null
+    } finally { db.close() }
+  }, bookmark.id)
+  firstDisplayCopyCount = iconCopyRequests.length - copyStart
+  firstDisplayObjectIconCount = objectIconRequests.length - objectIconStart
+  firstDisplayRefreshCount = iconRefreshRequests.length - refreshStart
+  firstDisplayCopyTraffic = await readIconCopyTraffic(copyStart, copyResponseStart)
+  check('homepage renders the trusted image from an object URL', warmImage?.loaded && warmImage.src.startsWith('blob:'))
+  check('first display stores the verified body in IndexedDB', warmStorage.enabled && warmStorage.entry && warmStorage.bodyBytes > 0)
+  const firstDisplayConflict = firstDisplayCopyTraffic.filter(item => item.status === 409)
+  const firstDisplayCopies = firstDisplayCopyTraffic.filter(item => item.status === 200)
+  const conflict = firstDisplayConflict[0]
+  const retry = firstDisplayCopyTraffic[1]
+  const conflictDescriptor = conflict?.conflict?.descriptor
+  const conflictRetryIsValid = firstDisplayCopyTraffic.length === 2 && firstDisplayConflict.length === 1 && firstDisplayCopies.length === 1 &&
+    conflict?.conflict?.protocol === 1 && conflict.conflict.reason === 'conflict' && conflict.conflict.hasImage === false &&
+    conflictDescriptor?.object_type === 'bookmark' && conflictDescriptor.object_id === bookmark.id &&
+    conflictDescriptor.dataset_epoch === conflict.request?.descriptor?.dataset_epoch && conflictDescriptor.state === 'ready' &&
+    /^sha256-[a-f0-9]{64}$/.test(conflictDescriptor.content_revision ?? '') &&
+    retry?.request?.descriptor?.object_id === conflictDescriptor.object_id &&
+    retry.request.descriptor.dataset_epoch === conflictDescriptor.dataset_epoch &&
+    retry.request.descriptor.expected_write_epoch === conflictDescriptor.write_epoch &&
+    retry.request.descriptor.expected_content_revision === conflictDescriptor.content_revision &&
+    retry.result?.protocol === 1 && retry.result.persistence === 'session-scoped' && retry.result.hasImage &&
+    retry.result.image?.byteLength > 0 && retry.result.image?.base64Length > 0 &&
+    retry.result.descriptor?.object_id === conflictDescriptor.object_id &&
+    retry.result.descriptor.dataset_epoch === conflictDescriptor.dataset_epoch &&
+    retry.result.descriptor.write_epoch === conflictDescriptor.write_epoch &&
+    retry.result.descriptor.content_revision === conflictDescriptor.content_revision
+  const directCopyIsValid = firstDisplayCopyTraffic.length === 1 && firstDisplayCopies.length === 1 && firstDisplayConflict.length === 0 &&
+    firstDisplayCopies[0].result?.protocol === 1 && firstDisplayCopies[0].result.persistence === 'session-scoped' &&
+    firstDisplayCopies[0].result.hasImage && firstDisplayCopies[0].result.image?.byteLength > 0 &&
+    firstDisplayCopies[0].result.image?.base64Length > 0 &&
+    firstDisplayCopies[0].result.descriptor?.object_id === firstDisplayCopies[0].request?.descriptor?.object_id &&
+    firstDisplayCopies[0].result.descriptor?.dataset_epoch === firstDisplayCopies[0].request?.descriptor?.dataset_epoch &&
+    firstDisplayCopies[0].result.descriptor?.write_epoch === firstDisplayCopies[0].request?.descriptor?.expected_write_epoch &&
+    firstDisplayCopies[0].result.descriptor?.content_revision === firstDisplayCopies[0].request?.descriptor?.expected_content_revision
+  const noCopyNeeded = firstDisplayCopyTraffic.length === 0 && iconCopyRequests.length === copyStart
+  const validFirstDisplayCopySequence = noCopyNeeded || directCopyIsValid || conflictRetryIsValid
+  if (conflictRetryIsValid) validatedProtocolConflictResponseIds.add(iconCopyResponses[copyResponseStart]?.requestId)
+  check('first display uses one valid body response, optionally after a body-free descriptor conflict',
+    iconCopyRequests.length - copyStart <= 2 && firstDisplayCopies.length <= 1 && validFirstDisplayCopySequence)
+  if (firstDisplayConflict.length > 0) check('descriptor conflict is excluded only after an exact successful retry', conflictRetryIsValid)
+  check('most-visited placement reuses the trusted icon copy', await cdp.call(function (title) {
+    const section = [...document.querySelectorAll('.category-section')].find(item => item.querySelector('h3')?.textContent.trim() === '经常访问')
+    const card = [...(section?.querySelectorAll('.bookmark-card-shell') ?? [])].find(item => item.getAttribute('aria-label') === title)
+    const image = card?.querySelector('img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, fixtureTitle))
+  await cdp.call(function (categoryTitle, title) {
+    const section = document.getElementById('category-' + categoryTitle)
+    const card = [...(section?.querySelectorAll('.bookmark-card-shell') ?? [])].find(item => item.getAttribute('aria-label') === title)
+    card?.scrollIntoView({ block: 'center', behavior: 'instant' })
+  }, category.id, fixtureTitle)
+  await until(function (categoryTitle, title) {
+    const section = document.getElementById('category-' + categoryTitle)
+    const card = [...(section?.querySelectorAll('.bookmark-card-shell') ?? [])].find(item => item.getAttribute('aria-label') === title)
+    const image = card?.querySelector('img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'regular category icon reuse', 20000, category.id, fixtureTitle)
+  check('regular category placement reuses the trusted icon copy', await cdp.call(function (categoryTitle, title) {
+    const section = document.getElementById('category-' + categoryTitle)
+    const card = [...(section?.querySelectorAll('.bookmark-card-shell') ?? [])].find(item => item.getAttribute('aria-label') === title)
+    const image = card?.querySelector('img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, category.id, fixtureTitle))
+  check('homepage placements do not fetch another icon body', iconCopyRequests.length - copyStart <= 2 && firstDisplayCopies.length <= 1)
+  const warmAggregateResponses = aggregateResponses.slice(aggregateStart)
+  const warmAggregateContainsBody = await inspectAggregateResponses(warmAggregateResponses, 'first display', icon)
+  check('first display aggregate traffic does not repeat the inline image body', warmAggregateResponses.length === 0 || warmAggregateContainsBody.every(value => !value))
+
+  const reloadCopyStart = iconCopyRequests.length
+  const reloadObjectIconStart = objectIconRequests.length
+  const reloadAggregateStart = aggregateResponses.length
+  await cdp.navigate(base)
+  await scrollFixtureIntoView(fixtureTitle)
+  await until(function (title) {
+    const card = [...document.querySelectorAll('.bookmark-card-shell')].find(item => item.getAttribute('aria-label') === title)
+    const image = card?.querySelector('img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'trusted homepage icon restoration after reload', 20000, fixtureTitle)
+  await cdp.waitForNetworkIdle(500)
+  const restoredImage = await readFixtureImage(fixtureTitle)
+  const restoredStorage = await cdp.call(async function (id) {
+    const request = indexedDB.open('cf-navs-object-icons-v1')
+    const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    try {
+      const tx = db.transaction('entries', 'readonly')
+      const item = tx.objectStore('entries').get('bookmark:' + id)
+      const entry = await new Promise((resolve, reject) => { item.onsuccess = () => resolve(item.result); item.onerror = () => reject(item.error) })
+      return entry?.descriptor?.state === 'ready'
+    } finally { db.close() }
+  }, bookmark.id)
+  check('reload restores the image from IndexedDB', restoredImage?.loaded && restoredImage.src.startsWith('blob:') && restoredStorage)
+  check('unchanged reload makes zero icon copy requests', iconCopyRequests.length === reloadCopyStart)
+  check('unchanged reload makes zero ordinary object icon requests', objectIconRequests.length === reloadObjectIconStart)
+  const reloadAggregateResponses = aggregateResponses.slice(reloadAggregateStart)
+  const reloadAggregateContainsBody = await inspectAggregateResponses(reloadAggregateResponses, 'unchanged reload', icon)
+  check('reload aggregate traffic does not repeat the inline image body', reloadAggregateResponses.length === 0 || reloadAggregateContainsBody.every(value => !value))
+  report.iconWarmup = {
+    bookmarkId: bookmark.id,
+    warmCopyRequests: iconCopyRequests.length - copyStart,
+    reloadCopyRequests: iconCopyRequests.length - reloadCopyStart,
+    warmObjectIconRequests: objectIconRequests.length - objectIconStart,
+    reloadObjectIconRequests: objectIconRequests.length - reloadObjectIconStart,
+    warmAggregateResponses: warmAggregateResponses.length,
+    warmAggregateContainsBody: warmAggregateContainsBody.some(Boolean),
+    reloadAggregateResponses: reloadAggregateResponses.length,
+    reloadAggregateContainsBody: reloadAggregateContainsBody.some(Boolean),
+    warmStorage,
+    restoredStorage,
+  }
+
+  await replaceText('.search-input', fixtureTitle)
+  await until(function (title) {
+    const card = [...document.querySelectorAll('.bookmark-card-shell')].find(item => item.getAttribute('aria-label') === title)
+    const image = card?.querySelector('img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'homepage search icon reuse', 20000, fixtureTitle)
+  check('homepage search reuses the verified icon body', await readFixtureImage(fixtureTitle).then(image => image?.loaded && image.src.startsWith('blob:')))
+  await replaceText('.search-input', '')
+
+  await cdp.call(() => document.activeElement?.blur())
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'k', code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 2 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'k', code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 2 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17 })
+  await until(() => Boolean(document.querySelector('.spotlight-input')), 'Spotlight open')
+  await cdp.send('Input.insertText', { text: fixtureTitle })
+  await until(function (title) {
+    const option = [...document.querySelectorAll('.spotlight-option')].find(item => item.textContent.includes(title))
+    const image = option?.querySelector('img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'Spotlight icon reuse', 20000, fixtureTitle)
+  check('Spotlight reuses the verified icon body', await cdp.call(function (title) {
+    const option = [...document.querySelectorAll('.spotlight-option')].find(item => item.textContent.includes(title))
+    const image = option?.querySelector('img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, fixtureTitle))
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+  await until(() => !document.querySelector('.spotlight-input'), 'Spotlight close')
+
+  await cdp.navigate(base + '/admin')
+  await until(() => Boolean(document.querySelector('[data-testid="admin-tab-bookmarks"]')), 'admin navigation')
+  await click('[data-testid="admin-tab-bookmarks"]')
+  await until(function (title) {
+    const row = [...document.querySelectorAll('.admin-bookmark-table tbody tr')].find(item => item.textContent.includes(title))
+    const image = row?.querySelector('.admin-icon-badge img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'admin bookmark icon reuse', 20000, fixtureTitle)
+  check('admin bookmark list reuses the verified icon body', await cdp.call(function (title) {
+    const row = [...document.querySelectorAll('.admin-bookmark-table tbody tr')].find(item => item.textContent.includes(title))
+    const image = row?.querySelector('.admin-icon-badge img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, fixtureTitle))
+
+  const refreshBeforeEdit = iconRefreshRequests.length
+  await click('.admin-bookmark-table tbody tr .admin-inline-actions button', '编辑')
+  await until(() => Boolean(document.querySelector('[data-testid="bookmark-modal"]')), 'bookmark editor open')
+  await cdp.waitForNetworkIdle(500)
+  check('opening the editor uses the icon refresh endpoint', iconRefreshRequests.length > refreshBeforeEdit)
+  const updatedTitle = fixtureTitle + ' edited'
+  await replaceText('[data-testid="bookmark-modal"] input[type="text"]', updatedTitle)
+  const editFormState = await cdp.call(function () {
+    const modal = document.querySelector('[data-testid="bookmark-modal"]')
+    const form = modal?.querySelector('form')
+    const title = modal?.querySelector('label input[type="text"]')
+    const save = modal?.querySelector('.modal-actions .primary-button')
+    return { title: title?.value ?? null, valid: form?.checkValidity() ?? false, saveDisabled: save?.disabled ?? true }
+  })
+  report.editFormState = editFormState
+  check('edited bookmark form is valid before save', editFormState.valid && !editFormState.saveDisabled && editFormState.title === updatedTitle)
+  report.saveTarget = await cdp.call(function () {
+    const button = document.querySelector('[data-testid="bookmark-modal"] .modal-actions .primary-button')
+    if (!button) return null
+    button.scrollIntoView({ block: 'center', behavior: 'instant' })
+    const rect = button.getBoundingClientRect()
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+    return { viewport: { width: innerWidth, height: innerHeight }, text: button.textContent.trim(), disabled: button.disabled, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, hitTag: hit?.tagName ?? null, hitClass: hit?.className ?? '', hitText: hit?.textContent?.trim().slice(0, 80) ?? '', hitIsButton: hit === button || Boolean(hit && button.contains(hit)) }
+  })
+  check('bookmark editor actions stay above the mobile admin navigation', report.saveTarget.hitIsButton)
+  await cdp.call(function () {
+    window.__cfNavsSubmitEvents = []
+    document.addEventListener('submit', event => {
+      window.__cfNavsSubmitEvents.push({ formClass: event.target?.className ?? '', submitterText: event.submitter?.textContent?.trim() ?? '', at: Date.now() })
+    }, true)
+  })
+  await click('[data-testid="bookmark-modal"] .modal-actions .primary-button', '保存')
+  await sleep(300)
+  report.mouseSubmitEvents = await cdp.call(() => window.__cfNavsSubmitEvents ?? [])
+  report.submitInput = report.mouseSubmitEvents.length ? 'mouse' : null
+  if (!report.submitInput) {
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })
+    await sleep(300)
+    report.keyboardSubmitEvents = await cdp.call(() => window.__cfNavsSubmitEvents ?? [])
+    if (report.keyboardSubmitEvents.length) report.submitInput = 'keyboard'
+  }
+  check('bookmark edit save triggers a real form submission', Boolean(report.submitInput))
+  await until(() => !document.querySelector('[data-testid="bookmark-modal"]'), 'bookmark editor save')
+  await until(function (title) {
+    const row = [...document.querySelectorAll('.admin-bookmark-table tbody tr')].find(item => item.textContent.includes(title))
+    return Boolean(row)
+  }, 'edited bookmark appears in the admin list', 20000, updatedTitle)
+  await cdp.waitForNetworkIdle(500)
+  check('saving an edit refreshes the bookmark icon', iconRefreshRequests.length > refreshBeforeEdit + 1)
+  check('metadata-only edit retains the existing local image body', await cdp.call(async function (id, revision) {
+    const request = indexedDB.open('cf-navs-object-icons-v1')
+    const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    try {
+      const tx = db.transaction(['entries', 'bodies'], 'readonly')
+      const item = tx.objectStore('entries').get('bookmark:' + id)
+      const entry = await new Promise((resolve, reject) => { item.onsuccess = () => resolve(item.result); item.onerror = () => reject(item.error) })
+      const bodyRequest = tx.objectStore('bodies').get('bookmark:' + id)
+      const body = await new Promise((resolve, reject) => { bodyRequest.onsuccess = () => resolve(bodyRequest.result); bodyRequest.onerror = () => reject(bodyRequest.error) })
+      return entry?.descriptor?.content_revision === revision && body?.size > 0
+    } finally { db.close() }
+  }, bookmark.id, warmStorage.revision))
+  check('all display paths share the existing local image copy', iconCopyRequests.length === reloadCopyStart)
+  fixtureTitle = updatedTitle
+  }
 } catch (error) {
   report.errors.push(redact(error.stack || error.message)); process.exitCode = 1
-  if (cdp.ws) report.uiState = await cdp.call(() => ({ checked: document.querySelector('.device-cache input')?.checked, disabled: document.querySelector('.device-cache input')?.disabled, active: document.activeElement?.tagName, status: document.querySelector('.device-status')?.textContent })).catch(() => null)
+  if (cdp.ws) report.uiState = await cdp.call(function (title) {
+    const card = [...document.querySelectorAll('.bookmark-card-shell')].find(item => item.getAttribute('aria-label') === title)
+    const image = card?.querySelector('img')
+    const modal = document.querySelector('[data-testid="bookmark-modal"]')
+    const form = modal?.querySelector('form')
+    const save = modal?.querySelector('.modal-actions .primary-button')
+    return { url: location.href, pageTitle: document.title, readyState: document.readyState, cardFound: Boolean(card), image: image ? { src: image.src, loaded: image.complete && image.naturalWidth > 0 } : null,
+      modal: modal ? { text: modal.innerText.slice(0, 500), valid: form?.checkValidity(), saveDisabled: save?.disabled,
+        fields: [...modal.querySelectorAll('input')].map(input => ({ type: input.type, value: input.value.slice(0, 160), disabled: input.disabled })) } : null,
+      checked: document.querySelector('.device-cache input')?.checked, disabled: document.querySelector('.device-cache input')?.disabled, active: document.activeElement?.tagName, activeText: document.activeElement?.textContent?.trim().slice(0, 80), submitEvents: window.__cfNavsSubmitEvents ?? [], status: document.querySelector('.device-status')?.textContent }
+  }, 'Local trusted icon').catch(() => null)
 }
 finally {
   if (cdp.ws) await cdp.call(async function () {
@@ -106,7 +506,15 @@ finally {
     localStorage.removeItem('cf-navs.auth')
   }).catch(error => report.errors.push(redact(error.message)))
   if (apiToken) await api('/logout').catch(error => report.errors.push(redact(error.message)))
-  report.evidence = { consoleErrors: cdp.consoleErrors.map(item => ({ ...item, text: redact(item.text) })), pageExceptions: cdp.pageExceptions.map(item => ({ ...item, text: redact(item.text) })), failedRequests: cdp.failedRequests, unexpectedHttp: cdp.responses.filter(item => item.status >= 400).map(item => ({ status: item.status, url: item.url.split('?')[0] })) }
+  report.evidence = { consoleErrors: cdp.consoleErrors.map(item => ({ ...item, text: redact(item.text) })), pageExceptions: cdp.pageExceptions.map(item => ({ ...item, text: redact(item.text) })), failedRequests: cdp.failedRequests, unexpectedHttp: cdp.responses.filter(item => item.status >= 400 && !validatedProtocolConflictResponseIds.has(item.requestId)).map(item => ({ status: item.status, url: item.url.split('?')[0] })) }
+  report.bookmarkUpdateRequests = bookmarkUpdateRequests
+  report.firstDisplayCopyCount = firstDisplayCopyCount
+  report.firstDisplayObjectIconCount = firstDisplayObjectIconCount
+  report.firstDisplayRefreshCount = firstDisplayRefreshCount
+  report.objectIconRequests = objectIconRequests
+  report.iconRefreshRequests = iconRefreshRequests
+  report.firstDisplayCopyTraffic = firstDisplayCopyTraffic
+  report.iconCopyTraffic = await readIconCopyTraffic()
   report.cleanup = await cdp.cleanup()
   if (report.cleanup.errors.length || report.cleanup.warnings.length || !report.cleanup.profileRemoved || Object.values(report.evidence).some(items => items.length)) process.exitCode = 1
   await writeFile(output, JSON.stringify(report, null, 2))

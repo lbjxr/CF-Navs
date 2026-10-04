@@ -1,3 +1,5 @@
+import { readBoundedBody } from '../../shared/boundedBody'
+import type { IconCopyRequest, IconCopyResult, IconDescriptor } from '../../shared/iconLocalCopy'
 import {
   ErrCode,
   type AdminData,
@@ -117,8 +119,10 @@ function buildUrl(path: string): string {
   return `${normalizedBase}${normalizedPath}`
 }
 
-async function parseResponseBody(response: Response): Promise<unknown> {
-  const text = await response.text()
+async function parseResponseBody(response: Response, maxBytes?: number): Promise<unknown> {
+  const bytes = maxBytes ? await readBoundedBody(response.body, maxBytes) : undefined
+  if (bytes === null) throw new ApiError('Response exceeds size limit', { status: response.status })
+  const text = bytes ? new TextDecoder().decode(bytes) : await response.text()
   if (!text) {
     return null
   }
@@ -259,13 +263,14 @@ export function getErrorMessage(error: unknown): string {
 
 export interface RequestOptions extends RequestInit {
   auth?: boolean
+  maxResponseBytes?: number
   // 后台自动发起的请求应设为 true：用户没主动操作时，不该因为一次 401
   // 就清掉登录态，把手上未保存的表单一起弄丢。
   keepSessionOnUnauthorized?: boolean
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { auth = false, keepSessionOnUnauthorized = false, headers: initHeaders, ...init } = options
+  const { auth = false, keepSessionOnUnauthorized = false, headers: initHeaders, maxResponseBytes, ...init } = options
   const headers = createHeaders(initHeaders)
   const sessionToken = getAuthToken()
 
@@ -294,7 +299,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     })
   }
 
-  const payload = await parseResponseBody(response)
+  const payload = await parseResponseBody(response, maxResponseBytes)
   const envelope = isApiResponse<T>(payload) ? payload : null
 
   if (!response.ok) {
@@ -392,7 +397,7 @@ export const bookmarksApi = {
   create: (payload: BookmarkUpsertReq) => jsonRequest<Bookmark>('/bookmarks', 'POST', payload, true),
   update: (id: number, payload: BookmarkUpsertReq) => jsonRequest<Bookmark>(`/bookmarks/${id}`, 'PUT', payload, true),
   refreshIconCache: (id: number) =>
-    jsonRequest<{ icon_blob: string | null }>(`/bookmarks/${id}/icon-cache/refresh`, 'POST', undefined, true),
+    jsonRequest<{ icon_blob: string | null; icon_descriptor?: IconDescriptor; icon_update?: 'updated' | 'unchanged' | 'cleared' | 'unavailable' }>(`/bookmarks/${id}/icon-cache/refresh`, 'POST', undefined, true),
   remove: (id: number) => request<null>(`/bookmarks/${id}`, { method: 'DELETE', auth: true }),
   batchDelete: (ids: number[]) => jsonRequest<BatchDeleteBookmarksResp>('/bookmarks/batch-delete', 'POST', { ids }, true),
   batchMove: (payload: BookmarkBatchMoveReq) => jsonRequest<BookmarkBatchMoveResp>('/bookmarks/batch-move', 'POST', payload, true),
@@ -447,3 +452,9 @@ export const api = {
 }
 
 export default api
+
+/** Only this known protocol can materialize an authenticated no-store data response. */
+export function fetchIconCopy(payload: IconCopyRequest, signal?: AbortSignal): Promise<IconCopyResult> {
+  return request<IconCopyResult>('/icon-local-copy', { auth: true, method: 'POST', cache: 'no-store', signal,
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload), maxResponseBytes: 768 * 1024 })
+}

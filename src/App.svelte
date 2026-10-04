@@ -81,7 +81,6 @@
   import { getAdminBookmarkCategoryOptions } from './lib/adminListState'
   import { getNextThemePreference, resolveAppThemeState } from './lib/appThemeState'
   import type { ImportSource } from './lib/importData'
-  import { pruneBookmarkIconCacheStorageBackedByLocalStorage } from './lib/localBookmarkIconCache'
   import { installPublicDataFocusRefresh } from './lib/publicDataFocusRefresh'
   import { adminStore, authStore, configStore, isAuthenticated, publicStore } from './lib/stores'
   import { readPreferredThemeMode, writePreferredThemeMode } from './lib/themePreference'
@@ -328,24 +327,6 @@
   function setPreferredThemeMode(mode: ThemeMode): void {
     preferredThemeMode = mode
     writePreferredThemeMode(mode)
-  }
-
-  function scheduleBookmarkIconCachePrune(): void {
-    if (typeof window === 'undefined') return
-
-    const prune = () => {
-      void pruneBookmarkIconCacheStorageBackedByLocalStorage().catch(() => undefined)
-    }
-    const idleWindow = window as Window & {
-      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
-    }
-
-    if (idleWindow.requestIdleCallback) {
-      idleWindow.requestIdleCallback(prune, { timeout: 5000 })
-      return
-    }
-
-    window.setTimeout(prune, 1500)
   }
 
   function handleToggleTheme(): void {
@@ -1120,7 +1101,6 @@
       return
     }
     void initializeApp()
-    scheduleBookmarkIconCachePrune()
     // 切回已打开的标签页时按会话状态刷新（Issue #25 跨标签页设置同步 / Issue #29
     // 登录态保留私密视图）：登录态走登录态聚合刷新，未登录走公开刷新。
     stopPublicDataFocusRefresh = installPublicDataFocusRefresh(() => refreshVisibleData())

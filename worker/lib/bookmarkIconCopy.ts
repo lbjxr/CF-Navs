@@ -9,8 +9,8 @@ export function bookmarkIconDescriptor(id: number, row: BookmarkIconData): IconD
   return {
     object_type: 'bookmark', object_id: id, dataset_epoch: row.dataset_epoch,
     write_epoch: row.icon_write_epoch,
-    state: row.icon_blob && isIconRevision(row.icon_revision) ? 'ready' : hasImage ? 'unknown' : row.icon ? 'text' : 'empty',
-    content_revision: row.icon_blob && isIconRevision(row.icon_revision) ? row.icon_revision : null,
+    state: (row.icon_blob || row.icon?.startsWith('data:image/')) && isIconRevision(row.icon_revision) ? 'ready' : hasImage ? 'unknown' : row.icon ? 'text' : 'empty',
+    content_revision: (row.icon_blob || row.icon?.startsWith('data:image/')) && isIconRevision(row.icon_revision) ? row.icon_revision : null,
   }
 }
 
@@ -40,7 +40,7 @@ export async function obtainBookmarkIconCopy(db: D1Database, input: IconCopyRequ
   }
   if (!icon) return unavailable()
   const revision = await iconContentRevision(icon)
-  if (row.icon_revision !== revision || !row.icon_blob) {
+  if (row.icon_revision !== revision || !row.icon_blob && !row.icon?.startsWith('data:image/')) {
     const wrote = await setIconBlob(db, input.object_id, iconBytesToDataUri(icon), row)
     row = await getBookmarkIconData(db, input.object_id)
     if (!row) return { status: 404, data: { protocol: ICON_COPY_PROTOCOL, reason: 'not-found' } }

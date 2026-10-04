@@ -6,6 +6,7 @@ type BookmarkIconLike = {
   url: string
   icon?: string | null
   icon_blob?: string | null
+  icon_display?: 'image' | 'text' | 'empty'
   icon_cached?: boolean | number | null
   icon_source?: string | null
 }
@@ -71,13 +72,15 @@ export function getBookmarkIconUrl(bookmark: BookmarkIconLike): string {
       ? `/api/icon/${bookmark.id}?v=${createIconVersion(`${bookmark.id}:${icon}:${bookmark.title}:${bookmark.url}`)}&cv=${ICON_CACHE_URL_VERSION}`
       : icon
   }
-  if (bookmark.icon_cached) {
+  if (bookmark.icon_cached || bookmark.icon_display === 'image') {
     return `/api/icon/${bookmark.id}?v=${createIconVersion(`${bookmark.id}:${bookmark.title}:${bookmark.url}:cached`)}&cv=${ICON_CACHE_URL_VERSION}`
   }
   return icon
 }
 
 export function hasBookmarkImageIcon(bookmark: BookmarkIconLike): boolean {
+  if (bookmark.icon_display === 'image') return true
+  if (bookmark.icon_display === 'empty' || bookmark.icon_display === 'text') return false
   const icon = bookmark.icon ?? ''
   const cachedIcon = bookmark.icon_blob ?? ''
   return Boolean(

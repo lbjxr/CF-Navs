@@ -108,26 +108,6 @@ async function deleteStaleCacheStorageEntries(cache: Cache, cacheKey: string): P
   )
 }
 
-function deleteStaleLocalStorageEntries(cacheKey: string): void {
-  if (!canUseLocalStorage()) return
-
-  const cacheKeyPrefix = bookmarkCacheKeyPrefix(cacheKey)
-  if (!cacheKeyPrefix) return
-
-  const currentKey = localStorageKey(cacheKey)
-  const staleKeyPrefix = `${STORAGE_PREFIX}${cacheKeyPrefix}`
-  try {
-    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
-      const key = localStorage.key(index)
-      if (key?.startsWith(staleKeyPrefix) && key !== currentKey) {
-        localStorage.removeItem(key)
-      }
-    }
-  } catch {
-    // Best-effort cleanup.
-  }
-}
-
 async function responseToIconBlob(response: Response): Promise<Blob | null> {
   if (!response.ok) return null
 
@@ -193,14 +173,8 @@ export function revokeLocalIconUrl(value: string): void {
 }
 
 export function readCachedBookmarkIconDataUri(cacheKey: string): string | null {
-  if (!canUseLocalStorage()) return null
-
-  try {
-    const value = localStorage.getItem(localStorageKey(cacheKey))
-    return value && isDataImage(value) ? value : null
-  } catch {
-    return null
-  }
+  void cacheKey
+  return null
 }
 
 export async function readCachedBookmarkIconUrl(cacheKey: string): Promise<string | null> {
@@ -248,64 +222,7 @@ export async function deleteCachedBookmarkIcon(cacheKey: string): Promise<void> 
 export async function writeBookmarkIconDataUri(cacheKey: string, dataUri: string): Promise<void> {
   await clearLegacyCacheStorage()
   if (!isDataImage(dataUri)) return
-
-  let storedInLocalStorage = false
-
-  if (canUseLocalStorage()) {
-    try {
-      deleteStaleLocalStorageEntries(cacheKey)
-      localStorage.setItem(localStorageKey(cacheKey), dataUri)
-      storedInLocalStorage = true
-    } catch {
-      // Browser storage can be disabled or full; Cache Storage remains a fallback.
-    }
-  }
-
-  if (!canUseCacheStorage()) return
-
-  try {
-    const cache = await caches.open(CACHE_NAME)
-    await deleteStaleCacheStorageEntries(cache, cacheKey)
-
-    if (storedInLocalStorage) {
-      await cache.delete(cacheRequest(cacheKey))
-      return
-    }
-
-    const response = await fetch(dataUri)
-    await cache.put(cacheRequest(cacheKey), response)
-  } catch {
-    // Local cache is an optimization; rendering should not depend on it.
-  }
-}
-
-export async function pruneBookmarkIconCacheStorageBackedByLocalStorage(): Promise<number> {
-  await clearLegacyCacheStorage()
-  if (!canUseCacheStorage() || !canUseLocalStorage()) return 0
-
-  try {
-    const cache = await caches.open(CACHE_NAME)
-    const requests = await cache.keys()
-    let deleted = 0
-
-    await Promise.all(
-      requests.map(async (request) => {
-        const cacheKey = cacheKeyFromRequest(request)
-        if (!cacheKey) return
-
-        const dataUri = localStorage.getItem(localStorageKey(cacheKey))
-        if (!dataUri || !isDataImage(dataUri)) return
-
-        if (await cache.delete(request)) {
-          deleted += 1
-        }
-      }),
-    )
-
-    return deleted
-  } catch {
-    return 0
-  }
+  await deleteCachedBookmarkIcon(cacheKey)
 }
 
 export async function fetchBookmarkIcon(cacheKey: string, url: string): Promise<BookmarkIconFetchResult> {

@@ -63,3 +63,19 @@ export function parseIconCopyRequest(value: unknown): IconCopyRequest | null {
     (input.expected_content_revision !== null && !isIconRevision(input.expected_content_revision))) return null
   return input as IconCopyRequest
 }
+
+export async function iconBytesRevision(bytes: Uint8Array, mime: string): Promise<string> {
+  const prefix = new TextEncoder().encode('cf-navs-icon-v1\n' + mime + '\n')
+  const input = new Uint8Array(prefix.length + bytes.length)
+  input.set(prefix); input.set(bytes, prefix.length)
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', input))
+  return 'sha256-' + Array.from(digest, value => value.toString(16).padStart(2, '0')).join('')
+}
+
+export function isIconDescriptor(value: unknown): value is IconDescriptor {
+  if (!value || typeof value !== 'object') return false
+  const d = value as IconDescriptor
+  return ['bookmark', 'category'].includes(d.object_type) && Number.isSafeInteger(d.object_id) && d.object_id > 0 &&
+    typeof d.dataset_epoch === 'string' && /^[a-f0-9]{32}$/.test(d.dataset_epoch) && Number.isSafeInteger(d.write_epoch) && d.write_epoch >= 0 &&
+    ['ready', 'unknown', 'empty', 'text'].includes(d.state) && (d.state === 'ready' ? isIconRevision(d.content_revision) : d.content_revision === null)
+}
