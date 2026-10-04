@@ -35,8 +35,12 @@ describe('category schema migration', () => {
     await ensureSchema(missing.db, true)
     expect(missing.batchedSql).toContain('ALTER TABLE categories ADD COLUMN parent_id INTEGER')
     expect(missing.batchedSql).toContain('CREATE INDEX IF NOT EXISTS idx_categories_parent_sort_id ON categories(parent_id, sort, id)')
+    expect(missing.batchedSql).toContain('ALTER TABLE categories ADD COLUMN icon_blob TEXT')
+    expect(missing.batchedSql).toContain('ALTER TABLE categories ADD COLUMN icon_revision TEXT')
+    expect(missing.batchedSql).toContain('ALTER TABLE categories ADD COLUMN icon_write_epoch INTEGER NOT NULL DEFAULT 0')
+    expect(missing.batchedSql.some(sql => sql.includes('category_icon_legacy_source'))).toBe(true)
 
-    const existing = createSchemaDb(['id', 'parent_id', 'title', 'icon', 'sort', 'created_at'])
+    const existing = createSchemaDb(['id', 'parent_id', 'title', 'icon', 'icon_blob', 'icon_revision', 'icon_write_epoch', 'sort', 'created_at'])
     await ensureSchema(existing.db, true)
     expect(existing.batchedSql).not.toContain('ALTER TABLE categories ADD COLUMN parent_id INTEGER')
   })

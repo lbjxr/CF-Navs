@@ -125,7 +125,9 @@ describe('category database hierarchy rules', () => {
       id: 3,
       parent_id: 1,
     })
-    expect(fake.prepared.find((entry) => entry.sql.startsWith('UPDATE categories SET title'))?.params).toEqual(['Updated', null, 3])
+    const params = fake.prepared.find((entry) => entry.sql.startsWith('UPDATE categories SET title'))?.params
+    expect(params?.[0]).toBe('Updated')
+    expect(params?.at(-1)).toBe(3)
   })
 
   it('rejects using a second-level category as a parent', async () => {

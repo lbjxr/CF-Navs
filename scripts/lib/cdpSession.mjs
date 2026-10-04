@@ -12,6 +12,7 @@
 //   - 禁止按进程名批量结束 Chrome，只按精确 profile 路径匹配。
 
 import { spawn, spawnSync } from 'node:child_process'
+import { get as httpGet } from 'node:http'
 import { existsSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
@@ -24,9 +25,19 @@ function sleep(ms) {
 }
 
 async function fetchJson(url, options) {
-  const response = await fetch(url, options)
-  if (!response.ok) throw new Error(`${url} -> HTTP ${response.status}`)
-  return response.json()
+  return await new Promise((resolve, reject) => {
+    const request = httpGet(url, { headers: options?.headers }, response => {
+      let body = ''
+      response.setEncoding('utf8')
+      response.on('data', chunk => { body += chunk })
+      response.on('end', () => {
+        if (response.statusCode < 200 || response.statusCode >= 300) return reject(new Error(`${url} -> HTTP ${response.statusCode}`))
+        try { resolve(JSON.parse(body)) } catch (error) { reject(error) }
+      })
+    })
+    request.setTimeout(3000, () => request.destroy(new Error('Local CDP request timed out')))
+    request.on('error', reject)
+  })
 }
 
 export class CdpSession {

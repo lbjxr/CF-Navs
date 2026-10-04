@@ -94,7 +94,7 @@
     <header class="section-header" class:no-heading={!showHeading} class:inline-actions={inlineActions && !showHeading}>
       {#if showHeading}
         <div class="section-title-wrap">
-          {#if showCategoryIcon && category.icon}
+          {#if showCategoryIcon && (category.icon || category.icon_display === 'image')}
             <CategoryIcon category={category} size={level === 2 ? 'var(--category-child-icon-size, 30px)' : 'var(--category-root-icon-size, 38px)'} className="section-icon" iconAccessKey={publicCategoryIds.has(Number(category.id)) ? '' : iconAccessKey} />
           {/if}
           <div class="section-copy">

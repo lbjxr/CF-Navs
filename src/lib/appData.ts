@@ -13,6 +13,11 @@ export type AdminCategorySummary = {
   sort?: number
   bookmarkCount?: number
   is_private?: boolean
+  icon_blob?: string
+  icon_display?: 'image' | 'text' | 'empty'
+  icon_revision?: string | null
+  icon_write_epoch?: number
+  icon_cached?: boolean | number | null
 }
 
 export type AdminBookmarkSummary = {
@@ -55,6 +60,9 @@ export function toAdminCategories(categories: Category[], bookmarks: Bookmark[])
     parent_id: category.parent_id ?? null,
     title: category.title,
     icon: category.icon ?? '',
+    ...(category.icon_display ? { icon_display: category.icon_display } : {}),
+    ...(category.icon_revision !== undefined ? { icon_revision: category.icon_revision, icon_write_epoch: category.icon_write_epoch } : {}),
+    ...(category.icon_cached !== undefined ? { icon_cached: category.icon_cached } : {}),
     sort: category.sort,
     bookmarkCount: bookmarkCountByCategory.get(category.id) ?? 0,
     ...(category.is_private === true || category.is_private === 1 ? { is_private: true } : {}),

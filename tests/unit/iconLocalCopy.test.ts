@@ -69,7 +69,9 @@ describe('authenticated icon materialization', () => {
     expect((await f.call({ ...f.request, padding: 'x'.repeat(5000) })).status).toBe(400)
     expect((await f.call(f.request, true, { origin: 'https://other.example.com' })).status).toBe(403)
     expect((await f.call({ ...f.request, object_id: 999 })).status).toBe(404)
-    expect((await f.call({ ...f.request, object_type: 'category' })).status).toBe(400)
+    const categoryResponse = await f.call({ ...f.request, object_type: 'category' })
+    expect(categoryResponse.status).toBe(409)
+    expect((await categoryResponse.json() as any).data.descriptor.object_type).toBe('category')
   })
 
   it.each([429, 503])('does not certify HTTP %i as an image', async (status) => {

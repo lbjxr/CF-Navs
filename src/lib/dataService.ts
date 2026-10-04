@@ -485,13 +485,36 @@ async function loadLoggedInData(forceRemote: boolean, isCurrent: IsCurrent): Pro
 }
 
 let iconSnapshotTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleIconSnapshot(): void {
+  if (iconSnapshotTimer) return
+  const valid = captureSession()
+  iconSnapshotTimer = setTimeout(() => { iconSnapshotTimer = null; void persistCurrentAdminData(valid).catch(error => hooks.onRootError(getErrorMessage(error), error)) }, 250)
+}
 function applyIconDescriptor(next: IconDescriptor, expected?: IconDescriptor): void {
-  if (next.object_type !== 'bookmark' || get(adminStore).data.dataset_epoch !== next.dataset_epoch) return
+  if (get(adminStore).data.dataset_epoch !== next.dataset_epoch) return
+  if (next.object_type === 'category') {
+    const patch = <T extends Omit<Category, 'created_at'>>(rows: T[]): T[] => rows.map(row => {
+      if (row.id !== next.object_id || (row.icon_write_epoch ?? 0) > next.write_epoch || expected && (row.icon_write_epoch ?? 0) !== expected.write_epoch && row.icon_revision !== next.content_revision) return row
+      const display = next.state === 'ready' || next.state === 'unknown' ? 'image' : next.state
+      if (row.icon_revision === next.content_revision && row.icon_write_epoch === next.write_epoch && row.icon_display === display) return row
+      return { ...row, icon_revision: next.content_revision, icon_write_epoch: next.write_epoch, icon_display: display, icon_cached: display === 'image',
+        ...(display === 'empty' ? { icon: null, icon_blob: null, icon_cached: false } : {}) }
+    })
+    const admin = get(adminStore).data
+    const categories = patch(admin.categories)
+    if (categories.some((row, index) => row !== admin.categories[index])) {
+      adminStore.setCategories(categories)
+      const visible = get(publicStore).data
+      if (visible) publicStore.setData({ ...visible, categories: patch(visible.categories) })
+      scheduleIconSnapshot()
+    }
+    return
+  }
   const patch = <T extends Bookmark>(rows: T[]): T[] => rows.map(row => {
     if (row.id !== next.object_id || (row.icon_write_epoch ?? 0) > next.write_epoch || expected && (row.icon_write_epoch ?? 0) !== expected.write_epoch && row.icon_revision !== next.content_revision) return row
     const display = next.state === 'ready' || next.state === 'unknown' ? 'image' : next.state
     if (row.icon_revision === next.content_revision && row.icon_write_epoch === next.write_epoch && row.icon_display === display) return row
-    return { ...row, icon_revision: next.content_revision, icon_write_epoch: next.write_epoch, icon_display: display,
+    return { ...row, icon_revision: next.content_revision, icon_write_epoch: next.write_epoch, icon_display: display, icon_cached: display === 'image',
       ...(display === 'empty' ? { icon: null, icon_blob: null, icon_cached: false } : {}) }
   })
   const before = get(adminStore).data.bookmarks
@@ -500,9 +523,6 @@ function applyIconDescriptor(next: IconDescriptor, expected?: IconDescriptor): v
   adminStore.setBookmarks(after)
   const visible = get(publicStore).data
   if (visible) publicStore.setData({ ...visible, bookmarks: patch(visible.bookmarks as Bookmark[]) })
-  if (!iconSnapshotTimer) {
-    const valid = captureSession()
-    iconSnapshotTimer = setTimeout(() => { iconSnapshotTimer = null; void persistCurrentAdminData(valid).catch(error => hooks.onRootError(getErrorMessage(error), error)) }, 250)
-  }
+  scheduleIconSnapshot()
 }
 objectIconLoader.configure((next, expected) => applyIconDescriptor(next, expected))

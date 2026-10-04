@@ -6,6 +6,10 @@ export type CategoryIconValue = {
   id: PublicCategory['id']
   title: PublicCategory['title']
   icon: PublicCategory['icon']
+  icon_blob?: string | null
+  icon_display?: 'image' | 'text' | 'empty'
+  icon_revision?: string | null
+  icon_write_epoch?: number
 }
 
 export function normalizeCategoryIcon(value: CategoryIconValue): string {
@@ -14,7 +18,9 @@ export function normalizeCategoryIcon(value: CategoryIconValue): string {
 
 export function getCategoryImageIconUrl(value: CategoryIconValue): string {
   const icon = normalizeCategoryIcon(value)
-  if (!icon) return ''
+  if (!icon) return value.icon_display === 'image'
+    ? `/api/category-icon/${encodeURIComponent(String(value.id))}?v=${createIconVersion(`${value.id}:${value.icon_revision ?? value.icon_write_epoch ?? 0}`)}&cv=${ICON_CACHE_URL_VERSION}`
+    : ''
   if (/^data:image\//i.test(icon)) return icon
 
   const remoteIcon = iconifyIcon(icon) || icon

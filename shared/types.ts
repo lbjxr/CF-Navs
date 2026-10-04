@@ -10,6 +10,11 @@ export interface Category {
   parent_id: number | null
   title: string
   icon: string | null
+  icon_blob?: string | null
+  icon_display?: 'image' | 'text' | 'empty'
+  icon_revision?: string | null
+  icon_write_epoch?: number
+  icon_cached?: boolean | number | null
   is_private?: boolean | number // 公开分类为 0/false，私密分类为 1/true
   sort: number
   created_at: number

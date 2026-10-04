@@ -8,6 +8,7 @@
     normalizeCategoryIcon,
   } from '../lib/categoryIconDisplay'
   import { withIconAccessKey } from '../lib/iconAccessKey'
+  import { createTrustedIconView, emptyTrustedIcon, type TrustedIconState } from '../lib/trustedIconView'
 
   export let category: CategoryIconValue
   export let size: number | string = 36
@@ -15,6 +16,10 @@
   export let label = ''
   export let iconAccessKey = ''
   export let imageLoading: 'lazy' | 'eager' = 'lazy'
+  export let preview = false
+
+  let trustedState: TrustedIconState = emptyTrustedIcon
+  const trustedView = createTrustedIconView(value => { trustedState = value })
 
   // 分类代理对上游瞬时失败返回 503，避免把文字兜底伪装成成功图片。页面刷新时如果
   // 恰好撞上上游限流，按退避持续重试，直到代理恢复；真正不存在的图标仍由 Worker
@@ -27,8 +32,13 @@
   let retryAttempt = 0
   let retryTimer: ReturnType<typeof setTimeout> | null = null
 
-  $: iconValue = normalizeCategoryIcon(category)
-  $: nextImageUrl = withIconAccessKey(getCategoryImageIconUrl(category), iconAccessKey)
+  $: iconValue = normalizeCategoryIcon(category) || category.icon_display === 'image'
+  $: trustedView.set({ object_type: 'category', id: Number(category.id), icon: category.icon, icon_blob: category.icon_blob,
+    icon_revision: category.icon_revision, icon_write_epoch: category.icon_write_epoch, icon_display: category.icon_display,
+    visible: true, preview })
+  $: previewValue = normalizeCategoryIcon(category)
+  $: previewSource = /^data:image\//i.test(previewValue) ? previewValue : /^https?:\/\//i.test(previewValue) ? previewValue : ''
+  $: nextImageUrl = preview ? previewSource : withIconAccessKey(getCategoryImageIconUrl(category), iconAccessKey)
   // 图标或授权 key 变化（换图标、key 续签）时必须重新计数，否则上一条 URL 的失败态
   // 会挡住新图标。
   $: if (nextImageUrl !== baseUrl) {
@@ -38,7 +48,7 @@
     retryAttempt = 0
     clearRetryTimer()
   }
-  $: imageUrl = retryUrl || baseUrl
+  $: imageUrl = trustedState.active ? trustedState.url : retryUrl || baseUrl
   $: textIcon = getCategoryTextIcon(category)
 
   function clearRetryTimer(): void {
@@ -49,6 +59,7 @@
   }
 
   function handleImageError(): void {
+    if (trustedState.active) { trustedView.failed(); return }
     // 只有同源代理地址值得重试：data URI 加载失败不是网络问题，重试也不会变好。
     if (!baseUrl.startsWith('/api/')) {
       failedUrl = retryUrl || baseUrl
@@ -68,7 +79,7 @@
   // 成功加载后不清空 retryUrl：那会把 src 换回失败过的 baseUrl，形成失败—重试的循环。
   // retryUrl 只在下一次 baseUrl 变化时重置。
 
-  onDestroy(clearRetryTimer)
+  onDestroy(() => { clearRetryTimer(); trustedView.destroy() })
 </script>
 
 {#if iconValue}
@@ -79,7 +90,7 @@
     aria-hidden={label ? undefined : 'true'}
     aria-label={label || undefined}
   >
-    {#if imageUrl && imageUrl !== failedUrl}
+    {#if imageUrl && (trustedState.active || imageUrl !== failedUrl)}
       <img src={imageUrl} alt="" loading={imageLoading} decoding="async" on:error={handleImageError} />
     {:else if textIcon}
       <span class="category-icon-text">{textIcon}</span>

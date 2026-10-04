@@ -294,6 +294,65 @@ try {
     check(`${result.entries} warmed icon bodies decode in full-set stress rounds`, result.fullDatasetSweep.rounds === 5 && result.fullDatasetSweep.decodedPerRound.every(count => count === result.entries))
     check(`${result.entries} scale reads avoid metadata scans and stay within joint budgets`, result.metadataFullScans === 0 && result.peakObjectUrls <= 4 && result.bodyBytes <= 10 * 1024 * 1024 && result.entries <= 1000 && result.indexBytes <= 512 * 1024)
   }
+  const jointScale = await callLong(primary, async function () {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="purple"/></svg>'
+    const body = new Blob([svg], { type: 'image/svg+xml' })
+    const items = [
+      ...Array.from({ length: 100 }, (_, index) => ({ object_type: 'bookmark', object_id: index + 1 })),
+      ...Array.from({ length: 30 }, (_, index) => ({ object_type: 'category', object_id: index + 1 })),
+    ]
+    const originalGet = IDBObjectStore.prototype.get
+    const originalGetAll = IDBObjectStore.prototype.getAll
+    const originalGetAllKeys = IDBObjectStore.prototype.getAllKeys
+    let getCount = 0
+    let fullScans = 0
+    let peakObjectUrls = 0
+    let activeObjectUrls = 0
+    await reset()
+    for (const item of items) await store.put(lease, { ...descriptor(item.object_id), object_type: item.object_type }, body, allow)
+    await store.flushTouches()
+    try {
+      IDBObjectStore.prototype.get = function (...args) { getCount += 1; return originalGet.apply(this, args) }
+      IDBObjectStore.prototype.getAll = function (...args) { fullScans += 1; return originalGetAll.apply(this, args) }
+      IDBObjectStore.prototype.getAllKeys = function (...args) { fullScans += 1; return originalGetAllKeys.apply(this, args) }
+      const rounds = []
+      for (let round = 0; round < 5; round += 1) {
+        const getsBefore = getCount
+        const started = performance.now()
+        let cursor = 0
+        await Promise.all(Array.from({ length: 4 }, async () => {
+          while (true) {
+            const item = items[cursor++]
+            if (!item) return
+            const hit = await store.read(lease, item.object_type, item.object_id, allow)
+            if (!hit) throw new Error(`Missing joint icon ${item.object_type}:${item.object_id}`)
+            const objectUrl = URL.createObjectURL(hit.blob)
+            activeObjectUrls += 1
+            peakObjectUrls = Math.max(peakObjectUrls, activeObjectUrls)
+            try {
+              const imageElement = new Image()
+              imageElement.src = objectUrl
+              await imageElement.decode()
+            } finally {
+              URL.revokeObjectURL(objectUrl)
+              activeObjectUrls -= 1
+            }
+          }
+        }))
+        rounds.push({ durationMs: Number((performance.now() - started).toFixed(2)), idbGets: getCount - getsBefore })
+        await store.flushTouches()
+      }
+      const state = await store.state()
+      return { entries: state.entries, bodyBytes: state.bodyBytes, indexBytes: state.indexBytes, rounds, fullScans, peakObjectUrls }
+    } finally {
+      IDBObjectStore.prototype.get = originalGet
+      IDBObjectStore.prototype.getAll = originalGetAll
+      IDBObjectStore.prototype.getAllKeys = originalGetAllKeys
+    }
+  }, 120000)
+  report.jointScale = jointScale
+  check('100 bookmarks plus 30 categories share the joint storage budget', jointScale.entries === 130 && jointScale.bodyBytes <= 10 * 1024 * 1024 && jointScale.indexBytes <= 512 * 1024)
+  check('joint bookmark/category reads decode five rounds without metadata scans', jointScale.rounds.length === 5 && jointScale.rounds.every(round => round.idbGets >= 130) && jointScale.fullScans === 0 && jointScale.peakObjectUrls <= 4)
   const scaleIconRequests = [
     ...primary.responses.slice(scaleResponseStart),
     ...primary.failedRequests.slice(scaleFailureStart),

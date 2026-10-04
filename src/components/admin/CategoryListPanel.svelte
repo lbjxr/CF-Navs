@@ -157,7 +157,14 @@
       id: Number(category.id),
       title: category.title,
       icon: category.icon ?? '',
+      icon_display: category.icon_display,
+      icon_revision: category.icon_revision,
+      icon_write_epoch: category.icon_write_epoch,
     }
+  }
+
+  function hasCategoryIconVisual(category: AdminCategory): boolean {
+    return Boolean(category.icon?.trim()) || category.icon_display === 'image'
   }
 </script>
 
@@ -240,7 +247,7 @@
             {#each displayCategories as category (category.id)}
               <article class="admin-compact-card sortable" data-sortable-item data-sort-id={category.id}>
                 <span class="admin-drag-handle" aria-hidden="true">⋮⋮</span>
-                {#if category.icon?.trim()}
+                {#if hasCategoryIconVisual(category)}
                   <CategoryIcon category={toCategoryIconValue(category)} size={28} className="admin-icon-badge" iconAccessKey={hiddenCategoryIds.has(Number(category.id)) ? $iconAccessKey : ''} imageLoading="eager" />
                 {:else}
                   <span class="admin-icon-badge">📁</span>
@@ -272,7 +279,7 @@
                 {:else}
                   <span class="admin-tree-toggle-spacer" aria-hidden="true"></span>
                 {/if}
-                {#if group.root.icon?.trim()}
+                {#if hasCategoryIconVisual(group.root)}
                   <CategoryIcon category={toCategoryIconValue(group.root)} size={28} className="admin-icon-badge" iconAccessKey={hiddenCategoryIds.has(Number(group.root.id)) ? $iconAccessKey : ''} imageLoading="eager" />
                 {:else}
                   <span class="admin-icon-badge">📁</span>
@@ -303,7 +310,7 @@
                     <article class="admin-compact-card admin-child-category-card" data-category-id={category.id}>
                       <input type="checkbox" aria-label={`选择分类 ${category.title}`} checked={selectedIds.has(Number(category.id))} on:change={(event) => toggleCategorySelection(event, Number(category.id))} />
                       <span class="admin-hierarchy-connector" aria-hidden="true">↳</span>
-                      {#if category.icon?.trim()}
+                      {#if hasCategoryIconVisual(category)}
                         <CategoryIcon category={toCategoryIconValue(category)} size={28} className="admin-icon-badge" iconAccessKey={hiddenCategoryIds.has(Number(category.id)) ? $iconAccessKey : ''} imageLoading="eager" />
                       {:else}
                         <span class="admin-icon-badge">📁</span>

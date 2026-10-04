@@ -489,7 +489,7 @@
               <section class="search-category-group" aria-labelledby={`search-category-${category.id}`}>
                 <header class="search-group-header">
                   <div class="search-group-title">
-                    {#if category.icon}
+                    {#if category.icon || category.icon_display === 'image'}
                       <CategoryIcon category={category} size="var(--category-root-icon-size, 38px)" className="search-category-icon" iconAccessKey={publicCategoryIds.has(Number(category.id)) ? '' : visibleIconAccessKey} />
                     {/if}
                     <h2 id={`search-category-${category.id}`} style={`font-size: var(--category-root-font-size, 1.28rem)`}>{category.title}</h2>
@@ -587,11 +587,17 @@
                 rootId={category.id}
                 title={category.title}
                 icon={category.icon}
+                icon_display={category.icon_display}
+                icon_revision={category.icon_revision}
+                icon_write_epoch={category.icon_write_epoch}
                 totalCount={getCategoryTreeBookmarkCount(category, allCategoryBookmarks)}
                 children={category.children.map((child) => ({
                   id: child.id,
                   title: child.title,
                   icon: child.icon,
+                  icon_display: child.icon_display,
+                  icon_revision: child.icon_revision,
+                  icon_write_epoch: child.icon_write_epoch,
                   count: allCategoryBookmarks.get(child.id)?.length ?? 0,
                 }))}
                 activeId={selectedCategory.id}

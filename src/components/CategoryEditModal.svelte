@@ -20,6 +20,7 @@
   import { buildParentCategoryOptions } from '../lib/categorySelect'
   import CategoryTreeSelect from './CategoryTreeSelect.svelte'
   import IconifySelector from './IconifySelector.svelte'
+  import CategoryIcon from './CategoryIcon.svelte'
 
   const emptyForm: CategoryFormValue = {
     parent_id: null,
@@ -238,6 +239,9 @@
           <span>图标</span>
           <div class="icon-row">
             <input bind:value={form.icon} type="text" placeholder="例如：🧰 或 icon-tools" on:input={syncManualIconInput} />
+            {#if form.icon.trim() && !iconifySelected}
+              <CategoryIcon category={{ id: Number(form.id) || 0, title: form.title, icon: form.icon }} preview size={32} />
+            {/if}
             {#if imageHostUrl}
               <button
                 type="button"

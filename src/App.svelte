@@ -727,8 +727,16 @@
   }
 
   async function openEditCategoryUseCase(category: { id: string | number }): Promise<void> {
-    const current = adminData.categories.find((item) => item.id === Number(category.id))
+    let current = adminData.categories.find((item) => item.id === Number(category.id))
     if (!current) return
+
+    // Snapshots intentionally remove embedded image sources. Refresh only when opening
+    // an image category whose editable source is absent, so a metadata edit cannot clear it.
+    if (!current.icon?.trim()) {
+      await refreshLoggedInData(true)
+      current = adminData.categories.find((item) => item.id === Number(category.id))
+      if (!current) return
+    }
 
     categoryError = ''
     categoryModalMode = 'edit'

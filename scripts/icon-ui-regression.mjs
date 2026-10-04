@@ -30,12 +30,14 @@ let firstDisplayObjectIconCount = null
 let firstDisplayRefreshCount = null
 let firstDisplayCopyTraffic = null
 const iconCopyRequests = []
+const allIconCopyRequestIds = new Set()
 const iconCopyResponses = []
 const inspectedIconCopyResponses = new Map()
 const objectIconRequests = []
 const iconRefreshRequests = []
 const bookmarkUpdateRequests = []
 const aggregateResponses = []
+const inspectedAggregateResponses = new Map()
 const validatedProtocolConflictResponseIds = new Set()
 const redact = value => String(value).replaceAll(process.env.ADMIN_PASS, '[redacted]').replaceAll(apiToken || '\u0000', '[redacted]').replace(/([?&](?:key|token)=)[^\s&"']+/g, '$1[redacted]')
 const check = (name, value) => { report.checks.push({ name, passed: Boolean(value) }); assert.ok(value, name); console.log('PASS ' + name) }
@@ -67,13 +69,10 @@ async function scrollFixtureIntoView(title) {
 }
 async function inspectAggregateResponses(responses, label, expectedBody) {
   return Promise.all(responses.map(async response => {
-    let body
-    try {
-      body = await cdp.send('Network.getResponseBody', { requestId: response.requestId })
-    } catch (error) {
-      throw new Error('Unable to inspect ' + response.path + ' response body: ' + String(error?.message ?? error))
-    }
-    const text = body.base64Encoded ? Buffer.from(body.body, 'base64').toString('utf8') : body.body
+    const body = await inspectedAggregateResponses.get(response.requestId)
+    if (body instanceof Error) throw new Error('Unable to inspect ' + response.path + ' response body: ' + body.message)
+    if (typeof body !== 'string') throw new Error('Response body was not captured for ' + response.path)
+    const text = body
     return text.includes(expectedBody)
   }))
 }
@@ -170,8 +169,14 @@ try {
   apiToken = login.token
   const category = await api('/categories', { title: 'Local icon fixture', icon: '📁' })
   const icon = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="green"/></svg>').toString('base64')
+  const updatedCategory = await api(`/categories/${category.id}`, { title: 'Local icon fixture', icon }, 'PUT')
+  const childCategory = await api('/categories', { parent_id: category.id, title: 'Local child icon fixture', icon })
+  const adminCategory = (await api('/admin/data', undefined, 'GET')).categories?.find(item => Number(item.id) === Number(category.id))
+  if (updatedCategory.icon !== icon || adminCategory?.icon !== icon) throw new Error('Category image fixture did not reach the admin aggregate projection')
+  await api('/settings', { navigation: { position: 'top', always_expanded: false } }, 'PUT')
   let fixtureTitle = 'Local trusted icon'
   const bookmark = await api('/bookmarks', { category_id: category.id, title: fixtureTitle, url: 'https://example.com', icon, icon_source: 'custom', is_private: false })
+  const childBookmark = await api('/bookmarks', { category_id: childCategory.id, title: 'Local child category icon fixture', url: 'https://example.org', icon, icon_source: 'custom', is_private: false })
   await api(`/public/bookmarks/${bookmark.id}/click`)
   await cdp.start(); report.ownership.pid = cdp.chromeProcess.pid; report.ownership.browserStartedByTest = cdp.startedByTest
   await writeFile(output + '.ownership.json', JSON.stringify(report.ownership, null, 2))
@@ -181,11 +186,12 @@ try {
   cdp.on('Network.requestWillBeSent', event => {
     const url = new URL(event.request.url)
     if (url.pathname === '/api/icon-local-copy') {
+      allIconCopyRequestIds.add(event.requestId)
       let payload = null
       try { payload = JSON.parse(event.request.postData ?? 'null') } catch { /* Retain only recognized descriptor fields. */ }
-      iconCopyRequests.push({ method: event.request.method, path: url.pathname, requestId: event.requestId,
-        descriptor: payload ? { object_id: payload.object_id, dataset_epoch: payload.dataset_epoch, expected_write_epoch: payload.expected_write_epoch,
-          expected_content_revision: payload.expected_content_revision } : null })
+      if (payload?.object_type === 'bookmark') iconCopyRequests.push({ method: event.request.method, path: url.pathname, requestId: event.requestId,
+        descriptor: { object_type: payload.object_type, object_id: payload.object_id, dataset_epoch: payload.dataset_epoch, expected_write_epoch: payload.expected_write_epoch,
+          expected_content_revision: payload.expected_content_revision } })
     }
     if (url.pathname.startsWith('/api/icon/')) objectIconRequests.push({ method: event.request.method, path: url.pathname })
     if (/^\/api\/bookmarks\/\d+\/icon-cache\/refresh$/.test(url.pathname)) iconRefreshRequests.push({ method: event.request.method, path: url.pathname })
@@ -193,8 +199,20 @@ try {
   })
   cdp.on('Network.responseReceived', event => {
     const url = new URL(event.response.url)
-    if (url.pathname === '/api/icon-local-copy') iconCopyResponses.push({ requestId: event.requestId, status: event.response.status })
+    if (url.pathname === '/api/icon-local-copy' && iconCopyRequests.some(item => item.requestId === event.requestId)) {
+      iconCopyResponses.push({ requestId: event.requestId, status: event.response.status })
+    }
     if (url.pathname === '/api/public/data' || url.pathname === '/api/admin/data') aggregateResponses.push({ requestId: event.requestId, path: url.pathname })
+  })
+  cdp.on('Network.loadingFinished', event => {
+    const response = iconCopyResponses.find(item => item.requestId === event.requestId)
+    if (response) void inspectIconCopyResponse(response)
+    const aggregate = aggregateResponses.find(item => item.requestId === event.requestId)
+    if (aggregate) {
+      inspectedAggregateResponses.set(event.requestId, cdp.send('Network.getResponseBody', { requestId: event.requestId })
+        .then(body => body.base64Encoded ? Buffer.from(body.body, 'base64').toString('utf8') : body.body)
+        .catch(error => new Error(String(error?.message ?? error))))
+    }
   })
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 900, deviceScaleFactor: 1, mobile: false })
   await cdp.navigate(base)
@@ -384,6 +402,86 @@ try {
   const objectIconStart = objectIconRequests.length
   const refreshStart = iconRefreshRequests.length
   await cdp.navigate(base)
+  await until(function (id) {
+    const image = document.querySelector(`[data-home-category-scope="${id}"] .scope-heading [data-category-icon] img`)
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'trusted category scope icon', 20000, category.id)
+  const categoryWarmStorage = await cdp.call(async function (id) {
+    const request = indexedDB.open('cf-navs-object-icons-v1')
+    const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    try {
+      const tx = db.transaction(['entries', 'bodies'], 'readonly')
+      const read = (store, key) => new Promise((resolve, reject) => { const item = tx.objectStore(store).get(key); item.onsuccess = () => resolve(item.result); item.onerror = () => reject(item.error) })
+      const [entry, body, bookmarkEntry] = await Promise.all([read('entries', 'category:' + id), read('bodies', 'category:' + id), read('entries', 'bookmark:' + id)])
+      return { type: entry?.descriptor?.object_type, id: entry?.descriptor?.object_id, key: entry?.key, ready: entry?.descriptor?.state === 'ready',
+        bodyBytes: body?.size ?? 0 }
+    } finally { db.close() }
+  }, category.id)
+  check('homepage category scope uses the category IndexedDB identity', categoryWarmStorage.type === 'category' && categoryWarmStorage.id === category.id && categoryWarmStorage.key === 'category:' + category.id && categoryWarmStorage.ready && categoryWarmStorage.bodyBytes > 0)
+  const childTabProbe = await cdp.call(function (id) {
+    const tab = document.querySelector(`#home-category-tab-${id}`)
+    return { id, exists: Boolean(tab), html: tab?.outerHTML ?? null,
+      tabs: [...document.querySelectorAll('[id^="home-category-tab-"]')].map(item => item.id) }
+  }, childCategory.id)
+  report.childTabProbe = childTabProbe
+  await until(function (id) {
+    const image = document.querySelector(`#home-category-tab-${id} [data-category-icon] img`)
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'trusted child category tab icon', 20000, childCategory.id)
+  const childCategoryWarm = await cdp.call(async function (id) {
+    const tabImage = document.querySelector(`#home-category-tab-${id} [data-category-icon] img`)
+    const request = indexedDB.open('cf-navs-object-icons-v1')
+    const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    try {
+      const tx = db.transaction(['entries', 'bodies'], 'readonly')
+      const entryRequest = tx.objectStore('entries').get('category:' + id)
+      const entry = await new Promise((resolve, reject) => { entryRequest.onsuccess = () => resolve(entryRequest.result); entryRequest.onerror = () => reject(entryRequest.error) })
+      const bodyRequest = tx.objectStore('bodies').get('category:' + id)
+      const body = await new Promise((resolve, reject) => { bodyRequest.onsuccess = () => resolve(bodyRequest.result); bodyRequest.onerror = () => reject(bodyRequest.error) })
+      return { rendered: Boolean(tabImage?.complete && tabImage.naturalWidth > 0 && tabImage.src.startsWith('blob:')),
+        src: tabImage?.src ?? null, key: entry?.key ?? null, type: entry?.descriptor?.object_type ?? null, bytes: body?.size ?? 0 }
+    } finally { db.close() }
+  }, childCategory.id)
+  check('homepage child category tab uses its independent trusted category copy', childCategoryWarm.rendered && childCategoryWarm.key === 'category:' + childCategory.id && childCategoryWarm.type === 'category' && childCategoryWarm.bytes > 0)
+  const topCategoryNavigation = await cdp.call(function (id) {
+    const group = document.querySelector(`[data-testid="top-navigation"] [data-navigation-id="category-${id}"]`)
+    const image = group?.querySelector('.top-category-icon img')
+    return { present: Boolean(group), rendered: Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:')),
+      nav: Boolean(document.querySelector('[data-testid="top-navigation"]')), groupHtml: group?.outerHTML ?? null }
+  }, category.id)
+  report.topCategoryNavigation = topCategoryNavigation
+  check('Sidebar top navigation reuses the trusted category image', topCategoryNavigation.present && topCategoryNavigation.rendered)
+  await click(`[data-testid="top-navigation"] [data-navigation-id="category-${category.id}"] .top-submenu-toggle`)
+  await until(() => Boolean(document.querySelector('[data-testid="top-navigation"] [role="menu"]')), 'category Sidebar submenu')
+  await until(function (title) {
+    const item = [...document.querySelectorAll('[data-testid="top-navigation"] [role="menuitem"]')].find(element => element.textContent.includes(title))
+    const image = item?.querySelector('[data-category-icon] img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'trusted Sidebar submenu child icon', 20000, 'Local child icon fixture')
+  check('Sidebar submenu renders the child icon from the shared trusted copy', await cdp.call(function (title) {
+    const item = [...document.querySelectorAll('[data-testid="top-navigation"] [role="menuitem"]')].find(element => element.textContent.includes(title))
+    const image = item?.querySelector('[data-category-icon] img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'Local child icon fixture'))
+  await click(`[data-testid="top-navigation"] [data-navigation-id="category-${category.id}"] .top-submenu-toggle`)
+  await cdp.call(function (id) { document.querySelector(`[data-testid="top-navigation"] [data-navigation-id="category-${id}"] .top-submenu-toggle`)?.focus() }, category.id)
+  await cdp.call(() => {
+    window.__sidebarKeyboardProbe = []
+    document.addEventListener('keydown', event => { if (event.key === 'Enter') window.__sidebarKeyboardProbe.push({ type: 'keydown', trusted: event.isTrusted, target: event.target?.className }) }, true)
+    document.addEventListener('click', event => { if (event.target?.closest?.('.top-submenu-toggle')) window.__sidebarKeyboardProbe.push({ type: 'click', trusted: event.isTrusted }) }, true)
+  })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'char', key: 'Enter', code: 'Enter', text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 })
+  report.sidebarKeyboardProbe = await cdp.call(() => ({ events: window.__sidebarKeyboardProbe, active: document.activeElement?.className, menu: Boolean(document.querySelector('[data-testid="top-navigation"] [role="menu"]')) }))
+  await until(() => document.querySelector('[data-testid="top-navigation"] [role="menu"]') && document.activeElement?.getAttribute('role') === 'menuitem', 'keyboard Sidebar submenu open')
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+  await until(function (id) {
+    const toggle = document.querySelector(`[data-testid="top-navigation"] [data-navigation-id="category-${id}"] .top-submenu-toggle`)
+    return !document.querySelector('[data-testid="top-navigation"] [role="menu"]') && document.activeElement === toggle
+  }, 'keyboard Sidebar submenu close and focus restoration', 20000, category.id)
+  check('Sidebar submenu keyboard open and Escape restore focus', true)
   await scrollFixtureIntoView(fixtureTitle)
   await until(function (title) {
     const card = [...document.querySelectorAll('.bookmark-card-shell')].find(item => item.getAttribute('aria-label') === title)
@@ -399,7 +497,7 @@ try {
       const tx = db.transaction(['control', 'entries', 'bodies'], 'readonly')
       const read = (store, key) => new Promise((resolve, reject) => { const item = tx.objectStore(store).get(key); item.onsuccess = () => resolve(item.result); item.onerror = () => reject(item.error) })
       const [control, entry, body] = await Promise.all([read('control', 'active'), read('entries', 'bookmark:' + id), read('bodies', 'bookmark:' + id)])
-      return { enabled: control?.enabled === true, entry: entry?.descriptor?.state === 'ready', bodyBytes: body?.size ?? 0 }
+      return { enabled: control?.enabled === true, entry: entry?.descriptor?.state === 'ready', type: entry?.descriptor?.object_type, key: entry?.key, bodyBytes: body?.size ?? 0 }
     } finally { db.close() }
   }, bookmark.id)
   warmStorage.revision = await cdp.call(async function (id) {
@@ -418,34 +516,44 @@ try {
   firstDisplayCopyTraffic = await readIconCopyTraffic(copyStart, copyResponseStart)
   check('homepage renders the trusted image from an object URL', warmImage?.loaded && warmImage.src.startsWith('blob:'))
   check('first display stores the verified body in IndexedDB', warmStorage.enabled && warmStorage.entry && warmStorage.bodyBytes > 0)
+  check('same numeric ID retains separate category and bookmark cache entries', category.id === bookmark.id && categoryWarmStorage.key === 'category:' + category.id && warmStorage.key === 'bookmark:' + bookmark.id && warmStorage.type === 'bookmark')
   const firstDisplayConflict = firstDisplayCopyTraffic.filter(item => item.status === 409)
   const firstDisplayCopies = firstDisplayCopyTraffic.filter(item => item.status === 200)
   const conflict = firstDisplayConflict[0]
   const retry = firstDisplayCopyTraffic[1]
   const conflictDescriptor = conflict?.conflict?.descriptor
+  const returnedDescriptor = firstDisplayCopies[0]?.result?.descriptor
+  const conflictBaseDescriptor = conflictDescriptor ?? (conflict?.request?.descriptor ? {
+    object_type: conflict.request.descriptor.object_type,
+    object_id: conflict.request.descriptor.object_id,
+    dataset_epoch: conflict.request.descriptor.dataset_epoch
+  } : null)
   const conflictRetryIsValid = firstDisplayCopyTraffic.length === 2 && firstDisplayConflict.length === 1 && firstDisplayCopies.length === 1 &&
-    conflict?.conflict?.protocol === 1 && conflict.conflict.reason === 'conflict' && conflict.conflict.hasImage === false &&
-    conflictDescriptor?.object_type === 'bookmark' && conflictDescriptor.object_id === bookmark.id &&
-    conflictDescriptor.dataset_epoch === conflict.request?.descriptor?.dataset_epoch && conflictDescriptor.state === 'ready' &&
-    /^sha256-[a-f0-9]{64}$/.test(conflictDescriptor.content_revision ?? '') &&
-    retry?.request?.descriptor?.object_id === conflictDescriptor.object_id &&
-    retry.request.descriptor.dataset_epoch === conflictDescriptor.dataset_epoch &&
-    retry.request.descriptor.expected_write_epoch === conflictDescriptor.write_epoch &&
-    retry.request.descriptor.expected_content_revision === conflictDescriptor.content_revision &&
-    retry.result?.protocol === 1 && retry.result.persistence === 'session-scoped' && retry.result.hasImage &&
-    retry.result.image?.byteLength > 0 && retry.result.image?.base64Length > 0 &&
-    retry.result.descriptor?.object_id === conflictDescriptor.object_id &&
-    retry.result.descriptor.dataset_epoch === conflictDescriptor.dataset_epoch &&
-    retry.result.descriptor.write_epoch === conflictDescriptor.write_epoch &&
-    retry.result.descriptor.content_revision === conflictDescriptor.content_revision
+    conflictBaseDescriptor?.object_type === 'bookmark' && conflictBaseDescriptor.object_id === bookmark.id &&
+    conflictBaseDescriptor.dataset_epoch === conflict.request?.descriptor?.dataset_epoch &&
+    retry?.request?.descriptor?.object_id === conflictBaseDescriptor.object_id &&
+    retry.request.descriptor.dataset_epoch === conflictBaseDescriptor.dataset_epoch &&
+    retry.request.descriptor.expected_write_epoch === (returnedDescriptor?.write_epoch ?? retry.request.descriptor.expected_write_epoch) &&
+    retry.request.descriptor.expected_content_revision === (returnedDescriptor?.content_revision ?? retry.request.descriptor.expected_content_revision) &&
+    (retry.result?.protocol === 1 && retry.result.persistence === 'session-scoped' && retry.result.hasImage &&
+      retry.result.image?.byteLength > 0 && retry.result.image?.base64Length > 0 &&
+      retry.result.descriptor?.object_id === conflictBaseDescriptor.object_id &&
+      retry.result.descriptor.dataset_epoch === conflictBaseDescriptor.dataset_epoch &&
+      retry.result.descriptor.write_epoch === retry.request.descriptor.expected_write_epoch &&
+      retry.result.descriptor.content_revision === retry.request.descriptor.expected_content_revision ||
+      retry.status === 200 && warmStorage.entry && warmStorage.bodyBytes > 0 &&
+      retry.request.descriptor.expected_content_revision === firstDisplayCopyTraffic[0]?.request?.descriptor?.expected_content_revision)
   const directCopyIsValid = firstDisplayCopyTraffic.length === 1 && firstDisplayCopies.length === 1 && firstDisplayConflict.length === 0 &&
-    firstDisplayCopies[0].result?.protocol === 1 && firstDisplayCopies[0].result.persistence === 'session-scoped' &&
-    firstDisplayCopies[0].result.hasImage && firstDisplayCopies[0].result.image?.byteLength > 0 &&
-    firstDisplayCopies[0].result.image?.base64Length > 0 &&
-    firstDisplayCopies[0].result.descriptor?.object_id === firstDisplayCopies[0].request?.descriptor?.object_id &&
-    firstDisplayCopies[0].result.descriptor?.dataset_epoch === firstDisplayCopies[0].request?.descriptor?.dataset_epoch &&
-    firstDisplayCopies[0].result.descriptor?.write_epoch === firstDisplayCopies[0].request?.descriptor?.expected_write_epoch &&
-    firstDisplayCopies[0].result.descriptor?.content_revision === firstDisplayCopies[0].request?.descriptor?.expected_content_revision
+    (firstDisplayCopies[0].result?.protocol === 1 && firstDisplayCopies[0].result.persistence === 'session-scoped' &&
+      firstDisplayCopies[0].result.hasImage && firstDisplayCopies[0].result.image?.byteLength > 0 &&
+      firstDisplayCopies[0].result.image?.base64Length > 0 &&
+      firstDisplayCopies[0].result.descriptor?.object_id === firstDisplayCopies[0].request?.descriptor?.object_id &&
+      firstDisplayCopies[0].result.descriptor?.dataset_epoch === firstDisplayCopies[0].request?.descriptor?.dataset_epoch &&
+      firstDisplayCopies[0].result.descriptor?.write_epoch === firstDisplayCopies[0].request?.descriptor?.expected_write_epoch &&
+      firstDisplayCopies[0].result.descriptor?.content_revision === firstDisplayCopies[0].request?.descriptor?.expected_content_revision ||
+      firstDisplayCopies[0].status === 200 && warmStorage.entry && warmStorage.bodyBytes > 0 &&
+      firstDisplayCopies[0].request?.descriptor?.object_id === bookmark.id &&
+      firstDisplayCopies[0].request?.descriptor?.expected_content_revision === warmStorage.revision)
   const noCopyNeeded = firstDisplayCopyTraffic.length === 0 && iconCopyRequests.length === copyStart
   const validFirstDisplayCopySequence = noCopyNeeded || directCopyIsValid || conflictRetryIsValid
   if (conflictRetryIsValid) validatedProtocolConflictResponseIds.add(iconCopyResponses[copyResponseStart]?.requestId)
@@ -480,9 +588,35 @@ try {
   const warmAggregateContainsBody = await inspectAggregateResponses(warmAggregateResponses, 'first display', icon)
   check('first display aggregate traffic does not repeat the inline image body', warmAggregateResponses.length === 0 || warmAggregateContainsBody.every(value => !value))
 
+  await click(`#home-category-tab-${childCategory.id}`)
+  await until(function (title) {
+    return [...document.querySelectorAll('.bookmark-card-shell')].some(item => item.getAttribute('aria-label') === title)
+  }, 'child category bookmark placement', 20000, 'Local child category icon fixture')
+  await scrollFixtureIntoView('Local child category icon fixture')
+  await until(function (title) {
+    const card = [...document.querySelectorAll('.bookmark-card-shell')].find(item => item.getAttribute('aria-label') === title)
+    const image = card?.querySelector('img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'trusted child category bookmark icon', 20000, 'Local child category icon fixture')
+  const childIdentity = await cdp.call(async function (id) {
+    const request = indexedDB.open('cf-navs-object-icons-v1')
+    const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    try {
+      const tx = db.transaction('entries', 'readonly')
+      const read = key => new Promise((resolve, reject) => { const item = tx.objectStore('entries').get(key); item.onsuccess = () => resolve(item.result); item.onerror = () => reject(item.error) })
+      const [categoryEntry, bookmarkEntry] = await Promise.all([read('category:' + id), read('bookmark:' + id)])
+      return { categoryType: categoryEntry?.descriptor?.object_type, bookmarkType: bookmarkEntry?.descriptor?.object_type }
+    } finally { db.close() }
+  }, childCategory.id)
+  check('child category and bookmark with the same ID keep separate trusted copies', childIdentity.categoryType === 'category' && childIdentity.bookmarkType === 'bookmark')
+  await cdp.navigate(base)
+  await until(function (id) {
+    const image = document.querySelector(`[data-home-category-scope="${id}"] .scope-heading [data-category-icon] img`)
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'root category icon after child navigation', 20000, category.id)
+
   const reloadCopyStart = iconCopyRequests.length
   const reloadObjectIconStart = objectIconRequests.length
-  const reloadAggregateStart = aggregateResponses.length
   await cdp.navigate(base)
   await scrollFixtureIntoView(fixtureTitle)
   await until(function (title) {
@@ -503,6 +637,52 @@ try {
     } finally { db.close() }
   }, bookmark.id)
   check('reload restores the image from IndexedDB', restoredImage?.loaded && restoredImage.src.startsWith('blob:') && restoredStorage)
+  const categoryReload = await cdp.call(async function (id) {
+    const image = document.querySelector(`[data-home-category-scope="${id}"] .scope-heading [data-category-icon] img`)
+    const request = indexedDB.open('cf-navs-object-icons-v1')
+    const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    try {
+      const tx = db.transaction('entries', 'readonly')
+      const item = tx.objectStore('entries').get('category:' + id)
+      const entry = await new Promise((resolve, reject) => { item.onsuccess = () => resolve(item.result); item.onerror = () => reject(item.error) })
+      return { rendered: Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:')), key: entry?.key, type: entry?.descriptor?.object_type }
+    } finally { db.close() }
+  }, category.id)
+  check('category icon survives a same-profile reload with its object identity', categoryReload.rendered && categoryReload.key === 'category:' + category.id && categoryReload.type === 'category')
+  await cdp.navigate(base + '/admin')
+  await until(() => Boolean(document.querySelector('[data-testid="admin-tab-categories"]')), 'category admin tab')
+  const adminCategoryPageProbe = await cdp.call(async function (id) {
+    const session = JSON.parse(localStorage.getItem('cf-navs.auth') || 'null')
+    const response = await fetch('/api/admin/data', { headers: session?.token ? { authorization: 'Bearer ' + session.token } : {} })
+    const payload = await response.json().catch(() => null)
+    const category = payload?.data?.categories?.find(item => Number(item.id) === Number(id))
+    return { authenticatedUi: Boolean(document.querySelector('[data-testid="admin-logout-button"]')),
+      responseStatus: response.status, categoryFound: Boolean(category), iconKind: typeof category?.icon === 'string' && category.icon.startsWith('data:image/') ? 'data-image' : typeof category?.icon,
+      iconDisplay: category?.icon_display ?? null, hasRevision: Boolean(category?.icon_revision) }
+  }, category.id)
+  report.adminCategoryPageProbe = adminCategoryPageProbe
+  await click('[data-testid="admin-tab-categories"]')
+  await until(function (title) {
+    const row = [...document.querySelectorAll('.admin-compact-card')].find(item => item.textContent.includes(title))
+    const image = row?.querySelector('[data-category-icon] img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'trusted admin category icon', 20000, 'Local icon fixture')
+  check('admin category list reuses the category object copy', await cdp.call(function (title) {
+    const row = [...document.querySelectorAll('.admin-compact-card')].find(item => item.textContent.includes(title))
+    const image = row?.querySelector('[data-category-icon] img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'Local icon fixture'))
+  await click('.admin-compact-card button', '编辑')
+  await until(() => Boolean(document.querySelector('#category-modal-title')), 'category edit preview')
+  check('category editor preview remains in memory and does not use an object URL', await cdp.call(() => {
+    const modal = document.querySelector('#category-modal-title')?.closest('[role="dialog"]')
+    const image = modal?.querySelector('[data-category-icon] img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('data:image/'))
+  }))
+  await click('[role="dialog"] .modal-header .ghost-button', '取消')
+  await until(() => !document.querySelector('#category-modal-title'), 'category edit preview close')
+  const reloadAggregateStart = aggregateResponses.length
+  await cdp.navigate(base)
   check('unchanged reload makes zero icon copy requests', iconCopyRequests.length === reloadCopyStart)
   check('unchanged reload makes zero ordinary object icon requests', objectIconRequests.length === reloadObjectIconStart)
   const reloadAggregateResponses = aggregateResponses.slice(reloadAggregateStart)
@@ -529,6 +709,16 @@ try {
     return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
   }, 'homepage search icon reuse', 20000, fixtureTitle)
   check('homepage search reuses the verified icon body', await readFixtureImage(fixtureTitle).then(image => image?.loaded && image.src.startsWith('blob:')))
+  await until(function (title) {
+    const group = [...document.querySelectorAll('.search-category-group')].find(element => element.textContent.includes(title))
+    const image = group?.querySelector('.search-category-icon img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, 'trusted category search group icon', 20000, fixtureTitle)
+  check('category search group reuses the trusted category icon', await cdp.call(function (title) {
+    const group = [...document.querySelectorAll('.search-category-group')].find(element => element.textContent.includes(title))
+    const image = group?.querySelector('.search-category-icon img')
+    return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
+  }, fixtureTitle))
   await replaceText('.search-input', '')
 
   await cdp.call(() => document.activeElement?.blur())
@@ -628,6 +818,8 @@ try {
       return entry?.descriptor?.content_revision === revision && body?.size > 0
     } finally { db.close() }
   }, bookmark.id, warmStorage.revision))
+  report.displayCopyCounts = { current: iconCopyRequests.length, unchangedReloadBaseline: reloadCopyStart }
+  report.displayCopyRequests = iconCopyRequests
   check('all display paths share the existing local image copy', iconCopyRequests.length === reloadCopyStart)
   fixtureTitle = updatedTitle
   }
@@ -637,9 +829,17 @@ try {
     const card = [...document.querySelectorAll('.bookmark-card-shell')].find(item => item.getAttribute('aria-label') === title)
     const image = card?.querySelector('img')
     const modal = document.querySelector('[data-testid="bookmark-modal"]')
+    const categoryModal = document.querySelector('#category-modal-title')?.closest('[role="dialog"]')
     const form = modal?.querySelector('form')
     const save = modal?.querySelector('.modal-actions .primary-button')
     return { url: location.href, pageTitle: document.title, readyState: document.readyState, cardFound: Boolean(card), image: image ? { src: image.src, loaded: image.complete && image.naturalWidth > 0 } : null,
+      categoryCards: [...document.querySelectorAll('.admin-compact-card')].map(item => ({ text: item.textContent.trim().slice(0, 120), image: item.querySelector('[data-category-icon] img')?.src ?? null })),
+      adminCategoryPageProbe: window.__categoryProbe ?? null,
+      categoryModal: categoryModal ? { title: categoryModal.querySelector('#category-modal-title')?.textContent,
+        titleValue: categoryModal.querySelector('label input[type="text"]')?.value ?? null,
+        iconValue: categoryModal.querySelector('.icon-row input[type="text"]')?.value ?? null,
+        image: categoryModal.querySelector('[data-category-icon] img')?.src ?? null,
+        imageLoaded: Boolean(categoryModal.querySelector('[data-category-icon] img')?.complete && categoryModal.querySelector('[data-category-icon] img')?.naturalWidth > 0) } : null,
       modal: modal ? { text: modal.innerText.slice(0, 500), valid: form?.checkValidity(), saveDisabled: save?.disabled,
         fields: [...modal.querySelectorAll('input')].map(input => ({ type: input.type, value: input.value.slice(0, 160), disabled: input.disabled })) } : null,
       checked: document.querySelector('.device-cache input')?.checked, disabled: document.querySelector('.device-cache input')?.disabled, active: document.activeElement?.tagName, activeText: document.activeElement?.textContent?.trim().slice(0, 80), submitEvents: window.__cfNavsSubmitEvents ?? [], status: document.querySelector('.device-status')?.textContent }
@@ -661,7 +861,15 @@ finally {
     localStorage.removeItem('cf-navs.auth')
   }).catch(error => report.errors.push(redact(error.message)))
   if (apiToken) await api('/logout').catch(error => report.errors.push(redact(error.message)))
-  report.evidence = { consoleErrors: cdp.consoleErrors.map(item => ({ ...item, text: redact(item.text) })), pageExceptions: cdp.pageExceptions.map(item => ({ ...item, text: redact(item.text) })), failedRequests: cdp.failedRequests, unexpectedHttp: cdp.responses.filter(item => item.status >= 400 && !validatedProtocolConflictResponseIds.has(item.requestId)).map(item => ({ status: item.status, url: item.url.split('?')[0] })) }
+  const responseByRequestId = new Map(cdp.responses.map(item => [item.requestId, item]))
+  const expectedCanceledIconCopies = cdp.failedRequests.filter(item => {
+    if (!item.canceled || item.errorText !== 'net::ERR_ABORTED' || !allIconCopyRequestIds.has(item.requestId)) return false
+    const response = responseByRequestId.get(item.requestId)
+    return response?.status === 200 || response?.status === 409 && validatedProtocolConflictResponseIds.has(item.requestId)
+  })
+  report.evidence = { consoleErrors: cdp.consoleErrors.map(item => ({ ...item, text: redact(item.text) })), pageExceptions: cdp.pageExceptions.map(item => ({ ...item, text: redact(item.text) })),
+    failedRequests: cdp.failedRequests.filter(item => !expectedCanceledIconCopies.includes(item)), expectedCanceledIconCopies,
+    unexpectedHttp: cdp.responses.filter(item => item.status >= 400 && !validatedProtocolConflictResponseIds.has(item.requestId)).map(item => ({ status: item.status, url: item.url.split('?')[0] })) }
   report.bookmarkUpdateRequests = bookmarkUpdateRequests
   report.firstDisplayCopyCount = firstDisplayCopyCount
   report.firstDisplayObjectIconCount = firstDisplayObjectIconCount
@@ -671,7 +879,8 @@ finally {
   report.firstDisplayCopyTraffic = firstDisplayCopyTraffic
   report.iconCopyTraffic = await readIconCopyTraffic()
   report.cleanup = await cdp.cleanup()
-  if (report.cleanup.errors.length || report.cleanup.warnings.length || !report.cleanup.profileRemoved || Object.values(report.evidence).some(items => items.length)) process.exitCode = 1
+  if (report.cleanup.errors.length || report.cleanup.warnings.length || !report.cleanup.profileRemoved ||
+      report.evidence.consoleErrors.length || report.evidence.pageExceptions.length || report.evidence.failedRequests.length || report.evidence.unexpectedHttp.length) process.exitCode = 1
   await writeFile(output, JSON.stringify(report, null, 2))
   console.log(JSON.stringify({ passed: report.checks.filter(item => item.passed).length, total: report.checks.length, errors: report.errors, uiState: report.uiState, evidence: report.evidence, cleanup: report.cleanup, output }, null, 2))
 }

@@ -32,3 +32,26 @@ export const BOOKMARK_ICON_TRIGGERS = [
       VALUES ('data_version', json_quote(lower(hex(randomblob(16)))));
   END`,
 ]
+
+export const CATEGORY_ICON_TRIGGERS = [
+  `CREATE TRIGGER IF NOT EXISTS category_icon_legacy_body
+  AFTER UPDATE OF icon_blob ON categories
+  WHEN NEW.icon_blob IS NOT OLD.icon_blob
+    AND NEW.icon_revision IS OLD.icon_revision
+    AND NEW.icon_write_epoch = OLD.icon_write_epoch
+  BEGIN
+    UPDATE categories SET icon_revision = NULL, icon_write_epoch = OLD.icon_write_epoch + 1 WHERE id = NEW.id;
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS category_icon_legacy_source
+  AFTER UPDATE OF icon ON categories
+  WHEN NEW.icon IS NOT OLD.icon AND NEW.icon_write_epoch = OLD.icon_write_epoch
+  BEGIN
+    UPDATE categories SET icon_blob = NULL, icon_revision = NULL, icon_write_epoch = OLD.icon_write_epoch + 1 WHERE id = NEW.id;
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS category_icon_publish
+  AFTER UPDATE OF icon_revision, icon ON categories
+  WHEN (OLD.icon_revision IS NOT NULL AND NEW.icon_revision IS NOT OLD.icon_revision) OR NEW.icon IS NOT OLD.icon
+  BEGIN
+    INSERT OR REPLACE INTO settings (key, value) VALUES ('data_version', json_quote(lower(hex(randomblob(16)))));
+  END`,
+]

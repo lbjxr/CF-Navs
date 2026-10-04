@@ -3,6 +3,7 @@ import { ICON_COPY_PROTOCOL, parseIconCopyRequest } from '../../shared/iconLocal
 import { ErrCode } from '../../shared/types'
 import { authRequired } from '../middleware/auth'
 import { obtainBookmarkIconCopy } from '../lib/bookmarkIconCopy'
+import { obtainCategoryIconCopy } from '../lib/categoryIconCopy'
 import { readBoundedBody } from '../lib/boundedBody'
 import { fail, ok } from '../lib/response'
 import type { HonoEnv } from '../types'
@@ -26,8 +27,9 @@ iconLocalCopyRoutes.post('/icon-local-copy', authRequired, async (c) => {
     try { value = JSON.parse(new TextDecoder().decode(bytes)) } catch { return c.json(fail(ErrCode.BAD_REQUEST, 'invalid request'), 400) }
     const input = parseIconCopyRequest(value)
     if (!input) return c.json(fail(ErrCode.BAD_REQUEST, 'invalid request'), 400)
-    if (input.object_type !== 'bookmark') return c.json(ok({ protocol: ICON_COPY_PROTOCOL, reason: 'unsupported' }), 400)
-    const result = await obtainBookmarkIconCopy(c.env.DB, input)
+    const result = input.object_type === 'bookmark'
+      ? await obtainBookmarkIconCopy(c.env.DB, input)
+      : await obtainCategoryIconCopy(c.env.DB, input)
     return c.json(ok(result.data), result.status)
   } catch {
     return c.json(ok({ protocol: ICON_COPY_PROTOCOL, reason: 'unavailable' }), 503)

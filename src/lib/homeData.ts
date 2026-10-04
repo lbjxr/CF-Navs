@@ -13,6 +13,9 @@ export type HomeSection = {
   categoryId: number
   title: string
   icon: string | null
+  icon_display?: 'image' | 'text' | 'empty'
+  icon_revision?: string | null
+  icon_write_epoch?: number
   count: number
   children: HomeSection[]
 }
@@ -127,6 +130,9 @@ export function getHomeSections(
       categoryId: child.id,
       title: child.title,
       icon: child.icon,
+      icon_display: child.icon_display,
+      icon_revision: child.icon_revision,
+      icon_write_epoch: child.icon_write_epoch,
       count: categoryBookmarks.get(child.id)?.length ?? 0,
       children: [],
     }))
@@ -136,6 +142,9 @@ export function getHomeSections(
       categoryId: category.id,
       title: category.title,
       icon: category.icon,
+      icon_display: category.icon_display,
+      icon_revision: category.icon_revision,
+      icon_write_epoch: category.icon_write_epoch,
       count: getCategoryTreeBookmarkCount(category, categoryBookmarks),
       children,
     }

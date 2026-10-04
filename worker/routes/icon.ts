@@ -32,6 +32,7 @@ import {
 } from '../lib/iconResponses'
 import { createIconAccessGrant, verifyIconAccessGrant } from '../lib/iconSignature'
 import { getJwtSecret } from '../lib/jwt'
+import { decodeVersionedIcon } from '../lib/iconRevision'
 import { fail, ok } from '../lib/response'
 import type { HonoEnv } from '../types'
 
@@ -270,6 +271,14 @@ iconRoutes.get('/category-icon/:id', objectIconClientCache, async (c) => {
       // 授权路径也不能泄露「id 不存在」与「id 存在但无图标」的区别之外的信息，
       // 因此这里与匿名路径同样传空标题。
       return fallbackIconResponse('', '', fallbackCache)
+    }
+    if (!category.icon && category.icon_blob) {
+      const stored = decodeVersionedIcon(category.icon_blob)
+      if (stored) {
+        const response = iconBytesToResponse(stored, successCache)
+        cacheResponse(c, cacheKey, response)
+        return response
+      }
     }
     if (!category.icon) {
       return cachedFallbackIconResponse(c, cacheKey, category.title, '', fallbackCache)

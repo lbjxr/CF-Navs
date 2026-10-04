@@ -1,4 +1,4 @@
-import { BOOKMARK_ICON_TRIGGERS, INITIALIZE_ICON_DATASET_SQL } from './iconSchema'
+import { BOOKMARK_ICON_TRIGGERS, CATEGORY_ICON_TRIGGERS, INITIALIZE_ICON_DATASET_SQL } from './iconSchema'
 
 // schema 迁移（幂等，仅缺列时添加）与旧库缺列时的重试封装
 
@@ -82,10 +82,13 @@ async function migrateSchema(db: D1Database): Promise<void> {
   if (!categoryColNames.has("is_private")) {
     stmts.push(db.prepare("ALTER TABLE categories ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"))
   }
+  if (!categoryColNames.has("icon_blob")) stmts.push(db.prepare("ALTER TABLE categories ADD COLUMN icon_blob TEXT"))
+  if (!categoryColNames.has("icon_revision")) stmts.push(db.prepare("ALTER TABLE categories ADD COLUMN icon_revision TEXT"))
+  if (!categoryColNames.has("icon_write_epoch")) stmts.push(db.prepare("ALTER TABLE categories ADD COLUMN icon_write_epoch INTEGER NOT NULL DEFAULT 0"))
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_bookmarks_sort_global ON bookmarks(sort, id)"))
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_categories_sort_id ON categories(sort, id)"))
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_categories_parent_sort_id ON categories(parent_id, sort, id)"))
 
-  stmts.push(db.prepare(INITIALIZE_ICON_DATASET_SQL), ...BOOKMARK_ICON_TRIGGERS.map((sql) => db.prepare(sql)))
+  stmts.push(db.prepare(INITIALIZE_ICON_DATASET_SQL), ...BOOKMARK_ICON_TRIGGERS.map((sql) => db.prepare(sql)), ...CATEGORY_ICON_TRIGGERS.map((sql) => db.prepare(sql)))
   await db.batch(stmts)
 }

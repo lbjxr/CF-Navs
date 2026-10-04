@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS categories (
   parent_id   INTEGER,                    -- NULL=一级分类，非空=所属一级分类
   title       TEXT NOT NULL,
   icon        TEXT,                       -- 图标 URL（可填 cftc 直链）
+  icon_blob   TEXT,
+  icon_revision TEXT,
+  icon_write_epoch INTEGER NOT NULL DEFAULT 0,
   is_private  INTEGER NOT NULL DEFAULT 0,-- 0=访客可见 1=仅登录可见
   sort        INTEGER NOT NULL DEFAULT 0,
   created_at  INTEGER NOT NULL
@@ -116,4 +119,26 @@ CREATE TRIGGER IF NOT EXISTS bookmark_icon_publish
   BEGIN
     INSERT OR REPLACE INTO settings (key, value)
       VALUES ('data_version', json_quote(lower(hex(randomblob(16)))));
+  END;
+
+CREATE TRIGGER IF NOT EXISTS category_icon_legacy_body
+  AFTER UPDATE OF icon_blob ON categories
+  WHEN NEW.icon_blob IS NOT OLD.icon_blob AND NEW.icon_revision IS OLD.icon_revision
+    AND NEW.icon_write_epoch = OLD.icon_write_epoch
+  BEGIN
+    UPDATE categories SET icon_revision = NULL, icon_write_epoch = OLD.icon_write_epoch + 1 WHERE id = NEW.id;
+  END;
+
+CREATE TRIGGER IF NOT EXISTS category_icon_legacy_source
+  AFTER UPDATE OF icon ON categories
+  WHEN NEW.icon IS NOT OLD.icon AND NEW.icon_write_epoch = OLD.icon_write_epoch
+  BEGIN
+    UPDATE categories SET icon_blob = NULL, icon_revision = NULL, icon_write_epoch = OLD.icon_write_epoch + 1 WHERE id = NEW.id;
+  END;
+
+CREATE TRIGGER IF NOT EXISTS category_icon_publish
+  AFTER UPDATE OF icon_revision, icon ON categories
+  WHEN (OLD.icon_revision IS NOT NULL AND NEW.icon_revision IS NOT OLD.icon_revision) OR NEW.icon IS NOT OLD.icon
+  BEGIN
+    INSERT OR REPLACE INTO settings (key, value) VALUES ('data_version', json_quote(lower(hex(randomblob(16)))));
   END;
