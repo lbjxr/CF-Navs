@@ -22,7 +22,9 @@ const debugPort = probe.address().port
 await new Promise(resolve => probe.close(resolve))
 const cdp = new CdpSession({ chromeExe, debugPort, userDataDir: profile, headless: true })
 const report = { checks: [], ownership: { profile, debugPort }, errors: [], cleanup: null }
+const compatMode = process.env.ICON_COMPAT_MODE === '1'
 let apiToken = ''
+let legacyTab = null
 let firstDisplayCopyCount = null
 let firstDisplayObjectIconCount = null
 let firstDisplayRefreshCount = null
@@ -204,10 +206,154 @@ try {
   }, process.env.ADMIN_USER, process.env.ADMIN_PASS)
   await cdp.navigate(base + '/admin')
   await until(() => Boolean(document.querySelector('[data-testid="admin-tab-settings"]')), 'admin navigation')
+  if (compatMode) {
+    const legacyKey = 'cf-navs.bookmark-icon.compat-probe'
+    const preservedKey = 'cf-navs.compat-unrelated-probe'
+    const cacheUrl = 'https://cf-navs.local/bookmark-icon/compat-probe'
+    await cdp.call(async function (legacyStorageKey, preservedStorageKey, preservedUrl) {
+      localStorage.setItem(legacyStorageKey, 'data:image/svg+xml;base64,PHN2Zy8+')
+      localStorage.setItem(preservedStorageKey, 'keep')
+      localStorage.setItem('cf-navs.icon-device-v1', JSON.stringify({ schema: 1, trusted: true,
+        receipt: { cache_scope: 'a'.repeat(64), checked_at: Date.now(), expires_at: Date.now() + 60000 },
+        dataset: 'b'.repeat(32), protocol: 1, observedAt: Date.now(), cleanupPending: false }))
+      const oldCache = await caches.open('cf-navs-bookmark-icons-v1')
+      await oldCache.put(new Request('https://cf-navs.local/bookmark-icon/compat-old'), new Response('legacy'))
+      const currentCache = await caches.open('cf-navs-bookmark-icons-v2')
+      await currentCache.put(new Request(preservedUrl), new Response('current-v2', { headers: { 'content-type': 'image/svg+xml' } }))
+      const request = indexedDB.open('cf-navs-object-icons-v1', 1)
+      request.onupgradeneeded = () => {
+        const db = request.result
+        db.createObjectStore('control', { keyPath: 'key' })
+        const entries = db.createObjectStore('entries', { keyPath: 'key' })
+        entries.createIndex('last_used', 'last_used')
+        db.createObjectStore('bodies')
+      }
+      const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+      try {
+        const tx = db.transaction(['control', 'entries', 'bodies'], 'readwrite')
+        tx.objectStore('control').put({ key: 'active', schema: 1, enabled: true, scope: 'fixture-scope', generation: 'fixture-generation', bodyBytes: 1, entries: 1, indexBytes: 4096 })
+        tx.objectStore('entries').put({ key: 'bookmark:999', generation: 'fixture-generation', descriptor: {}, mime: 'image/png', byte_length: 1, saved_at: Date.now(), last_used: Date.now(), metadata_bytes: 100 })
+        tx.objectStore('bodies').put(new Blob(['x'], { type: 'image/png' }), 'bookmark:999')
+        await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(tx.error) })
+      } finally { db.close() }
+    }, legacyKey, preservedKey, cacheUrl)
+    await cdp.send('Page.reload')
+    await until(() => location.pathname === '/admin' && document.readyState === 'complete' && Boolean(document.querySelector('[data-testid="admin-tab-settings"]')), 'compatibility build reload')
+    await click('[data-testid="admin-tab-settings"]')
+    await until(() => Boolean(document.querySelector('.settings-submenu')), 'compatibility settings panel')
+    await click('.settings-submenu button', '设备缓存')
+    await until(() => Boolean(document.querySelector('.settings-submenu')), 'compatibility device settings view')
+    const readCompatibilityState = async function (legacyStorageKey, preservedStorageKey, preservedUrl) {
+      const names = await caches.keys()
+      const externalCache = await caches.open('cf-navs-bookmark-icons-v2')
+      const preserved = await externalCache.match(new Request(preservedUrl))
+      const request = indexedDB.open('cf-navs-object-icons-v1')
+      const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+      try {
+        const tx = db.transaction(['entries', 'bodies'], 'readonly')
+        const count = store => new Promise((resolve, reject) => { const item = tx.objectStore(store).count(); item.onsuccess = () => resolve(item.result); item.onerror = () => reject(item.error) })
+        const [entries, bodies] = await Promise.all([count('entries'), count('bodies')])
+        const device = JSON.parse(localStorage.getItem('cf-navs.icon-device-v1') || 'null')
+        return { legacyStorageRemoved: localStorage.getItem(legacyStorageKey) === null, unrelatedPreserved: localStorage.getItem(preservedStorageKey) === 'keep',
+          legacyCacheRemoved: !names.includes('cf-navs-bookmark-icons-v1'), externalCachePreserved: await preserved?.text() === 'current-v2',
+          trustedDisabled: device?.trusted === false && device.receipt === null, entries, bodies, panelHidden: !document.querySelector('.device-cache') }
+      } finally { db.close() }
+    }
+    let compatibilityState = await cdp.call(readCompatibilityState, legacyKey, preservedKey, cacheUrl)
+    for (let attempt = 0; attempt < 200 && !(compatibilityState.legacyStorageRemoved && compatibilityState.legacyCacheRemoved && compatibilityState.trustedDisabled && compatibilityState.entries === 0 && compatibilityState.bodies === 0); attempt += 1) {
+      await sleep(100)
+      compatibilityState = await cdp.call(readCompatibilityState, legacyKey, preservedKey, cacheUrl)
+    }
+    check('compatibility startup completes migration and namespace cleanup', compatibilityState.legacyStorageRemoved && compatibilityState.legacyCacheRemoved && compatibilityState.trustedDisabled && compatibilityState.entries === 0 && compatibilityState.bodies === 0)
+    check('compatibility build disables trust and clears the new IndexedDB namespace', compatibilityState.trustedDisabled && compatibilityState.entries === 0 && compatibilityState.bodies === 0 && compatibilityState.panelHidden)
+    check('compatibility migration removes only legacy namespaces and preserves v2/unrelated state', compatibilityState.legacyStorageRemoved && compatibilityState.legacyCacheRemoved && compatibilityState.unrelatedPreserved && compatibilityState.externalCachePreserved)
+    await cdp.call(async function (preservedStorageKey, preservedUrl) {
+      localStorage.removeItem(preservedStorageKey)
+      const cache = await caches.open('cf-navs-bookmark-icons-v2')
+      await cache.delete(new Request(preservedUrl))
+    }, preservedKey, cacheUrl)
+    await cdp.navigate(base)
+    await scrollFixtureIntoView(fixtureTitle)
+    await until(function (title) {
+      const card = [...document.querySelectorAll('.bookmark-card-shell')].find(item => item.getAttribute('aria-label') === title)
+      const image = card?.querySelector('img')
+      return Boolean(image?.complete && image.naturalWidth > 0)
+    }, 'standard icon rendering in compatibility build', 20000, fixtureTitle)
+    const standardImage = await readFixtureImage(fixtureTitle)
+    check('compatibility build restores projected images through the standard proxy', standardImage?.loaded && standardImage.src.startsWith(new URL(base).origin + '/api/icon/') && iconCopyRequests.length === 0)
+  } else {
   await click('[data-testid="admin-tab-settings"]')
   await until(() => Boolean(document.querySelector('.settings-submenu')), 'settings panel')
   await click('.settings-submenu button', '设备缓存')
   await until(() => Boolean(document.querySelector('.device-cache input')), 'device controls')
+  const legacyStorageKey = 'cf-navs.bookmark-icon.legacy-migration-probe'
+  const preservedStorageKey = 'cf-navs.migration-unrelated-probe'
+  const preservedCacheUrl = 'https://cf-navs.local/bookmark-icon/legacy-migration-probe'
+  await cdp.call(async function (legacyKey, preservedKey, cacheUrl) {
+    localStorage.setItem(legacyKey, 'data:image/svg+xml;base64,PHN2Zy8+')
+    localStorage.setItem(preservedKey, 'keep')
+    const oldCache = await caches.open('cf-navs-bookmark-icons-v1')
+    await oldCache.put(new Request('https://cf-navs.local/bookmark-icon/old-probe'), new Response('legacy'))
+    const currentCache = await caches.open('cf-navs-bookmark-icons-v2')
+    await currentCache.put(new Request(cacheUrl), new Response('current-v2', { headers: { 'content-type': 'image/svg+xml' } }))
+  }, legacyStorageKey, preservedStorageKey, preservedCacheUrl)
+  await cdp.send('Page.reload')
+  await until(() => location.pathname === '/admin' && document.readyState === 'complete' && Boolean(document.querySelector('[data-testid="admin-tab-settings"]')), 'admin application after migration reload')
+  await until(async function (legacyKey, cacheUrl) {
+    const names = await caches.keys()
+    const current = await caches.open('cf-navs-bookmark-icons-v2')
+    const preserved = await current.match(new Request(cacheUrl))
+    return localStorage.getItem(legacyKey) === null && !names.includes('cf-navs-bookmark-icons-v1') && await preserved?.text() === 'current-v2'
+  }, 'legacy storage migration', 20000, legacyStorageKey, preservedCacheUrl)
+  const migration = await cdp.call(async function (legacyKey, preservedKey, cacheUrl) {
+    const names = await caches.keys()
+    const current = await caches.open('cf-navs-bookmark-icons-v2')
+    const preserved = await current.match(new Request(cacheUrl))
+    return {
+      legacyStorageRemoved: localStorage.getItem(legacyKey) === null,
+      unrelatedStoragePreserved: localStorage.getItem(preservedKey) === 'keep',
+      legacyCacheRemoved: !names.includes('cf-navs-bookmark-icons-v1'),
+      currentCachePreserved: await preserved?.text() === 'current-v2',
+    }
+  }, legacyStorageKey, preservedStorageKey, preservedCacheUrl)
+  check('reload removes old localStorage data and the dedicated v1 cache', migration.legacyStorageRemoved && migration.legacyCacheRemoved)
+  check('migration preserves unrelated localStorage and the active v2 external-icon entry', migration.unrelatedStoragePreserved && migration.currentCachePreserved)
+  await cdp.call(async function (preservedKey, cacheUrl) {
+    localStorage.removeItem(preservedKey)
+    const current = await caches.open('cf-navs-bookmark-icons-v2')
+    await current.delete(new Request(cacheUrl))
+  }, preservedStorageKey, preservedCacheUrl)
+  await until(() => Boolean(document.querySelector('[data-testid="admin-tab-settings"]')), 'admin navigation after migration reload')
+  await click('[data-testid="admin-tab-settings"]')
+  await until(() => Boolean(document.querySelector('.settings-submenu')), 'settings panel after migration reload')
+  await click('.settings-submenu button', '设备缓存')
+  await until(() => Boolean(document.querySelector('.device-cache input')), 'device controls after migration reload')
+  legacyTab = await openSecondaryTab(base)
+  report.ownership.legacyTargetId = legacyTab.targetId
+  report.ownership.legacySessionId = legacyTab.sessionId
+  await writeFile(output + '.ownership.json', JSON.stringify(report.ownership, null, 2))
+  await legacyTab.evaluate(async function () {
+    localStorage.setItem('cf-navs.bookmark-icon.late-tab-probe', 'data:image/svg+xml;base64,PHN2Zy8+')
+    const cache = await caches.open('cf-navs-bookmark-icons-v1')
+    await cache.put(new Request('https://cf-navs.local/bookmark-icon/late-tab-probe'), new Response('late legacy body'))
+  })
+  await until(async function () {
+    const names = await caches.keys()
+    return localStorage.getItem('cf-navs.bookmark-icon.late-tab-probe') === null && !names.includes('cf-navs-bookmark-icons-v1')
+  }, 'new tab cleans late legacy writes from the old tab', 20000)
+  check('a real cross-tab storage event removes late localStorage and v1 writes', await cdp.call(async () => localStorage.getItem('cf-navs.bookmark-icon.late-tab-probe') === null && !(await caches.keys()).includes('cf-navs-bookmark-icons-v1')))
+  await legacyTab.evaluate(async function () {
+    const cache = await caches.open('cf-navs-bookmark-icons-v1')
+    await cache.put(new Request('https://cf-navs.local/bookmark-icon/focus-probe'), new Response('focus legacy body'))
+  })
+  await cdp.send('Target.activateTarget', { targetId: legacyTab.targetId })
+  await cdp.send('Target.activateTarget', { targetId: cdp.targetId })
+  await until(async () => !(await caches.keys()).includes('cf-navs-bookmark-icons-v1'), 'new tab cleans cache-only late write on focus', 20000)
+  check('focus restoration re-cleans a legacy Cache Storage write with no storage event', await cdp.call(async () => !(await caches.keys()).includes('cf-navs-bookmark-icons-v1')))
+  await cdp.send('Target.closeTarget', { targetId: legacyTab.targetId })
+  report.ownership.legacyTargetClosed = true
+  legacyTab = null
+  await writeFile(output + '.ownership.json', JSON.stringify(report.ownership, null, 2))
   check('device preference starts disabled', await cdp.call(() => !document.querySelector('.device-cache input').checked))
   check('device controls explain private/offline risks', await cdp.call(() => document.querySelector('.device-cache').textContent.includes('私密图片') && document.querySelector('.device-cache').textContent.includes('24 小时')))
   const beforeSettings = await api('/settings', undefined, 'GET')
@@ -500,6 +646,15 @@ try {
   }, 'Local trusted icon').catch(() => null)
 }
 finally {
+  if (legacyTab && cdp.ws) {
+    try {
+      await cdp.send('Target.closeTarget', { targetId: legacyTab.targetId }, 10000)
+      report.ownership.legacyTargetClosed = true
+    } catch (error) {
+      report.errors.push('Secondary target cleanup failed: ' + redact(error.message))
+      process.exitCode = 1
+    }
+  }
   if (cdp.ws) await cdp.call(async function () {
     const session = JSON.parse(localStorage.getItem('cf-navs.auth') || 'null')
     if (session?.token) await fetch('/api/logout', { method: 'POST', headers: { authorization: 'Bearer ' + session.token } })

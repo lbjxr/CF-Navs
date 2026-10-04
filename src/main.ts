@@ -7,9 +7,11 @@ import {
   registerServiceWorker,
 } from './lib/serviceWorkerClient'
 import { toastStore } from './lib/toast'
+import { migrateLegacyIconCopies } from './lib/legacyIconCopyMigration'
 import App from './App.svelte'
 
 initErrorReporting()
+void migrateLegacyIconCopies()
 
 const app = mount(App, {
   target: document.getElementById('app')!,

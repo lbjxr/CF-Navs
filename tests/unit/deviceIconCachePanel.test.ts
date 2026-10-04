@@ -8,7 +8,7 @@ vi.mock('../../src/lib/iconDeviceState', async () => {
   const { writable } = await import('svelte/store')
   let state: any = { trusted: false, phase: 'disabled', epoch: 0, lease: null, dataset: null, leaseUntil: null, checkedAt: null, stats: { entries: 0, bodyBytes: 0, indexBytes: 0 }, error: null }
   const store = writable(state)
-  return { iconDevice: {
+  return { ICON_LOCAL_COPY_ENABLED: true, iconDevice: {
     subscribe: store.subscribe, snapshot: () => state,
     setTrusted: vi.fn(async (trusted: boolean) => { state = { ...state, trusted, phase: trusted ? 'waiting-auth' : 'disabled' }; store.set(state) }),
     clearCopies: vi.fn(async () => undefined), resume: vi.fn(async () => undefined),

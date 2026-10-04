@@ -211,7 +211,7 @@ export function mergePublicData(current: PublicData | null, next: PublicData): P
   const settings = jsonEqual(current.settings, next.settings) ? current.settings : next.settings
 
   if (categories === current.categories && bookmarks === current.bookmarks && settings === current.settings &&
-    current.dataset_epoch === next.dataset_epoch && current.icon_local_copy_protocol === next.icon_local_copy_protocol) {
+    current.dataset_epoch === next.dataset_epoch && current.icon_local_copy_protocol === next.icon_local_copy_protocol && current.icon_inline_copy_protocol === next.icon_inline_copy_protocol) {
     return current
   }
 
@@ -224,7 +224,7 @@ export function mergeAdminData(current: AdminData, next: AdminData): AdminData {
   const settings = jsonEqual(current.settings, next.settings) ? current.settings : next.settings
 
   if (categories === current.categories && bookmarks === current.bookmarks && settings === current.settings &&
-    current.dataset_epoch === next.dataset_epoch && current.icon_local_copy_protocol === next.icon_local_copy_protocol) {
+    current.dataset_epoch === next.dataset_epoch && current.icon_local_copy_protocol === next.icon_local_copy_protocol && current.icon_inline_copy_protocol === next.icon_inline_copy_protocol) {
     return current
   }
 
@@ -233,7 +233,7 @@ export function mergeAdminData(current: AdminData, next: AdminData): AdminData {
 
 export function adminDataToPublicData(data: AdminData, settings: Settings): PublicData {
   return {
-    ...(data.dataset_epoch ? { dataset_epoch: data.dataset_epoch, icon_local_copy_protocol: data.icon_local_copy_protocol } : {}),
+    ...(data.dataset_epoch ? { dataset_epoch: data.dataset_epoch, icon_local_copy_protocol: data.icon_local_copy_protocol, icon_inline_copy_protocol: data.icon_inline_copy_protocol } : {}),
     categories: data.categories,
     bookmarks: toPublicBookmarks(data.bookmarks),
     settings: toPublicSettings(settings),

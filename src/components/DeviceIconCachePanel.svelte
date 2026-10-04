@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { iconDevice, type IconDevicePhase } from '../lib/iconDeviceState'
+  import { ICON_LOCAL_COPY_ENABLED, iconDevice, type IconDevicePhase } from '../lib/iconDeviceState'
   import { ICON_COPY_BODY_BUDGET } from '../../shared/iconLocalCopy'
   const phaseText: Record<IconDevicePhase, string> = {
     disabled: '未启用', 'waiting-auth': '等待有效的登录校验', checking: '正在检查此设备的副本', ready: '已启用',
@@ -18,6 +18,7 @@
   const size = (bytes: number) => (bytes / (1024 * 1024)).toFixed(2) + ' MiB'
 </script>
 
+{#if ICON_LOCAL_COPY_ENABLED}
 <section class="device-cache" aria-labelledby="device-cache-title">
   <div class="device-heading"><div><h3 id="device-cache-title">此设备的图标副本</h3><p>只影响此浏览器，不随全站设置保存或备份。</p></div><span class="device-tag">本机</span></div>
   <label class="trust-choice"><input type="checkbox" checked={$iconDevice.trusted} disabled={busy} on:change={(event) => toggle(event.currentTarget.checked)} /><span>在此设备保留书签图标</span></label>
@@ -27,6 +28,7 @@
   <div class="device-actions"><button type="button" disabled={busy || !onVerify} on:click={verify}>联网校验</button><button type="button" disabled={busy} on:click={clear}>清理此设备图标副本</button><button type="button" disabled={busy || !$iconDevice.trusted} on:click={() => toggle(false)}>关闭并清理</button></div>
   <p class="device-footnote">只清理本机副本，不删除云端书签或图片；之后仅按需恢复当前使用的图标。</p>
 </section>
+{/if}
 
 <style>
   .device-cache { border: 1px solid var(--sp-group-border); background: var(--sp-group-bg); border-radius: 16px; padding: 22px; color: var(--sp-text); }

@@ -6,7 +6,7 @@ export function iconMetadataFromRows(rows: Array<{ key: string; value: string | 
   try {
     const epoch: unknown = JSON.parse(raw)
     return typeof epoch === 'string' && /^[a-f0-9]{32}$/.test(epoch)
-      ? { dataset_epoch: epoch, icon_local_copy_protocol: ICON_COPY_PROTOCOL }
+      ? { dataset_epoch: epoch, icon_local_copy_protocol: ICON_COPY_PROTOCOL, icon_inline_copy_protocol: ICON_COPY_PROTOCOL }
       : {}
   } catch {
     return {}

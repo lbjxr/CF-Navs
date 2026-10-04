@@ -2,12 +2,15 @@ import { ICON_COPY_PROTOCOL, iconSessionScope, type IconAuthReceipt, type IconCo
 import { AUTH_STORAGE_KEY, getStoredAuthSession, notifyBrowserStorageChange, refreshStoredAuthSession, subscribeBrowserStorageChanges } from './api'
 import { iconLeaseUntil, iconPermissionFailure, iconScopeKey, type IconStorageLease, type IconStorageTotals } from './iconCachePolicy'
 import { createIconCopyStorage, IconStorageError, type IconCopyStorage } from './iconCopyStorage'
+import { LEGACY_ICON_LOCAL_STORAGE_PREFIX, migrateLegacyIconCopies } from './legacyIconCopyMigration'
 
 export const ICON_DEVICE_KEY = 'cf-navs.icon-device-v1'
+export const ICON_LOCAL_COPY_ENABLED = import.meta.env.MODE !== 'icon-compat'
 export type IconDevicePhase = 'disabled' | 'waiting-auth' | 'ready' | 'checking' | 'expired' | 'unsupported' | 'unavailable' | 'cleanup-failed'
-interface DeviceRecord { schema: 1; trusted: boolean; receipt: IconAuthReceipt | null; dataset: string | null; protocol?: number; observedAt: number; cleanupPending: boolean; revokedScope?: string | null }
+interface DeviceRecord { schema: 1; trusted: boolean; receipt: IconAuthReceipt | null; dataset: string | null; protocol?: number; inlineProtocol?: number; observedAt: number; cleanupPending: boolean; revokedScope?: string | null }
 export interface IconDeviceSnapshot {
   trusted: boolean; phase: IconDevicePhase; epoch: number; lease: IconStorageLease | null
+  inlineProtocol?: number
   dataset: string | null; leaseUntil: number | null; checkedAt: number | null
   stats: IconStorageTotals; error: string | null
 }
@@ -18,6 +21,8 @@ interface DeviceOptions {
   load: () => string | null
   save: (record: string) => void
   notify?: () => void
+  prepareLegacyCopies?: (force?: boolean) => Promise<boolean>
+  enabled?: boolean
   now?: () => number
   scope?: (token: string) => Promise<string>
 }
@@ -36,6 +41,7 @@ function readRecord(raw: string | null): DeviceRecord {
 export function createIconDeviceController(options: DeviceOptions) {
   const now = options.now ?? Date.now
   const scope = options.scope ?? iconSessionScope
+  const enabled = options.enabled !== false
   let record = blankRecord()
   let dataDataset: string | null = null
   let activeToken = options.session()?.token ?? null
@@ -44,6 +50,8 @@ export function createIconDeviceController(options: DeviceOptions) {
   let sequence = 0
   let writing = false
   let initialized = false
+  let recordLoaded = false
+  let initialization: Promise<void> | null = null
   let disposed = false
   let expiry: ReturnType<typeof setTimeout> | null = null
   let clearTask: Promise<void> = Promise.resolve()
@@ -61,8 +69,20 @@ export function createIconDeviceController(options: DeviceOptions) {
     catch { block('unavailable', '无法保存此设备设置；已停止使用图标副本，请检查浏览器存储权限。'); return false }
     finally { writing = false }
   }
+  async function prepareLegacyCopies(force = false): Promise<boolean> {
+    try {
+      if (await (options.prepareLegacyCopies?.(force) ?? Promise.resolve(true))) {
+        if (state.phase === 'cleanup-failed') update({ error: null })
+        return true
+      }
+    } catch {
+      // A failed migration must keep the trusted-copy path closed.
+    }
+    block('cleanup-failed', '旧版图标副本清理未完成；可信设备副本暂不可用，请重试或检查浏览器存储权限。')
+    return false
+  }
   function permitted(): boolean {
-    return !disposed && !record.cleanupPending && record.revokedScope !== currentScope && options.session()?.token === activeToken && activeToken !== null &&
+    return enabled && !disposed && !record.cleanupPending && record.revokedScope !== currentScope && options.session()?.token === activeToken && activeToken !== null &&
       dataDataset === record.dataset && dataDataset !== null &&
       iconPermissionFailure({ trusted: record.trusted, protocol: record.protocol, cacheScope: currentScope,
         receipt: record.receipt, now: now(), lastObservedAt: Math.max(record.observedAt, lastClock) }) === null
@@ -81,9 +101,13 @@ export function createIconDeviceController(options: DeviceOptions) {
   }
 
   async function synchronize(retry = true): Promise<void> {
+    if (!enabled) {
+      if (record.trusted || state.phase !== 'unsupported') await closeForCompatibility()
+      return
+    }
     const own = ++sequence
     const token = options.session()?.token ?? null
-    if (!record.trusted) { update({ trusted: false, phase: 'disabled', lease: null }); return }
+    if (!record.trusted) { update({ trusted: false, phase: 'disabled', lease: null, error: null }); return }
     if (record.cleanupPending) { update({ phase: 'cleanup-failed', lease: null }); return }
     if (!token || !record.receipt) { update({ trusted: true, phase: 'waiting-auth', lease: null }); return }
     try {
@@ -112,7 +136,7 @@ export function createIconDeviceController(options: DeviceOptions) {
       if (!valid()) return
       const stats = await options.storage.state()
       if (!valid()) return
-      update({ trusted: true, phase: 'ready', lease, dataset: record.dataset, leaseUntil: iconLeaseUntil(record.receipt!), checkedAt: record.receipt!.checked_at,
+      update({ trusted: true, phase: 'ready', lease, inlineProtocol: record.inlineProtocol, dataset: record.dataset, leaseUntil: iconLeaseUntil(record.receipt!), checkedAt: record.receipt!.checked_at,
         stats: stats ? { bodyBytes: stats.bodyBytes, entries: stats.entries, indexBytes: stats.indexBytes } : state.stats, error: null })
       scheduleExpiry()
     } catch (error) {
@@ -145,18 +169,40 @@ export function createIconDeviceController(options: DeviceOptions) {
     return clearTask
   }
 
-  async function initialize() {
-    if (initialized) return
-    initialized = true
-    try { record = readRecord(options.load()) } catch { block('unavailable'); return }
-    lastClock = record.observedAt
-    update({ trusted: record.trusted, dataset: record.dataset, checkedAt: record.receipt?.checked_at ?? null })
-    if (record.cleanupPending) { await revoke(); return }
-    if (!activeToken && record.receipt) { await revoke(); return }
-    await synchronize()
+  async function closeForCompatibility(): Promise<void> {
+    record = { ...record, trusted: false }
+    update({ trusted: false })
+    await revoke('unsupported', true)
+    try {
+      await options.storage.clear()
+    } catch {
+      block('cleanup-failed', '兼容回滚清理未完成；图标副本能力保持关闭，请重试清理。')
+    }
+  }
+
+  async function initialize(forceLegacyCheck = false) {
+    if (initialized || disposed) return
+    if (initialization) return initialization
+    const task = (async () => {
+      if (!recordLoaded) {
+        try { record = readRecord(options.load()) } catch { block('unavailable'); return }
+        recordLoaded = true
+        lastClock = record.observedAt
+        update({ trusted: record.trusted, dataset: record.dataset, checkedAt: record.receipt?.checked_at ?? null })
+      }
+      if (!await prepareLegacyCopies(forceLegacyCheck)) return
+      initialized = true
+      if (!enabled) { await closeForCompatibility(); return }
+      if (record.cleanupPending) { await revoke(); return }
+      if (!activeToken && record.receipt) { await revoke(); return }
+      await synchronize()
+    })()
+    initialization = task
+    try { await task } finally { if (initialization === task) initialization = null }
   }
   async function acceptMetadata(metadata: IconCopyMetadata, expectedToken: string | null, isCurrent: () => boolean): Promise<void> {
     await initialize()
+    if (!initialized || !enabled) return
     let pending: Promise<void>
     do { pending = clearTask; await pending } while (pending !== clearTask)
     if (!expectedToken || expectedToken !== options.session()?.token || !isCurrent()) return
@@ -172,19 +218,32 @@ export function createIconDeviceController(options: DeviceOptions) {
     activeToken = expectedToken
     currentScope = digest
     if (record.dataset && record.dataset !== metadata.dataset_epoch) block('checking')
-    record = { ...record, revokedScope: null, receipt: { ...receipt, expires_at: Math.min(receipt.expires_at, options.session()!.expires_at) }, dataset: metadata.dataset_epoch, protocol: metadata.icon_local_copy_protocol, observedAt: now() }
+    record = { ...record, revokedScope: null, receipt: { ...receipt, expires_at: Math.min(receipt.expires_at, options.session()!.expires_at) }, dataset: metadata.dataset_epoch, protocol: metadata.icon_local_copy_protocol, inlineProtocol: metadata.icon_inline_copy_protocol, observedAt: now() }
     if (!persist()) return
     update({ dataset: record.dataset, checkedAt: receipt.checked_at, leaseUntil: iconLeaseUntil(receipt) })
     await synchronize()
   }
   async function setTrusted(trusted: boolean) {
     await initialize()
-    if (!trusted) { record = { ...record, trusted: false }; update({ trusted: false }); await revoke('disabled', false); return }
+    if (!trusted) {
+      record = { ...record, trusted: false }; update({ trusted: false }); await revoke('disabled', false)
+      if (!await prepareLegacyCopies()) return
+      if (!initialized) await initialize()
+      return
+    }
+    if (!initialized || !enabled) return
     record = { ...record, trusted: true }
     update({ trusted: true })
     if (persist()) await synchronize()
   }
-  async function clearCopies() { await initialize(); await revoke(record.trusted ? 'checking' : 'disabled', false); if (!record.cleanupPending) await synchronize() }
+  async function clearCopies() {
+    const wasInitialized = initialized
+    await initialize()
+    await revoke(record.trusted ? 'checking' : 'disabled', false)
+    if (record.cleanupPending) return
+    if (!wasInitialized) await initialize()
+    else await synchronize()
+  }
   function setDataset(dataset: string | undefined) {
     const next = dataset ?? null
     if (dataDataset === next) return
@@ -212,7 +271,10 @@ export function createIconDeviceController(options: DeviceOptions) {
       else void synchronize()
     }
   }
-  async function resume() {
+  async function resume(forceLegacyCheck = false) {
+    if (disposed) return
+    if (recordLoaded && !await prepareLegacyCopies(forceLegacyCheck)) return
+    await initialize(forceLegacyCheck)
     if (!initialized || disposed) return
     authChanged()
     if (state.lease) block('checking')
@@ -245,16 +307,22 @@ export function createIconDeviceController(options: DeviceOptions) {
 export const iconDevice = createIconDeviceController({ storage: createIconCopyStorage(), session: getStoredAuthSession,
   load: () => typeof localStorage === 'undefined' ? null : localStorage.getItem(ICON_DEVICE_KEY),
   save: value => { if (typeof localStorage === 'undefined') throw new Error('storage unavailable'); localStorage.setItem(ICON_DEVICE_KEY, value) },
+  prepareLegacyCopies: async force => (await migrateLegacyIconCopies(force)).complete,
+  enabled: ICON_LOCAL_COPY_ENABLED,
   notify: () => notifyBrowserStorageChange(ICON_DEVICE_KEY),
 })
 export function startIconDevice(): () => void {
   const stop = subscribeBrowserStorageChanges(key => iconDevice.storageChanged(key))
-  const resume = () => { if (document.visibilityState !== 'hidden') { refreshStoredAuthSession(); void iconDevice.resume() } else iconDevice.checkpoint() }
+  const resume = () => { if (document.visibilityState !== 'hidden') { refreshStoredAuthSession(); void iconDevice.resume(true) } else iconDevice.checkpoint() }
   const checkpoint = () => iconDevice.checkpoint()
+  const legacyStorageWrite = (event: StorageEvent) => {
+    if (event.newValue !== null && event.key?.startsWith(LEGACY_ICON_LOCAL_STORAGE_PREFIX)) void iconDevice.resume(true)
+  }
   window.addEventListener('pagehide', checkpoint)
   window.addEventListener('pageshow', resume)
   window.addEventListener('focus', resume)
+  window.addEventListener('storage', legacyStorageWrite)
   document.addEventListener('visibilitychange', resume)
-  void iconDevice.initialize()
-  return () => { stop(); window.removeEventListener('pagehide', checkpoint); window.removeEventListener('pageshow', resume); window.removeEventListener('focus', resume); document.removeEventListener('visibilitychange', resume); iconDevice.dispose() }
+  void iconDevice.initialize(true)
+  return () => { stop(); window.removeEventListener('pagehide', checkpoint); window.removeEventListener('pageshow', resume); window.removeEventListener('focus', resume); window.removeEventListener('storage', legacyStorageWrite); document.removeEventListener('visibilitychange', resume); iconDevice.dispose() }
 }

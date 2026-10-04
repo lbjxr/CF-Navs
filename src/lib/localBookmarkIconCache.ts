@@ -1,9 +1,9 @@
-const CACHE_NAME = 'cf-navs-bookmark-icons-v2'
-const LEGACY_CACHE_NAMES = ['cf-navs-bookmark-icons-v1']
+import { CURRENT_EXTERNAL_ICON_CACHE_NAME, LEGACY_ICON_LOCAL_STORAGE_PREFIX } from './legacyIconCopyMigration'
+
+const CACHE_NAME = CURRENT_EXTERNAL_ICON_CACHE_NAME
 const MAX_LOCAL_ICON_CACHE_BYTES = 512 * 1024
 const CACHE_ORIGIN = 'https://cf-navs.local'
 const CACHE_PATH_PREFIX = '/bookmark-icon/'
-const STORAGE_PREFIX = 'cf-navs.bookmark-icon.'
 
 export type BookmarkIconCacheInput = {
   id: string | number
@@ -15,20 +15,6 @@ function canUseCacheStorage(): boolean {
   return typeof window !== 'undefined' && 'caches' in window
 }
 
-let legacyCacheCleanup: Promise<void> | null = null
-
-function clearLegacyCacheStorage(): Promise<void> {
-  if (!canUseCacheStorage()) return Promise.resolve()
-  const deleteCache = typeof caches.delete === 'function' ? caches.delete.bind(caches) : null
-  if (!deleteCache) return Promise.resolve()
-  if (!legacyCacheCleanup) {
-    legacyCacheCleanup = Promise.all(
-      LEGACY_CACHE_NAMES.map((name) => deleteCache(name)),
-    ).then(() => undefined).catch(() => undefined)
-  }
-  return legacyCacheCleanup
-}
-
 function isObjectIconProxyUrl(url: string): boolean {
   if (url.startsWith('/api/icon/')) return true
   try {
@@ -37,10 +23,6 @@ function isObjectIconProxyUrl(url: string): boolean {
   } catch {
     return false
   }
-}
-
-function canUseLocalStorage(): boolean {
-  return typeof window !== 'undefined' && 'localStorage' in window
 }
 
 function createHash(input: string): string {
@@ -55,10 +37,6 @@ function cacheRequest(cacheKey: string): Request {
   return new Request(`${CACHE_ORIGIN}${CACHE_PATH_PREFIX}${encodeURIComponent(cacheKey)}`, {
     method: 'GET',
   })
-}
-
-function localStorageKey(cacheKey: string): string {
-  return `${STORAGE_PREFIX}${cacheKey}`
 }
 
 function bookmarkCacheKeyPrefix(cacheKey: string): string | null {
@@ -76,20 +54,6 @@ function isBookmarkIconCacheRequest(request: Request, cacheKeyPrefix: string): b
     )
   } catch {
     return false
-  }
-}
-
-function cacheKeyFromRequest(request: Request): string | null {
-  try {
-    const url = new URL(request.url)
-    if (url.origin !== CACHE_ORIGIN || !url.pathname.startsWith(CACHE_PATH_PREFIX)) {
-      return null
-    }
-
-    const encodedKey = url.pathname.slice(CACHE_PATH_PREFIX.length)
-    return encodedKey ? decodeURIComponent(encodedKey) : null
-  } catch {
-    return null
   }
 }
 
@@ -178,10 +142,6 @@ export function readCachedBookmarkIconDataUri(cacheKey: string): string | null {
 }
 
 export async function readCachedBookmarkIconUrl(cacheKey: string): Promise<string | null> {
-  await clearLegacyCacheStorage()
-  const dataUri = readCachedBookmarkIconDataUri(cacheKey)
-  if (dataUri) return dataUri
-
   if (!canUseCacheStorage()) return null
 
   try {
@@ -201,12 +161,12 @@ export async function readCachedBookmarkIconUrl(cacheKey: string): Promise<strin
 }
 
 export async function deleteCachedBookmarkIcon(cacheKey: string): Promise<void> {
-  if (canUseLocalStorage()) {
-    try {
-      localStorage.removeItem(localStorageKey(cacheKey))
-    } catch {
-      // Best-effort cleanup.
+  try {
+    if (typeof window !== 'undefined' && 'localStorage' in window) {
+      window.localStorage.removeItem(`${LEGACY_ICON_LOCAL_STORAGE_PREFIX}${cacheKey}`)
     }
+  } catch {
+    // Best-effort cleanup.
   }
 
   if (!canUseCacheStorage()) return
@@ -220,13 +180,11 @@ export async function deleteCachedBookmarkIcon(cacheKey: string): Promise<void> 
 }
 
 export async function writeBookmarkIconDataUri(cacheKey: string, dataUri: string): Promise<void> {
-  await clearLegacyCacheStorage()
   if (!isDataImage(dataUri)) return
   await deleteCachedBookmarkIcon(cacheKey)
 }
 
 export async function fetchBookmarkIcon(cacheKey: string, url: string): Promise<BookmarkIconFetchResult> {
-  await clearLegacyCacheStorage()
   if (!url) return { url: null, status: 'unavailable' }
 
   try {
@@ -280,4 +238,3 @@ export async function fetchCachedBookmarkIconUrl(
   }
   return { url, stale: false }
 }
-

@@ -11,7 +11,7 @@
 
 | ID | 优先 | 事项 | 当前边界 | 详情 |
 | --- | --- | --- | --- | --- |
-| REQ-15 | P1 | 可信设备图标本地优先：一期书签、二期分类 | IC-P02～P05 本地实现与验证完成；P05 接通完整书签展示、编辑与快照投影。剩余 P06 迁移/兼容回滚、P07 全量审计、规模数据及测试站点/生产部署后验证；分类 Q01～Q04 待 P07 安全门通过并另获授权启动 | [需求](plans/BOOKMARK_ICON_LOCAL_FIRST_REQUIREMENTS.md) / [开发计划](plans/BOOKMARK_ICON_LOCAL_FIRST_DEVELOPMENT.md) |
+| REQ-15 | P1 | 可信设备图标本地优先：一期书签、二期分类 | IC-P02～P06 本地实现与验证完成；P06 覆盖兼容回滚清理、旧命名空间迁移和快照图片普通代理回退。当前验证：类型检查、149 文件/1167 单测、构建、隔离 IndexedDB 16/16、正常/兼容 Chrome 34/34 与 4/4、API 冒烟 109/109。剩余 P07 全量审计、100/500/1,000 规模数据及测试站点/生产部署后验证；P05/P06 已分别本地提交，未推送或部署。分类二期 Q01～Q04 须在 P07 安全门通过并另获授权后启动 | [需求](plans/BOOKMARK_ICON_LOCAL_FIRST_REQUIREMENTS.md) / [开发计划](plans/BOOKMARK_ICON_LOCAL_FIRST_DEVELOPMENT.md) |
 
 ## 2. 需要裁定
 

@@ -203,7 +203,7 @@ publicRoutes.get('/public/data', async (c) => {
     bookmarks: publicDataSource.bookmarks,
     settings: toPublicSettings(publicSettings),
     version: publicDataSource.version,
-    ...(publicDataSource.dataset_epoch ? { dataset_epoch: publicDataSource.dataset_epoch, icon_local_copy_protocol: publicDataSource.icon_local_copy_protocol } : {}),
+    ...(publicDataSource.dataset_epoch ? { dataset_epoch: publicDataSource.dataset_epoch, icon_local_copy_protocol: publicDataSource.icon_local_copy_protocol, icon_inline_copy_protocol: publicDataSource.icon_inline_copy_protocol } : {}),
     ...(privateAccessAllowed && token ? { auth_receipt: await iconAuthReceipt(token, c.get('sessionExpiresAt')) } : {}),
   }
 

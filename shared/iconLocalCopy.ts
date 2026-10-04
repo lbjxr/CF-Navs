@@ -30,6 +30,7 @@ export interface IconAuthReceipt {
 export interface IconCopyMetadata {
   dataset_epoch?: string
   icon_local_copy_protocol?: typeof ICON_COPY_PROTOCOL
+  icon_inline_copy_protocol?: typeof ICON_COPY_PROTOCOL
   auth_receipt?: IconAuthReceipt
 }
 

@@ -181,7 +181,7 @@ describe('local bookmark icon cache', () => {
     expect(firstUrl).toMatch(/^blob:/)
     expect(reopenedUrl).toMatch(/^blob:/)
     expect(entries.size).toBe(1)
-    expect(legacyCacheDeletes).toContain('cf-navs-bookmark-icons-v1')
+    expect(legacyCacheDeletes).toEqual([])
     if (firstUrl) revokeLocalIconUrl(firstUrl)
     if (reopenedUrl) revokeLocalIconUrl(reopenedUrl)
   })

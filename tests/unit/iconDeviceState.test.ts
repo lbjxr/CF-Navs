@@ -7,9 +7,9 @@ const firstScope = 'a'.repeat(64)
 const secondScope = 'b'.repeat(64)
 const controllers: ReturnType<typeof createIconDeviceController>[] = []
 afterEach(() => { controllers.splice(0).forEach(controller => controller.dispose()); vi.useRealTimers() })
-function setup() {
+function setup(prepareLegacyCopies?: (force?: boolean) => Promise<boolean>, enabled = true, initialRecord: string | null = null) {
   let session: { token: string; expires_at: number } | null = { token: 'fixture-one', expires_at: 100000 }
-  let record: string | null = null
+  let record: string | null = initialRecord
   let control: any = null
   let clock = 2000
   let denyClear = false
@@ -20,13 +20,13 @@ function setup() {
       if (!allowed() || (control && (control.scope !== lease.scope || control.generation !== lease.generation) && previous?.generation !== control.generation)) throw new IconStorageError('stale')
       control = { ...lease, enabled: true, bodyBytes: 0, entries: 0, indexBytes: 4096 }
     }),
-    clear: vi.fn(async (lease: any) => { if (denyClear) throw new Error('disk failure'); if (control?.generation === lease.generation) control = { ...control, enabled: false, bodyBytes: 0, entries: 0 } }),
+    clear: vi.fn(async (lease?: any) => { if (denyClear) throw new Error('disk failure'); if (!lease || control?.generation === lease.generation) { if (control) control = { ...control, enabled: false, bodyBytes: 0, entries: 0 } } }),
     close: vi.fn(async () => undefined),
   } as unknown as IconCopyStorage
   const make = () => {
     const device = createIconDeviceController({ storage, session: () => session, load: () => record,
       save: value => { if (denySave) throw new Error('storage disabled'); record = value }, now: () => clock,
-      scope: async token => token === 'fixture-one' ? firstScope : secondScope })
+      scope: async token => token === 'fixture-one' ? firstScope : secondScope, prepareLegacyCopies, enabled })
     controllers.push(device)
     return device
   }
@@ -131,5 +131,71 @@ describe('device-scoped icon permission lifecycle', () => {
     await f.device.setTrusted(true)
     expect(f.device.snapshot().phase).toBe('unavailable')
     expect(f.device.capture()).toBeNull()
+  })
+  it('blocks trust until legacy cleanup succeeds and permits a later retry', async () => {
+    let migrationComplete = false
+    const f = setup(async () => migrationComplete)
+    await f.device.initialize()
+    f.device.setDataset(dataset)
+    await f.device.setTrusted(true)
+    expect(f.device.snapshot().phase).toBe('cleanup-failed')
+    expect(f.device.snapshot().trusted).toBe(false)
+    expect(f.device.capture()).toBeNull()
+
+    migrationComplete = true
+    await f.device.resume(true)
+    await f.device.acceptMetadata(f.metadata(), 'fixture-one', () => true)
+    await f.device.setTrusted(true)
+    expect(f.device.capture()).not.toBeNull()
+  })
+  it('keeps trusted copies blocked after legacy cleanup fails, but still allows closing and clearing', async () => {
+    let migrationComplete = true
+    const f = setup(async () => migrationComplete)
+    await f.ready()
+    migrationComplete = false
+
+    await f.device.resume(true)
+    expect(f.device.snapshot().phase).toBe('cleanup-failed')
+    expect(f.device.capture()).toBeNull()
+
+    await f.device.setTrusted(false)
+    expect(f.record().trusted).toBe(false)
+    expect(f.device.capture()).toBeNull()
+    expect(f.device.snapshot().phase).toBe('cleanup-failed')
+
+    migrationComplete = true
+    await f.device.resume(true)
+    expect(f.device.snapshot().phase).toBe('disabled')
+    expect(f.device.snapshot().trusted).toBe(false)
+    expect(f.storage.clear).toHaveBeenCalled()
+  })
+  it('does not enable local copies when an older server omits the protocol', async () => {
+    const f = setup()
+    await f.device.initialize()
+    f.device.setDataset(dataset)
+    await f.device.acceptMetadata({ ...f.metadata(), icon_local_copy_protocol: undefined }, 'fixture-one', () => true)
+    await f.device.setTrusted(true)
+
+    expect(f.device.snapshot().trusted).toBe(true)
+    expect(f.device.capture()).toBeNull()
+    expect(f.storage.activate).not.toHaveBeenCalled()
+  })
+  it('builds a compatibility rollback that revokes trust, clears the new namespace, and cannot be re-enabled', async () => {
+    const priorRecord = JSON.stringify({ schema: 1, trusted: true,
+      receipt: { cache_scope: firstScope, checked_at: 1000, expires_at: 100000 }, dataset, protocol: 1,
+      observedAt: 2000, cleanupPending: false })
+    const f = setup(undefined, false, priorRecord)
+    await f.device.initialize()
+
+    expect(f.device.snapshot().phase).toBe('unsupported')
+    expect(f.device.snapshot().trusted).toBe(false)
+    expect(f.record().trusted).toBe(false)
+    expect(f.record().receipt).toBeNull()
+    expect(f.storage.clear).toHaveBeenCalled()
+
+    await f.device.acceptMetadata(f.metadata(), 'fixture-one', () => true)
+    await f.device.setTrusted(true)
+    expect(f.device.capture()).toBeNull()
+    expect(f.storage.activate).not.toHaveBeenCalled()
   })
 })

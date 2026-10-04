@@ -10,6 +10,7 @@
   "scripts": {
     "dev:web": "vite",
     "build": "vite build",
+    "build:icon-compat": "vite build --mode icon-compat",
     "type-check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json",
     "test": "node --experimental-sqlite node_modules/vitest/vitest.mjs run",
     "test:icon-storage": "node scripts/icon-storage-regression.mjs",
