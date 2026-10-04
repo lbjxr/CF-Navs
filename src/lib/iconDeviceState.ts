@@ -90,7 +90,20 @@ export function createIconDeviceController(options: DeviceOptions) {
   function scheduleExpiry() {
     if (expiry) clearTimeout(expiry)
     if (!record.receipt) return
-    expiry = setTimeout(() => { block('expired'); }, Math.max(0, Math.min(0x7fffffff, iconLeaseUntil(record.receipt) - now())))
+    const scheduledReceipt = { ...record.receipt }
+    expiry = setTimeout(() => {
+      expiry = null
+      const currentReceipt = record.receipt
+      // A callback that was already queued can run after a renewed receipt replaced
+      // the timer. It must not expire the newer lease.
+      if (!currentReceipt || currentReceipt.cache_scope !== scheduledReceipt.cache_scope ||
+        currentReceipt.checked_at !== scheduledReceipt.checked_at || currentReceipt.expires_at !== scheduledReceipt.expires_at) return
+      if (now() < iconLeaseUntil(currentReceipt)) {
+        scheduleExpiry()
+        return
+      }
+      block('expired')
+    }, Math.max(0, Math.min(0x7fffffff, iconLeaseUntil(scheduledReceipt) - now())))
   }
   function failure(error: unknown) {
     if (error instanceof IconStorageError && error.reason === 'stale') return

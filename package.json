@@ -17,6 +17,7 @@
     "smoke": "node scripts/smoke-local.mjs",
     "perf:audit": "node scripts/perf-audit.mjs",
     "regression:icons:local": "node scripts/smoke-local.mjs --icons",
+    "regression:icons:prod": "node scripts/category-icon-prod-regression.mjs",
     "regression:icons:perf": "node scripts/smoke-local.mjs --category-perf",
     "regression:chrome": "node scripts/chrome-regression.mjs",
     "accept:prod": "node scripts/prod-acceptance.mjs",
