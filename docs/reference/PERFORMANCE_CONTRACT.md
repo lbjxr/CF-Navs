@@ -29,6 +29,14 @@ This document records the current performance-sensitive behavior that should not
 - Failed icon handling should prefer stable fallback behavior over repeated retries in the same interaction path.
 - Anonymous icon proxies must perform the current public-visibility metadata gate **before every shared edge-cache lookup**. Cache hits now pay the gate's targeted metadata read; this is intentional for privacy revocation and must be measured by `perf:audit` rather than removed to recover the old hit count. The gate must fail closed.
 
+## Trusted Device Icon Copies
+
+- Persistent object-icon copies are an explicit device opt-in and require a current authenticated receipt. Standard mode and anonymous visitors continue to use the ordinary `no-store` proxy path; ordinary proxy responses are never persisted.
+- Trusted bookmark copies are fetched only through the session-authenticated `/api/icon-local-copy` protocol and are stored in one IndexedDB database. The Service Worker, Cache Storage, aggregate snapshots, and `localStorage` must not mirror the image bodies.
+- The shared bookmark/category budget is 10 MiB of bodies, 1,000 entries, and 512 KiB of index metadata; one body is at most 512 KiB. LRU pressure evicts from the 10 MiB high-water mark to 8 MiB. Category icons do not yet use this storage path.
+- For an unchanged, warmed, authorized, non-evicted bookmark, refresh or same-profile reopen should issue zero icon-body requests. Version/authorization checks remain separately observable and are not counted as icon bodies.
+- `npm run test:icon-storage` measures the native IndexedDB path with synthetic SVGs: 20-item first-batch samples and full-set stress sweeps at 100/500/1,000 entries, five rounds each. Its decode timings are a storage-layer baseline only; it does not measure actual viewport rendering, Worker/D1 queries, production edge behavior, or another browser.
+
 ## Service Worker And Storage
 
 - Navigation requests use stale-while-revalidate: the cached `/index.html` is served immediately and refreshed in the background. Do not revert to network-first without measuring the second-visit first paint.

@@ -13,16 +13,18 @@ CF-Navs 支持多种图标来源：
 - 自定义文字或表情
 - 基于完整书签标题生成的本地 SVG 文字图标，长标题按字符宽度自动换行到最多 4 行
 
-新增或编辑书签时，普通 HTTP(S) 图标会通过刷新接口写入书签图标缓存。刷新接口使用短超时抓取外站图标，避免保存流程被慢速 favicon 服务长时间阻塞；抓取失败时保留已有 `icon_blob`，没有缓存则返回 `null`。**聚合接口不返回二进制 `icon_blob`，而返回 `icon_cached` 轻量标志**；首页普通渲染据此使用已有 data URI，或在本地副本缺失时读取 `/api/icon/:id` 但只把响应用于当前渲染，不再持久化对象图标代理响应。旧版 `cf-navs-bookmark-icons-v1` 会在新本地缓存初始化时清理；原始外站图标仍可使用新的本地优化缓存。失败时回退到兼容代理或已保存的普通 HTTP(S) 图标 URL。后台列表或显式刷新结果可以使用完整实体中的 `icon_blob`。
+新增或编辑书签时，普通 HTTP(S) 图标会通过刷新接口写入书签图标正文；失败时保留最近一次成功正文。聚合响应不返回二进制 `icon_blob`，只给出轻量 `icon_cached` 与版本描述。标准模式下，首页可按需读取普通 `/api/icon/:id`，响应仅用于当前渲染且保持 `no-store`。用户明确开启可信设备后，首页卡片、经常访问、搜索、Spotlight、后台列表和编辑保存统一通过图标协调层读取或取得本地副本；取得只走会话鉴权的 `/api/icon-local-copy`，通过版本与解码校验后正文和索引写入专用 IndexedDB。普通代理响应、聚合快照和 localStorage 不保存这份正文。可信开关默认关闭；回执不因图片下载或离线命中续租。
 
 相关接口：
 
 - `POST /api/bookmarks/:id/icon-cache/refresh`
+- `POST /api/icon-local-copy`（会话鉴权的书签图标物化协议）
 - `GET /api/icon/:id`
 - `GET /api/category-icon/:id`
 - `GET /api/iconify/:set/:name.svg`
 
 - `/api/icon/:id` 与 `/api/category-icon/:id` 主要保留为后台预览、兼容和兜底代理。匿名请求先过当前可见性 gate，再优先读取 Cloudflare edge cache；Worker 将公开 edge 响应写入 `caches.default`，但返回浏览器前统一改成 `Cache-Control: no-store`，避免共享域名的 Zone Browser Cache TTL 覆盖 `max-age=0` 后在客户端保存可撤回图标。分类图标与 Iconify 预览同样区分失败类型：永久缺失可短时使用 edge fallback，超时/网络错误/429/5xx 等瞬时失败返回 `no-store`，避免浏览器、edge 或 Service Worker 把临时文字图标钉住。
+- 可信书签副本仅在当前设备、会话回执和租期许可下读取；单一 IndexedDB 同时维护正文、索引、容量和撤销栅栏。预算为书签/分类合计 10 MiB 正文、1,000 条、512 KiB 索引，单图 512 KiB；正文达到高水位后按 LRU 清至 8 MiB。分类对象当前仍使用原展示/代理路径，尚未加入该协议或预算。
 
 图标相关 worker 逻辑按职责拆分：
 

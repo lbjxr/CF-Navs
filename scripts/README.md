@@ -12,7 +12,7 @@
 
 - `npm test` 使用 Node 内置 SQLite 执行图标版本/迁移的真实 SQL 单元测试，传入 `--experimental-sqlite` 以兼容 Node 22.12；无需安装额外数据库依赖。Worker/D1 平台差异仍由 L1 检查。
 
-- `icon-storage-regression.mjs`：`npm run test:icon-storage` 在临时本地页面运行原生 IndexedDB 事务/双标签/配额/损坏修复验证，不读取测试站点配置或管理员凭据。使用独立无头 Chrome profile，结果与所有权清单写入系统临时目录，finally 清理并验证；它不是完整页面 E2E 的替代。
+- `icon-storage-regression.mjs`：`npm run test:icon-storage` 在临时本地页面运行原生 IndexedDB 事务/双标签/离线读盘/配额/损坏修复验证，并以 100/500/1,000 条合成 SVG 分别进行五轮 20 项首批样本与全量读盘/解码测量，报告中位数、p95、最大值、IDB 读取数、正文/索引占用和 object URL 峰值。不读取测试站点配置或管理员凭据；使用独立无头 Chrome profile，报告与所有权清单写入系统临时目录，finally 清理并验证。该结果只代表存储/解码层，不是整页渲染或 D1 性能证据，也不是完整页面 E2E 的替代。
 - `smoke-local.mjs`：**L1 一键闸门（`npm run smoke`）**。用唯一的 `.wrangler/state-smoke-<id>` 起一个隔离本地 Worker，自动选空闲端口、造一次性管理员密码，跑完 `smoke-test.mjs` 再拆掉。不碰开发者日常的 `.wrangler/state`，也不与 `npm run dev` 抢 8787。CI 在 Build 之后跑这一步。
 - `icon-ui-regression.mjs`：`npm run regression:icons:local` 复用 smoke-local 的隔离 Worker/D1 与一次性凭据，操作实际应用的设备缓存设置。默认只运行本机临时实例，拒绝生产域名；清理、窄屏与键盘都通过真实 CDP 输入检查。自定义 `SMOKE_PERSIST_TO` 必须是 `.wrangler` 下尚不存在的 `state-smoke-*` 目录，脚本拒绝删除已有目录。
 - `smoke-test.mjs`：API 冒烟断言本体（包括可信图标物化、描述冲突与临时数据清理），需要一个已运行的实例与**干净**数据库。直接跑它要自己准备环境，日常用 `npm run smoke`。

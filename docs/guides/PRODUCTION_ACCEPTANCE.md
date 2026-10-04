@@ -124,6 +124,7 @@ PROB-14 还要求至少有一个带书签的二级分类，并有不属于该子
 | PROB-19v 的 KV 写入故障注入 | 要让 KV 真的写失败才能走到 `store_unavailable` 分支，生产上没有安全的注入手段 |
 | REQ-08b 13 套预设视觉 | 要逐套写入 `background_preset_id`，属 Tier 1；且「好不好看」需要人眼 |
 | PROB-16 的数值断点 | `820px` 分行 2 行/98px、浮动按钮 `top=18` 这类一次性数值证据，已在台账里明确标为不构成持续回归 |
+| REQ-15 可信图标的部署与升级验收 | 当前 `accept:prod` / `perf:audit` 不会启用设备信任或取得可信副本；同 profile 离线、租期/权限撤回与两次部署兼容仍须在获授权的真实目标上单独验证。`test:icon-storage` 和 `regression:icons:local` 只证明隔离本地环境 |
 
 ## 6. 安全边界
 
@@ -193,5 +194,6 @@ Get-ChildItem $env:TEMP -Directory -Filter 'cf-navs-chrome-profile-*' | ForEach-
 | `npm run regression:chrome` | 生产 | 无（除显式开启密码轮换） | 更早的功能回归：首页/后台/搜索/右键菜单/鉴权探针 |
 | `npm run perf:audit` | 生产 | 无 | 性能预算：图标请求数、Cache Storage、传输量 |
 | `npm run smoke` | 本地 | 有（自建临时实例） | 自己起隔离实例 + 临时 D1，跑 API 端到端后拆除 |
+| `npm run test:icon-storage` | 本地 | 有（隔离 Chrome/临时 IndexedDB） | 原生存储、断网读盘与 100/500/1,000 条五轮暖命中基准；不测 Worker/D1 或生产平台 |
 
 `scripts/lib/cdpSession.mjs` 是 `accept:prod` 用的 CDP 会话层。`chrome-regression.mjs` 目前仍带着自己那份同源的内联实现 —— 两份尚未合并，等它下次需要改连接层时再迁移，不为了去重就动一个已经在用的验证工具。
