@@ -154,7 +154,19 @@ try {
       requests: [...document.querySelectorAll('[data-home-category-scope]')].length,
     }), category.id).catch(() => null)
     const traffic = session.responses.filter((item) => item.url.includes('/api/icon-local-copy') || item.url.includes('/api/category-icon/')).map((item) => ({ url: item.url.split('?')[0], status: item.status }))
-    throw new Error(`${error.message}; category=${category.id}; debug=${JSON.stringify(debug)}; traffic=${JSON.stringify(traffic)}`)
+    let panel = null
+    try {
+      await rawNavigate(`${origin}/admin`)
+      await waitFor(() => Boolean(document.querySelector('[data-testid="admin-tab-settings"]')), 'diagnostic admin navigation')
+      await session.call(() => document.querySelector('[data-testid="admin-tab-settings"]')?.click())
+      await waitFor(() => Boolean(document.querySelector('.settings-submenu')), 'diagnostic settings panel')
+      await session.call(() => [...document.querySelectorAll('.settings-submenu button')].find((item) => item.textContent.includes('设备缓存'))?.click())
+      await waitFor(() => Boolean(document.querySelector('.device-cache input')), 'diagnostic device controls')
+      panel = await session.call(() => ({ checked: document.querySelector('.device-cache input')?.checked, status: document.querySelector('.device-status')?.textContent ?? '' }))
+    } catch (diagnosticError) {
+      panel = { error: diagnosticError.message }
+    }
+    throw new Error(`${error.message}; category=${category.id}; debug=${JSON.stringify(debug)}; panel=${JSON.stringify(panel)}; traffic=${JSON.stringify(traffic)}`)
   }
   const cold = await session.call(pageReadCategoryCache, category.id)
   const coldCopies = session.responses.filter((item) => item.url.includes('/api/icon-local-copy') && item.status === 200).length

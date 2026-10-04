@@ -127,7 +127,13 @@ export function createIconDeviceController(options: DeviceOptions) {
       const digest = await scope(token)
       if (disposed || own !== sequence || token !== options.session()?.token) return
       currentScope = digest
-      const denied = iconPermissionFailure({ trusted: true, protocol: record.protocol, cacheScope: digest, receipt: record.receipt, now: now(), lastObservedAt: record.observedAt })
+      const currentNow = now()
+      const deniedByReceipt = iconPermissionFailure({ trusted: true, protocol: record.protocol, cacheScope: digest, receipt: record.receipt, now: currentNow, lastObservedAt: record.observedAt })
+      // A stale expiry decision can race a renewed receipt during startup. Recheck the
+      // current receipt before blocking; only its own lease boundary may expire it.
+      const denied = deniedByReceipt === 'expired' && record.receipt && currentNow < iconLeaseUntil(record.receipt)
+        ? null
+        : deniedByReceipt
       if (denied === 'scope-mismatch' || denied === 'unauthenticated') { record = { ...record, revokedScope: record.receipt?.cache_scope }; await revoke('waiting-auth'); return }
       if (denied) {
         block(denied === 'expired' || denied === 'clock' ? 'expired' : denied === 'unsupported' ? 'unsupported' : 'waiting-auth')
