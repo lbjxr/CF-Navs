@@ -51,6 +51,32 @@ function installBrowserStorage(origin = 'https://navs.example.test'): MemoryStor
 }
 
 describe('publicDataCache', () => {
+  it('refreshes legacy empty-icon metadata without discarding the offline snapshot', async () => {
+    const { readCachedPublicDataEntry, writeCachedPublicData } = await import('../../src/lib/publicDataCache')
+    const data = { ...publicData, bookmarks: [{ id: 7, icon_display: 'empty', icon_cached: false }] } as PublicData
+    await writeCachedPublicData(data, 'v1')
+    const key = localStorage.key(0)!
+    const payload = JSON.parse(localStorage.getItem(key)!)
+    delete payload.icon_snapshot_version
+    localStorage.setItem(key, JSON.stringify(payload))
+    const restored = await readCachedPublicDataEntry()
+    expect(restored?.version).toBeNull()
+    expect(restored?.data.bookmarks).toEqual(data.bookmarks)
+    // A successful remote refresh writes a current snapshot; valid empty icons
+    // must not force a full data download on every subsequent page load.
+    await writeCachedPublicData(data, 'v2')
+    expect((await readCachedPublicDataEntry())?.version).toBe('v2')
+  })
+  it('does not invalidate unaffected legacy snapshots', async () => {
+    const { readCachedPublicDataEntry, writeCachedPublicData } = await import('../../src/lib/publicDataCache')
+    await writeCachedPublicData(publicData, 'v1')
+    const key = localStorage.key(0)!
+    const payload = JSON.parse(localStorage.getItem(key)!)
+    delete payload.icon_snapshot_version
+    localStorage.setItem(key, JSON.stringify(payload))
+    expect((await readCachedPublicDataEntry())?.version).toBe('v1')
+  })
+
   beforeEach(() => {
     vi.resetModules()
     installBrowserStorage()

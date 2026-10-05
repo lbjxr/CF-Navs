@@ -125,6 +125,35 @@ try {
   await wait(() => document.querySelector('.device-status')?.textContent.includes('下次刷新'))
   compare('cold cache preserves every baseline image', baseline, await sample('cold'))
   compare('warm cache preserves every baseline image', baseline, await sample('warm'))
+  const damaged = await browser.call(async () => {
+    let count = 0
+    const damage = payload => {
+      if (!Array.isArray(payload?.data?.bookmarks)) return null
+      delete payload.icon_snapshot_version
+      payload.data.bookmarks = payload.data.bookmarks.map(bookmark => {
+        if (!bookmark.icon_cached && bookmark.icon_display !== 'image') return bookmark
+        count++
+        return { ...bookmark, icon: null, icon_blob: null, icon_revision: null, icon_cached: false, icon_display: 'empty' }
+      })
+      return payload
+    }
+    for (const name of ['cf-navs-admin-data-v1', 'cf-navs-public-data-v1']) {
+      if (!(await caches.keys()).includes(name)) continue
+      const cache = await caches.open(name)
+      for (const request of await cache.keys()) {
+        const value = damage(await (await cache.match(request)).json())
+        if (value) await cache.put(request, new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } }))
+      }
+    }
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith('cf-navs.admin-data.') && !key.startsWith('cf-navs.public-data.')) continue
+      const value = damage(JSON.parse(localStorage.getItem(key)))
+      if (value) localStorage.setItem(key, JSON.stringify(value))
+    }
+    return count
+  })
+  check('legacy snapshot regression was seeded only in the test profile', damaged > 0)
+  compare('legacy snapshot upgrade preserves every baseline image', baseline, await sample('legacy-upgrade'))
   await controls()
   browser.on('Fetch.requestPaused', event => {
     injected++
