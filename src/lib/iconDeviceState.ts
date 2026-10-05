@@ -59,6 +59,10 @@ export function createIconDeviceController(options: DeviceOptions) {
   const listeners = new Set<(snapshot: IconDeviceSnapshot) => void>()
   function update(patch: Partial<IconDeviceSnapshot>) { state = { ...state, ...patch }; for (const listener of listeners) listener(state) }
   function block(phase: IconDevicePhase, error: string | null = null) {
+    if (phase === 'expired' && record.receipt && now() < iconLeaseUntil(record.receipt)) {
+      scheduleExpiry()
+      return
+    }
     sequence++
     if (expiry) clearTimeout(expiry)
     expiry = null
