@@ -85,6 +85,7 @@
                       id={bookmark.id}
                       icon={bookmark.icon ?? ''}
                       iconSource={bookmark.icon_source}
+                      iconCached={bookmark.icon_cached}
                       iconRevision={bookmark.icon_revision}
                       iconWriteEpoch={bookmark.icon_write_epoch}
                       iconDisplay={bookmark.icon_display}
@@ -141,6 +142,7 @@
                       id={bookmark.id}
                       icon={bookmark.icon ?? ''}
                       iconSource={bookmark.icon_source}
+                      iconCached={bookmark.icon_cached}
                       iconRevision={bookmark.icon_revision}
                       iconWriteEpoch={bookmark.icon_write_epoch}
                       iconDisplay={bookmark.icon_display}

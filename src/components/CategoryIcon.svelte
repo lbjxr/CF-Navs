@@ -35,7 +35,7 @@
   $: iconValue = normalizeCategoryIcon(category) || category.icon_display === 'image'
   $: trustedView.set({ object_type: 'category', id: Number(category.id), icon: category.icon, icon_blob: category.icon_blob,
     icon_revision: category.icon_revision, icon_write_epoch: category.icon_write_epoch, icon_display: category.icon_display,
-    visible: true, preview })
+    visible: true, preview, online_url: nextImageUrl })
   $: previewValue = normalizeCategoryIcon(category)
   $: previewSource = /^data:image\//i.test(previewValue) ? previewValue : /^https?:\/\//i.test(previewValue) ? previewValue : ''
   $: nextImageUrl = preview ? previewSource : withIconAccessKey(getCategoryImageIconUrl(category), iconAccessKey)

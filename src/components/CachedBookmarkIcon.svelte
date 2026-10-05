@@ -20,6 +20,7 @@
   export let id: string | number
   export let icon = ''
   export let iconSource: string | null | undefined = null
+  export let iconCached: boolean | number | null | undefined = undefined
   export let iconRevision: string | null | undefined = undefined
   export let iconWriteEpoch: number | undefined = undefined
   export let iconDisplay: 'image' | 'text' | 'empty' | undefined = undefined
@@ -39,7 +40,7 @@
 
   $: trimmedIcon = icon.trim()
   $: trimmedIconBlob = iconBlob.trim()
-  $: trustedView.set({ id: Number(id), icon: trimmedIcon, icon_blob: trimmedIconBlob, icon_revision: iconRevision, icon_write_epoch: iconWriteEpoch, icon_display: iconDisplay, visible: inView })
+  $: trustedView.set({ id: Number(id), icon: trimmedIcon, icon_blob: trimmedIconBlob, icon_revision: iconRevision, icon_cached: iconCached, icon_write_epoch: iconWriteEpoch, icon_display: iconDisplay, visible: inView, online_url: src })
   $: cacheKey = createBookmarkIconCacheKey({
     id,
     icon: trimmedIcon,

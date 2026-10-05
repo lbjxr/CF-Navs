@@ -38,7 +38,7 @@
   let iconStateKey = ''
   const localCacheRequest = { current: 0 }
 
-  $: trustedView.set({ ...bookmark, visible: true })
+  $: trustedView.set({ ...bookmark, visible: true, online_url: iconBaseState.proxiedHttpIconUrl })
   $: iconBaseState = deriveBookmarkCardIconBase({
     bookmark,
     iconInView: true,

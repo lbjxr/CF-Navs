@@ -85,7 +85,7 @@
   const LONG_PRESS_MS = 500
 
   $: openInNewTab = bookmark.open_method === 1
-  $: trustedView.set({ ...bookmark, visible: iconInView, preview })
+  $: trustedView.set({ ...bookmark, visible: iconInView, preview, online_url: iconBaseState.proxiedHttpIconUrl })
   $: iconBaseState = deriveBookmarkCardIconBase({
     bookmark,
     iconInView,
