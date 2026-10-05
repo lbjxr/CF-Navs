@@ -1,3 +1,6 @@
+import { logoSurfIcon } from '../../src/lib/icons'
+import { inlineIconBlob } from '../../src/lib/objectIconLoader'
+import { iconBytesRevision } from '../../shared/iconLocalCopy'
 import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSqliteD1 } from '../helpers/d1Sqlite'
@@ -29,6 +32,26 @@ async function fixture(icon = iconFixture().dataUri) {
 }
 
 describe('authenticated icon materialization', () => {
+  it.each([false, true])('materializes actual generated logos, including legacy missing revisions (%s)', async legacy => {
+    const source = logoSurfIcon('图标 Audit', 'https://example.com')
+    const f = await fixture(source)
+    expect(f.request.expected_content_revision).toMatch(/^sha256-/)
+    if (legacy) {
+      f.sqlite.prepare('UPDATE bookmarks SET icon_revision=NULL WHERE id=?').run(f.bookmark.id)
+      f.request.expected_content_revision = null
+    }
+    const response = await f.call()
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    const { data } = await response.json() as any
+    const inline = inlineIconBlob(source)!
+    expect(inline).not.toBeNull()
+    const bytes = new Uint8Array(await inline.arrayBuffer())
+    expect(data.descriptor.content_revision).toBe(await iconBytesRevision(bytes, inline.type))
+    expect(data.image.byte_length).toBe(inline.size)
+    expect(Uint8Array.from(atob(data.image.base64), c => c.charCodeAt(0))).toEqual(bytes)
+    expect((await getBookmarkIconData(f.db, f.bookmark.id))!.icon_revision).toBe(data.descriptor.content_revision)
+  })
   it('authenticates before object lookup and never enters shared response caches', async () => {
     const f = await fixture()
     const before = f.statements.length

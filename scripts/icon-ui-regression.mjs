@@ -168,7 +168,8 @@ try {
   const login = await api('/login', { username: process.env.ADMIN_USER, password: process.env.ADMIN_PASS })
   apiToken = login.token
   const category = await api('/categories', { title: 'Local icon fixture', icon: '📁' })
-  const icon = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="green"/></svg>').toString('base64')
+  // Match the charset-bearing form emitted by logoSurfIcon; exercise it through real Chrome and D1.
+  const icon = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="green"/></svg>')
   const updatedCategory = await api(`/categories/${category.id}`, { title: 'Local icon fixture', icon }, 'PUT')
   const childCategory = await api('/categories', { parent_id: category.id, title: 'Local child icon fixture', icon })
   const adminCategory = (await api('/admin/data', undefined, 'GET')).categories?.find(item => Number(item.id) === Number(category.id))

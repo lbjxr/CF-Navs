@@ -1,3 +1,5 @@
+import { logoSurfIcon } from '../../src/lib/icons'
+import { decodeVersionedIcon, iconContentRevision } from '../../worker/lib/iconRevision'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createObjectIconLoader } from '../../src/lib/objectIconLoader'
 import { iconBytesRevision, type IconDescriptor } from '../../shared/iconLocalCopy'
@@ -39,6 +41,20 @@ async function fixture() {
 }
 
 describe('versioned object icon orchestration', () => {
+  it('persists the real generated UTF-8 logo through the inline loader path', async () => {
+    const f = await fixture()
+    const source = logoSurfIcon('图标 Audit', 'https://example.com')
+    const descriptor = { ...f.ready, content_revision: await iconContentRevision(decodeVersionedIcon(source)!) }
+    const handle = f.loader.acquire(descriptor, source)
+    const loaded = await handle.result
+    expect(loaded.status).toBe('ready')
+    expect(loaded.source).toBe('inline')
+    expect(f.fetchCopy).not.toHaveBeenCalled()
+    expect(f.decode).toHaveBeenCalledOnce()
+    expect(f.storage.put).toHaveBeenCalledOnce()
+    expect(f.data.get('bookmark:1').blob.size).toBeGreaterThan(0)
+    handle.release()
+  })
   it('restores a qualified local image without a body request, including first-fill unknown metadata', async () => {
     const f = await fixture()
     f.data.set('bookmark:1', { entry: { key: 'bookmark:1', descriptor: f.ready }, blob: new Blob([f.icon.bytes], { type: f.icon.contentType }) })

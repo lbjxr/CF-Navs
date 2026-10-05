@@ -1,3 +1,4 @@
+import { decodeIconDataUri } from '../../shared/iconDataUri'
 import { ICON_COPY_MAX_BYTES, ICON_COPY_PROTOCOL, iconBytesRevision, isIconDescriptor, type IconCopyResult, type IconDescriptor } from '../../shared/iconLocalCopy'
 import { ApiError, fetchIconCopy } from './api'
 import { iconDevice } from './iconDeviceState'
@@ -22,13 +23,8 @@ export async function decodeIconBlob(blob: Blob): Promise<void> {
   finally { URL.revokeObjectURL(url) }
 }
 export function inlineIconBlob(value: string): Blob | null {
-  if (value.length > ICON_COPY_MAX_BYTES * 4 + 256) return null
-  const match = /^data:(image\/[a-z0-9.+-]+)(;base64)?,([\s\S]*)$/i.exec(value)
-  if (!match) return null
-  try {
-    const bytes = match[2] ? Uint8Array.from(atob(match[3]), char => char.charCodeAt(0)) : new TextEncoder().encode(decodeURIComponent(match[3]))
-    return bytes.byteLength && bytes.byteLength <= ICON_COPY_MAX_BYTES ? new Blob([bytes], { type: match[1].toLowerCase() }) : null
-  } catch { return null }
+  const decoded = decodeIconDataUri(value)
+  return decoded ? new Blob([decoded.bytes], { type: decoded.mime }) : null
 }
 function sameObject(a: IconDescriptor, b: IconDescriptor): boolean { return a.object_type === b.object_type && a.object_id === b.object_id && a.dataset_epoch === b.dataset_epoch }
 function cacheMatches(a: IconDescriptor, b: IconDescriptor): boolean {
