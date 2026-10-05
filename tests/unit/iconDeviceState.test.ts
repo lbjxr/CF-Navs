@@ -38,6 +38,65 @@ function setup(prepareLegacyCopies?: (force?: boolean) => Promise<boolean>, enab
 }
 
 describe('device-scoped icon permission lifecycle', () => {
+  it('waits for a slightly future server receipt without granting early access or renewing it', async () => {
+    vi.useFakeTimers()
+    const f = setup(); await f.ready()
+    const metadata = { ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }
+    await f.device.acceptMetadata(metadata, 'fixture-one', () => true)
+    expect(f.device.snapshot().phase).toBe('checking')
+    expect(f.device.capture()).toBeNull()
+    f.setClock(2588); await vi.advanceTimersByTimeAsync(588)
+    expect(f.device.capture()).toBeNull()
+    f.setClock(2600); await vi.advanceTimersByTimeAsync(12)
+    expect(f.device.snapshot().phase).toBe('ready')
+    expect(f.device.capture()).not.toBeNull()
+    expect(f.record().receipt.checked_at).toBe(2589)
+    expect(f.record().receipt.expires_at).toBe(100000)
+  })
+  it('does not auto-recover real clock rollback or large server skew', async () => {
+    vi.useFakeTimers()
+    const f = setup(); await f.ready(); f.device.capture()
+    f.setClock(1900); await f.device.resume()
+    expect(f.device.capture()).toBeNull()
+    expect(f.device.snapshot().error).toContain('时钟异常')
+    f.setClock(3000); await vi.advanceTimersByTimeAsync(10000)
+    expect(f.device.capture()).toBeNull()
+    const metadata = { ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 10000 } }
+    await f.device.acceptMetadata(metadata, 'fixture-one', () => true)
+    f.setClock(11000); await vi.advanceTimersByTimeAsync(10000)
+    expect(f.device.capture()).toBeNull()
+    expect(f.device.snapshot().error).toContain('时钟异常')
+  })
+  it('does not poll forever when the device clock fails to advance', async () => {
+    vi.useFakeTimers()
+    const f = setup(); await f.ready()
+    await f.device.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }, 'fixture-one', () => true)
+    await vi.advanceTimersByTimeAsync(20000)
+    expect(f.device.capture()).toBeNull()
+    expect(vi.getTimerCount()).toBe(0)
+    expect(f.device.snapshot().error).toContain('时钟异常')
+  })
+  it('replaces a pending clock retry with a newer valid receipt', async () => {
+    vi.useFakeTimers()
+    const f = setup(); await f.ready()
+    await f.device.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }, 'fixture-one', () => true)
+    f.setClock(3000)
+    await f.device.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2900 } }, 'fixture-one', () => true)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(f.device.snapshot().phase).toBe('ready')
+    expect(f.record().receipt.checked_at).toBe(2900)
+    expect(f.device.capture()).not.toBeNull()
+  })
+  it('cancels the clock retry when trust is revoked', async () => {
+    vi.useFakeTimers()
+    const f = setup(); await f.ready()
+    await f.device.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }, 'fixture-one', () => true)
+    await f.device.setTrusted(false)
+    f.setClock(3000); await vi.advanceTimersByTimeAsync(2000)
+    expect(f.device.snapshot().phase).toBe('disabled')
+    expect(f.device.capture()).toBeNull()
+  })
+
   it('flushes pending touches on a valid lifecycle checkpoint, not after logout', async () => {
     const f = setup(); await f.ready()
     f.device.checkpoint()

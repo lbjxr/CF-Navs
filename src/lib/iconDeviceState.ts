@@ -54,6 +54,7 @@ export function createIconDeviceController(options: DeviceOptions) {
   let initialization: Promise<void> | null = null
   let disposed = false
   let expiry: ReturnType<typeof setTimeout> | null = null
+  let clockRetry: ReturnType<typeof setTimeout> | null = null
   let clearTask: Promise<void> = Promise.resolve()
   let state: IconDeviceSnapshot = { trusted: false, phase: 'disabled', epoch: 0, lease: null, dataset: null, leaseUntil: null, checkedAt: null, stats: { bodyBytes: 0, entries: 0, indexBytes: 0 }, error: null }
   const listeners = new Set<(snapshot: IconDeviceSnapshot) => void>()
@@ -64,6 +65,8 @@ export function createIconDeviceController(options: DeviceOptions) {
       return
     }
     sequence++
+    if (clockRetry) clearTimeout(clockRetry)
+    clockRetry = null
     if (expiry) clearTimeout(expiry)
     expiry = null
     update({ phase, error, lease: null, epoch: state.epoch + 1 })
@@ -117,7 +120,9 @@ export function createIconDeviceController(options: DeviceOptions) {
     update({ error: '本地图标存储不可用，已停止持久化。可清理副本后重试。', phase: 'unavailable', lease: null })
   }
 
-  async function synchronize(retry = true): Promise<void> {
+  async function synchronize(retry = true, retryClock = true): Promise<void> {
+    if (clockRetry) clearTimeout(clockRetry)
+    clockRetry = null
     if (!enabled) {
       if (record.trusted || state.phase !== 'unsupported') await closeForCompatibility()
       return
@@ -139,8 +144,18 @@ export function createIconDeviceController(options: DeviceOptions) {
         ? null
         : deniedByReceipt
       if (denied === 'scope-mismatch' || denied === 'unauthenticated') { record = { ...record, revokedScope: record.receipt?.cache_scope }; await revoke('waiting-auth'); return }
+      if (denied === 'clock') {
+        // A fresh server receipt can arrive slightly ahead of this device's clock.
+        // Do not relax permission checks or rewrite its timestamp: wait once until
+        // local time catches up. Actual rollback or large skew requires rechecking.
+        const ahead = (record.receipt?.checked_at ?? 0) - currentNow
+        const transientSkew = retryClock && ahead > 0 && ahead <= 5000 && currentNow >= record.observedAt && currentNow >= lastClock
+        block('checking', transientSkew ? null : '本机时钟异常，请同步系统时间并联网校验。')
+        if (transientSkew) clockRetry = setTimeout(() => { clockRetry = null; void synchronize(true, false) }, ahead + 10)
+        return
+      }
       if (denied) {
-        block(denied === 'expired' || denied === 'clock' ? 'expired' : denied === 'unsupported' ? 'unsupported' : 'waiting-auth')
+        block(denied === 'expired' ? 'expired' : denied === 'unsupported' ? 'unsupported' : 'waiting-auth')
         return
       }
       if (dataDataset !== record.dataset) { update({ phase: 'checking', lease: null }); return }
@@ -325,7 +340,7 @@ export function createIconDeviceController(options: DeviceOptions) {
     const stats = await options.storage.state()
     if (stats && isCurrent(captured)) update({ stats: { bodyBytes: stats.bodyBytes, entries: stats.entries, indexBytes: stats.indexBytes } })
   }
-  function dispose() { disposed = true; sequence++; if (expiry) clearTimeout(expiry); listeners.clear(); void options.storage.close() }
+  function dispose() { disposed = true; sequence++; if (clockRetry) clearTimeout(clockRetry); if (expiry) clearTimeout(expiry); listeners.clear(); void options.storage.close() }
   return { subscribe: (listener: (value: IconDeviceSnapshot) => void) => { listeners.add(listener); listener(state); return () => listeners.delete(listener) },
     snapshot: () => state, initialize, acceptMetadata, setTrusted, clearCopies, setDataset, authChanged, storageChanged, resume, capture, isCurrent, refreshStats,
     beginLogout: () => { record = { ...record, revokedScope: currentScope ?? record.receipt?.cache_scope }; return revoke(record.trusted ? 'waiting-auth' : 'disabled', true, true, options.session()?.token ?? null) }, reportStorageError: failure, checkpoint, dispose, storage: options.storage }

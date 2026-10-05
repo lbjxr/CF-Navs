@@ -23,6 +23,8 @@ await new Promise(resolve => probe.close(resolve))
 const cdp = new CdpSession({ chromeExe, debugPort, userDataDir: profile, headless: true })
 const report = { checks: [], ownership: { profile, debugPort }, errors: [], cleanup: null }
 const compatMode = process.env.ICON_COMPAT_MODE === '1'
+const clockSkewMs = Number(process.env.ICON_TEST_CLOCK_SKEW_MS ?? 0)
+if (!Number.isSafeInteger(clockSkewMs) || clockSkewMs < 0 || clockSkewMs > 5000) throw new Error('Invalid isolated clock skew')
 let apiToken = ''
 let legacyTab = null
 let firstDisplayCopyCount = null
@@ -182,6 +184,11 @@ try {
   await cdp.start(); report.ownership.pid = cdp.chromeProcess.pid; report.ownership.browserStartedByTest = cdp.startedByTest
   await writeFile(output + '.ownership.json', JSON.stringify(report.ownership, null, 2))
   await cdp.attach(); report.ownership.targetId = cdp.targetId
+  if (clockSkewMs) {
+    report.clockSkewMs = clockSkewMs
+    // Browser-only test injection: the disposable Worker's clock is unchanged.
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: 'const realNow = Date.now.bind(Date); Date.now = () => realNow() - ' + clockSkewMs })
+  }
   report.ownership.sessionId = cdp.sessionId
   await writeFile(output + '.ownership.json', JSON.stringify(report.ownership, null, 2))
   cdp.on('Network.requestWillBeSent', event => {
