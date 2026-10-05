@@ -1,0 +1,37 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createIconTouchFlush } from '../../src/lib/iconTouchFlush'
+afterEach(() => vi.useRealTimers())
+describe('demand driven icon touch batching', () => {
+  it('bounds a burst to one flush without continually delaying it', async () => {
+    vi.useFakeTimers()
+    const flush = vi.fn(async () => undefined)
+    const batch = createIconTouchFlush(flush, vi.fn())
+    batch.request()
+    await vi.advanceTimersByTimeAsync(800)
+    batch.request()
+    await vi.advanceTimersByTimeAsync(200)
+    expect(flush).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(flush).toHaveBeenCalledOnce()
+    batch.dispose()
+  })
+  it('flushes a pending burst on dispose once and cancels its timer', async () => {
+    vi.useFakeTimers()
+    const flush = vi.fn(async () => undefined)
+    const batch = createIconTouchFlush(flush, vi.fn())
+    batch.request(); batch.dispose(); batch.dispose(); batch.request()
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(flush).toHaveBeenCalledOnce()
+  })
+  it('reports failure, retries only on new demand, and has no idle polling', async () => {
+    vi.useFakeTimers()
+    const flush = vi.fn().mockRejectedValueOnce(new Error('disk')).mockResolvedValue(undefined)
+    const error = vi.fn()
+    const batch = createIconTouchFlush(flush, error)
+    batch.request(); await vi.advanceTimersByTimeAsync(20000)
+    expect(flush).toHaveBeenCalledOnce(); expect(error).toHaveBeenCalledOnce()
+    batch.request(); await vi.advanceTimersByTimeAsync(1000)
+    expect(flush).toHaveBeenCalledTimes(2)
+    batch.dispose()
+  })
+})

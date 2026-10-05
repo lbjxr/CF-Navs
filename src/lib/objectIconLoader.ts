@@ -1,3 +1,4 @@
+import { createIconTouchFlush } from './iconTouchFlush'
 import { decodeIconDataUri } from '../../shared/iconDataUri'
 import { ICON_COPY_MAX_BYTES, ICON_COPY_PROTOCOL, iconBytesRevision, isIconDescriptor, type IconCopyResult, type IconDescriptor } from '../../shared/iconLocalCopy'
 import { ApiError, fetchIconCopy } from './api'
@@ -33,6 +34,14 @@ function cacheMatches(a: IconDescriptor, b: IconDescriptor): boolean {
 
 export function createObjectIconLoader(options: Options) {
   const device = options.device
+  const touchFlush = createIconTouchFlush(async () => {
+    const captured = device.capture()
+    if (!captured) return
+    try { await device.storage.flushTouches() }
+    catch (error) {
+      if (device.isCurrent(captured) && !(error instanceof IconStorageError && error.reason === 'stale')) device.reportStorageError(error)
+    }
+  }, error => device.reportStorageError(error))
   const decode = options.decode ?? decodeIconBlob
   const fetchCopy = options.fetchCopy ?? fetchIconCopy
   const createUrl = options.createUrl ?? (blob => URL.createObjectURL(blob))
@@ -157,6 +166,7 @@ export function createObjectIconLoader(options: Options) {
       const owned = entry
       entry.promise = load(capture, { ...descriptor }, inline, abort.signal).then(result => {
         owned.settled = true; owned.result = result
+        if (result.source === 'local' && device.isCurrent(capture)) touchFlush.request()
         const alias = key(capture, result.descriptor)
         if (!entries.has(alias)) { entries.set(alias, owned); owned.aliases.add(alias) }
         if (device.isCurrent(capture) && (result.status === 'ready' || result.status === 'empty')) onDescriptor(result.descriptor, descriptor)
@@ -186,6 +196,6 @@ export function createObjectIconLoader(options: Options) {
     })
     return { result, release }
   }
-  return { acquire, configure: (listener: typeof onDescriptor) => { onDescriptor = listener }, destroy: () => { stop(); for (const release of [...handles]) release(); entries.clear() } }
+  return { acquire, configure: (listener: typeof onDescriptor) => { onDescriptor = listener }, destroy: () => { touchFlush.dispose(); stop(); for (const release of [...handles]) release(); entries.clear() } }
 }
 export const objectIconLoader = createObjectIconLoader({ device: iconDevice })

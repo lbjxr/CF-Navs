@@ -310,6 +310,10 @@ export function createIconDeviceController(options: DeviceOptions) {
     return { lease: { ...state.lease }, epoch: state.epoch }
   }
   function checkpoint() {
+    const captured = capture()
+    if (captured) void options.storage.flushTouches().catch(error => {
+      if (isCurrent(captured) && !(error instanceof IconStorageError && error.reason === 'stale')) failure(error)
+    })
     if (record.trusted && record.receipt && !record.cleanupPending) { record = { ...record, observedAt: Math.max(record.observedAt, lastClock, now()) }; persist() }
   }
   function isCurrent(captured: { lease: IconStorageLease; epoch: number }): boolean {

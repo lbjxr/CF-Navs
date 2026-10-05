@@ -15,6 +15,7 @@ function setup(prepareLegacyCopies?: (force?: boolean) => Promise<boolean>, enab
   let denyClear = false
   let denySave = false
   const storage = {
+    flushTouches: vi.fn(async () => undefined),
     state: vi.fn(async () => control ? { ...control } : null),
     activate: vi.fn(async (lease: any, allowed: () => boolean, previous: any) => {
       if (!allowed() || (control && (control.scope !== lease.scope || control.generation !== lease.generation) && previous?.generation !== control.generation)) throw new IconStorageError('stale')
@@ -37,6 +38,22 @@ function setup(prepareLegacyCopies?: (force?: boolean) => Promise<boolean>, enab
 }
 
 describe('device-scoped icon permission lifecycle', () => {
+  it('flushes pending touches on a valid lifecycle checkpoint, not after logout', async () => {
+    const f = setup(); await f.ready()
+    f.device.checkpoint()
+    expect(f.storage.flushTouches).toHaveBeenCalledOnce()
+    await f.device.beginLogout()
+    f.device.checkpoint()
+    expect(f.storage.flushTouches).toHaveBeenCalledOnce()
+  })
+  it('observes checkpoint flush errors and preserves quota-limited usable state', async () => {
+    const f = setup(); await f.ready()
+    vi.mocked(f.storage.flushTouches).mockRejectedValue(new IconStorageError('quota'))
+    f.device.checkpoint()
+    await Promise.resolve(); await Promise.resolve()
+    expect(f.device.snapshot().error).toContain('空间不足')
+    expect(f.device.capture()).not.toBeNull()
+  })
   it('defaults off and requires both verified metadata and a matching applied dataset', async () => {
     const f = setup(); await f.device.initialize()
     expect(f.device.snapshot().trusted).toBe(false)

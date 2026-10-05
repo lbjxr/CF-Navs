@@ -4,10 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createObjectIconLoader } from '../../src/lib/objectIconLoader'
 import { iconBytesRevision, type IconDescriptor } from '../../shared/iconLocalCopy'
 import { ApiError } from '../../src/lib/api'
+import { IconStorageError } from '../../src/lib/iconCopyStorage'
 import { iconFixture } from '../helpers/iconFixture'
 
 const loaders: ReturnType<typeof createObjectIconLoader>[] = []
-afterEach(() => { loaders.splice(0).forEach(loader => loader.destroy()) })
+afterEach(() => { loaders.splice(0).forEach(loader => loader.destroy()); vi.useRealTimers() })
 async function fixture() {
   const icon = iconFixture()
   const revision = await iconBytesRevision(icon.bytes, icon.contentType)
@@ -19,6 +20,7 @@ async function fixture() {
   const data = new Map<string, any>()
   const subscribers = new Set<(state: any) => void>()
   const storage = {
+    flushTouches: vi.fn(async () => undefined),
     read: vi.fn(async (_lease, type, id) => data.get(type + ':' + id) ?? null),
     put: vi.fn(async (_lease, descriptor, blob, valid) => { if (!valid()) throw new Error('stale'); data.set(descriptor.object_type + ':' + descriptor.object_id, { entry: { key: descriptor.object_type + ':' + descriptor.object_id, descriptor }, blob }) }),
     remove: vi.fn(async (_lease, key) => { data.delete(key) }),
@@ -41,6 +43,45 @@ async function fixture() {
 }
 
 describe('versioned object icon orchestration', () => {
+  it('batches real loader hits into one demand-driven flush and stops when idle', async () => {
+    vi.useFakeTimers()
+    const f = await fixture()
+    for (const id of [1, 2]) {
+      f.data.set('bookmark:' + id, { entry: { key: 'bookmark:' + id, descriptor: { ...f.ready, object_id: id } }, blob: new Blob([f.icon.bytes], { type: f.icon.contentType }) })
+    }
+    const a = f.loader.acquire(f.ready), b = f.loader.acquire({ ...f.ready, object_id: 2 })
+    await Promise.all([a.result, b.result])
+    expect(f.storage.flushTouches).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(f.storage.flushTouches).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(f.storage.flushTouches).toHaveBeenCalledOnce()
+    a.release(); b.release()
+  })
+  it('does not report an old flush failure against a changed session', async () => {
+    vi.useFakeTimers()
+    const f = await fixture()
+    let reject!: (error: unknown) => void
+    f.storage.flushTouches.mockImplementation(() => new Promise((_resolve, fail) => { reject = fail }))
+    f.data.set('bookmark:1', { entry: { key: 'bookmark:1', descriptor: f.ready }, blob: new Blob([f.icon.bytes], { type: f.icon.contentType }) })
+    await f.loader.acquire(f.ready).result
+    await vi.advanceTimersByTimeAsync(1000)
+    f.invalidate()
+    reject(new IconStorageError('unavailable'))
+    await Promise.resolve(); await Promise.resolve()
+    expect(f.device.reportStorageError).not.toHaveBeenCalled()
+  })
+  it('observes flush failure without creating an automatic retry loop', async () => {
+    vi.useFakeTimers()
+    const f = await fixture()
+    f.storage.flushTouches.mockRejectedValue(new IconStorageError('quota'))
+    f.data.set('bookmark:1', { entry: { key: 'bookmark:1', descriptor: f.ready }, blob: new Blob([f.icon.bytes], { type: f.icon.contentType }) })
+    await f.loader.acquire(f.ready).result
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(f.device.reportStorageError).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(f.storage.flushTouches).toHaveBeenCalledOnce()
+  })
   it('persists the real generated UTF-8 logo through the inline loader path', async () => {
     const f = await fixture()
     const source = logoSurfIcon('图标 Audit', 'https://example.com')

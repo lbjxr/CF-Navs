@@ -36,7 +36,30 @@ export function createIconCopyStorage(options: { factory?: IDBFactory; name?: st
   const now = options.now ?? Date.now
   let connection: Promise<IDBDatabase> | null = null
   let closed = false
-  const touches = new Map<string, { lease: IconStorageLease; at: number }>()
+  type Touch = { lease: IconStorageLease; at: number; allowed: () => boolean }
+  const touches = new Map<string, Touch>()
+  function acknowledge(batch: Array<[string, Touch]>): void {
+    // A read arriving while the transaction commits belongs to the next batch.
+    for (const [key, touch] of batch) if (touches.get(key) === touch) touches.delete(key)
+  }
+  async function applyTouches(tx: IDBTransaction, control: Control, batch: Array<[string, Touch]>): Promise<Touch[]> {
+    const store = tx.objectStore('entries')
+    const written: Touch[] = []
+    for (const [key, touch] of batch) {
+      if (!current(control, touch.lease) || !touch.allowed()) continue
+      const entry: StoredIconEntry | undefined = await result(store.get(key))
+      if (!entry || !validStoredIcon(entry, touch.lease) || touch.at <= entry.last_used) continue
+      if (!touch.allowed() || closed) throw new IconStorageError('stale')
+      const updated = { ...entry, last_used: touch.at }
+      updated.metadata_bytes = entryMetadataBytes(updated)
+      control.indexBytes += updated.metadata_bytes - entry.metadata_bytes
+      if (!withinIconBudget(control)) throw new IconStorageError('quota')
+      await result(store.put(updated))
+      written.push(touch)
+    }
+    if (closed || written.some(touch => !touch.allowed())) throw new IconStorageError('stale')
+    return written
+  }
 
   async function open(): Promise<IDBDatabase> {
     if (closed) throw new IconStorageError('unavailable')
@@ -120,7 +143,10 @@ export function createIconCopyStorage(options: { factory?: IDBFactory; name?: st
       await result(tx.objectStore('control').put({ key: ACTIVE_KEY, schema: 1, enabled: true, ...lease, ...emptyTotals() } satisfies Control))
       if (!allowed()) throw new IconStorageError('stale')
     })
-    touches.clear()
+    // Same-generation activation (focus/receipt renewal) must retain pending hits.
+    for (const [key, touch] of touches) {
+      if (touch.lease.scope !== lease.scope || touch.lease.generation !== lease.generation) touches.delete(key)
+    }
   }
 
   async function read(lease: IconStorageLease, type: IconObjectType, id: number, allowed: () => boolean): Promise<{ entry: StoredIconEntry; blob: Blob } | null> {
@@ -135,8 +161,10 @@ export function createIconCopyStorage(options: { factory?: IDBFactory; name?: st
       return { entry, blob }
     })
     if (hit && 'damaged' in hit) { await repair(lease, allowed); return null }
-    if (hit) {
-      touches.set(key, { lease, at: now() })
+    if (hit && allowed() && !closed) {
+      const previous = touches.get(key)
+      const at = Math.max(now(), hit.entry.last_used, previous?.lease.scope === lease.scope && previous.lease.generation === lease.generation ? previous.at : 0)
+      touches.set(key, { lease: { ...lease }, at, allowed })
       if (touches.size > 1000) touches.delete(touches.keys().next().value!)
     }
     return hit
@@ -147,10 +175,12 @@ export function createIconCopyStorage(options: { factory?: IDBFactory; name?: st
       descriptor: { ...descriptor }, mime: blob.type, byte_length: blob.size, saved_at: now(), last_used: now(), metadata_bytes: 0 }
     entry.metadata_bytes = entryMetadataBytes(entry)
     if (!validStoredIcon(entry, lease)) throw new IconStorageError('corrupt')
+    let applied: Array<[string, Touch]> = []
+    let writtenTouches: Touch[] = []
     await run('readwrite', async tx => {
       const control = await requireLease(tx, lease, allowed)
       const store = tx.objectStore('entries')
-      const previous: StoredIconEntry | undefined = await result(store.get(entry.key))
+      let previous: StoredIconEntry | undefined = await result(store.get(entry.key))
       if (previous && !validStoredIcon(previous, lease)) throw new IconStorageError('corrupt')
       if (previous && previous.descriptor.write_epoch > descriptor.write_epoch) throw new IconStorageError('stale')
       let totals: IconStorageTotals = {
@@ -159,6 +189,11 @@ export function createIconCopyStorage(options: { factory?: IDBFactory; name?: st
         indexBytes: control.indexBytes - (previous?.metadata_bytes ?? 0) + entry.metadata_bytes,
       }
       if (!withinIconBudget(totals) || totals.bodyBytes >= ICON_COPY_BODY_BUDGET) {
+        // Fold this tab's latest hits into the same transaction as eviction. Other
+        // tabs' committed touches are already serialized by IndexedDB.
+        applied = [...touches]
+        writtenTouches = await applyTouches(tx, control, applied)
+        previous = await result(store.get(entry.key))
         // Metadata only; image bodies are never scanned on a hit or eviction decision.
         const entries: StoredIconEntry[] = await result(store.getAll())
         if (entries.some(item => !validStoredIcon(item, lease))) throw new IconStorageError('corrupt')
@@ -171,9 +206,12 @@ export function createIconCopyStorage(options: { factory?: IDBFactory; name?: st
       await result(tx.objectStore('bodies').put(blob, entry.key))
       await result(store.put(entry))
       await result(tx.objectStore('control').put({ ...control, ...totals }))
+      if (writtenTouches.some(touch => !touch.allowed())) throw new IconStorageError('stale')
       if (!allowed()) throw new IconStorageError('stale')
     })
-    touches.delete(entry.key)
+    acknowledge(applied)
+    const pending = touches.get(entry.key)
+    if (pending?.lease.scope === lease.scope && pending.lease.generation === lease.generation && pending.at <= entry.last_used) touches.delete(entry.key)
   }
 
   async function remove(lease: IconStorageLease, key: string, allowed: () => boolean): Promise<void> {
@@ -200,24 +238,17 @@ export function createIconCopyStorage(options: { factory?: IDBFactory; name?: st
 
   async function flushTouches(): Promise<void> {
     const batch = [...touches]
-    touches.clear()
     if (!batch.length || closed) return
+    // Retain the batch until commit. Failure retries on the next demand/lifecycle
+    // event, not a periodic timer; concurrent newer touches are never discarded.
     await run('readwrite', async tx => {
       const control = await controlFor(tx)
       if (!control) return
-      const store = tx.objectStore('entries')
-      for (const [key, touch] of batch) {
-        if (!current(control, touch.lease)) continue
-        const entry: StoredIconEntry | undefined = await result(store.get(key))
-        if (!entry || !validStoredIcon(entry, touch.lease) || touch.at < entry.last_used) continue
-        const updated = { ...entry, last_used: touch.at }
-        updated.metadata_bytes = entryMetadataBytes(updated)
-        control.indexBytes += updated.metadata_bytes - entry.metadata_bytes
-        if (!withinIconBudget(control)) throw new IconStorageError('quota')
-        await result(store.put(updated))
-      }
+      const written = await applyTouches(tx, control, batch)
       await result(tx.objectStore('control').put(control))
+      if (closed || written.some(touch => !touch.allowed())) throw new IconStorageError('stale')
     })
+    acknowledge(batch)
   }
 
   /** Explicit startup/fault recovery. Does not run for every image read. */

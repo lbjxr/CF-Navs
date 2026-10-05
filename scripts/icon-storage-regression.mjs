@@ -160,6 +160,79 @@ try {
     const healthy = await store.read(lease, 'bookmark', 2, allow)
     return missing === null && healthy?.blob.size === 128 && (await store.state()).entries === 1
   }))
+  const touchChecks = await primary.call(async function () {
+    const results = []
+    let clock = 1000
+    const name = 'cf-navs-touch-regression'
+    const a = CFNavsIconStorage.createIconCopyStorage({ name, now: () => clock })
+    const b = CFNavsIconStorage.createIconCopyStorage({ name, now: () => clock })
+    const scope = { ...lease, generation: 'touch-tests' }
+    const raw = async id => {
+      const request = indexedDB.open(name)
+      const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+      try {
+        return await new Promise((resolve, reject) => { const item = db.transaction('entries').objectStore('entries').get('bookmark:' + id); item.onsuccess = () => resolve(item.result); item.onerror = () => reject(item.error) })
+      } finally { db.close() }
+    }
+    try {
+      await a.activate(scope, allow)
+      await a.put(scope, descriptor(1), image(), allow)
+      clock = 2000
+      await a.read(scope, 'bookmark', 1, allow)
+      await a.activate(scope, allow, scope)
+      await a.flushTouches()
+      results.push(['same-generation activation preserves pending hit timestamps', (await raw(1)).last_used === 2000])
+      clock = 3000; await b.read(scope, 'bookmark', 1, allow)
+      clock = 4000; await a.read(scope, 'bookmark', 1, allow); await a.flushTouches(); await b.flushTouches()
+      results.push(['independent connections cannot move last_used backwards', (await raw(1)).last_used === 4000])
+      clock = 5000; await a.read(scope, 'bookmark', 1, allow)
+      const original = IDBObjectStore.prototype.put
+      let failed = false
+      try {
+        IDBObjectStore.prototype.put = function (...args) { if (this.name === 'entries') throw new DOMException('test quota', 'QuotaExceededError'); return original.apply(this, args) }
+        await a.flushTouches()
+      } catch (error) { failed = error.reason === 'quota' }
+      finally { IDBObjectStore.prototype.put = original }
+      const rollback = (await raw(1)).last_used === 4000
+      await a.flushTouches()
+      results.push(['failed touch transaction retains its batch for demand-driven retry', failed && rollback && (await raw(1)).last_used === 5000])
+      clock = 6000; await a.read(scope, 'bookmark', 1, allow)
+      const flushing = a.flushTouches()
+      clock = 7000
+      await Promise.all([flushing, a.read(scope, 'bookmark', 1, allow)])
+      await a.flushTouches()
+      results.push(['reads arriving during flush are not lost at acknowledgment', (await raw(1)).last_used === 7000])
+      let live = true
+      clock = 8000; await a.read(scope, 'bookmark', 1, () => live)
+      let revoked = false
+      try {
+        IDBObjectStore.prototype.put = function (...args) { const result = original.apply(this, args); if (this.name === 'control') live = false; return result }
+        await a.flushTouches()
+      } catch (error) { revoked = error.reason === 'stale' }
+      finally { IDBObjectStore.prototype.put = original }
+      results.push(['revocation at the final control write aborts touch updates', revoked && (await raw(1)).last_used === 7000])
+      await a.flushTouches()
+      results.push(['invalidated hit cannot later update its entry', (await raw(1)).last_used === 7000])
+      clock = 9000; await b.read(scope, 'bookmark', 1, allow)
+      await a.clear(scope, true); await b.flushTouches()
+      results.push(['late connection flush cannot resurrect cleared entries', !(await raw(1)) && !(await a.state()).enabled && (await a.state()).entries === 0])
+    } finally { await a.close(); await b.close() }
+    return results
+  })
+  for (const [name, passed] of touchChecks) check(name, passed)
+  check('capacity eviction includes unflushed recent hits in its transaction', await primary.call(async function () {
+    let clock = 1000
+    const hot = CFNavsIconStorage.createIconCopyStorage({ name: 'cf-navs-hot-eviction', now: () => clock })
+    const hotLease = { ...lease, generation: 'hot-eviction' }
+    try {
+      await hot.activate(hotLease, allow)
+      for (let id = 1; id <= 19; id++) { clock += 1000; await hot.put(hotLease, descriptor(id), image(512 * 1024), allow) }
+      clock += 1000; await hot.read(hotLease, 'bookmark', 1, allow)
+      // No explicit flush: the production put boundary must include pending hits.
+      clock += 1000; await hot.put(hotLease, descriptor(20), image(512 * 1024), allow)
+      return Boolean(await hot.read(hotLease, 'bookmark', 1, allow)) && !(await hot.read(hotLease, 'bookmark', 2, allow)) && (await hot.state()).bodyBytes === 8 * 1024 * 1024
+    } finally { await hot.close() }
+  }))
   check('10 MiB high water evicts to 8 MiB using LRU', await primary.call(async function () {
     await reset()
     for (let id = 1; id <= 20; id++) await store.put(lease, descriptor(id), image(512 * 1024), allow)

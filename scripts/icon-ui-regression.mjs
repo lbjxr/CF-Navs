@@ -638,6 +638,27 @@ try {
     } finally { db.close() }
   }, bookmark.id)
   check('reload restores the image from IndexedDB', restoredImage?.loaded && restoredImage.src.startsWith('blob:') && restoredStorage)
+  // Do not call flushTouches from the test: prove the mounted loader schedules it.
+  const readUseTime = async (id, type) => cdp.call(async function (id, type) {
+    const request = indexedDB.open('cf-navs-object-icons-v1')
+    const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    try {
+      return await new Promise((resolve, reject) => {
+        const item = db.transaction('entries').objectStore('entries').get(type + ':' + id)
+        item.onsuccess = () => resolve(item.result ? { saved: item.result.saved_at, used: item.result.last_used } : null)
+        item.onerror = () => reject(item.error)
+      })
+    } finally { db.close() }
+  }, id, type)
+  let useTimes = null
+  for (let attempt = 0; attempt < 30; attempt++) {
+    useTimes = { bookmark: await readUseTime(bookmark.id, 'bookmark'), category: await readUseTime(category.id, 'category') }
+    if (useTimes.bookmark?.used > useTimes.bookmark?.saved && useTimes.category?.used > useTimes.category?.saved) break
+    await sleep(200)
+  }
+  report.touchTimes = useTimes
+  check('real mounted bookmark and category loaders persist recent use after warm reads', useTimes.bookmark?.used > useTimes.bookmark?.saved && useTimes.category?.used > useTimes.category?.saved)
+
   const categoryReload = await cdp.call(async function (id) {
     const image = document.querySelector(`[data-home-category-scope="${id}"] .scope-heading [data-category-icon] img`)
     const request = indexedDB.open('cf-navs-object-icons-v1')
