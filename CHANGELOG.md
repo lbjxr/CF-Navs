@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+### REQ-15 分类生产冷/热路径修复（2026-10-05）
+
+- 修复可信租约仍在有效期内时被竞态切入 `expired` 的状态机问题：租约回调、同步判定和统一过期入口均会重新读取当前租约并拒绝陈旧过期决定。对应提交为 `b5d8725`、`2f5029a`、`57f6c96`，已推送 `develop`。
+- 新 bundle `index-B_vb1kMT.js` 部署到测试站后，`npm run regression:icons:prod` 通过：分类冷路径使用可信 Blob（`body=89989`，`copy200=4`），同 profile 热加载复用 IndexedDB（`copyRequests=0`）；控制台错误、页面异常和非预期 HTTP 均为 0。
+- 本次测试创建的 Chrome target、浏览器进程和临时 profile 均已清理。该证据覆盖桌面测试站分类入口；iOS/Safari 与真实设备仍按用户指示由用户自行测试。
+
 ### REQ-15 后续验证续跑（2026-10-04）
 
 - 按本轮授权推送空提交触发第二次 Cloudflare 部署；部署计数达到两次，但提交未改变应用 bundle，不能据此证明 IC-A07 的新版本兼容更新路径。
