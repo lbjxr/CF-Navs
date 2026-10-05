@@ -1,3 +1,6 @@
+import { createObjectIconLoader } from '../../src/lib/objectIconLoader'
+import { iconBytesRevision, type IconCopyRequest, type IconDescriptor } from '../../shared/iconLocalCopy'
+import { iconFixture } from '../helpers/iconFixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createIconDeviceController, ICON_DEVICE_KEY } from '../../src/lib/iconDeviceState'
 import { IconStorageError, type IconCopyStorage } from '../../src/lib/iconCopyStorage'
@@ -38,9 +41,102 @@ function setup(prepareLegacyCopies?: (force?: boolean) => Promise<boolean>, enab
 }
 
 describe('device-scoped icon permission lifecycle', () => {
-  it('waits for a slightly future server receipt without granting early access or renewing it', async () => {
+  it('does not release bookmark or category image handles when refreshing metadata', async () => {
     vi.useFakeTimers()
     const f = setup(); await f.ready()
+    const icon = iconFixture()
+    const content_revision = await iconBytesRevision(icon.bytes, icon.contentType)
+    const descriptor: IconDescriptor = { object_type: 'bookmark', object_id: 1, dataset_epoch: dataset, write_epoch: 0, state: 'ready', content_revision }
+    const fetchCopy = vi.fn(async (request: IconCopyRequest) => ({ protocol: 1 as const, persistence: 'session-scoped' as const,
+      descriptor: { ...descriptor, object_type: request.object_type, object_id: request.object_id },
+      image: { mime: icon.contentType, byte_length: icon.bytes.length, base64: icon.dataUri.split(',')[1] } }))
+    f.storage.read = vi.fn(async () => null)
+    f.storage.put = vi.fn(async () => undefined)
+    const revokeUrl = vi.fn()
+    const loader = createObjectIconLoader({ device: f.device, fetchCopy, decode: async () => undefined,
+      createUrl: () => 'blob:fixture-icon', revokeUrl })
+    const descriptors: IconDescriptor[] = [descriptor, { ...descriptor, object_id: 2 }, { ...descriptor, object_type: 'category' }]
+    const handles = descriptors.map(value => loader.acquire(value))
+    try {
+      const results = await Promise.all(handles.map(handle => handle.result))
+      expect(results.every(result => result.status === 'ready')).toBe(true)
+      expect(fetchCopy).toHaveBeenCalledTimes(3)
+      await f.device.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }, 'fixture-one', () => true)
+      expect(revokeUrl).not.toHaveBeenCalled()
+      f.setClock(2600); await vi.advanceTimersByTimeAsync(600)
+      expect(revokeUrl).not.toHaveBeenCalled()
+      const reused = descriptors.map(value => loader.acquire(value))
+      try {
+        expect((await Promise.all(reused.map(handle => handle.result))).every(result => result.status === 'ready')).toBe(true)
+        expect(fetchCopy).toHaveBeenCalledTimes(3)
+        expect(f.storage.read).toHaveBeenCalledTimes(3)
+      } finally { reused.forEach(handle => handle.release()) }
+    } finally { handles.forEach(handle => handle.release()); loader.destroy() }
+  })
+
+  it('keeps the current lease and epoch during a slightly future metadata renewal', async () => {
+    vi.useFakeTimers()
+    const f = setup(); await f.ready()
+    const captured = f.device.capture()!
+    const transitions: string[] = []
+    const stop = f.device.subscribe(state => transitions.push(state.phase))
+    const metadata = { ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }
+    await f.device.acceptMetadata(metadata, 'fixture-one', () => true)
+    expect(f.device.isCurrent(captured)).toBe(true)
+    expect(f.record().receipt.checked_at).toBe(1000)
+    f.setClock(2588); await vi.advanceTimersByTimeAsync(588)
+    expect(f.device.isCurrent(captured)).toBe(true)
+    expect(f.record().receipt.checked_at).toBe(1000)
+    f.setClock(2600); await vi.advanceTimersByTimeAsync(12)
+    expect(f.device.isCurrent(captured)).toBe(true)
+    expect(f.record().receipt).toEqual(metadata.auth_receipt)
+    expect(transitions.every(phase => phase === 'ready')).toBe(true)
+    stop()
+  })
+  it('does not extend the old receipt or poll if the clock stops during renewal', async () => {
+    vi.useFakeTimers()
+    const f = setup(); await f.ready()
+    await f.device.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }, 'fixture-one', () => true)
+    await vi.advanceTimersByTimeAsync(20000)
+    expect(f.device.capture()).not.toBeNull()
+    expect(f.record().receipt.checked_at).toBe(1000)
+    expect(vi.getTimerCount()).toBe(1) // Only the existing expiry timer remains.
+    f.setClock(100000)
+    expect(f.device.capture()).toBeNull()
+  })
+  it('ignores a deferred receipt after its data refresh loses ownership', async () => {
+    vi.useFakeTimers()
+    const f = setup(); await f.ready()
+    let current = true
+    await f.device.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }, 'fixture-one', () => current)
+    current = false; f.setClock(3000); await vi.advanceTimersByTimeAsync(1000)
+    expect(f.record().receipt.checked_at).toBe(1000)
+    expect(f.device.capture()).not.toBeNull()
+  })
+  it('does not preserve the old lease for a changed dataset or an uncovered renewal gap', async () => {
+    vi.useFakeTimers()
+    const f = setup(); await f.ready()
+    await f.device.acceptMetadata({ ...f.metadata(), dataset_epoch: 'd'.repeat(32), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }, 'fixture-one', () => true)
+    expect(f.device.capture()).toBeNull()
+    const g = setup(); await g.ready(); g.setClock(99990)
+    await g.device.acceptMetadata({ ...g.metadata(), auth_receipt: { ...g.metadata().auth_receipt, checked_at: 100010, expires_at: 200000 } }, 'fixture-one', () => true)
+    expect(g.device.capture()).toBeNull()
+  })
+  it('cancels deferred renewal on logout and disposal', async () => {
+    vi.useFakeTimers()
+    for (const dispose of [false, true]) {
+      const f = setup(); await f.ready()
+      await f.device.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }, 'fixture-one', () => true)
+      if (dispose) f.device.dispose(); else await f.device.beginLogout()
+      f.setClock(3000); await vi.advanceTimersByTimeAsync(1000)
+      expect(f.device.capture()).toBeNull()
+      expect(f.record().receipt?.checked_at).not.toBe(2589)
+    }
+  })
+
+  it('waits for a slightly future server receipt without granting early access or renewing it', async () => {
+    vi.useFakeTimers()
+    const f = setup(); await f.device.initialize(); f.device.setDataset(dataset); await f.device.setTrusted(true)
     const metadata = { ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }
     await f.device.acceptMetadata(metadata, 'fixture-one', () => true)
     expect(f.device.snapshot().phase).toBe('checking')
@@ -69,7 +165,7 @@ describe('device-scoped icon permission lifecycle', () => {
   })
   it('does not poll forever when the device clock fails to advance', async () => {
     vi.useFakeTimers()
-    const f = setup(); await f.ready()
+    const f = setup(); await f.device.initialize(); f.device.setDataset(dataset); await f.device.setTrusted(true)
     await f.device.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }, 'fixture-one', () => true)
     await vi.advanceTimersByTimeAsync(20000)
     expect(f.device.capture()).toBeNull()

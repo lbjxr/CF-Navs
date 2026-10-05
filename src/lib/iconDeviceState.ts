@@ -55,16 +55,22 @@ export function createIconDeviceController(options: DeviceOptions) {
   let disposed = false
   let expiry: ReturnType<typeof setTimeout> | null = null
   let clockRetry: ReturnType<typeof setTimeout> | null = null
+  let receiptRenewal: ReturnType<typeof setTimeout> | null = null
   let clearTask: Promise<void> = Promise.resolve()
   let state: IconDeviceSnapshot = { trusted: false, phase: 'disabled', epoch: 0, lease: null, dataset: null, leaseUntil: null, checkedAt: null, stats: { bodyBytes: 0, entries: 0, indexBytes: 0 }, error: null }
   const listeners = new Set<(snapshot: IconDeviceSnapshot) => void>()
   function update(patch: Partial<IconDeviceSnapshot>) { state = { ...state, ...patch }; for (const listener of listeners) listener(state) }
+  function cancelReceiptRenewal() {
+    if (receiptRenewal) clearTimeout(receiptRenewal)
+    receiptRenewal = null
+  }
   function block(phase: IconDevicePhase, error: string | null = null) {
     if (phase === 'expired' && record.receipt && now() < iconLeaseUntil(record.receipt)) {
       scheduleExpiry()
       return
     }
     sequence++
+    cancelReceiptRenewal()
     if (clockRetry) clearTimeout(clockRetry)
     clockRetry = null
     if (expiry) clearTimeout(expiry)
@@ -252,6 +258,25 @@ export function createIconDeviceController(options: DeviceOptions) {
     const permissionEpoch = state.epoch
     const digest = await scope(expectedToken)
     if (permissionEpoch !== state.epoch || record.cleanupPending || !isCurrent() || expectedToken !== options.session()?.token || receipt.cache_scope !== digest || record.revokedScope === digest || !iconScopeKey(metadata.dataset_epoch, digest)) return
+    cancelReceiptRenewal()
+    const currentNow = now()
+    const ahead = receipt.checked_at - currentNow
+    // A refresh must not evict every displayed icon just because its new receipt
+    // is slightly ahead of the local clock. Keep the independently valid old
+    // lease until the unmodified new receipt becomes usable. Cold starts and
+    // expired/revoked leases still follow the fail-closed synchronization path.
+    if (state.phase === 'ready' && permitted() && record.dataset === metadata.dataset_epoch &&
+      ahead > 0 && ahead <= 5000 && record.receipt && iconLeaseUntil(record.receipt) > receipt.checked_at + 10) {
+      const pending = { ...metadata, auth_receipt: { ...receipt } }
+      receiptRenewal = setTimeout(() => {
+        receiptRenewal = null
+        // One attempt only: a stopped/rolled-back clock cannot create a poll loop.
+        if (disposed || state.epoch !== permissionEpoch || now() < receipt.checked_at ||
+          !isCurrent() || expectedToken !== options.session()?.token) return
+        void acceptMetadata(pending, expectedToken, isCurrent)
+      }, ahead + 10)
+      return
+    }
     // Only this verified network path replaces the receipt. Reading a snapshot never renews it.
     activeToken = expectedToken
     currentScope = digest
@@ -340,7 +365,7 @@ export function createIconDeviceController(options: DeviceOptions) {
     const stats = await options.storage.state()
     if (stats && isCurrent(captured)) update({ stats: { bodyBytes: stats.bodyBytes, entries: stats.entries, indexBytes: stats.indexBytes } })
   }
-  function dispose() { disposed = true; sequence++; if (clockRetry) clearTimeout(clockRetry); if (expiry) clearTimeout(expiry); listeners.clear(); void options.storage.close() }
+  function dispose() { disposed = true; sequence++; cancelReceiptRenewal(); if (clockRetry) clearTimeout(clockRetry); if (expiry) clearTimeout(expiry); listeners.clear(); void options.storage.close() }
   return { subscribe: (listener: (value: IconDeviceSnapshot) => void) => { listeners.add(listener); listener(state); return () => listeners.delete(listener) },
     snapshot: () => state, initialize, acceptMetadata, setTrusted, clearCopies, setDataset, authChanged, storageChanged, resume, capture, isCurrent, refreshStats,
     beginLogout: () => { record = { ...record, revokedScope: currentScope ?? record.receipt?.cache_scope }; return revoke(record.trusted ? 'waiting-auth' : 'disabled', true, true, options.session()?.token ?? null) }, reportStorageError: failure, checkpoint, dispose, storage: options.storage }
