@@ -172,6 +172,13 @@ export function createIconDeviceController(options: DeviceOptions) {
       if (previous?.revokedScope === digest) {
         record = { ...record, revokedScope: digest, receipt: null }; persist(); block('waiting-auth'); return
       }
+      // Rechecking a live lease (for example on focus) is not an invalidation.
+      // Only a changed durable fence must discard in-memory image handles.
+      if (state.lease && (!previous?.enabled || previous.scope !== state.lease.scope || previous.generation !== state.lease.generation)) {
+        block('checking')
+        await synchronize(retry, retryClock)
+        return
+      }
       const lease = previous?.enabled && previous.scope === key
         ? { scope: key, generation: previous.generation }
         : { scope: key, generation: crypto.randomUUID() }
@@ -184,8 +191,11 @@ export function createIconDeviceController(options: DeviceOptions) {
         stats: stats ? { bodyBytes: stats.bodyBytes, entries: stats.entries, indexBytes: stats.indexBytes } : state.stats, error: null })
       scheduleExpiry()
     } catch (error) {
-      if (own === sequence && retry && error instanceof IconStorageError && error.reason === 'stale') await synchronize(false)
-      else if (own === sequence) failure(error)
+      if (own !== sequence) return
+      // A failed fence check cannot leave the previously displayed lease usable.
+      if (state.lease) block('checking')
+      if (retry && error instanceof IconStorageError && error.reason === 'stale') await synchronize(false)
+      else failure(error)
     }
   }
 
@@ -340,8 +350,8 @@ export function createIconDeviceController(options: DeviceOptions) {
     await initialize(forceLegacyCheck)
     if (!initialized || disposed) return
     authChanged()
-    if (state.lease) block('checking')
-    // A resume checks both the durable fence and the local expiry before reusing any image.
+    // Validate expiry and the durable fence without discarding an unchanged lease.
+    // synchronize invalidates images if permission or the durable generation changed.
     await synchronize()
   }
   function capture() {

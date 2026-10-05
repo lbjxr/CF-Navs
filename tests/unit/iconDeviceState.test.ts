@@ -37,10 +37,60 @@ function setup(prepareLegacyCopies?: (force?: boolean) => Promise<boolean>, enab
   const device = make()
   const metadata = (scope = firstScope) => ({ dataset_epoch: dataset, icon_local_copy_protocol: 1 as const, auth_receipt: { cache_scope: scope, checked_at: 1000, expires_at: 100000 } })
   const ready = async () => { await device.initialize(); device.setDataset(dataset); await device.acceptMetadata(metadata(), session!.token, () => true); await device.setTrusted(true) }
-  return { device, storage, make, ready, metadata, setSession: (value: typeof session) => { session = value }, setClock: (value: number) => { clock = value }, denyClear: (value: boolean) => { denyClear = value }, denySave: (value: boolean) => { denySave = value }, record: () => JSON.parse(record ?? '{}') }
+  return { device, storage, make, ready, metadata, setControl: (patch: Record<string, unknown>) => { control = { ...control, ...patch } }, setSession: (value: typeof session) => { session = value }, setClock: (value: number) => { clock = value }, denyClear: (value: boolean) => { denyClear = value }, denySave: (value: boolean) => { denySave = value }, record: () => JSON.parse(record ?? '{}') }
 }
 
 describe('device-scoped icon permission lifecycle', () => {
+  it('revalidates focus without changing a valid lease or its display phase', async () => {
+    const f = setup(); await f.ready()
+    const captured = f.device.capture()!
+    const phases: string[] = []
+    const stop = f.device.subscribe(state => phases.push(state.phase))
+    vi.mocked(f.storage.state).mockClear()
+    await f.device.resume(true)
+    await Promise.all([f.device.resume(true), f.device.resume(true)])
+    expect(f.storage.state).toHaveBeenCalled()
+    expect(f.device.isCurrent(captured)).toBe(true)
+    expect(phases.every(phase => phase === 'ready')).toBe(true)
+    stop()
+  })
+  it.each([{ enabled: false }, { generation: 'other-tab-generation' }])('invalidates focus handles when the durable fence changed: %j', async patch => {
+    const f = setup(); await f.ready()
+    const captured = f.device.capture()!
+    f.setControl(patch)
+    await f.device.resume(true)
+    expect(f.device.isCurrent(captured)).toBe(false)
+    expect(f.device.snapshot().epoch).toBeGreaterThan(captured.epoch)
+    expect(f.device.capture()).not.toBeNull()
+  })
+  it('does not keep focused images after a durable session revocation', async () => {
+    const f = setup(); await f.ready()
+    const captured = f.device.capture()!
+    f.setControl({ revokedScope: firstScope })
+    await f.device.resume(true)
+    expect(f.device.isCurrent(captured)).toBe(false)
+    expect(f.device.capture()).toBeNull()
+    expect(f.device.snapshot().phase).toBe('waiting-auth')
+  })
+  it('does not retain a live lease after repeated stale activation failures', async () => {
+    const f = setup(); await f.ready()
+    const captured = f.device.capture()!
+    vi.mocked(f.storage.activate).mockRejectedValue(new IconStorageError('stale'))
+    await f.device.resume(true)
+    expect(f.device.isCurrent(captured)).toBe(false)
+    expect(f.device.capture()).toBeNull()
+    expect(f.device.snapshot().phase).toBe('checking')
+  })
+  it('fails closed when durable focus validation fails', async () => {
+    const f = setup(); await f.ready()
+    const captured = f.device.capture()!
+    vi.mocked(f.storage.state).mockRejectedValue(new Error('storage unavailable'))
+    await f.device.resume(true)
+    expect(f.device.isCurrent(captured)).toBe(false)
+    expect(f.device.capture()).toBeNull()
+    expect(f.device.snapshot().phase).toBe('unavailable')
+  })
+
   it('does not release bookmark or category image handles when refreshing metadata', async () => {
     vi.useFakeTimers()
     const f = setup(); await f.ready()
@@ -61,6 +111,8 @@ describe('device-scoped icon permission lifecycle', () => {
       const results = await Promise.all(handles.map(handle => handle.result))
       expect(results.every(result => result.status === 'ready')).toBe(true)
       expect(fetchCopy).toHaveBeenCalledTimes(3)
+      await f.device.resume(true)
+      expect(revokeUrl).not.toHaveBeenCalled()
       await f.device.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }, 'fixture-one', () => true)
       expect(revokeUrl).not.toHaveBeenCalled()
       f.setClock(2600); await vi.advanceTimersByTimeAsync(600)
