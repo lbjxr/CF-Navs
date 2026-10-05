@@ -2,7 +2,7 @@
   import { ICON_LOCAL_COPY_ENABLED, iconDevice, type IconDevicePhase } from '../lib/iconDeviceState'
   import { ICON_COPY_BODY_BUDGET } from '../../shared/iconLocalCopy'
   const phaseText: Record<IconDevicePhase, string> = {
-    disabled: '未启用', 'waiting-auth': '等待有效的登录校验', checking: '正在检查此设备的副本', ready: '已启用',
+    disabled: '未启用', 'pending-reload': '已保存，将在下次刷新或重新打开页面时启用', 'waiting-auth': '等待有效的登录校验', checking: '正在检查此设备的副本', ready: '已启用',
     expired: '离线期限已到期，联网校验后可恢复', unsupported: '当前服务端不支持本地副本', unavailable: '存储不可用', 'cleanup-failed': '清理未完成',
   }
   export let onVerify: (() => Promise<void>) | undefined = undefined
@@ -12,7 +12,7 @@
     busy = true; localError = ''
     try { await operation() } catch { localError = '操作未完成，请检查网络或浏览器存储权限后重试。' } finally { busy = false }
   }
-  const toggle = (enabled: boolean) => act(async () => { await iconDevice.setTrusted(enabled); if (enabled && iconDevice.snapshot().phase !== 'ready') await onVerify?.() })
+  const toggle = (enabled: boolean) => act(() => iconDevice.setTrusted(enabled))
   const clear = () => act(() => iconDevice.clearCopies())
   const verify = () => act(async () => { await onVerify?.(); await iconDevice.resume() })
   const size = (bytes: number) => (bytes / (1024 * 1024)).toFixed(2) + ' MiB'

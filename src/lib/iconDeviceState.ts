@@ -6,10 +6,11 @@ import { LEGACY_ICON_LOCAL_STORAGE_PREFIX, migrateLegacyIconCopies } from './leg
 
 export const ICON_DEVICE_KEY = 'cf-navs.icon-device-v1'
 export const ICON_LOCAL_COPY_ENABLED = import.meta.env.MODE !== 'icon-compat'
-export type IconDevicePhase = 'disabled' | 'waiting-auth' | 'ready' | 'checking' | 'expired' | 'unsupported' | 'unavailable' | 'cleanup-failed'
+export type IconDevicePhase = 'disabled' | 'pending-reload' | 'waiting-auth' | 'ready' | 'checking' | 'expired' | 'unsupported' | 'unavailable' | 'cleanup-failed'
 interface DeviceRecord { schema: 1; trusted: boolean; receipt: IconAuthReceipt | null; dataset: string | null; protocol?: number; inlineProtocol?: number; observedAt: number; cleanupPending: boolean; revokedScope?: string | null }
 export interface IconDeviceSnapshot {
-  trusted: boolean; phase: IconDevicePhase; epoch: number; lease: IconStorageLease | null
+  // Saved preference and document-scoped activation are deliberately separate.
+  trusted: boolean; enabledForPage: boolean; phase: IconDevicePhase; epoch: number; lease: IconStorageLease | null
   inlineProtocol?: number
   dataset: string | null; leaseUntil: number | null; checkedAt: number | null
   stats: IconStorageTotals; error: string | null
@@ -57,7 +58,7 @@ export function createIconDeviceController(options: DeviceOptions) {
   let clockRetry: ReturnType<typeof setTimeout> | null = null
   let receiptRenewal: ReturnType<typeof setTimeout> | null = null
   let clearTask: Promise<void> = Promise.resolve()
-  let state: IconDeviceSnapshot = { trusted: false, phase: 'disabled', epoch: 0, lease: null, dataset: null, leaseUntil: null, checkedAt: null, stats: { bodyBytes: 0, entries: 0, indexBytes: 0 }, error: null }
+  let state: IconDeviceSnapshot = { trusted: false, enabledForPage: false, phase: 'disabled', epoch: 0, lease: null, dataset: null, leaseUntil: null, checkedAt: null, stats: { bodyBytes: 0, entries: 0, indexBytes: 0 }, error: null }
   const listeners = new Set<(snapshot: IconDeviceSnapshot) => void>()
   function update(patch: Partial<IconDeviceSnapshot>) { state = { ...state, ...patch }; for (const listener of listeners) listener(state) }
   function cancelReceiptRenewal() {
@@ -95,7 +96,7 @@ export function createIconDeviceController(options: DeviceOptions) {
     return false
   }
   function permitted(): boolean {
-    return enabled && !disposed && !record.cleanupPending && record.revokedScope !== currentScope && options.session()?.token === activeToken && activeToken !== null &&
+    return enabled && state.enabledForPage && !disposed && !record.cleanupPending && record.revokedScope !== currentScope && options.session()?.token === activeToken && activeToken !== null &&
       dataDataset === record.dataset && dataDataset !== null &&
       iconPermissionFailure({ trusted: record.trusted, protocol: record.protocol, cacheScope: currentScope,
         receipt: record.receipt, now: now(), lastObservedAt: Math.max(record.observedAt, lastClock) }) === null
@@ -135,8 +136,9 @@ export function createIconDeviceController(options: DeviceOptions) {
     }
     const own = ++sequence
     const token = options.session()?.token ?? null
-    if (!record.trusted) { update({ trusted: false, phase: 'disabled', lease: null, error: null }); return }
+    if (!record.trusted) { update({ trusted: false, enabledForPage: false, phase: 'disabled', lease: null, error: null }); return }
     if (record.cleanupPending) { update({ phase: 'cleanup-failed', lease: null }); return }
+    if (!state.enabledForPage) { update({ trusted: true, phase: 'pending-reload', lease: null }); return }
     if (!token || !record.receipt) { update({ trusted: true, phase: 'waiting-auth', lease: null }); return }
     try {
       const digest = await scope(token)
@@ -225,7 +227,7 @@ export function createIconDeviceController(options: DeviceOptions) {
 
   async function closeForCompatibility(): Promise<void> {
     record = { ...record, trusted: false }
-    update({ trusted: false })
+    update({ trusted: false, enabledForPage: false })
     await revoke('unsupported', true)
     try {
       await options.storage.clear()
@@ -242,7 +244,7 @@ export function createIconDeviceController(options: DeviceOptions) {
         try { record = readRecord(options.load()) } catch { block('unavailable'); return }
         recordLoaded = true
         lastClock = record.observedAt
-        update({ trusted: record.trusted, dataset: record.dataset, checkedAt: record.receipt?.checked_at ?? null })
+        update({ trusted: record.trusted, enabledForPage: enabled && record.trusted, dataset: record.dataset, checkedAt: record.receipt?.checked_at ?? null })
       }
       if (!await prepareLegacyCopies(forceLegacyCheck)) return
       initialized = true
@@ -299,15 +301,18 @@ export function createIconDeviceController(options: DeviceOptions) {
   async function setTrusted(trusted: boolean) {
     await initialize()
     if (!trusted) {
-      record = { ...record, trusted: false }; update({ trusted: false }); await revoke('disabled', false)
+      record = { ...record, trusted: false }; update({ trusted: false, enabledForPage: false }); await revoke('disabled', false)
       if (!await prepareLegacyCopies()) return
       if (!initialized) await initialize()
       return
     }
     if (!initialized || !enabled) return
+    if (record.trusted) return
+    // Persist intent only. This document keeps its existing image path; only a
+    // new controller's first record load may enable trusted copies for the page.
     record = { ...record, trusted: true }
-    update({ trusted: true })
-    if (persist()) await synchronize()
+    if (persist()) update({ trusted: true, phase: record.cleanupPending ? 'cleanup-failed' : 'pending-reload', error: record.cleanupPending ? state.error : null })
+    else record = { ...record, trusted: false }
   }
   async function clearCopies() {
     const wasInitialized = initialized
@@ -339,7 +344,7 @@ export function createIconDeviceController(options: DeviceOptions) {
     if (key === AUTH_STORAGE_KEY || key === null) authChanged()
     if (key === ICON_DEVICE_KEY || key === null) {
       try { record = readRecord(options.load()) } catch { block('unavailable'); return }
-      update({ trusted: record.trusted })
+      update({ trusted: record.trusted, enabledForPage: state.enabledForPage && record.trusted })
       if (!record.trusted || record.cleanupPending) block(record.trusted ? 'cleanup-failed' : 'disabled')
       else void synchronize()
     }

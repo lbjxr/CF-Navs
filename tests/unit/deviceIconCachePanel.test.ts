@@ -10,7 +10,7 @@ vi.mock('../../src/lib/iconDeviceState', async () => {
   const store = writable(state)
   return { ICON_LOCAL_COPY_ENABLED: true, iconDevice: {
     subscribe: store.subscribe, snapshot: () => state,
-    setTrusted: vi.fn(async (trusted: boolean) => { state = { ...state, trusted, phase: trusted ? 'waiting-auth' : 'disabled' }; store.set(state) }),
+    setTrusted: vi.fn(async (trusted: boolean) => { state = { ...state, trusted, phase: trusted ? 'pending-reload' : 'disabled' }; store.set(state) }),
     clearCopies: vi.fn(async () => undefined), resume: vi.fn(async () => undefined),
   } }
 })
@@ -28,10 +28,13 @@ describe('device-only icon controls', () => {
     expect(screen.getByText(/10.00 MiB/)).toBeTruthy()
     expect(screen.getByText(/不随全站设置保存或备份/)).toBeTruthy()
   })
-  it('requests verification through the page callback, without submitting the settings form', async () => {
+  it('saves enablement without verification until reload, and keeps manual verification explicit', async () => {
     const verify = vi.fn(async () => undefined)
     render(DeviceIconCachePanel, { props: { onVerify: verify } })
     await fireEvent.change(screen.getByRole('checkbox'), { target: { checked: true } })
+    await vi.waitFor(() => expect(screen.getByRole('status').textContent).toContain('下次刷新'))
+    expect(verify).not.toHaveBeenCalled()
+    await fireEvent.click(screen.getByRole('button', { name: '联网校验' }))
     await vi.waitFor(() => expect(verify).toHaveBeenCalledOnce())
     expect(iconDevice.setTrusted).toHaveBeenCalledWith(true)
     for (const button of screen.getAllByRole('button')) expect(button.getAttribute('type')).toBe('button')

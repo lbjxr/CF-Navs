@@ -26,7 +26,7 @@ export function createTrustedIconView(onChange: (value: TrustedIconState) => voi
   function reset() { sequence++; handle?.release(); handle = null }
   function update(force = false) {
     if (disposed || !input) return
-    const active = deviceState.trusted && !input.preview && Number.isSafeInteger(input.id) && input.id > 0 && !['unsupported', 'unavailable'].includes(deviceState.phase)
+    const active = deviceState.enabledForPage && deviceState.trusted && !input.preview && Number.isSafeInteger(input.id) && input.id > 0 && !['unsupported', 'unavailable'].includes(deviceState.phase)
     const descriptor = deviceState.dataset ? bookmarkDescriptor(input, deviceState.dataset) : null
     const next = JSON.stringify([active, input.object_type, input.id, input.icon, input.icon_blob, input.icon_revision, input.icon_write_epoch, input.icon_display, input.visible, deviceState.epoch, deviceState.phase, deviceState.dataset])
     if (!force && next === signature) return

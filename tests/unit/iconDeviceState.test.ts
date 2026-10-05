@@ -36,11 +36,77 @@ function setup(prepareLegacyCopies?: (force?: boolean) => Promise<boolean>, enab
   }
   const device = make()
   const metadata = (scope = firstScope) => ({ dataset_epoch: dataset, icon_local_copy_protocol: 1 as const, auth_receipt: { cache_scope: scope, checked_at: 1000, expires_at: 100000 } })
-  const ready = async () => { await device.initialize(); device.setDataset(dataset); await device.acceptMetadata(metadata(), session!.token, () => true); await device.setTrusted(true) }
-  return { device, storage, make, ready, metadata, setControl: (patch: Record<string, unknown>) => { control = { ...control, ...patch } }, setSession: (value: typeof session) => { session = value }, setClock: (value: number) => { clock = value }, denyClear: (value: boolean) => { denyClear = value }, denySave: (value: boolean) => { denySave = value }, record: () => JSON.parse(record ?? '{}') }
+  const rememberTrust = () => { record = JSON.stringify({ schema: 1, trusted: true, receipt: null, dataset: null, observedAt: 0, cleanupPending: false }) }
+  const ready = async () => { rememberTrust(); await device.initialize(); device.setDataset(dataset); await device.acceptMetadata(metadata(), session!.token, () => true) }
+  return { device, storage, make, ready, rememberTrust, metadata, setControl: (patch: Record<string, unknown>) => { control = { ...control, ...patch } }, setSession: (value: typeof session) => { session = value }, setClock: (value: number) => { clock = value }, denyClear: (value: boolean) => { denyClear = value }, denySave: (value: boolean) => { denySave = value }, record: () => JSON.parse(record ?? '{}') }
 }
 
 describe('device-scoped icon permission lifecycle', () => {
+  it('only persists enablement until the next document loads, even after refresh events', async () => {
+    const f = setup(); await f.device.initialize(); f.device.setDataset(dataset)
+    await f.device.acceptMetadata(f.metadata(), 'fixture-one', () => true)
+    vi.mocked(f.storage.activate).mockClear()
+    await f.device.setTrusted(true)
+    expect(f.record().trusted).toBe(true)
+    expect(f.record()).not.toHaveProperty('enabledForPage')
+    expect(f.device.snapshot()).toMatchObject({ trusted: true, enabledForPage: false, phase: 'pending-reload' })
+    await f.device.resume(true)
+    await f.device.acceptMetadata(f.metadata(), 'fixture-one', () => true)
+    f.device.storageChanged(ICON_DEVICE_KEY)
+    await f.device.resume()
+    expect(f.device.capture()).toBeNull()
+    expect(f.storage.activate).not.toHaveBeenCalled()
+    const reloaded = f.make(); reloaded.setDataset(dataset); await reloaded.initialize()
+    expect(reloaded.snapshot().enabledForPage).toBe(true)
+    expect(reloaded.capture()).not.toBeNull()
+  })
+  it('does not hot-enable another already open document', async () => {
+    const f = setup(); await f.device.initialize()
+    const other = f.make(); other.setDataset(dataset); await other.initialize()
+    await f.device.setTrusted(true)
+    other.storageChanged(ICON_DEVICE_KEY)
+    await other.acceptMetadata(f.metadata(), 'fixture-one', () => true)
+    await other.resume(true)
+    expect(other.snapshot()).toMatchObject({ trusted: true, enabledForPage: false, phase: 'pending-reload' })
+    expect(other.capture()).toBeNull()
+    expect(f.storage.activate).not.toHaveBeenCalled()
+  })
+  it('clearing copies and changing sessions cannot activate a pending preference', async () => {
+    const f = setup(); await f.device.initialize(); await f.device.setTrusted(true)
+    await f.device.clearCopies()
+    f.setSession({ token: 'fixture-two', expires_at: 100000 }); f.device.authChanged()
+    f.device.setDataset(dataset)
+    await f.device.acceptMetadata(f.metadata(secondScope), 'fixture-two', () => true)
+    await f.device.resume()
+    expect(f.device.snapshot().enabledForPage).toBe(false)
+    expect(f.device.capture()).toBeNull()
+    expect(f.storage.activate).not.toHaveBeenCalled()
+  })
+  it('cancels a pending preference without activating it on reload', async () => {
+    const f = setup(); await f.device.initialize(); await f.device.setTrusted(true)
+    await f.device.setTrusted(false)
+    const reloaded = f.make(); reloaded.setDataset(dataset); await reloaded.initialize()
+    expect(reloaded.snapshot()).toMatchObject({ trusted: false, enabledForPage: false })
+    expect(reloaded.capture()).toBeNull()
+    expect(f.storage.activate).not.toHaveBeenCalled()
+  })
+  it('does not hide a cleanup failure when enablement is saved for the next load', async () => {
+    const f = setup(); await f.ready(); f.denyClear(true)
+    await f.device.setTrusted(false)
+    const error = f.device.snapshot().error
+    await f.device.setTrusted(true)
+    expect(f.device.snapshot()).toMatchObject({ trusted: true, enabledForPage: false, phase: 'cleanup-failed', error })
+    expect(f.device.capture()).toBeNull()
+  })
+  it('can retry saving a pending preference after storage recovers', async () => {
+    const f = setup(); await f.device.initialize(); f.denySave(true)
+    await f.device.setTrusted(true)
+    expect(f.device.snapshot().trusted).toBe(false)
+    f.denySave(false); await f.device.setTrusted(true)
+    expect(f.record().trusted).toBe(true)
+    expect(f.device.snapshot()).toMatchObject({ trusted: true, enabledForPage: false, phase: 'pending-reload' })
+  })
+
   it('revalidates focus without changing a valid lease or its display phase', async () => {
     const f = setup(); await f.ready()
     const captured = f.device.capture()!
@@ -188,7 +254,7 @@ describe('device-scoped icon permission lifecycle', () => {
 
   it('waits for a slightly future server receipt without granting early access or renewing it', async () => {
     vi.useFakeTimers()
-    const f = setup(); await f.device.initialize(); f.device.setDataset(dataset); await f.device.setTrusted(true)
+    const f = setup(); f.rememberTrust(); await f.device.initialize(); f.device.setDataset(dataset)
     const metadata = { ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }
     await f.device.acceptMetadata(metadata, 'fixture-one', () => true)
     expect(f.device.snapshot().phase).toBe('checking')
@@ -217,7 +283,7 @@ describe('device-scoped icon permission lifecycle', () => {
   })
   it('does not poll forever when the device clock fails to advance', async () => {
     vi.useFakeTimers()
-    const f = setup(); await f.device.initialize(); f.device.setDataset(dataset); await f.device.setTrusted(true)
+    const f = setup(); f.rememberTrust(); await f.device.initialize(); f.device.setDataset(dataset)
     await f.device.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2589 } }, 'fixture-one', () => true)
     await vi.advanceTimersByTimeAsync(20000)
     expect(f.device.capture()).toBeNull()
@@ -269,7 +335,9 @@ describe('device-scoped icon permission lifecycle', () => {
     await f.device.acceptMetadata(f.metadata(), 'fixture-one', () => true)
     expect(f.device.capture()).toBeNull()
     f.device.setDataset(dataset); await f.device.resume()
-    expect(f.device.capture()).not.toBeNull()
+    expect(f.device.capture()).toBeNull()
+    const reloaded = f.make(); reloaded.setDataset(dataset); await reloaded.initialize()
+    expect(reloaded.capture()).not.toBeNull()
     expect(JSON.stringify(f.record())).not.toContain('fixture-one')
   })
   it('blocks synchronously on logout and cannot be renewed by a late successful request', async () => {
@@ -341,7 +409,9 @@ describe('device-scoped icon permission lifecycle', () => {
     await f.device.setTrusted(false)
     expect(f.device.capture()).toBeNull()
     await f.device.setTrusted(true)
-    expect(f.device.capture()!.lease.generation).not.toBe(first.lease.generation)
+    expect(f.device.capture()).toBeNull()
+    const reloaded = f.make(); reloaded.setDataset(dataset); await reloaded.initialize()
+    expect(reloaded.capture()!.lease.generation).not.toBe(first.lease.generation)
   })
   it('keeps authorized existing copies usable after a quota-only failure', async () => {
     const f = setup(); await f.ready()
@@ -370,7 +440,9 @@ describe('device-scoped icon permission lifecycle', () => {
     await f.device.resume(true)
     await f.device.acceptMetadata(f.metadata(), 'fixture-one', () => true)
     await f.device.setTrusted(true)
-    expect(f.device.capture()).not.toBeNull()
+    expect(f.device.capture()).toBeNull()
+    const reloaded = f.make(); reloaded.setDataset(dataset); await reloaded.initialize()
+    expect(reloaded.capture()).not.toBeNull()
   })
   it('keeps trusted copies blocked after legacy cleanup fails, but still allows closing and clearing', async () => {
     let migrationComplete = true

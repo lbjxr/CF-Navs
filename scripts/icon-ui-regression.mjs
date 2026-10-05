@@ -383,8 +383,16 @@ try {
   check('device preference starts disabled', await cdp.call(() => !document.querySelector('.device-cache input').checked))
   check('device controls explain private/offline risks', await cdp.call(() => document.querySelector('.device-cache').textContent.includes('私密图片') && document.querySelector('.device-cache').textContent.includes('24 小时')))
   const beforeSettings = await api('/settings', undefined, 'GET')
+  const beforeEnableCopies = iconCopyRequests.length
   await click('.device-cache input')
-  await until(() => document.querySelector('.device-status')?.textContent.startsWith('已启用'), 'trusted session initialization')
+  await until(() => document.querySelector('.device-status')?.textContent.includes('下次刷新'), 'saved pending enablement')
+  check('enabling saves intent without fetching trusted copies', iconCopyRequests.length === beforeEnableCopies)
+  await cdp.navigate(base + '/admin')
+  await until(() => Boolean(document.querySelector('[data-testid="admin-tab-settings"]')), 'admin after enable reload')
+  await click('[data-testid="admin-tab-settings"]')
+  await until(() => Boolean(document.querySelector('.settings-submenu')), 'settings after enable reload')
+  await click('.settings-submenu button', '设备缓存')
+  await until(() => document.querySelector('.device-status')?.textContent.startsWith('已启用'), 'trusted session initialization after reload')
   check('real session receipt enables this device', await cdp.call(() => { const record = JSON.parse(localStorage.getItem('cf-navs.icon-device-v1')); return record.trusted && record.receipt?.cache_scope?.length === 64 && record.dataset?.length === 32 }))
   await click('.device-actions button', '清理此设备图标副本')
   await until(() => document.querySelector('.device-status')?.textContent.startsWith('已启用'), 'clear and reopen')
@@ -402,7 +410,7 @@ try {
   await until(() => document.activeElement === document.querySelector('.device-cache input'), 'checkbox focus')
   await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', text: ' ', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 })
   await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 })
-  await until(() => document.querySelector('.device-status')?.textContent.startsWith('已启用'), 'keyboard enable')
+  await until(() => document.querySelector('.device-status')?.textContent.includes('下次刷新'), 'keyboard enable waits for reload')
   check('keyboard toggling is functional', await cdp.call(() => document.querySelector('.device-cache input').checked))
   const aggregateStart = aggregateResponses.length
   const copyStart = iconCopyRequests.length
