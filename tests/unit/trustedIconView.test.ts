@@ -180,6 +180,14 @@ describe('verified icon identity survives snapshot hydration',()=>{
       expect(f.release).not.toHaveBeenCalled();expect(harness.acquire).toHaveBeenCalledOnce();expect(f.changed).not.toHaveBeenCalled()
     } finally {f.view.destroy()}
   })
+  it('retains verified bytes when only the write fence advances',async()=>{
+    const f=setup();try {
+      f.view.set(f.input);await Promise.resolve()
+      f.view.set({...f.input,icon_write_epoch:2})
+      expect(f.release).not.toHaveBeenCalled()
+      expect(harness.acquire).toHaveBeenCalledOnce()
+    }finally{f.view.destroy()}
+  })
   it('does not release a verified local image just to renew its online key',async()=>{
     const f=setup();try{f.view.set(f.input);await Promise.resolve();f.view.set({...f.input,online_url:'/api/icon/7?key=renewed'});expect(f.release).not.toHaveBeenCalled();expect(harness.acquire).toHaveBeenCalledOnce()}finally{f.view.destroy()}
   })

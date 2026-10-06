@@ -36,10 +36,12 @@ export function createTrustedIconView(onChange: (value: TrustedIconState) => voi
     if (!force && next === signature) return
     // Snapshot hydration and refreshed online grants can change raw fields while
     // the same verified image is still owned by this view. They are not a new
-    // image identity. Permission/dataset transitions must still release it.
+    // image identity. write_epoch fences writes, not content-addressed reads; a
+    // refresh may advance it without changing bytes. Permission/dataset
+    // transitions must still release the image.
     if (!force && active && input.visible && handle && presentation.url && presentation.active &&
       deviceState.phase === 'ready' && deviceState.epoch === displayedEpoch && descriptor?.state === 'ready' && displayedDescriptor &&
-      (['object_type', 'object_id', 'dataset_epoch', 'state', 'content_revision', 'write_epoch'] as const).every(key => descriptor[key] === displayedDescriptor![key])) {
+      (['object_type', 'object_id', 'dataset_epoch', 'state', 'content_revision'] as const).every(key => descriptor[key] === displayedDescriptor![key])) {
       signature = next
       return
     }
