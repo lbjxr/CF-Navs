@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyAuthUIRegion,
+  createAuthViewIntent,
   getAuthResetMask,
   logoutRevocationWarning,
   targetAfterLoginClose,
@@ -133,5 +134,34 @@ describe('applyAuthUIRegion', () => {
     const result = applyAuthUIRegion({ loginModalOpen: true, currentView: null })
     expect(result.loginModalOpen).toBe(true)
     expect(result).not.toHaveProperty('currentView')
+  })
+})
+
+
+describe('auth view intent ownership', () => {
+  it('allows an unchanged logout to apply its view', () => {
+    const intent = createAuthViewIntent()
+    expect(intent.begin()()).toBe(true)
+  })
+  it('invalidates an older completion when a newer logout starts', () => {
+    const intent = createAuthViewIntent(), old = intent.begin(), current = intent.begin()
+    expect(old()).toBe(false)
+    expect(current()).toBe(true)
+  })
+  it('does not revive a stale intent after an open-close-open sequence', () => {
+    const intent = createAuthViewIntent(), old = intent.begin()
+    intent.invalidate(); intent.invalidate(); intent.invalidate()
+    expect(old()).toBe(false)
+    expect(intent.begin()()).toBe(true)
+  })
+  it('preserves typed login state when public refresh resolves after a new action', async () => {
+    const intent = createAuthViewIntent(), current = intent.begin()
+    let finish!: () => void
+    const pending = new Promise<void>(resolve => { finish = resolve })
+    let login = false, text = ''
+    const logout = pending.then(() => { if (current()) { login = false; text = '' } })
+    intent.invalidate(); login = true; text = 'Synthetic login draft'
+    finish(); await logout
+    expect({ login, text }).toEqual({ login: true, text: 'Synthetic login draft' })
   })
 })

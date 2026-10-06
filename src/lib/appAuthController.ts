@@ -113,3 +113,15 @@ export function applyAuthUIRegion(
   }
   return result
 }
+
+/** App owns auth-view intent; asynchronous logout must not close a newer dialog. */
+export function createAuthViewIntent() {
+  let epoch = 0
+  return {
+    begin() {
+      const captured = ++epoch
+      return () => captured === epoch
+    },
+    invalidate() { epoch += 1 },
+  }
+}

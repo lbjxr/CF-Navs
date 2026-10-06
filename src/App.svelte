@@ -27,7 +27,7 @@
   import type { AdminTab, BookmarkFormValue, CategoryFormValue } from './lib/adminTypes'
   import { toBookmarkForm, toBookmarkPayload, toCategoryForm, toCategoryPayload } from './lib/adminFormAdapters'
   import { runAdminMutation } from './lib/appAdminMutation'
-  import { logoutRevocationWarning } from './lib/appAuthController'
+  import { createAuthViewIntent, logoutRevocationWarning } from './lib/appAuthController'
   import {
     createImportExportState,
     exportDataToFile,
@@ -170,6 +170,7 @@
     },
   })
 
+  const authViewIntent = createAuthViewIntent()
   let loginModalOpen = false
   let categoryModalOpen = false
   let bookmarkModalOpen = false
@@ -603,6 +604,7 @@
   }
 
   async function openLoginUseCase(): Promise<void> {
+    authViewIntent.invalidate()
     rootError = ''
     authStore.resetError()
     await ensureLoginModalComponent()
@@ -614,6 +616,7 @@
   }
 
   async function handleCloseLogin(): Promise<void> {
+    authViewIntent.invalidate()
     authStore.resetError()
     if (!canSeeHome) {
       loginModalOpen = true
@@ -629,6 +632,7 @@
   }
 
   async function completeLoginUseCase(payload: { username: string; password: string }): Promise<void> {
+    authViewIntent.invalidate()
     await authStore.login(payload.username, payload.password)
     loginModalOpen = false
     rootError = ''
@@ -650,11 +654,13 @@
 
   async function completeLogoutUseCase(previousSettings: Settings | null): Promise<string | null> {
     const revocationWarning = logoutRevocationWarning(await authStore.logout())
+    if (isLoggedIn()) return revocationWarning
     resetCategoryState()
     resetSettingsState()
     resetBookmarkState()
     adminStore.reset()
     await clearCachedAdminData()
+    if (isLoggedIn()) return revocationWarning
     if (previousSettings) {
       applyConfigFromSettings(previousSettings)
     }
@@ -663,6 +669,7 @@
   }
 
   async function handleLogout(): Promise<void> {
+    const viewIsCurrent = authViewIntent.begin()
     rootError = ''
     const previousSettings = get(adminStore).data.settings
 
@@ -673,17 +680,20 @@
         publicMode: get(configStore).data?.public_mode,
         authenticated: false,
       })
-      if (homeGate.loginModalOpen) {
-        await ensureLoginModalComponent()
+      if (viewIsCurrent() && !isLoggedIn()) {
+        if (homeGate.loginModalOpen) await ensureLoginModalComponent()
+        // Lazy loading can yield to another login/recovery action as well.
+        if (viewIsCurrent() && !isLoggedIn()) {
+          loginModalOpen = homeGate.loginModalOpen
+          currentView = homeGate.view
+        }
       }
-      loginModalOpen = homeGate.loginModalOpen
-      currentView = homeGate.view
       // 视图先切换，确保全局 Toast 不被登出后的页面切换影响。
       if (revocationWarning) {
         toastStore.addToast(revocationWarning, 'error', { duration: 12000 })
       }
     } catch (error) {
-      rootError = getErrorMessage(error)
+      if (viewIsCurrent()) rootError = getErrorMessage(error)
     }
   }
 
@@ -989,6 +999,7 @@
   }
 
   async function handleChangePassword(payload: ChangePasswordReq): Promise<void> {
+    authViewIntent.invalidate()
     rootError = ''
 
     await api.auth.changePassword(payload)
@@ -1085,6 +1096,7 @@
     void initializeApp()
   }
   function handleForgotPassword(): void {
+    authViewIntent.invalidate()
     // 忘记密码是登录态的子流程，按模态语义处理：不改 URL，避免 pushState 制造一个没有
     // popstate 监听的历史项（后退键会让 URL 与视图错位）。直达 /recover 仍由 onMount 处理。
     loginModalOpen = false

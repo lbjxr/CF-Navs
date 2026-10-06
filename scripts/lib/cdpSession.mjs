@@ -127,7 +127,10 @@ export class CdpSession {
       '--remote-allow-origins=*',
       '--no-first-run',
       '--no-default-browser-check',
-      '--disable-features=Translate,MediaRouter',
+      // Windows native-window occlusion can suspend a visible test tab when
+      // another app covers it. Keep tab visibility/lifecycle unchanged.
+      '--disable-features=Translate,MediaRouter,CalculateNativeWinOcclusion',
+      '--disable-backgrounding-occluded-windows',
       '--disable-background-networking',
       'about:blank',
     ]

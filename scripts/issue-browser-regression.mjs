@@ -6,6 +6,7 @@ import path from 'node:path'
 import net from 'node:net'
 import { randomUUID } from 'node:crypto'
 import { CdpSession, sleep } from './lib/cdpSession.mjs'
+import { verifiedLogoutFailures } from './lib/logoutEvidence.mjs'
 import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
@@ -325,8 +326,14 @@ try {
       if (!handled) return b.send('Fetch.continueRequest', { requestId:event.requestId })
     }).catch(error => { report.interceptionError=safe(error.message) })
   })
+  const authSessions = new Map() // Raw headers stay in memory, never in reports.
   b.on('Network.requestWillBeSent', e => {
     const row = { requestId: e.requestId, stage, time: e.timestamp, wallTime: e.wallTime, method: e.request.method, type: e.type, initiator: e.initiator?.type, initiatorFrames:e.initiator?.stack?.callFrames?.slice(0,4).map(f=>({function:f.functionName,url:safe(f.url),line:f.lineNumber,column:f.columnNumber})), ...classifyIssueRequest(e.request.url, e.request.postData, base) }
+    const authorization = Object.entries(e.request.headers ?? {}).find(([key]) => key.toLowerCase() === 'authorization')?.[1]
+    if (typeof authorization === 'string' && authorization.startsWith('Bearer ')) {
+      if (!authSessions.has(authorization)) authSessions.set(authorization, authSessions.size + 1)
+      row.authSession = authSessions.get(authorization)
+    }
     if(operationImageUrls) row.wasDisplayed=operationImageUrls.has(e.request.url)
     if (row.kind === 'external' && row.type === 'Image') row.kind = 'external-image'
     if(row.kind==='external-image') {
@@ -343,9 +350,17 @@ try {
       void b.call(url=>[...document.querySelectorAll('[data-testid="bookmark-modal"] img')].some(img=>img.src===url||img.currentSrc===url),e.request.url).then(matches=>{if(matches){row.surface='editor-preview';row.previewFor=previewFor}}).catch(()=>{})
     }
   })
-  b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','cache-control','x-icon-fallback','content-security-policy'].includes(name.toLowerCase()))) }) })
+  b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,responseTime:e.timestamp,disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','cache-control','x-icon-fallback','content-security-policy'].includes(name.toLowerCase()))) }) })
   function inspectCopyResponse(requestId) {
     const row=requests.get(requestId)
+    if(row?.path === '/api/logout' && row.status === 200) {
+      const read=b.send('Network.getResponseBody',{requestId}).then(response=>{
+        const body=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body)
+        row.logoutRevoked=body.code===0 && body.data?.revoked===true
+      }).catch(()=>{row.logoutRevoked=false})
+      responseReads.add(read);void read.finally(()=>responseReads.delete(read))
+      return
+    }
     if(row?.kind!=='icon-copy'||![200,409].includes(row.status)) return
     const read=b.send('Network.getResponseBody',{requestId}).then(response=>{
       const envelope=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body),data=envelope.data
@@ -562,6 +577,27 @@ try {
       return {oldResponseReleased:true,privateObjectRetained:true}
     })
   })
+  await scenario('29-LOGOUT-LOGIN-INTENT', async () => {
+    await home()
+    let held = null
+    return intercept([{ urlPattern: '*/api/public/data*', requestStage: 'Response' }], async event => {
+      if (held) return false
+      held = event
+      return true
+    }, async () => {
+      await homeAction('logout')
+      await wait(() => !localStorage.getItem('cf-navs.auth'))
+      await localWait(() => held, 'Logout public refresh')
+      await homeAction('login')
+      await fill('input[autocomplete="username"]', 'Synthetic pending login')
+      report.cases.at(-1).preconditions = { logoutRefreshHeld: true, newLoginOpened: true }
+      await b.send('Fetch.continueRequest', { requestId: held.requestId })
+      await sleep(1500)
+      const retained = await b.call(() => ({ open: Boolean(document.querySelector('[aria-labelledby="login-modal-title"]')), value: document.querySelector('input[autocomplete="username"]')?.value === 'Synthetic pending login' }))
+      assert(retained.open && retained.value, 'Late logout completion dismissed the newer login intent')
+      return { pendingLoginRetained: true, typedValueRetained: true }
+    })
+  })
   await scenario('29-OLD-401', async () => {
     await home({waitForImages:false}); const previousToken=token; let held=null
     return intercept([{urlPattern:'*/api/data/version*',requestStage:'Response'}],async event=>{
@@ -594,7 +630,10 @@ try {
       await b.send('Target.activateTarget',{targetId:b.targetId});await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
       let removed=false
       for(let i=0;i<100;i++){removed=await sessionCall(sessionId,id=>!document.querySelector(`[data-sort-id="${id}"]`)&&!localStorage.getItem('cf-navs.auth'),bookmarks[2].id);if(removed)break;await sleep(100)}
-      assert(removed,'Other tab retained private data after logout'); await signInPlace()
+      assert(removed,'Other tab retained private data after logout')
+      const clearedAt = await b.call(() => (performance.timeOrigin + performance.now()) / 1000)
+      for (const row of report.requests) if (row.stage === stage && row.path === '/api/logout') row.clientClearedAt = clearedAt
+      await signInPlace()
       return {privatePresentBefore:true,privateRemovedInOtherTab:true}
     } finally {await b.send('Target.closeTarget',{targetId:secondary});secondary=null;await b.send('Target.activateTarget',{targetId:b.targetId})}
   })
@@ -668,11 +707,13 @@ finally {
   report.validatedConflicts=[...protocolConflicts]
   const canceledHttp=new Set(report.requests.filter(isCanceledNetworkResponse).map(row=>row.requestId))
   report.canceledResponses=[...canceledHttp]
-  report.unexpectedHttp = report.requests.filter(e => e.status >= 400 && !injectedRequests.has(e.requestId) && !protocolConflicts.has(e.requestId) && !canceledHttp.has(e.requestId))
+  const revokedRequests = new Set(verifiedLogoutFailures(report.requests))
+  report.verifiedLogoutFailures = [...revokedRequests]
+  report.unexpectedHttp = report.requests.filter(e => e.status >= 400 && !injectedRequests.has(e.requestId) && !protocolConflicts.has(e.requestId) && !canceledHttp.has(e.requestId) && !revokedRequests.has(e.requestId))
   report.failedRequests = report.requests.filter(e => e.error)
   report.expectedOfflineRequests=[...expectedOfflineRequests]
   report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!(e.canceled&&e.error==='net::ERR_ABORTED'))
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId))))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||revokedRequests.has(e.requestId))))
   report.injectedRequests=[...injectedRequests]
   await persist()
   console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))
