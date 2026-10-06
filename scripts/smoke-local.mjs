@@ -51,8 +51,8 @@ const SETUP_TOKEN = `smoke-setup-${randomBytes(18).toString('base64url')}`
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function fail(message) {
-  console.error(`smoke: ${message}`)
-  process.exit(2)
+  // Throw so the owned Worker/state finally block also runs on startup failure.
+  throw new Error(message)
 }
 
 function findFreePort() {

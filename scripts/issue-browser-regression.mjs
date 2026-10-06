@@ -43,11 +43,12 @@ async function wait(fn, args = [], timeout = 20000) {
 }
 async function click(selector, button = 'left') {
   await b.send('Page.bringToFront')
-  const hover=await b.call(sel=>{const e=document.querySelector(sel);if(!e)return null;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return r.width&&r.height?{x:r.x+r.width/2,y:r.y+r.height/2}:null},selector)
+  const hover=await b.call(sel=>{const e=document.querySelector(sel);if(!e)return null;let r=e.getBoundingClientRect();const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);if(!(r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth&&(hit===e||e.contains(hit))))e.scrollIntoView({block:e.closest('.bookmark-context-menu')?'nearest':'center',inline:'nearest'});r=e.getBoundingClientRect();return r.width&&r.height?{x:r.x+r.width/2,y:r.y+r.height/2}:null},selector)
   if(hover) { await b.send('Input.dispatchMouseEvent',{type:'mouseMoved',...hover,button:'none'}); await sleep(250) }
   const point = await wait(sel => {
     const e = document.querySelector(sel); if (!e || e.disabled) return null
-    e.scrollIntoView({ block: 'center', behavior: 'instant' })
+    let before=e.getBoundingClientRect();const beforeHit=document.elementFromPoint(before.x+before.width/2,before.y+before.height/2)
+    if(!(before.top>=0&&before.bottom<=innerHeight&&before.left>=0&&before.right<=innerWidth&&(beforeHit===e||e.contains(beforeHit))))e.scrollIntoView({block:e.closest('.bookmark-context-menu')?'nearest':'center',inline:'nearest',behavior:'instant'})
     const r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2
     const hit = document.elementFromPoint(x, y)
     return r.width && r.height && (hit === e || e.contains(hit)) ? { x, y } : null
@@ -353,7 +354,22 @@ try {
     assert(!copies.length, 'Enabling issued local-copy requests before complete reload'); assert(await b.call(()=>performance.timeOrigin)===documentStart,'Return unexpectedly replaced the document'); return { copyRequests: copies.length, sameDocument: true }
   })
   await scenario('28-COLD-RELOAD', async () => { await home(); const images = await verifyImages(); await shot('28-cold'); return images })
-  await scenario('28-WARM-RELOAD', async () => { const start = report.requests.length; await home(); await verifyImages(); const network = assessStableIcons(report.requests.slice(start)); assert(network.passed, JSON.stringify(network)); return network })
+  await scenario('28-WARM-RELOAD', async () => {
+    await home();await verifyImages()
+    const keys=manifest().map(row=>row.key)
+    const persisted=await b.call(async keys=>{
+      const request=indexedDB.open('cf-navs-object-icons-v1'),db=await new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)})
+      try {const tx=db.transaction(['entries','bodies'],'readonly');return (await Promise.all(keys.map(async key=>{
+        const read=store=>new Promise((resolve,reject)=>{const r=tx.objectStore(store).get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})
+        const [entry,body]=await Promise.all([read('entries'),read('bodies')]);return entry?.descriptor?.state==='ready'&&body?.size>0
+      }))).every(Boolean)}finally{db.close()}
+    },keys)
+    assert(persisted,'Warm test requires persisted fixture bodies')
+    const start=report.requests.length;await home();await verifyImages()
+    assert(await b.call(manifest=>manifest.every(row=>document.querySelector(row.selector)?.querySelector('img')?.src.startsWith('blob:')),manifest()),'Warm fixture did not use object URLs')
+    const rows=report.requests.slice(start),network=assessStableIcons(rows.filter(row=>['icon-body','icon-copy'].includes(row.kind)))
+    assert(network.passed,JSON.stringify(network));return {persisted,network,otherImageRequests:rows.filter(row=>['external-image','iconify-body'].includes(row.kind)).length}
+  })
   await scenario('28-RIGHT-CLICK-ON', async () => stableOperation(async () => { await click(card(0), 'right'); await key('Escape'); }))
   await scenario('29-TAB-FOCUS', async () => stableOperation(async () => {
     secondary = (await b.send('Target.createTarget', { url: 'about:blank' })).targetId

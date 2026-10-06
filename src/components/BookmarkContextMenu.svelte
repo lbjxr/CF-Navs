@@ -23,6 +23,7 @@
   let menuElement: HTMLDivElement | null = null
   let placement: 'down' | 'up' = 'down'
   let maxHeight: number | null = null
+  let topOffset: number | null = null
   let remeasureQueued = false
 
   function handleEditClick() {
@@ -81,9 +82,11 @@
     // Home publishes the fixed sorting bar's exclusion area. Other hosts omit
     // the variable and retain the full viewport as before.
     const toolbarInset = Math.max(0, Number.parseFloat(getComputedStyle(anchor).getPropertyValue('--home-sort-bottom-inset')) || 0)
-    const viewportBottom = Math.max(0, window.innerHeight - toolbarInset)
+    const viewportTop = window.visualViewport?.offsetTop ?? 0
+    const visualBottom = viewportTop + (window.visualViewport?.height ?? window.innerHeight)
+    const viewportBottom = Math.max(viewportTop, Math.min(visualBottom, window.innerHeight - toolbarInset))
     const spaceBelow = viewportBottom - downStart - VIEWPORT_MARGIN_PX
-    const spaceAbove = upStart - VIEWPORT_MARGIN_PX
+    const spaceAbove = upStart - viewportTop - VIEWPORT_MARGIN_PX
 
     let nextPlacement: 'down' | 'up' = 'down'
     let nextMaxHeight: number | null = null
@@ -98,6 +101,18 @@
       nextMaxHeight = Math.max(0, Math.floor(nextPlacement === 'up' ? spaceAbove : spaceBelow))
     }
 
+    let nextTopOffset: number | null = null
+    if (movePickerOpen && nextMaxHeight !== null) {
+      // A tree needs more than the remainder on one side of a card. Permit it
+      // to overlap the anchor while staying inside the unobscured viewport.
+      // Otherwise the fixed controls can squeeze its scroll area below one row.
+      const available = Math.max(0, viewportBottom - viewportTop - VIEWPORT_MARGIN_PX * 2)
+      nextMaxHeight = Math.min(naturalHeight, Math.floor(available))
+      const preferredTop = nextPlacement === 'up' ? upStart - nextMaxHeight : downStart
+      const menuTop = Math.max(viewportTop + VIEWPORT_MARGIN_PX, Math.min(preferredTop, viewportBottom - VIEWPORT_MARGIN_PX - nextMaxHeight))
+      nextTopOffset = menuTop - anchorRect.top - anchor.clientTop
+    }
+    if (nextTopOffset !== topOffset) topOffset = nextTopOffset
     if (nextPlacement !== placement) placement = nextPlacement
     if (nextMaxHeight !== maxHeight) maxHeight = nextMaxHeight
   }
@@ -118,11 +133,15 @@
     measurePlacement()
     window.addEventListener('resize', scheduleMeasure)
     window.addEventListener('scroll', scheduleMeasure, true)
+    window.visualViewport?.addEventListener('resize', scheduleMeasure)
+    window.visualViewport?.addEventListener('scroll', scheduleMeasure)
   })
 
   onDestroy(() => {
     window.removeEventListener('resize', scheduleMeasure)
     window.removeEventListener('scroll', scheduleMeasure, true)
+    window.visualViewport?.removeEventListener('resize', scheduleMeasure)
+    window.visualViewport?.removeEventListener('scroll', scheduleMeasure)
   })
 
   $: if (
@@ -146,7 +165,7 @@
   class:placement-up={placement === 'up'}
   class:clamped={maxHeight !== null}
   bind:this={menuElement}
-  style={maxHeight !== null ? `max-height: ${maxHeight}px;` : ''}
+  style={`${maxHeight !== null ? `max-height: ${maxHeight}px;` : ''}${topOffset !== null ? `top: ${topOffset}px; bottom: auto;` : ''}`}
   role="menu"
   tabindex="-1"
   on:click|stopPropagation
