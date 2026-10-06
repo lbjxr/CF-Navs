@@ -59,11 +59,11 @@ export function isExpectedOfflineFailure(errorText, offlineActive) {
 }
 
 // The timeout probe must prove cold storage, a still-held transport cancelled by
-// the app's 10s deadline, and pixels from a real, uncached ordinary proxy. Timing
+// the app's 10s deadline, and pixels from a real, uncached ordinary proxy Fetch and its new Blob. Timing
 // uses CDP monotonic seconds; wall time only joins the DOM observation to it.
 export function assessCopyTimeoutFallback(rows, evidence) {
   const errors = []
-  const { object, requestId, proxyRequestId, cold, afterTimeout, displayedPath, pixelsPassed, observedWallTime } = evidence
+  const { object, requestId, proxyRequestId, cold, afterTimeout, displayed, pixelsPassed } = evidence
   const copy = rows.find(row => row.requestId === requestId)
   const proxy = rows.find(row => row.requestId === proxyRequestId)
   const missing = state => state?.available === true && state.enabled === true && state.entryPresent === false && state.bodyPresent === false
@@ -72,14 +72,18 @@ export function assessCopyTimeoutFallback(rows, evidence) {
   if (!copy || copy.stage !== '28-COPY-TIMEOUT' || copy.kind !== 'icon-copy' || copy.object !== object || copy.status != null ||
       copy.canceled !== true || copy.error !== 'net::ERR_ABORTED') errors.push('not-held-copy-cancellation')
   const abortElapsedMs = (copy?.failureTime - copy?.time) * 1000
-  const imageElapsedMs = observedWallTime - copy?.wallTime * 1000
+  const imageElapsedMs = displayed?.observedWallTime - copy?.wallTime * 1000
   if (!Number.isFinite(abortElapsedMs) || abortElapsedMs < 9000 || abortElapsedMs > 15000) errors.push('deadline-not-observed')
   if (!Number.isFinite(imageElapsedMs) || imageElapsedMs < abortElapsedMs - 100 || imageElapsedMs > 15000) errors.push('fallback-not-bounded')
   const headers = Object.fromEntries(Object.entries(proxy?.headers ?? {}).map(([key, value]) => [key.toLowerCase(), value]))
-  if (!proxy || proxy.stage !== '28-COPY-TIMEOUT' || proxy.kind !== 'icon-body' || proxy.object !== object || proxy.type !== 'Image' ||
+  if (!proxy || proxy.stage !== '28-COPY-TIMEOUT' || proxy.kind !== 'icon-body' || proxy.object !== object || proxy.type !== 'Fetch' ||
       proxy.status !== 200 || proxy.error || proxy.canceled || proxy.disk || proxy.sw || !Number.isFinite(proxy.finishedTime) ||
       !(proxy.time >= copy?.failureTime - 0.1 && proxy.finishedTime >= copy?.failureTime) ||
-      proxy.path !== displayedPath || !/^image\//i.test(headers['content-type'] ?? '') || headers['x-icon-fallback'] === '1' || pixelsPassed !== true) errors.push('not-real-proxy-image')
+      proxy.path !== '/api/icon/' + object.split(':')[1] || !/^image\//i.test(headers['content-type'] ?? '') || headers['x-icon-fallback'] === '1' || pixelsPassed !== true) errors.push('not-real-proxy-image')
+  const bodyFinishedWallTime = proxy?.wallTime * 1000 + (proxy?.finishedTime - proxy?.time) * 1000
+  if (displayed?.kind !== 'blob' || !Number.isFinite(displayed.createdWallTime) || !(displayed.bytes > 0) ||
+      displayed.mime?.split(';')[0].trim().toLowerCase() !== headers['content-type']?.split(';')[0].trim().toLowerCase() || !Number.isFinite(bodyFinishedWallTime) ||
+      displayed.createdWallTime < bodyFinishedWallTime - 100 || displayed.createdWallTime > displayed.observedWallTime) errors.push('not-new-proxy-blob')
   // A second cancellation, even for the same object, has no timeout exemption.
   const unexpectedFailures = rows.filter(row => row.error && row.requestId !== requestId).map(row => row.requestId)
   if (unexpectedFailures.length) errors.push('unrelated-network-failure')

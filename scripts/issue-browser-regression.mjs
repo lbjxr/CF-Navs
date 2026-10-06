@@ -625,27 +625,28 @@ try {
           assert(evidence.newDocument, 'Cold timeout cannot reuse in-memory loader handles')
           await localWait(() => evidence.held.length > 0, 'Fixture copy suspension', 10000)
           const held = evidence.held[0]
+          await b.call(() => { window.__issueUrls.active = true; window.__issueUrls.events = [] })
           await localWait(() => requests.get(held.requestId)?.error, 'Frontend timeout cancellation', 16000)
           const row = requests.get(held.requestId)
           evidence.abortElapsedMs = (row.failureTime-row.time)*1000
           assert(row.canceled && row.error === 'net::ERR_ABORTED' && row.status == null && evidence.abortElapsedMs >= 9000 && evidence.abortElapsedMs <= 15000, 'Held transport was not cancelled by the 10s deadline')
-          // Inspect the displayed image itself; no diagnostic fetch, fake image
-          // or post-failure reload is allowed to provide fallback evidence.
-          evidence.displayed = await wait((selector, id) => {
+          // The actual normal renderer fetches the proxy and creates a Blob.
+          // Require a newly created displayed URL, not a hot copy or diagnostic fetch.
+          evidence.displayed = await wait(selector => {
             const image = document.querySelector(selector)?.querySelector('img')
-            if (!image?.complete || !image.naturalWidth) return null
-            const url = new URL(image.currentSrc || image.src, location.href)
-            return url.origin === location.origin && url.pathname === '/api/icon/'+id
-              ? {path:url.pathname,observedWallTime:performance.timeOrigin+performance.now()} : null
-          }, [target.selector, bookmarks[0].id], 5000)
+            if (!image?.complete || !image.naturalWidth || !image.src.startsWith('blob:')) return null
+            const state = window.__issueUrls, id = state.ids.get(image.src)
+            const created = state.events.find(event => event.kind === 'create' && event.id === id)
+            return created ? {kind:'blob',id,createdWallTime:performance.timeOrigin+created.at,observedWallTime:performance.timeOrigin+performance.now(),bytes:created.size,mime:created.mime} : null
+          }, [target.selector], 5000)
           const observed = await b.call(collectIconFixtures, [target])
           evidence.pixels = evaluateIconFixtures([target], observed)
           evidence.afterTimeout = await readFixtureCopy(target.key)
-          const proxy = report.requests.slice(start).find(row => row.kind === 'icon-body' && row.object === target.key && row.type === 'Image' && row.time >= requests.get(held.requestId).failureTime-0.1 && row.status === 200)
+          const proxy = report.requests.slice(start).find(row => row.kind === 'icon-body' && row.object === target.key && row.type === 'Fetch' && row.time >= requests.get(held.requestId).failureTime-0.1 && row.status === 200)
           if (proxy) await localWait(() => Number.isFinite(proxy.finishedTime), 'Ordinary proxy body completion', 1500)
           evidence.fallback = assessCopyTimeoutFallback(report.requests.slice(start), {
             object:target.key, requestId:held.requestId, proxyRequestId:proxy?.requestId, cold:evidence.cold, afterTimeout:evidence.afterTimeout,
-            displayedPath:evidence.displayed.path, pixelsPassed:evidence.pixels.passed, observedWallTime:evidence.displayed.observedWallTime,
+            displayed:evidence.displayed, pixelsPassed:evidence.pixels.passed,
           })
           evidence.proxyRequestId = proxy?.requestId
           assert(evidence.held.length === 1, 'Repeated copy attempts before fallback verification; inspect held request journal')
@@ -669,10 +670,10 @@ try {
       // loader, fetch the copy manually, edit the icon, or clear IDB a second time.
       await localWait(() => report.requests.slice(start).some(row => row.kind === 'icon-copy' && row.object === target.key && row.wallTime*1000 >= evidence.recovery.restoredWallTime && row.status === 200 && row.copyResult?.hasImage), 'Fresh real frontend copy after restoring interception', 20000)
       const recovered = report.requests.slice(start).find(row => row.kind === 'icon-copy' && row.object === target.key && row.wallTime*1000 >= evidence.recovery.restoredWallTime && row.status === 200 && row.copyResult?.hasImage)
-      await wait(selector => {
+      await wait((selector, previousId) => {
         const image=document.querySelector(selector)?.querySelector('img')
-        return image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:')
-      }, [target.selector], 10000)
+        return image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:') && window.__issueUrls.ids.get(image.src) !== previousId
+      }, [target.selector, evidence.displayed.id], 10000)
       evidence.recovery.pixels = await verifyImages([target])
       evidence.recovery.persisted = await readFixtureCopy(target.key)
       evidence.recovery.result = assessCopyTimeoutRecovery(report.requests.slice(start), {

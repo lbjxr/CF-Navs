@@ -121,10 +121,11 @@ it('waives only the exact error while this test actively injects offline mode',(
 
 describe('copy timeout requires cold, timed, request-owned network evidence', () => {
   const absent = { available:true, enabled:true, entryPresent:false, bodyPresent:false }
+  const displayed = {kind:'blob',bytes:323,mime:'image/svg+xml',createdWallTime:1010150,observedWallTime:1010200}
   function fixture() {
     const copy = { requestId:'held', stage:'28-COPY-TIMEOUT', kind:'icon-copy', object:'bookmark:12', time:100, wallTime:1000, failureTime:110, canceled:true, error:'net::ERR_ABORTED' }
-    const proxy = { requestId:'proxy', stage:'28-COPY-TIMEOUT', kind:'icon-body', object:'bookmark:12', path:'/api/icon/12', type:'Image', time:110.01, finishedTime:110.1, status:200, headers:{'content-type':'image/svg+xml'} }
-    return { rows:[copy,proxy], evidence:{object:'bookmark:12',requestId:'held',proxyRequestId:'proxy',cold:{...absent},afterTimeout:{...absent},displayedPath:'/api/icon/12',pixelsPassed:true,observedWallTime:1010200} }
+    const proxy = { requestId:'proxy', stage:'28-COPY-TIMEOUT', kind:'icon-body', object:'bookmark:12', path:'/api/icon/12', type:'Fetch', wallTime:1010.01, time:110.01, finishedTime:110.1, status:200, headers:{'content-type':'image/svg+xml'} }
+    return { rows:[copy,proxy], evidence:{object:'bookmark:12',requestId:'held',proxyRequestId:'proxy',cold:{...absent},afterTimeout:{...absent},displayed:{...displayed},pixelsPassed:true} }
   }
   it('accepts only the actual held request and records the bounded wait', () => {
     const {rows,evidence}=fixture()
@@ -133,7 +134,8 @@ describe('copy timeout requires cold, timed, request-owned network evidence', ()
   it.each([
     {cold:{...absent,entryPresent:true}}, {cold:{...absent,bodyPresent:true}}, {cold:{...absent,available:false}}, {cold:{...absent,enabled:false}},
     {afterTimeout:{...absent,entryPresent:true}}, {afterTimeout:{...absent,bodyPresent:true}}, {afterTimeout:{...absent,available:false}},
-    {pixelsPassed:false}, {displayedPath:'[blob]'}, {observedWallTime:1020000}, {observedWallTime:1001000}, {observedWallTime:NaN}, {requestId:'not-held'},
+    {pixelsPassed:false}, {displayed:{...displayed,kind:'data'}}, {displayed:{...displayed,observedWallTime:1020000}}, {displayed:{...displayed,observedWallTime:1001000}}, {displayed:{...displayed,observedWallTime:NaN}}, {requestId:'not-held'},
+    {displayed:{...displayed,createdWallTime:1000000}}, {displayed:{...displayed,createdWallTime:NaN}}, {displayed:{...displayed,bytes:0}}, {displayed:{...displayed,mime:'text/html'}},
   ])('fails closed for missing/false storage, pixels or timing: %j', patch => {
     const {rows,evidence}=fixture()
     expect(assessCopyTimeoutFallback(rows,{...evidence,...patch})).toMatchObject({passed:false,expectedCanceledRequests:[]})
@@ -146,7 +148,7 @@ describe('copy timeout requires cold, timed, request-owned network evidence', ()
     expect(assessCopyTimeoutFallback([{...rows[0],...patch},rows[1]],evidence)).toMatchObject({passed:false,expectedCanceledRequests:[]})
   })
   it.each([
-    {status:503}, {status:304}, {object:'bookmark:13'}, {type:'Fetch'}, {disk:true}, {sw:true}, {error:'net::ERR_FAILED'},
+    {status:503}, {status:304}, {object:'bookmark:13'}, {type:'Image'}, {disk:true}, {sw:true}, {error:'net::ERR_FAILED'},
     {time:105}, {finishedTime:undefined}, {path:'/api/icon/13'}, {headers:{'content-type':'application/json'}},
     {headers:{'Content-Type':'image/svg+xml','X-Icon-Fallback':'1'}},
   ])('requires the actual uncached ordinary proxy image: %j', patch => {
