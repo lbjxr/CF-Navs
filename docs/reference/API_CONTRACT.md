@@ -314,3 +314,7 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 - 聚合和版本响应在迁移完成后附 dataset_epoch 与 icon_local_copy_protocol=1。已鉴权响应的 auth_receipt 含 cache_scope、checked_at、expires_at（毫秒）；cache_scope 是非凭据会话标识，不能独立授权。图片下载不续租，图标 key 不续租；回执遵循原有会话撤销缓存窗口。
 - 书签轻量字段 icon_revision/icon_write_epoch 与聚合数据的 version、dataset_epoch 同批读取。内部数据集代次不进入用户 Settings 或可信备份输入；导入重建表时原子更换代次，返回带新身份的聚合数据。当前 merge 也通过重建/重映射实现，因此同样更换代次。
 - setIconBlob 条件提交保护数据集、源、代次和预期正文/版本；legacy SQL 改正文时摘要失效，改源时同时清旧正文。已发布内容变化与 data_version 在同一数据库更新边界发布；仅补充未知摘要不逐图触发全量刷新。
+
+## HTML 入口响应策略
+
+非 API 的 HTML 入口继续使用再验证缓存，并禁止代理修改正文（`no-transform`）。Worker HTML 响应与直接静态资源入口的规则均来自 `worker/lib/assetHeaders.ts`，由构建生成静态入口规则并纳入离线外壳指纹；API 的鉴权、私密响应与 no-store 契约不因此改变。严格脚本策略及自动注入统计的取舍见 `SECURITY.md`。

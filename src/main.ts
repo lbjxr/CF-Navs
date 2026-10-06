@@ -9,6 +9,10 @@ import {
 import { toastStore } from './lib/toast'
 import { migrateLegacyIconCopies } from './lib/legacyIconCopyMigration'
 import App from './App.svelte'
+import { installBrowserThemeColor } from './lib/browserThemeColor'
+
+const stopThemeColor = installBrowserThemeColor(document)
+if (import.meta.hot) import.meta.hot.dispose(stopThemeColor)
 
 initErrorReporting()
 void migrateLegacyIconCopies()

@@ -39,6 +39,8 @@ This document records the current performance-sensitive behavior that should not
 
 ## Service Worker And Storage
 
+- The offline-shell fingerprint includes generated HTML response-header rules as well as HTML, scripts and styles. A policy-only change must not leave an old cached security policy indefinitely. HTML retains revalidation and uses `no-transform`; immutable build assets and the Service Worker retain their separate cache policies.
+
 - Navigation requests use stale-while-revalidate: the cached `/index.html` is served immediately and refreshed in the background. Do not revert to network-first without measuring the second-visit first paint.
 - The page sends the current document's `/assets/*` list to the Service Worker after `load` so hashed build output actually lands in Cache Storage on the first visit. Do not remove this without replacing it with a build-time manifest.
 - The Service Worker must not write `/api/icon/*` or `/api/iconify/*` bookmark icon proxy responses into Cache Storage. Object-icon responses are also `no-store` to the browser, so the page's local bookmark-icon Cache Storage path must not persist them; public reuse is provided only by the Worker edge cache after the visibility gate.

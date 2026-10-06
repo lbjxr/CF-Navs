@@ -1,3 +1,4 @@
+import { buildStaticHtmlHeaderRules } from './worker/lib/assetHeaders'
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve as resolvePath } from 'node:path'
@@ -10,11 +11,15 @@ function versionServiceWorkerCache(): Plugin {
     apply: 'build',
     closeBundle() {
       const outputDir = resolvePath('dist')
+      // One policy source for Worker routes and directly served HTML assets.
+      const headersPath = resolvePath(outputDir, '_headers')
+      writeFileSync(headersPath, readFileSync(resolvePath('public', '_headers'), 'utf8').trimEnd() + '\n\n' + buildStaticHtmlHeaderRules() + '\n')
       const serviceWorkerPath = resolvePath(outputDir, 'sw.js')
       const source = readFileSync(serviceWorkerPath, 'utf8')
       const fingerprint = createHash('sha256')
         .update(readFileSync(resolvePath(outputDir, 'index.html')))
         .update(source)
+        .update(readFileSync(headersPath))
 
       for (const file of readdirSync(resolvePath(outputDir, 'assets')).sort()) {
         fingerprint.update(file).update(readFileSync(resolvePath(outputDir, 'assets', file)))

@@ -35,3 +35,9 @@ Code scanning 告警以其关联分支的重新扫描结果为准。本地扫描
 - **登出撤销是最终一致的。** 会话撤销名单写入 KV，其他 Worker isolate 最多约 15 秒后感知；KV 写入失败时登出接口仍返回成功，token 会继续有效到 `exp`。
 - **缺少 `SESSION` 绑定时会跳过撤销检查。** 这是部署配置问题，请按部署文档正确配置绑定。
 - **一次性安装令牌 `SETUP_TOKEN` 由部署者保管。** 站点安装完成后该令牌不再需要，后续安装请求会被永久拒绝。
+
+## HTML 交付与脚本注入
+
+直接作为静态资源返回的 HTML 入口与 Worker 返回的 HTML 使用同一安全策略。构建从 `worker/lib/assetHeaders.ts` 生成规则，并将规则纳入离线外壳指纹；不要再手工维护另一份 CSP。
+
+HTML 在保持再验证的同时使用 `no-transform`，阻止与严格脚本策略冲突的代理自动注入，而不是为消除控制台错误开放第三方脚本执行。Cloudflare 的 [Web Analytics 设置说明](https://developers.cloudflare.com/web-analytics/get-started/) 描述了该行为。因此，这些响应上的自动注入统计会被停用；后续若需要统计集成，应单独审查 CSP 和隐私边界。

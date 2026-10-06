@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { withAssetCacheHeaders } from '../../worker/lib/assetHeaders'
+import { withAssetCacheHeaders, buildStaticHtmlHeaderRules } from '../../worker/lib/assetHeaders'
 
 function applyHeaders(pathname: string, response: Response): Response {
   return withAssetCacheHeaders(new Request(`https://example.com${pathname}`), response)
@@ -11,7 +11,7 @@ describe('asset response headers', () => {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
     }))
 
-    expect(response.headers.get('Cache-Control')).toBe('no-cache, max-age=0, must-revalidate')
+    expect(response.headers.get('Cache-Control')).toBe('public, no-cache, max-age=0, must-revalidate, no-transform')
     expect(response.headers.get('Content-Security-Policy')).toContain("default-src 'self'")
     expect(response.headers.get('X-Frame-Options')).toBe('DENY')
     expect(await response.text()).toBe('<!doctype html>')
@@ -102,4 +102,15 @@ describe('content security policy', () => {
     expect(isAllowedBookmarkUrl('javascript:alert(1)')).toBe(false)
     expect(isAllowedBookmarkUrl('https://example.com')).toBe(true)
   })
+})
+
+it('generates the same strict policy for HTML assets without changing script assets',()=>{
+  const rules=buildStaticHtmlHeaderRules()
+  const response=applyHeaders('/',new Response('<html>',{headers:{'content-type':'text/html'}}))
+  expect(rules).toContain('content-security-policy: '+response.headers.get('Content-Security-Policy'))
+  expect(rules).toContain('cache-control: '+response.headers.get('Cache-Control'))
+  expect(rules).toContain('/admin\n')
+  expect(rules).not.toContain('/sw.js')
+  expect(rules).not.toContain('/assets/')
+  expect(applyHeaders('/sw.js',new Response('code')).headers.get('Cache-Control')).toBe('no-cache, max-age=0, must-revalidate')
 })

@@ -319,7 +319,7 @@ try {
       void b.call(url=>[...document.querySelectorAll('[data-testid="bookmark-modal"] img')].some(img=>img.src===url||img.currentSrc===url),e.request.url).then(matches=>{if(matches){row.surface='editor-preview';row.previewFor=previewFor}}).catch(()=>{})
     }
   })
-  b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','cache-control','x-icon-fallback'].includes(name.toLowerCase()))) }) })
+  b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','cache-control','x-icon-fallback','content-security-policy'].includes(name.toLowerCase()))) }) })
   function inspectCopyResponse(requestId) {
     const row=requests.get(requestId)
     if(row?.kind!=='icon-copy'||![200,409].includes(row.status)) return
@@ -585,6 +585,23 @@ try {
   await scenario('28-CLOCK-BEHIND-600MS', async () => {
     const {identifier}=await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{const now=Date.now.bind(Date);Date.now=()=>now()-600})()`})
     try {await home();return await verifyImages()}finally{await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier});await b.navigate(base)}
+  })
+  await scenario('CSP-THEME-COLOR', async()=>{
+    await b.setViewport({width:1366,height:900,scale:1});await home()
+    const samples=[]
+    for(let i=0;i<3;i++) {
+      await wait(()=>document.querySelector('meta[name="theme-color"]')?.content===(document.documentElement.dataset.theme==='dark'?'#08111f':'#f8fafc'))
+      samples.push(await b.call(()=>({theme:document.documentElement.dataset.theme,color:document.querySelector('meta[name="theme-color"]').content})))
+      if(i<2){await click('[data-testid="home-theme-toggle"]');await b.call(()=>new Promise(resolve=>requestAnimationFrame(()=>resolve(true))))}
+    }
+    assert(new Set(samples.map(s=>s.theme)).size===2,'Both theme modes were not exercised')
+    const documents=report.requests.filter(row=>row.type==='Document'&&row.status===200)
+    const headers=documents.at(-1)?.headers??{}
+    const policy=Object.entries(headers).find(([name])=>name.toLowerCase()==='content-security-policy')?.[1]??''
+    const cache=Object.entries(headers).find(([name])=>name.toLowerCase()==='cache-control')?.[1]??''
+    assert(policy.includes("script-src 'self' blob:")&&!policy.match(/script-src[^;]*unsafe-inline/),'HTML did not retain the strict script policy')
+    assert(cache.includes('no-transform'),'HTML can still be modified by the delivery proxy')
+    return {samples,strictPolicy:true,noTransform:true}
   })
   await scenario('29-LOGOUT', async () => {
     await b.setViewport({ width: 1366, height: 900, scale: 1 }); await home()

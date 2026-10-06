@@ -6,20 +6,6 @@
     <title>CF-Navs</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#0f172a" />
-    <script>
-      (function () {
-        var meta = document.querySelector('meta[name="theme-color"]')
-        if (!meta) return
-        function sync() {
-          meta.content = document.documentElement.getAttribute('data-theme') === 'dark' ? '#08111f' : '#f8fafc'
-        }
-        if (window.MutationObserver) {
-          var observer = new MutationObserver(sync)
-          observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-        }
-        sync()
-      })()
-    </script>
     <link rel="icon" href="/icon.ico" sizes="any" />
     <link rel="icon" type="image/png" href="/icon.png" />
     <link rel="apple-touch-icon" href="/icon.png" />

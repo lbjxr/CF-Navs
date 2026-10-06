@@ -1,5 +1,6 @@
 const IMMUTABLE_ASSET_CACHE = 'public, max-age=31536000, immutable'
 const REVALIDATE_CACHE = 'no-cache, max-age=0, must-revalidate'
+const HTML_CACHE = 'public, ' + REVALIDATE_CACHE + ', no-transform'
 const SHORT_STATIC_CACHE = 'public, max-age=86400'
 
 const CONTENT_SECURITY_POLICY = [
@@ -41,6 +42,17 @@ export function setSecurityHeaders(headers: Headers): void {
   headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
 }
 
+/** Assets may bypass the Worker. Generate identical HTML policy at build time.
+ * no-transform also prevents automatic beacon injection incompatible with the
+ * deliberately strict script policy; it does not grant third-party execution. */
+export function buildStaticHtmlHeaderRules(): string {
+  const headers = new Headers()
+  setSecurityHeaders(headers)
+  headers.set('Cache-Control', HTML_CACHE)
+  const lines = [...headers].map(([name, value]) => `  ${name}: ${value}`).join('\n')
+  return ['/', '/index.html', '/admin', '/admin/', '/install', '/install/'].map(route => `${route}\n${lines}`).join('\n\n')
+}
+
 export function withAssetCacheHeaders(request: Request, response: Response): Response {
   const url = new URL(request.url)
   const headers = new Headers(response.headers)
@@ -52,7 +64,7 @@ export function withAssetCacheHeaders(request: Request, response: Response): Res
 
   if (response.ok) {
     if (isHtml || url.pathname === '/sw.js') {
-      headers.set('Cache-Control', REVALIDATE_CACHE)
+      headers.set('Cache-Control', isHtml ? HTML_CACHE : REVALIDATE_CACHE)
     } else if (url.pathname.startsWith('/assets/')) {
       headers.set('Cache-Control', IMMUTABLE_ASSET_CACHE)
     } else if (
