@@ -1,5 +1,7 @@
 // Invoked by smoke-local.mjs --icons against its disposable Worker/D1 only.
 import assert from 'node:assert/strict'
+import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.mjs'
+import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -69,13 +71,13 @@ async function scrollFixtureIntoView(title) {
     return true
   }, title)
 }
-async function inspectAggregateResponses(responses, label, expectedBody) {
+async function inspectAggregateResponses(responses, label, expectedBodies) {
   return Promise.all(responses.map(async response => {
     const body = await inspectedAggregateResponses.get(response.requestId)
     if (body instanceof Error) throw new Error('Unable to inspect ' + response.path + ' response body: ' + body.message)
     if (typeof body !== 'string') throw new Error('Response body was not captured for ' + response.path)
     const text = body
-    return text.includes(expectedBody)
+    return expectedBodies.some(body => text.includes(body))
   }))
 }
 async function click(selector, text = null) {
@@ -171,14 +173,15 @@ try {
   apiToken = login.token
   const category = await api('/categories', { title: 'Local icon fixture', icon: '📁' })
   // Match the charset-bearing form emitted by logoSurfIcon; exercise it through real Chrome and D1.
-  const icon = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="green"/></svg>')
+  const acceptanceFixtures = createIconAcceptanceFixtures()
+  const icon = acceptanceFixtures.category.uri
   const updatedCategory = await api(`/categories/${category.id}`, { title: 'Local icon fixture', icon }, 'PUT')
   const childCategory = await api('/categories', { parent_id: category.id, title: 'Local child icon fixture', icon })
   const adminCategory = (await api('/admin/data', undefined, 'GET')).categories?.find(item => Number(item.id) === Number(category.id))
   if (updatedCategory.icon !== icon || adminCategory?.icon !== icon) throw new Error('Category image fixture did not reach the admin aggregate projection')
   await api('/settings', { navigation: { position: 'top', always_expanded: false } }, 'PUT')
   let fixtureTitle = 'Local trusted icon'
-  const bookmark = await api('/bookmarks', { category_id: category.id, title: fixtureTitle, url: 'https://example.com', icon, icon_source: 'custom', is_private: false })
+  const bookmark = await api('/bookmarks', { category_id: category.id, title: fixtureTitle, url: 'https://example.com', icon: acceptanceFixtures.bookmark.uri, icon_source: 'custom', is_private: false })
   const childBookmark = await api('/bookmarks', { category_id: childCategory.id, title: 'Local child category icon fixture', url: 'https://example.org', icon, icon_source: 'custom', is_private: false })
   await api(`/public/bookmarks/${bookmark.id}/click`)
   await cdp.start(); report.ownership.pid = cdp.chromeProcess.pid; report.ownership.browserStartedByTest = cdp.startedByTest
@@ -599,9 +602,16 @@ try {
     const image = card?.querySelector('img')
     return Boolean(image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:'))
   }, category.id, fixtureTitle))
+  const fixtureManifest = [
+    { key: `category:${category.id}:heading`, selector: `[data-home-category-scope="${category.id}"] > .scope-heading > [data-category-icon]`, kind: 'image', pixels: acceptanceFixtures.category.pixels },
+    { key: `bookmark:${bookmark.id}:most-visited`, selector: `[data-sort-category-id="-1"] .bookmark-card-shell[aria-label="${fixtureTitle}"]`, kind: 'image', pixels: acceptanceFixtures.bookmark.pixels },
+    { key: `bookmark:${bookmark.id}:category`, selector: `[data-sort-category-id="${category.id}"] .bookmark-card-shell[aria-label="${fixtureTitle}"]`, kind: 'image', pixels: acceptanceFixtures.bookmark.pixels },
+  ]
+  report.fixtureAcceptance = evaluateIconFixtures(fixtureManifest, await cdp.call(collectIconFixtures, fixtureManifest))
+  check('distinct synthetic bookmark/category pixels match every expected instance', report.fixtureAcceptance.passed)
   check('homepage placements do not fetch another icon body', iconCopyRequests.length - copyStart <= 2 && firstDisplayCopies.length <= 1)
   const warmAggregateResponses = aggregateResponses.slice(aggregateStart)
-  const warmAggregateContainsBody = await inspectAggregateResponses(warmAggregateResponses, 'first display', icon)
+  const warmAggregateContainsBody = await inspectAggregateResponses(warmAggregateResponses, 'first display', [icon, acceptanceFixtures.bookmark.uri])
   check('first display aggregate traffic does not repeat the inline image body', warmAggregateResponses.length === 0 || warmAggregateContainsBody.every(value => !value))
 
   await click(`#home-category-tab-${childCategory.id}`)
@@ -723,7 +733,7 @@ try {
   check('unchanged reload makes zero icon copy requests', iconCopyRequests.length === reloadCopyStart)
   check('unchanged reload makes zero ordinary object icon requests', objectIconRequests.length === reloadObjectIconStart)
   const reloadAggregateResponses = aggregateResponses.slice(reloadAggregateStart)
-  const reloadAggregateContainsBody = await inspectAggregateResponses(reloadAggregateResponses, 'unchanged reload', icon)
+  const reloadAggregateContainsBody = await inspectAggregateResponses(reloadAggregateResponses, 'unchanged reload', [icon, acceptanceFixtures.bookmark.uri])
   check('reload aggregate traffic does not repeat the inline image body', reloadAggregateResponses.length === 0 || reloadAggregateContainsBody.every(value => !value))
   report.iconWarmup = {
     bookmarkId: bookmark.id,

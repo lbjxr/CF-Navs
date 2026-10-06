@@ -2,6 +2,7 @@
 // Optional ICON_COMPARE_CATEGORY selects a category by title (environment only).
 // Failure injection affects only the test-owned browser's local-copy requests.
 import fs from 'node:fs/promises'
+import { compareIconSamples } from './lib/iconAcceptance.mjs'
 import os from 'node:os'
 import path from 'node:path'
 import net from 'node:net'
@@ -80,7 +81,7 @@ async function sample(name) {
       const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(identity))
       const key = [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join('')
       const image = card.querySelector('img')
-      return { key, loaded: Boolean(image?.complete && image.naturalWidth > 0), textFallback: !image }
+      return { key, loaded: Boolean(image?.complete && image.naturalWidth > 0), textFallback: !image, broken: Boolean(image && (!image.complete || image.naturalWidth === 0)) }
     }))
     return values
   }, selector)
@@ -91,9 +92,8 @@ async function sample(name) {
   return cards
 }
 function compare(name, baseline, next) {
-  const loaded = baseline.filter(card => card.loaded)
-  const regressed = loaded.filter(card => !next.some(other => other.key === card.key && other.loaded))
-  check(name, loaded.length > 0 && regressed.length === 0, { expectedImages: loaded.length, regressed: regressed.map(card => card.key) })
+  const result = compareIconSamples(baseline, next)
+  check(name, result.passed, result)
 }
 try {
   await browser.start()
@@ -119,12 +119,12 @@ try {
     if (categoryId === null) throw new Error('Requested category not found; comparison scope not changed silently')
   }
   const baseline = await sample('disabled')
-  check('baseline has real loaded images', baseline.some(card => card.loaded), { cards: baseline.length })
+  check('baseline has decodable images (identity not verified)', baseline.some(card => card.loaded), { cards: baseline.length })
   await controls()
   await click('.device-cache input')
   await wait(() => document.querySelector('.device-status')?.textContent.includes('下次刷新'))
-  compare('cold cache preserves every baseline image', baseline, await sample('cold'))
-  compare('warm cache preserves every baseline image', baseline, await sample('warm'))
+  compare('cold cache preserves baseline display instances (identity not verified)', baseline, await sample('cold'))
+  compare('warm cache preserves baseline display instances (identity not verified)', baseline, await sample('warm'))
   const damaged = await browser.call(async () => {
     let count = 0
     const damage = payload => {
@@ -153,7 +153,7 @@ try {
     return count
   })
   check('legacy snapshot regression was seeded only in the test profile', damaged > 0)
-  compare('legacy snapshot upgrade preserves every baseline image', baseline, await sample('legacy-upgrade'))
+  compare('legacy snapshot upgrade preserves baseline display instances (identity not verified)', baseline, await sample('legacy-upgrade'))
   await controls()
   browser.on('Fetch.requestPaused', event => {
     injected++
@@ -165,7 +165,7 @@ try {
   await browser.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/icon-local-copy', requestStage: 'Request' }] })
   await click('.device-actions button', '清理此设备图标副本')
   await wait(() => document.querySelector('.device-status')?.textContent.startsWith('已启用'))
-  compare('copy-service failure preserves every baseline image', baseline, await sample('copy-failure'))
+  compare('copy-service failure preserves baseline display instances (identity not verified)', baseline, await sample('copy-failure'))
   check('copy failure injection was exercised', injected > 0, { injected })
   await browser.send('Fetch.disable')
 } catch (error) {
