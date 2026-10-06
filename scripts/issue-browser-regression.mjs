@@ -30,6 +30,7 @@ const requests = new Map()
 const responseReads = new Set()
 let fetchHandler = null
 let editorObject = null
+let operationImageUrls = null
 const injectedRequests = new Set()
 function safe(value) { return redactCredentials(String(value), credentials).replaceAll(base, '[test-origin]').replaceAll(token || '\u0000', '[token]').replace(/([?&](?:key|token)=)[^\s&"']+/g, '$1[redacted]') }
 async function persist() { await fs.writeFile(path.join(output, 'report.json'), safe(JSON.stringify(report, null, 2))) }
@@ -132,25 +133,48 @@ async function shot(name) {
   if (clip?.width && clip?.height) { const image = await b.send('Page.captureScreenshot', { format: 'png', clip, captureBeyondViewport: true }); await fs.writeFile(path.join(output, name + '.png'), Buffer.from(image.data, 'base64')) }
 }
 async function traceStart() {
+  operationImageUrls=new Set(await b.call(()=>[...document.images].filter(img=>img.complete&&img.naturalWidth>0).map(img=>img.currentSrc||img.src)))
   await b.call(manifest => {
     window.__issueTrace?.stop?.()
     if(window.__issueUrls){window.__issueUrls.events=[];window.__issueUrls.active=true}
-    const baseline = new Map(), changes = [], samples = { frames: 0 }; let running = true
-    for (const row of manifest) { const e = document.querySelector(row.selector); const img = e?.matches('img') ? e : e?.querySelector('img'); baseline.set(row.key, img?.src || '') }
+    const entries=manifest.map(row=>({key:row.key,node:document.querySelector(row.selector)}))
+    const nodes=new Set(entries.map(row=>row.node)),protectedIds=new Map()
+    function owner(node,index) {
+      const bookmark=node.closest('[data-sort-id]')?.getAttribute('data-sort-id')
+      if(bookmark) return 'bookmark:'+bookmark
+      const tab=node.closest('[id^="home-category-tab-"]')?.id.match(/-(\d+)$/)?.[1]
+      const category=tab||node.closest('[data-navigation-id^="category-"]')?.getAttribute('data-navigation-id')?.slice(9)||node.closest('[data-home-category-scope]')?.getAttribute('data-home-category-scope')
+      return category?'category:'+category:'display:'+index
+    }
+    for(const [index,node] of [...document.querySelectorAll('.bookmark-card-shell,[data-category-icon]')].entries()) {
+      const image=node.querySelector('img')
+      if(!nodes.has(node)&&image?.complete&&image.naturalWidth>0) entries.push({key:owner(node,index),node})
+    }
+    for(const row of entries) {
+      const image=row.node?.matches('img')?row.node:row.node?.querySelector('img')
+      row.src=image?.src||''
+      const id=window.__issueUrls?.ids?.get(row.src)
+      if(id!==undefined) protectedIds.set(id,row.key)
+    }
+    const changes=[],samples={frames:0};let running=true
     function scan() {
-      if (!running) return; samples.frames++
-      for (const row of manifest) {
-        const e = document.querySelector(row.selector), img = e?.matches('img') ? e : e?.querySelector('img')
-        const state = !e ? 'missing' : !img ? 'text' : !img.complete || !img.naturalWidth ? 'unloaded' : img.src !== baseline.get(row.key) ? 'src-changed' : 'stable'
-        if (state !== 'stable' && changes.length < 2000) { const r=e?.getBoundingClientRect(); changes.push({ key: row.key, state, visible:Boolean(r&&r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth), at:Math.round(performance.now()) }) }
+      if(!running)return;samples.frames++
+      for(const row of entries) {
+        const e=row.node,img=e?.matches('img')?e:e?.querySelector('img'),r=e?.getBoundingClientRect()
+        const visible=Boolean(r&&r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth)
+        const state=!e?.isConnected?'missing':!img?'text':!img.complete||!img.naturalWidth?'unloaded':img.src!==row.src?'src-changed':'stable'
+        if(state!=='stable'&&changes.length<2000)changes.push({key:row.key,state,visible,at:Math.round(performance.now())})
       }
       requestAnimationFrame(scan)
     }
     requestAnimationFrame(scan)
-    window.__issueTrace = { changes, samples, stop: () => { running = false } }
-  }, manifest())
+    window.__issueTrace={changes,samples,protectedIds,stop:()=>{running=false}}
+  },manifest())
 }
-async function traceEnd() { return b.call(() => { const t = window.__issueTrace; t?.stop(); if(window.__issueUrls)window.__issueUrls.active=false; return t ? { objectUrls:window.__issueUrls?.events??[], changes: t.changes, frames: t.samples.frames, timeOrigin:performance.timeOrigin } : null }) }
+async function traceEnd() {
+  operationImageUrls=null
+  return b.call(()=>{const t=window.__issueTrace;t?.stop();if(window.__issueUrls)window.__issueUrls.active=false;const events=window.__issueUrls?.events??[];return t?{objectUrls:events,protectedRevocations:events.filter(e=>e.kind==='revoke'&&t.protectedIds.has(e.id)).map(e=>({key:t.protectedIds.get(e.id),id:e.id,at:e.at})),changes:t.changes,frames:t.samples.frames,timeOrigin:performance.timeOrigin}:null})
+}
 async function scenario(id, action) {
   if(id==='28-ENABLE-DEFERRED'&&cacheMode==='off'){const skipped={id,status:'not-run',reason:'Explicit cache-off matrix'};report.cases.push(skipped);return skipped}
   if(selectedCases.size&&!selectedCases.has(id)&&!requiredCases.has(id)){const skipped={id,status:'not-run'};report.cases.push(skipped);return skipped}
@@ -165,13 +189,13 @@ async function scenario(id, action) {
   await persist(); return entry
 }
 async function stableOperation(action, allowed = []) {
-  await home(); await verifyImages(); await traceStart(); const start = report.requests.length
+  await home({waitForImages:false}); await home(); await verifyImages(); await traceStart(); const start = report.requests.length
   report.cases.at(-1).actionRequestOffset=start
   await action(); await b.waitForNetworkIdle(1000, 15000); await sleep(1500)
-  const trace = await traceEnd(), network = assessStableIcons(report.requests.slice(start), allowed, editorObject ? [editorObject] : [])
+  const trace = await traceEnd(), network = assessStableIcons(report.requests.slice(start), allowed, editorObject ? [editorObject] : [], true)
   const traceResult = assessIconTrace(trace, allowed), regressions = traceResult.regressions
   report.cases.at(-1).detail={network,trace}
-  assert(network.passed && traceResult.passed, JSON.stringify({ network, regressions: regressions.slice(0, 15) }))
+  assert(network.passed && traceResult.passed, JSON.stringify({ network, regressions: regressions.slice(0, 15),revocations:traceResult.revocations }))
   for(const item of manifest()) await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),item.selector)
   await verifyImages(); return { network, traceFrames: trace?.frames, regressions }
 }
@@ -235,7 +259,7 @@ try {
   await b.start(); await b.attach()
   await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(() => {
     const create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL),ids=new Map();let sequence=0;
-    const state=window.__issueUrls={active:false,events:[]};
+    const state=window.__issueUrls={active:false,events:[],ids};
     URL.createObjectURL=function(blob){const url=create(blob);ids.set(url,++sequence);if(state.active&&state.events.length<2000)state.events.push({kind:'create',id:sequence,size:blob.size,mime:blob.type,at:performance.now(),stack:new Error().stack});return url};
     URL.revokeObjectURL=function(url){if(state.active&&state.events.length<2000)state.events.push({kind:'revoke',id:ids.get(url),at:performance.now(),stack:new Error().stack});ids.delete(url);return revoke(url)};
   })()`})
@@ -250,6 +274,7 @@ try {
   })
   b.on('Network.requestWillBeSent', e => {
     const row = { requestId: e.requestId, stage, time: e.timestamp, wallTime: e.wallTime, method: e.request.method, type: e.type, initiator: e.initiator?.type, initiatorFrames:e.initiator?.stack?.callFrames?.slice(0,4).map(f=>({function:f.functionName,url:safe(f.url),line:f.lineNumber,column:f.columnNumber})), ...classifyIssueRequest(e.request.url, e.request.postData, base) }
+    if(operationImageUrls) row.wasDisplayed=operationImageUrls.has(e.request.url)
     if (row.kind === 'external' && row.type === 'Image') row.kind = 'external-image'
     if(row.kind==='icon-copy') {try{const body=JSON.parse(e.request.postData);row.copyRequest={dataset_epoch:body.dataset_epoch,expected_write_epoch:body.expected_write_epoch,expected_content_revision:body.expected_content_revision}}catch{}}
     requests.set(e.requestId, row); report.requests.push(row)
@@ -259,16 +284,17 @@ try {
     }
   })
   b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','cache-control','x-icon-fallback'].includes(name.toLowerCase()))) }) })
-  b.on('Network.loadingFinished', e => {
-    const row=requests.get(e.requestId)
+  function inspectCopyResponse(requestId) {
+    const row=requests.get(requestId)
     if(row?.kind!=='icon-copy'||![200,409].includes(row.status)) return
-    const read=b.send('Network.getResponseBody',{requestId:e.requestId}).then(response=>{
+    const read=b.send('Network.getResponseBody',{requestId}).then(response=>{
       const envelope=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body),data=envelope.data
       row.copyResult={protocol:data?.protocol,reason:data?.reason,persistence:data?.persistence,descriptor:data?.descriptor,hasImage:Boolean(data?.image),imageBytes:data?.image?.byte_length??0}
     }).catch(()=>{row.copyResult={unreadable:true}})
     responseReads.add(read);void read.finally(()=>responseReads.delete(read))
-  })
-  b.on('Network.loadingFailed', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { error: e.errorText, canceled: Boolean(e.canceled) }) })
+  }
+  b.on('Network.loadingFinished', e => inspectCopyResponse(e.requestId))
+  b.on('Network.loadingFailed', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { error: e.errorText, canceled: Boolean(e.canceled) }); inspectCopyResponse(e.requestId) })
   await b.setViewport({ width: 1366, height: 900, scale: 1 })
   await scenario('LOGIN-UI', async () => { await login(); return { authenticated: true } })
   assert(token, 'Login prerequisite failed')

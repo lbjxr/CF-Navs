@@ -17,14 +17,15 @@ export function classifyIssueRequest(url, postData, origin) {
   }
   return { kind: path.startsWith('/api/') ? 'api' : 'resource', object: null, path }
 }
-export function assessStableIcons(requests, allowedObjects = [], allowedPreviewObjects = []) {
-  const unexpected = requests.filter(row => ['icon-body', 'icon-copy', 'iconify-body', 'external-image'].includes(row.kind) && !allowedObjects.includes(row.object) && !(row.surface === 'editor-preview' && allowedPreviewObjects.includes(row.previewFor)))
+export function assessStableIcons(requests, allowedObjects = [], allowedPreviewObjects = [], existingImagesOnly = false) {
+  const unexpected = requests.filter(row => ['icon-body', 'icon-copy', 'iconify-body', 'external-image'].includes(row.kind) && !(existingImagesOnly && ['external-image','iconify-body'].includes(row.kind) && row.wasDisplayed === false) && !allowedObjects.includes(row.object) && !(row.surface === 'editor-preview' && allowedPreviewObjects.includes(row.previewFor)))
   return { passed: unexpected.length === 0, unexpected: unexpected.map(row => ({ requestId: row.requestId, object: row.object, path: row.path, status: row.status ?? null, canceled: row.canceled ?? false })) }
 }
 
 export function assessIconTrace(trace, allowedObjects = []) {
   const regressions = (trace?.changes ?? []).filter(row => !allowedObjects.includes(row.key))
-  return { passed: Number.isSafeInteger(trace?.frames) && trace.frames > 0 && regressions.length === 0, frames: trace?.frames ?? 0, regressions }
+  const revocations=(trace?.protectedRevocations??[]).filter(row=>!allowedObjects.includes(row.key))
+  return { passed: Number.isSafeInteger(trace?.frames) && trace.frames > 0 && regressions.length === 0 && revocations.length===0, frames: trace?.frames ?? 0, regressions, revocations }
 }
 
 // A 409 is expected only when the matching advertised descriptor is requested

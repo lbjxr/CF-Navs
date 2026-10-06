@@ -23,15 +23,26 @@ export function createTrustedIconView(onChange: (value: TrustedIconState) => voi
   let sequence = 0
   let disposed = false
   let presentation = emptyTrustedIcon
+  let displayedDescriptor: IconDescriptor | null = null
+  let displayedEpoch = -1
   function publish(value: TrustedIconState) { presentation = value; onChange(value) }
   const retry = createIconRetry(() => update(true))
-  function reset() { sequence++; handle?.release(); handle = null }
+  function reset() { sequence++; handle?.release(); handle = null; displayedDescriptor = null }
   function update(force = false) {
     if (disposed || !input) return
     const active = deviceState.enabledForPage && deviceState.trusted && !input.preview && Number.isSafeInteger(input.id) && input.id > 0 && !['unsupported', 'unavailable'].includes(deviceState.phase)
     const descriptor = deviceState.dataset ? bookmarkDescriptor(input, deviceState.dataset) : null
     const next = JSON.stringify([active, input.object_type, input.id, input.icon, input.icon_blob, input.icon_revision, input.icon_write_epoch, input.icon_cached, input.icon_display, input.visible, input.online_url, deviceState.epoch, deviceState.phase, deviceState.dataset])
     if (!force && next === signature) return
+    // Snapshot hydration and refreshed online grants can change raw fields while
+    // the same verified image is still owned by this view. They are not a new
+    // image identity. Permission/dataset transitions must still release it.
+    if (!force && active && input.visible && handle && presentation.url && presentation.active &&
+      deviceState.phase === 'ready' && deviceState.epoch === displayedEpoch && descriptor?.state === 'ready' && displayedDescriptor &&
+      (['object_type', 'object_id', 'dataset_epoch', 'state', 'content_revision', 'write_epoch'] as const).every(key => descriptor[key] === displayedDescriptor![key])) {
+      signature = next
+      return
+    }
     signature = next; reset()
     if (!force) retry.reset()
     if (!active) { publish(emptyTrustedIcon); return }
@@ -75,6 +86,7 @@ export function createTrustedIconView(onChange: (value: TrustedIconState) => voi
         if (result.status === 'retryable') retry.failed()
         return
       }
+      if (result.status === 'ready' && result.url) { displayedDescriptor = result.descriptor; displayedEpoch = deviceState.epoch }
       publish({ active: true, url: result.url ?? '', pending: false })
       if (result.status === 'retryable') retry.failed(); else if (result.status === 'ready') retry.reset()
     }).catch(() => { if (own === sequence && !disposed) { publish(emptyTrustedIcon); retry.failed() } })

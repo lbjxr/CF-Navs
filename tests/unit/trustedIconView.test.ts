@@ -161,3 +161,37 @@ describe('trusted icon activation for the current document', () => {
     view.destroy()
   })
 })
+
+describe('verified icon identity survives snapshot hydration',()=>{
+  const revision='sha256-'+'a'.repeat(64)
+  function setup(object_type: 'bookmark'|'category'='bookmark') {
+    pendingState();publish({enabledForPage:true,phase:'ready'})
+    const input={id:7,object_type,icon:null,icon_blob:null,icon_cached:true,icon_display:'image' as const,icon_revision:revision,icon_write_epoch:1,visible:true,online_url:'/api/icon/7?v=old'}
+    const descriptor=bookmarkDescriptor(input,harness.state.dataset!)
+    const release=vi.fn(),changed=vi.fn()
+    harness.acquire.mockReturnValue({result:Promise.resolve({status:'ready',url:'blob:verified',descriptor}),release})
+    return {input,release,changed,view:createTrustedIconView(changed)}
+  }
+  it.each(['bookmark','category'] as const)('keeps the %s handle when identical source fields are hydrated',async type=>{
+    const f=setup(type)
+    try {
+      f.view.set(f.input);await Promise.resolve();f.changed.mockClear()
+      f.view.set({...f.input,icon:'data:image/svg+xml;base64,PHN2Zy8+',icon_blob:'data:image/svg+xml;base64,PHN2Zy8+',icon_cached:false,online_url:'/api/icon/7?v=new'})
+      expect(f.release).not.toHaveBeenCalled();expect(harness.acquire).toHaveBeenCalledOnce();expect(f.changed).not.toHaveBeenCalled()
+    } finally {f.view.destroy()}
+  })
+  it('does not release a verified local image just to renew its online key',async()=>{
+    const f=setup();try{f.view.set(f.input);await Promise.resolve();f.view.set({...f.input,online_url:'/api/icon/7?key=renewed'});expect(f.release).not.toHaveBeenCalled();expect(harness.acquire).toHaveBeenCalledOnce()}finally{f.view.destroy()}
+  })
+  it.each(['revision','dataset','permission','empty','hidden'])('still releases on %s changes',async kind=>{
+    const f=setup();try{
+      f.view.set(f.input);await Promise.resolve()
+      if(kind==='dataset') publish({dataset:'d'.repeat(32)})
+      else if(kind==='permission') publish({epoch:1,phase:'waiting-auth'})
+      else if(kind==='empty') f.view.set({...f.input,icon_display:'empty'})
+      else if(kind==='hidden') f.view.set({...f.input,visible:false})
+      else f.view.set({...f.input,icon_revision:'sha256-'+'b'.repeat(64)})
+      expect(f.release).toHaveBeenCalledOnce()
+    } finally {f.view.destroy()}
+  })
+})

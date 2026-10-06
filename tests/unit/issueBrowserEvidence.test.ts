@@ -84,3 +84,15 @@ describe('descriptor conflicts require a verified successful retry',()=>{
     expect(validatedIconConflicts([conflict,{...success,copyRequest:{...success.copyRequest,expected_write_epoch:2}}])).toEqual([])
   })
 })
+
+it('does not mistake a new editor image for reloading an existing image',()=>{
+  const newPreview={kind:'external-image',object:null,path:'[external]',wasDisplayed:false}
+  expect(assessStableIcons([newPreview],[],[],true).passed).toBe(true)
+  expect(assessStableIcons([{...newPreview,wasDisplayed:true}],[],[],true).passed).toBe(false)
+  expect(assessStableIcons([{...newPreview,kind:'icon-body',object:'category:1'}],[],[],true).passed).toBe(false)
+})
+it('rejects revocation of an existing offscreen handle, not just visible flashes',()=>{
+  const trace={frames:10,changes:[],protectedRevocations:[{key:'category:1',id:4}]}
+  expect(assessIconTrace(trace,['bookmark:1']).passed).toBe(false)
+  expect(assessIconTrace(trace,['category:1']).passed).toBe(true)
+})
