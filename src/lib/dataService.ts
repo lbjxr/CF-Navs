@@ -437,6 +437,20 @@ export async function persistCurrentAdminData(isCurrent: IsCurrent = captureSess
   }
 }
 
+/** Read editable source fields without publishing full image bodies into the view
+ * stores. Snapshot projections are display data, never a safe PUT baseline. */
+export async function readAdminDataForEdit(): Promise<AdminData | null> {
+  if (!isLoggedIn()) return null
+  const isCurrent = captureSession()
+  try {
+    const data = await api.admin.getData({ keepSessionOnUnauthorized: true })
+    return isCurrent() ? data : null
+  } catch (error) {
+    if (!isCurrent()) return null
+    throw error
+  }
+}
+
 export function refreshLoggedInData(forceRemote = false): Promise<void> {
   return loadLoggedInData(forceRemote, beginRefresh())
 }

@@ -142,7 +142,7 @@ async function main() {
   try {
     await waitForHealth(baseUrl, child)
     console.log(`smoke: local worker ready at ${baseUrl}`)
-    const smokeScript = process.argv.includes('--category-perf')
+    const smokeScript = process.argv.includes('--issues') ? 'issue-browser-regression.mjs' : process.argv.includes('--category-perf')
       ? 'category-icon-perf-regression.mjs'
       : process.argv.includes('--icons') ? 'icon-ui-regression.mjs' : 'smoke-test.mjs'
     const smoke = spawnSync(process.execPath, [path.join(rootDir, 'scripts', smokeScript)], {

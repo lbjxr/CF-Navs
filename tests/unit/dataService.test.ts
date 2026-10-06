@@ -73,6 +73,7 @@ import {
   getCurrentDataVersion,
   isLoggedIn,
   refreshLoggedInData,
+  readAdminDataForEdit,
   refreshPublicData,
   refreshVisibleData,
 } from '../../src/lib/dataService'
@@ -623,5 +624,54 @@ describe('dataService refresh ownership', () => {
       expect(get(publicStore).data?.bookmarks).toHaveLength(1)
       expect(getCurrentDataVersion()).toBe('new')
     } finally { vi.useRealTimers() }
+  })
+})
+
+describe('dataService authoritative edit reads', () => {
+  it('restores source fields without replacing projected view stores or snapshots', async () => {
+    authStore.setSession(session)
+    const projected = makeAdminData('v1')
+    projected.bookmarks[0] = { ...bookmark, icon: null, icon_blob: null, icon_display: 'image' }
+    applyLoggedInData(projected)
+    const view = get(publicStore).data, admin = get(adminStore).data
+    const raw = makeAdminData('v1')
+    raw.bookmarks = [{ ...bookmark, icon: 'data:image/svg+xml;base64,PHN2Zy8+', icon_source: 'custom' }]
+    raw.categories = [{ ...category, icon: 'data:image/svg+xml;base64,PHN2Zy8+' }]
+    api.admin.getData.mockResolvedValueOnce(raw)
+    expect(await readAdminDataForEdit()).toBe(raw)
+    expect(get(publicStore).data).toBe(view)
+    expect(get(adminStore).data).toBe(admin)
+    expect(adminCache.readCachedAdminDataEntry).not.toHaveBeenCalled()
+    expect(adminCache.writeCachedAdminData).not.toHaveBeenCalled()
+  })
+  it('does not read private edit data while logged out', async () => {
+    expect(await readAdminDataForEdit()).toBeNull()
+    expect(api.admin.getData).not.toHaveBeenCalled()
+  })
+  it('discards edit data after an identity change', async () => {
+    authStore.setSession(session)
+    let resolve!: (data: AdminData) => void
+    api.admin.getData.mockReturnValueOnce(new Promise<AdminData>(done => { resolve = done }))
+    const pending = readAdminDataForEdit()
+    authStore.setSession({ ...session, token: 'new-session' })
+    resolve(makeAdminData())
+    expect(await pending).toBeNull()
+  })
+  it('does not surface an old 401 into a new edit session', async () => {
+    authStore.setSession(session)
+    let reject!: (error: Error) => void
+    api.admin.getData.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail }))
+    const pending = readAdminDataForEdit()
+    authStore.setSession({ ...session, token: 'new-session' })
+    reject(Object.assign(new Error('old 401'), { status: 401 }))
+    expect(await pending).toBeNull()
+    expect(get(authStore).session?.token).toBe('new-session')
+  })
+  it('does not substitute a lossy snapshot when the authoritative read fails', async () => {
+    authStore.setSession(session)
+    applyLoggedInData(makeAdminData())
+    api.admin.getData.mockRejectedValueOnce(new Error('offline'))
+    await expect(readAdminDataForEdit()).rejects.toThrow('offline')
+    expect(adminCache.readCachedAdminDataEntry).not.toHaveBeenCalled()
   })
 })

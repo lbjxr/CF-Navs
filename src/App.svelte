@@ -69,7 +69,7 @@
     toInstallScreenState,
     type InstallScreenState,
   } from './lib/appInstall'
-  import { createBookmarkDraft, createCategoryDraft, findBookmarkForEdit } from './lib/appModalState'
+  import { createBookmarkDraft, createCategoryDraft } from './lib/appModalState'
   import {
     canSeeHomeView,
     createHomeGateState,
@@ -98,6 +98,7 @@
     isLoggedIn,
     persistCurrentAdminData,
     refreshBookmarkIconCacheInBackground,
+    readAdminDataForEdit,
     refreshLoggedInData,
     refreshPublicData,
     refreshVisibleData,
@@ -234,6 +235,7 @@
 
   let activeCategory: Partial<CategoryFormValue> | null = null
   let activeBookmark: Partial<BookmarkFormValue> | null = null
+  let editIntent = 0
 
   let savingCategory = false
   let savingBookmark = false
@@ -577,6 +579,7 @@
   }
 
   function resetCategoryState(): void {
+    editIntent += 1
     categoryModalOpen = false
     categoryModalMode = 'create'
     activeCategory = null
@@ -591,6 +594,7 @@
   }
 
   function resetBookmarkState(): void {
+    editIntent += 1
     bookmarkModalOpen = false
     bookmarkModalMode = 'create'
     activeBookmark = null
@@ -698,6 +702,7 @@
     currentView = 'admin'
   }
   async function openCreateCategoryUseCase(returnToHome: boolean): Promise<boolean> {
+    editIntent += 1
     if (!isLoggedIn()) {
       await handleOpenLogin()
       return false
@@ -727,21 +732,19 @@
   }
 
   async function openEditCategoryUseCase(category: { id: string | number }): Promise<void> {
-    let current = adminData.categories.find((item) => item.id === Number(category.id))
-    if (!current) return
-
-    // Snapshots intentionally remove embedded image sources. Refresh only when opening
-    // an image category whose editable source is absent, so a metadata edit cannot clear it.
-    if (!current.icon?.trim()) {
-      await refreshLoggedInData(true)
-      current = adminData.categories.find((item) => item.id === Number(category.id))
-      if (!current) return
+    const intent = ++editIntent
+    try {
+      const data = await readAdminDataForEdit()
+      if (!data || intent !== editIntent) return
+      const current = data.categories.find(item => item.id === Number(category.id))
+      if (!current) throw new Error('分类已不存在，请刷新后重试。')
+      categoryError = ''
+      categoryModalMode = 'edit'
+      activeCategory = toCategoryForm(current)
+      categoryModalOpen = true
+    } catch (error) {
+      if (intent === editIntent) rootError = `无法读取分类的原始编辑数据：${getErrorMessage(error)}`
     }
-
-    categoryError = ''
-    categoryModalMode = 'edit'
-    activeCategory = toCategoryForm(current)
-    categoryModalOpen = true
   }
   async function handleEditCategory(category: { id: string | number }): Promise<void> {
     await openEditCategoryUseCase(category)
@@ -821,6 +824,7 @@
   }
 
   async function handleOpenCreateBookmark(categoryId?: string | number): Promise<void> {
+    editIntent += 1
     if (!isLoggedIn()) {
       await handleOpenLogin()
       return
@@ -838,28 +842,27 @@
   }
 
   async function handleEditBookmark(bookmark: { id: string | number }): Promise<void> {
+    const intent = ++editIntent
+    const editSession = get(authStore).session
     if (!isLoggedIn()) {
       await handleOpenLogin()
       return
     }
-
-    const current = findBookmarkForEdit(bookmark.id, adminData.bookmarks, publicData?.bookmarks ?? [])
-    if (!current) return
-
     bookmarkError = ''
-    if (!await ensureLoggedInDataLoaded()) {
-      return
+    try {
+      const data = await readAdminDataForEdit()
+      if (!data || intent !== editIntent) return
+      const current = data.bookmarks.find(item => item.id === Number(bookmark.id))
+      if (!current) throw new Error('书签已不存在，请刷新后重试。')
+      await ensureBookmarkEditModalComponent()
+      if (!isLoggedIn() || get(authStore).session !== editSession || intent !== editIntent) return
+      bookmarkModalMode = 'edit'
+      activeBookmark = toBookmarkForm(current)
+      bookmarkModalOpen = true
+      refreshBookmarkIconCacheInBackground(Number(bookmark.id))
+    } catch (error) {
+      if (intent === editIntent) rootError = `无法读取书签的原始编辑数据：${getErrorMessage(error)}`
     }
-    await ensureBookmarkEditModalComponent()
-    bookmarkModalMode = 'edit'
-    const refreshed = findBookmarkForEdit(
-      bookmark.id,
-      get(adminStore).data.bookmarks,
-      get(publicStore).data?.bookmarks ?? [],
-    ) ?? current
-    activeBookmark = toBookmarkForm(refreshed)
-    bookmarkModalOpen = true
-    refreshBookmarkIconCacheInBackground(Number(bookmark.id))
   }
 
   async function handleCloseBookmarkModal(): Promise<void> {

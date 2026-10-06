@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyIssueRequest, assessStableIcons, assessIconTrace } from '../../scripts/lib/issueBrowserEvidence.mjs'
+import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts } from '../../scripts/lib/issueBrowserEvidence.mjs'
 const origin = 'https://nav.example.test'
 describe('per-operation browser network evidence', () => {
   it.each([
@@ -65,5 +65,22 @@ describe('resource loads are not necessarily network traffic', () => {
     expect(assessStableIcons([row],[],['bookmark:1']).passed).toBe(true)
     expect(assessStableIcons([row],[],['bookmark:2']).passed).toBe(false)
     expect(assessStableIcons([{...row,surface:undefined}],[],['bookmark:1']).passed).toBe(false)
+  })
+})
+
+describe('descriptor conflicts require a verified successful retry',()=>{
+  const descriptor={object_type:'category',object_id:2,dataset_epoch:'c'.repeat(32),write_epoch:3,content_revision:'sha256-'+'a'.repeat(64),state:'ready'}
+  const conflict={requestId:'old',status:409,time:1,object:'category:2',copyRequest:{dataset_epoch:descriptor.dataset_epoch},copyResult:{protocol:1,reason:'conflict',hasImage:false,descriptor}}
+  const success={requestId:'new',status:200,time:2,object:'category:2',copyRequest:{dataset_epoch:descriptor.dataset_epoch,expected_write_epoch:3,expected_content_revision:descriptor.content_revision},copyResult:{protocol:1,persistence:'session-scoped',imageBytes:20,descriptor}}
+  it('accepts only the exact conflict request id',()=>expect(validatedIconConflicts([conflict,success])).toEqual(['old']))
+  it('rejects absent, unrelated or body-free retries',()=>{
+    expect(validatedIconConflicts([conflict])).toEqual([])
+    expect(validatedIconConflicts([conflict,{...success,object:'bookmark:2'}])).toEqual([])
+    expect(validatedIconConflicts([conflict,{...success,copyResult:{...success.copyResult,imageBytes:0}}])).toEqual([])
+  })
+  it('rejects malformed conflicts, stale or differing descriptors',()=>{
+    expect(validatedIconConflicts([{...conflict,copyResult:{...conflict.copyResult,reason:'other'}},success])).toEqual([])
+    expect(validatedIconConflicts([conflict,{...success,time:0}])).toEqual([])
+    expect(validatedIconConflicts([conflict,{...success,copyRequest:{...success.copyRequest,expected_write_epoch:2}}])).toEqual([])
   })
 })

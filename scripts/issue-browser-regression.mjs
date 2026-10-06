@@ -10,20 +10,24 @@ import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
 import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.mjs'
-import { classifyIssueRequest, assessStableIcons, assessIconTrace } from './lib/issueBrowserEvidence.mjs'
+import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts } from './lib/issueBrowserEvidence.mjs'
 if (process.env.ISSUE_BROWSER_WRITE_FIXTURES !== '1') throw new Error('Explicit ISSUE_BROWSER_WRITE_FIXTURES=1 required for temporary test-site records')
 const base = resolveBaseUrl(), credentials = requireAdminCredentials()
 const selectedCases=new Set((process.env.ISSUE_CASES??'').split(',').filter(Boolean))
-const requiredCases=new Set(['LOGIN-UI','28-BASELINE','28-ENABLE-DEFERRED','28-COLD-RELOAD'])
+const cacheMode=process.env.ISSUE_CACHE_MODE??'on'
+assert(['on','off'].includes(cacheMode),'Invalid ISSUE_CACHE_MODE')
+if(cacheMode==='off') assert(selectedCases.size>0&&[...selectedCases].every(id=>['28-EDIT-TITLE-DATA','28-EDIT-CANCEL','28-IDLE-CONTROL','28-RIGHT-CLICK-OFF'].includes(id)),'Off mode requires explicit compatible cases')
+const requiredCases=new Set(['LOGIN-UI','28-BASELINE','28-ENABLE-DEFERRED'])
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const output = await fs.mkdtemp(path.join(os.tmpdir(), 'cf-navs-issue-browser-'))
 const profile = path.join(os.tmpdir(), 'cf-navs-chrome-profile-issue-' + run)
 const probe = net.createServer(); await new Promise(r => probe.listen(0, '127.0.0.1', r))
 const port = probe.address().port; await new Promise(r => probe.close(r))
 const b = new CdpSession({ chromeExe: resolveSetting('CHROME_EXE', 'chromeExe', 'C:/Program Files/Google/Chrome/Application/chrome.exe'), debugPort: port, userDataDir: profile, headless: false })
-const report = { run, browserLog: [], cases: [], requests: [], cleanup: {}, excluded: [], limitations: [] }
+const report = { run, cacheMode, browserLog: [], cases: [], requests: [], cleanup: {}, excluded: [], limitations: [] }
 let stage = 'setup', token = '', category, child, bookmarks = [], ownedCategories = [], ownedBookmarks = [], secondary = null
 const requests = new Map()
+const responseReads = new Set()
 let fetchHandler = null
 let editorObject = null
 const injectedRequests = new Set()
@@ -78,7 +82,7 @@ async function login() {
     await fill('input[autocomplete="current-password"]', credentials.password)
     await click('[aria-labelledby="login-modal-title"] form button[type="submit"]')
     await wait(() => !document.querySelector('input[autocomplete="current-password"]'), [], 30000)
-    if (!await b.call(() => Boolean(document.querySelector('[data-testid="admin-tab-settings"]')))) await homeAction('admin')
+    await b.navigate(base + '/admin')
   }
   await wait(() => Boolean(document.querySelector('[data-testid="admin-tab-settings"]')), [], 30000)
   token = await b.call(() => JSON.parse(localStorage.getItem('cf-navs.auth') || 'null')?.token || '')
@@ -102,12 +106,12 @@ function manifest() {
   return [{ key: `category:${child.id}`, selector: `#home-category-tab-${child.id} [data-category-icon]`, kind:'image', pixels: fixtures.bookmark.pixels }, { key: `category:${category.id}`, selector: `${scope()} > .scope-heading > [data-category-icon]`, kind: 'image', pixels: fixtures.category.pixels },
     ...bookmarks.map((item, i) => ({ key: `bookmark:${item.id}`, selector: card(i), kind: 'image', pixels: item.pixels }))]
 }
-async function home() {
+async function home({ waitForImages = true } = {}) {
   await b.navigate(base)
   await wait(sel => Boolean(document.querySelector(sel)), [scope()], 30000)
   await click(scope() + ' .scope-root-trigger')
   await wait(id => document.querySelectorAll(`[data-sort-category-id="${id}"] .bookmark-card-shell`).length >= 3, [category.id], 30000)
-  for (const item of manifest()) {
+  if (waitForImages) for (const item of manifest()) {
     await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),item.selector)
     await wait(sel=>{const e=document.querySelector(sel),img=e?.matches('img')?e:e?.querySelector('img');return img?.complete&&img.naturalWidth>0},[item.selector],20000)
   }
@@ -148,6 +152,7 @@ async function traceStart() {
 }
 async function traceEnd() { return b.call(() => { const t = window.__issueTrace; t?.stop(); if(window.__issueUrls)window.__issueUrls.active=false; return t ? { objectUrls:window.__issueUrls?.events??[], changes: t.changes, frames: t.samples.frames, timeOrigin:performance.timeOrigin } : null }) }
 async function scenario(id, action) {
+  if(id==='28-ENABLE-DEFERRED'&&cacheMode==='off'){const skipped={id,status:'not-run',reason:'Explicit cache-off matrix'};report.cases.push(skipped);return skipped}
   if(selectedCases.size&&!selectedCases.has(id)&&!requiredCases.has(id)){const skipped={id,status:'not-run'};report.cases.push(skipped);return skipped}
   stage = id; editorObject=null; const start = report.requests.length, consoles = b.consoleErrors.length, exceptions = b.pageExceptions.length
   const entry = { id, expectedFault: ['28-COPY-503', '29-OLD-401', '29-OFFLINE-FOCUS'].includes(id), started: new Date().toISOString(), status: 'running' }; report.cases.push(entry)
@@ -219,6 +224,14 @@ async function sessionCall(sessionId,fn,...args) {
 async function settings() { await homeAction('admin'); await wait(() => document.querySelector('[data-testid="admin-tab-settings"]')); await click('[data-testid="admin-tab-settings"]'); await wait(() => [...document.querySelectorAll('.settings-submenu button')].some(e => e.textContent.includes('设备缓存'))); const selector = await b.call(() => { const buttons = [...document.querySelectorAll('.settings-submenu button')]; return '.settings-submenu button:nth-child(' + (buttons.findIndex(e => e.textContent.includes('设备缓存')) + 1) + ')' }); await click(selector); await wait(() => document.querySelector('.device-cache input')) }
 async function edit(index) { editorObject=`bookmark:${bookmarks[index].id}`; await click(card(index), 'right'); await click('[data-testid="bookmark-context-edit"]'); await wait(() => document.querySelector('[data-testid="bookmark-modal"]')) }
 try {
+  // smoke-local owns the empty D1 and its one-time bootstrap credentials. Match
+  // the existing icon smoke setup, then still exercise the real login form.
+  if (new URL(base).hostname === '127.0.0.1' && process.env.SETUP_TOKEN) {
+    const response = await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:credentials.username,password:credentials.password})})
+    const bootstrap = await response.json()
+    assert(bootstrap.code===0&&bootstrap.data?.token,'Disposable local bootstrap failed')
+    await fetch(base+'/api/logout',{method:'POST',headers:{authorization:'Bearer '+bootstrap.data.token}})
+  }
   await b.start(); await b.attach()
   await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(() => {
     const create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL),ids=new Map();let sequence=0;
@@ -238,6 +251,7 @@ try {
   b.on('Network.requestWillBeSent', e => {
     const row = { requestId: e.requestId, stage, time: e.timestamp, wallTime: e.wallTime, method: e.request.method, type: e.type, initiator: e.initiator?.type, initiatorFrames:e.initiator?.stack?.callFrames?.slice(0,4).map(f=>({function:f.functionName,url:safe(f.url),line:f.lineNumber,column:f.columnNumber})), ...classifyIssueRequest(e.request.url, e.request.postData, base) }
     if (row.kind === 'external' && row.type === 'Image') row.kind = 'external-image'
+    if(row.kind==='icon-copy') {try{const body=JSON.parse(e.request.postData);row.copyRequest={dataset_epoch:body.dataset_epoch,expected_write_epoch:body.expected_write_epoch,expected_content_revision:body.expected_content_revision}}catch{}}
     requests.set(e.requestId, row); report.requests.push(row)
     if(editorObject && ['icon-body','icon-copy','iconify-body','external-image'].includes(row.kind)) {
       const previewFor=editorObject
@@ -245,6 +259,15 @@ try {
     }
   })
   b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','cache-control','x-icon-fallback'].includes(name.toLowerCase()))) }) })
+  b.on('Network.loadingFinished', e => {
+    const row=requests.get(e.requestId)
+    if(row?.kind!=='icon-copy'||![200,409].includes(row.status)) return
+    const read=b.send('Network.getResponseBody',{requestId:e.requestId}).then(response=>{
+      const envelope=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body),data=envelope.data
+      row.copyResult={protocol:data?.protocol,reason:data?.reason,persistence:data?.persistence,descriptor:data?.descriptor,hasImage:Boolean(data?.image),imageBytes:data?.image?.byte_length??0}
+    }).catch(()=>{row.copyResult={unreadable:true}})
+    responseReads.add(read);void read.finally(()=>responseReads.delete(read))
+  })
   b.on('Network.loadingFailed', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { error: e.errorText, canceled: Boolean(e.canceled) }) })
   await b.setViewport({ width: 1366, height: 900, scale: 1 })
   await scenario('LOGIN-UI', async () => { await login(); return { authenticated: true } })
@@ -283,6 +306,33 @@ try {
     await click('[data-testid="bookmark-modal"] button[type="submit"]'); await wait(() => !document.querySelector('[data-testid="bookmark-modal"]'), [], 30000)
     bookmarks[0].pixels = fixtures.category.pixels; bookmarks[0].imageKey='category'
   }, [`bookmark:${bookmarks[0].id}`]))
+  await scenario('28-EDIT-TITLE-DATA', async () => {
+    for (const index of [0, 2]) {
+      await home({waitForImages:false})
+      await wait(async id => {
+        const cache=await caches.open('cf-navs-admin-data-v1')
+        for(const request of await cache.keys()) {
+          const payload=await (await cache.match(request)).json()
+          const item=payload?.data?.bookmarks?.find(row=>row.id===id)
+          if(item?.icon_display==='image'&&!item.icon) return true
+        }
+        return Object.keys(localStorage).filter(key=>key.startsWith('cf-navs.admin-data.')).some(key=>{try{const item=JSON.parse(localStorage.getItem(key)).data.bookmarks.find(row=>row.id===id);return item?.icon_display==='image'&&!item.icon}catch{return false}})
+      },[bookmarks[index].id])
+      await home({waitForImages:false})
+      await edit(index)
+      const expected=fixtures[bookmarks[index].imageKey].base64Uri
+      assert(await b.call(value=>document.querySelector('[data-testid="bookmark-modal"] .icon-row input')?.value===value,expected),'Projected snapshot leaked an empty icon into the editor')
+      const title=`Edited ${run} ${index}`
+      await fill('[data-testid="bookmark-modal"] input[placeholder="例如：Svelte 官方网站"]',title)
+      await click('[data-testid="bookmark-modal"] button[type="submit"]')
+      await wait(()=>!document.querySelector('[data-testid="bookmark-modal"]'))
+      bookmarks[index].title=title
+      const saved=(await api('/admin/data',undefined,'GET')).bookmarks.find(item=>item.id===bookmarks[index].id)
+      assert(saved?.title===title&&saved.icon===expected&&saved.icon_source==='custom','Metadata edit lost authoritative image fields')
+      report.cases.at(-1).recordAfter={index,titleMatched:true,iconRetained:true,sourceRetained:true}
+    }
+    return {publicAndPrivate:true,projectedSnapshotConfirmed:true,originalSourceVerifiedBeforeSubmit:true,serverImageRetained:true}
+  })
   const titleCase=await scenario('28-EDIT-TITLE-SAVE', async () => stableOperation(async () => {
     await edit(0); const title='Browser edited '+run
     await fill('[data-testid="bookmark-modal"] input[placeholder="例如：Svelte 官方网站"]',title)
@@ -452,10 +502,13 @@ finally {
     }
   } catch (error) { report.cleanup.serverError = safe(error.message) }
   if (secondary) await b.send('Target.closeTarget', { targetId: secondary }).catch(() => {})
+  await Promise.allSettled([...responseReads])
   report.cleanup.browser = await b.cleanup()
-  report.unexpectedHttp = report.requests.filter(e => e.status >= 400 && !injectedRequests.has(e.requestId))
+  const protocolConflicts=new Set(validatedIconConflicts(report.requests))
+  report.validatedConflicts=[...protocolConflicts]
+  report.unexpectedHttp = report.requests.filter(e => e.status >= 400 && !injectedRequests.has(e.requestId) && !protocolConflicts.has(e.requestId))
   report.failedRequests = report.requests.filter(e => e.error)
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId))
   report.injectedRequests=[...injectedRequests]
   await persist()
   console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))

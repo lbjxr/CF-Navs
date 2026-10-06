@@ -26,3 +26,23 @@ export function assessIconTrace(trace, allowedObjects = []) {
   const regressions = (trace?.changes ?? []).filter(row => !allowedObjects.includes(row.key))
   return { passed: Number.isSafeInteger(trace?.frames) && trace.frames > 0 && regressions.length === 0, frames: trace?.frames ?? 0, regressions }
 }
+
+// A 409 is expected only when the matching advertised descriptor is requested
+// again and a real body succeeds. Never waive all conflicts by status alone.
+export function validatedIconConflicts(rows) {
+  const ids = []
+  for (const row of rows) {
+    const result=row.copyResult, d=result?.descriptor
+    if(row.status!==409||result?.protocol!==1||result.reason!=='conflict'||result.hasImage||d?.state!=='ready'||
+       !['bookmark','category'].includes(d.object_type)||!Number.isSafeInteger(d.object_id)||d.object_id<=0||
+       !/^[a-f0-9]{32}$/.test(d.dataset_epoch??'')||!Number.isSafeInteger(d.write_epoch)||d.write_epoch<0||
+       !/^sha256-[a-f0-9]{64}$/.test(d.content_revision??'')||row.object!==`${d.object_type}:${d.object_id}`||
+       row.copyRequest?.dataset_epoch!==d.dataset_epoch) continue
+    const success=rows.find(next=>next.status===200&&next.time>=row.time&&next.object===row.object&&
+      next.copyRequest?.dataset_epoch===d.dataset_epoch&&next.copyRequest.expected_write_epoch===d.write_epoch&&next.copyRequest.expected_content_revision===d.content_revision&&
+      next.copyResult?.protocol===1&&next.copyResult.persistence==='session-scoped'&&next.copyResult.imageBytes>0&&
+      ['object_type','object_id','dataset_epoch','write_epoch','content_revision','state'].every(key=>next.copyResult.descriptor?.[key]===d[key]))
+    if(success) ids.push(row.requestId)
+  }
+  return ids
+}
