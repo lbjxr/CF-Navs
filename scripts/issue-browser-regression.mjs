@@ -10,7 +10,7 @@ import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
 import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.mjs'
-import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse } from './lib/issueBrowserEvidence.mjs'
+import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure } from './lib/issueBrowserEvidence.mjs'
 if (process.env.ISSUE_BROWSER_WRITE_FIXTURES !== '1') throw new Error('Explicit ISSUE_BROWSER_WRITE_FIXTURES=1 required for temporary test-site records')
 const base = resolveBaseUrl(), credentials = requireAdminCredentials()
 const selectedCases=new Set((process.env.ISSUE_CASES??'').split(',').filter(Boolean))
@@ -33,6 +33,8 @@ let fetchHandler = null
 let editorObject = null
 let operationImageUrls = null
 const injectedRequests = new Set()
+const expectedOfflineRequests = new Set()
+let offlineActive = false
 function safe(value) { return redactCredentials(String(value), credentials).replaceAll(base, '[test-origin]').replaceAll(token || '\u0000', '[token]').replace(/([?&](?:key|token)=)[^\s&"']+/g, '$1[redacted]') }
 async function persist() { await fs.writeFile(path.join(output, 'report.json'), safe(JSON.stringify(report, null, 2))) }
 function assert(value, message) { if (!value) throw new Error(message) }
@@ -73,11 +75,21 @@ async function fill(selector, value) {
   assert(await b.call((sel,expected)=>document.querySelector(sel)?.value===expected,selector,value),'Field replacement verification failed: '+selector)
 }
 async function homeAction(name) {
-  const selector = `[data-testid="home-${name}-button"]`
-  if (!await b.call(sel => { const r = document.querySelector(sel)?.getBoundingClientRect(); return r && r.width > 0 && r.height > 0 }, selector)) await click('[data-testid="home-actions-menu-trigger"]')
-  await click(selector)
+  const selector = name==='theme' ? '[data-testid="home-theme-toggle"]' : `[data-testid="home-${name}-button"]`
+  let failedClicks=0
+  for(let attempt=0;attempt<120;attempt++) {
+    if(name==='login'&&await b.call(()=>Boolean(document.querySelector('[aria-labelledby="login-modal-title"]'))))return
+    if(name==='admin'&&await b.call(()=>Boolean(document.querySelector('[data-testid="admin-tab-settings"]'))))return
+    const state=await b.call(sel=>{const e=document.querySelector(sel),r=e?.getBoundingClientRect(),trigger=document.querySelector('[data-testid="home-actions-menu-trigger"]'),t=trigger?.getBoundingClientRect();return {exists:!!e,visible:!!r&&r.width>0&&r.height>0,trigger:!!t&&t.width>0&&t.height>0,expanded:trigger?.getAttribute('aria-expanded')==='true'}},selector)
+    if(state.visible){try{await click(selector);return}catch(error){if(!error.message.startsWith('Click failed '+selector)||++failedClicks>=2)throw error}}
+    else if(state.exists&&state.trigger&&!state.expanded)await click('[data-testid="home-actions-menu-trigger"]')
+    await sleep(150)
+  }
+  throw new Error('Floating action did not become available: '+name)
 }
+
 async function login() {
+  await b.send('Page.bringToFront')
   await b.navigate(base + '/admin')
   await wait(() => document.querySelector('input[autocomplete="username"]') || document.querySelector('[data-testid="admin-tab-settings"]') || document.querySelector('[data-testid="home-login-button"]'), [], 30000)
   if (!await b.call(() => Boolean(document.querySelector('[data-testid="admin-tab-settings"]')))) {
@@ -111,6 +123,7 @@ function manifest() {
     ...bookmarks.map((item, i) => ({ key: `bookmark:${item.id}`, selector: card(i), kind: 'image', pixels: item.pixels }))]
 }
 async function home({ waitForImages = true } = {}) {
+  await b.send('Page.bringToFront')
   await b.navigate(base)
   await wait(sel => Boolean(document.querySelector(sel)), [scope()], 30000)
   await click(scope() + ' .scope-root-trigger')
@@ -183,7 +196,18 @@ async function scenario(id, action) {
   if(selectedCases.size&&!selectedCases.has(id)&&!requiredCases.has(id)){const skipped={id,status:'not-run'};report.cases.push(skipped);return skipped}
   stage = id; editorObject=null; const start = report.requests.length, consoles = b.consoleErrors.length, exceptions = b.pageExceptions.length
   const entry = { id, expectedFault: ['28-COPY-503', '29-OLD-401', '29-OFFLINE-FOCUS'].includes(id), started: new Date().toISOString(), status: 'running' }; report.cases.push(entry)
-  try { if((id.startsWith('29-')||id.startsWith('30-')||id.startsWith('28-STORAGE'))&&!await b.call(()=>Boolean(JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token))) await login(); entry.detail = await action(); entry.status = 'passed' } catch (error) { entry.status = 'failed'; entry.error = safe(error.message); if(category && !await b.call(()=>Boolean(document.querySelector('input[type="password"]'))).catch(()=>true)) await shot(id+'-failed').catch(()=>{}) }
+  try { if((id.startsWith('29-')||id.startsWith('30-')||id.startsWith('28-STORAGE'))&&!await b.call(()=>Boolean(JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token))) await login(); entry.detail = await action(); entry.status = 'passed' } catch (error) { entry.status = 'failed'; entry.error = safe(error.message);
+    entry.visibleUi=await b.call(()=>({heading:document.querySelector('h1')?.textContent?.slice(0,120),splash:document.querySelector('.app-splash-card')?.textContent?.trim().slice(0,250),dialogs:document.querySelectorAll('[role="dialog"]').length,inputs:[...document.querySelectorAll('input')].map(e=>({type:e.type,autocomplete:e.autocomplete})),ready:document.readyState})).catch(()=>null);
+    entry.iconState=await b.call(async ids=>{
+      const script=[...document.scripts].find(e=>e.type==='module'&&e.src.includes('/assets/index-'))
+      if(!script)return null
+      const values=Object.values(await import(script.src))
+      const device=values.find(v=>v&&typeof v==='object'&&typeof v.snapshot==='function'&&typeof v.acceptMetadata==='function')
+      const store=values.find(v=>v&&typeof v==='object'&&typeof v.setDataProgressively==='function'&&typeof v.subscribe==='function')
+      const state=device?.snapshot();let data;const stop=store?.subscribe(value=>{data=value.data});stop?.()
+      return {deviceFound:!!device,storeFound:!!store,phase:state?.phase,epoch:state?.epoch,trusted:state?.trusted,enabled:state?.enabledForPage,hasLease:!!state?.lease,categories:data?.categories?.filter(e=>ids.includes(e.id)).map(e=>({id:e.id,sourcePresent:!!e.icon,display:e.icon_display,revision:e.icon_revision,write:e.icon_write_epoch}))}
+    },ownedCategories).catch(()=>null);
+    if(category && !await b.call(()=>Boolean(document.querySelector('input[type="password"]'))).catch(()=>true)) await shot(id+'-failed').catch(()=>{}) }
   entry.requests = report.requests.slice(start).map(r => r.requestId)
   entry.console = b.consoleErrors.slice(consoles).map(e => safe(JSON.stringify(e)))
   entry.exceptions = b.pageExceptions.slice(exceptions).map(e => safe(JSON.stringify(e)))
@@ -330,7 +354,7 @@ try {
     responseReads.add(read);void read.finally(()=>responseReads.delete(read))
   }
   b.on('Network.loadingFinished', e => inspectCopyResponse(e.requestId))
-  b.on('Network.loadingFailed', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { error: e.errorText, canceled: Boolean(e.canceled) }); inspectCopyResponse(e.requestId) })
+  b.on('Network.loadingFailed', e => { if(isExpectedOfflineFailure(e.errorText,offlineActive))expectedOfflineRequests.add(e.requestId); const row = requests.get(e.requestId); if (row) Object.assign(row, { error: e.errorText, canceled: Boolean(e.canceled) }); inspectCopyResponse(e.requestId) })
   await b.setViewport({ width: 1366, height: 900, scale: 1 })
   await scenario('LOGIN-UI', async () => { await login(); return { authenticated: true } })
   assert(token, 'Login prerequisite failed')
@@ -426,9 +450,10 @@ try {
   if(titleCase.status!=='not-run') await setFixtureIcon(0,fixtures[bookmarks[0].imageKey].base64Uri)
   await scenario('29-OFFLINE-FOCUS', async () => {
     await home(); await verifyImages()
+    offlineActive=true
     await b.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 })
     try { await click(card(1), 'right'); await key('Escape'); await focusCycle(); await sleep(1500); return await verifyImages() }
-    finally { await b.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }) }
+    finally { await b.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });offlineActive=false }
   })
   for (const [width, height] of [[1366, 768], [390, 844], [1000, 300]]) await scenario(`30-MENU-${width}x${height}`, async () => {
     await b.setViewport({ width, height, scale: 1 }); await home(); await click(card(2), 'right')
@@ -490,7 +515,7 @@ try {
         let payload;try{payload=JSON.parse(event.request.postData)}catch{return false}
         if(payload.object_type!=='bookmark'||payload.object_id!==bookmarks[targetIndex].id)return false
         injected++;report.cases.at(-1).injection={kind:'target-copy-503',targetIndex,count:injected};if(event.networkId)injectedRequests.add(event.networkId)
-        await b.send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:503,responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'private, no-store'}],body:Buffer.from(JSON.stringify({code:5000,message:'Injected temporary copy failure'})).toString('base64')})
+        await b.send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:503,responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'private, no-store'}],body:Buffer.from(JSON.stringify({code:0,msg:'ok',data:{protocol:1,reason:'unavailable'}})).toString('base64')})
         return true
       },async()=>{await home();await verifyImages();assert(injected>0,'Copy fault not exercised');await shot('28-copy-fallback-'+targetIndex);return {private:targetIndex===2,injected,images:'correct'}}))}
       finally {await setFixtureIcon(targetIndex,fixtures[bookmarks[targetIndex].imageKey].base64Uri)}
@@ -498,7 +523,7 @@ try {
     return {variants}
   })
   await scenario('29-OLD-ADMIN-RESPONSE', async () => {
-    await home(); let held=null, forced=false
+    await home({waitForImages:false}); let held=null, forced=false
     return intercept([{urlPattern:'*/api/data/version*',requestStage:'Response'},{urlPattern:'*/api/admin/data',requestStage:'Response'}],async event=>{
       const pathname=new URL(event.request.url).pathname
       if(pathname==='/api/data/version'&&!forced){
@@ -518,7 +543,7 @@ try {
     })
   })
   await scenario('29-OLD-ANONYMOUS-RESPONSE', async () => {
-    await home();await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'));await b.waitForNetworkIdle(1000,15000)
+    await home({waitForImages:false});await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'));await b.waitForNetworkIdle(1000,15000)
     let held=null,forced=false
     return intercept([{urlPattern:'*/api/data/version*',requestStage:'Response'},{urlPattern:'*/api/public/data',requestStage:'Response'}],async event=>{
       const pathname=new URL(event.request.url).pathname
@@ -538,7 +563,7 @@ try {
     })
   })
   await scenario('29-OLD-401', async () => {
-    await home(); const previousToken=token; let held=null
+    await home({waitForImages:false}); const previousToken=token; let held=null
     return intercept([{urlPattern:'*/api/data/version*',requestStage:'Response'}],async event=>{
       if(held) return false; held=event; return true
     },async()=>{
@@ -549,7 +574,7 @@ try {
       await wait(id=>Boolean(document.querySelector(`[data-sort-id="${id}"]`)),[bookmarks[2].id])
       report.cases.at(-1).preconditions={freshSession:true,privateVisibleBeforeRelease:true}
       if(held.networkId) injectedRequests.add(held.networkId)
-      await b.send('Fetch.fulfillRequest',{requestId:held.requestId,responseCode:401,responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'no-store'}],body:Buffer.from(JSON.stringify({code:1001,message:'Injected old session failure'})).toString('base64')})
+      await b.send('Fetch.fulfillRequest',{requestId:held.requestId,responseCode:401,responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'no-store'}],body:Buffer.from(JSON.stringify({code:1001,msg:'Injected old session failure',data:null})).toString('base64')})
       await sleep(1500)
       const retained=await b.call(expected=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token===expected,currentToken)
       report.cases.at(-1).afterRelease={sessionRetained:retained}
@@ -558,7 +583,7 @@ try {
     })
   })
   await scenario('29-CROSS-TAB-LOGOUT', async () => {
-    await home(); secondary=(await b.send('Target.createTarget',{url:'about:blank'})).targetId
+    await home({waitForImages:false}); secondary=(await b.send('Target.createTarget',{url:'about:blank'})).targetId
     const {sessionId}=await b.send('Target.attachToTarget',{targetId:secondary,flatten:true})
     for(const method of ['Page.enable','Runtime.enable','Network.enable','Log.enable']) await sessionSend(sessionId,method)
     try {
@@ -592,7 +617,7 @@ try {
     for(let i=0;i<3;i++) {
       await wait(()=>document.querySelector('meta[name="theme-color"]')?.content===(document.documentElement.dataset.theme==='dark'?'#08111f':'#f8fafc'))
       samples.push(await b.call(()=>({theme:document.documentElement.dataset.theme,color:document.querySelector('meta[name="theme-color"]').content})))
-      if(i<2){await click('[data-testid="home-theme-toggle"]');await b.call(()=>new Promise(resolve=>requestAnimationFrame(()=>resolve(true))))}
+      if(i<2){await homeAction('theme');await b.call(()=>new Promise(resolve=>requestAnimationFrame(()=>resolve(true))))}
     }
     assert(new Set(samples.map(s=>s.theme)).size===2,'Both theme modes were not exercised')
     const documents=report.requests.filter(row=>row.type==='Document'&&row.status===200)
@@ -602,6 +627,10 @@ try {
     assert(policy.includes("script-src 'self' blob:")&&!policy.match(/script-src[^;]*unsafe-inline/),'HTML did not retain the strict script policy')
     assert(cache.includes('no-transform'),'HTML can still be modified by the delivery proxy')
     return {samples,strictPolicy:true,noTransform:true}
+  })
+  await scenario('28-RELOGIN-ICONS',async()=>{
+    await home({waitForImages:false});await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
+    await login();await home();return await verifyImages()
   })
   await scenario('29-LOGOUT', async () => {
     await b.setViewport({ width: 1366, height: 900, scale: 1 }); await home()
@@ -641,9 +670,11 @@ finally {
   report.canceledResponses=[...canceledHttp]
   report.unexpectedHttp = report.requests.filter(e => e.status >= 400 && !injectedRequests.has(e.requestId) && !protocolConflicts.has(e.requestId) && !canceledHttp.has(e.requestId))
   report.failedRequests = report.requests.filter(e => e.error)
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&canceledHttp.has(e.requestId)))
+  report.expectedOfflineRequests=[...expectedOfflineRequests]
+  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!(e.canceled&&e.error==='net::ERR_ABORTED'))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId))))
   report.injectedRequests=[...injectedRequests]
   await persist()
   console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))
-  if (report.fatal || report.interceptionError || report.unexpectedHttp.length || report.consoleFindings.length || report.cases.some(c => c.status === 'failed') || !report.cleanup.serverFixturesRemoved || !report.cleanup.browser.profileRemoved || report.cleanup.browser.errors.length || report.cleanup.browser.warnings.length) process.exitCode = 1
+  if (report.fatal || report.interceptionError || report.unexpectedHttp.length || report.unexpectedFailures.length || report.consoleFindings.length || report.cases.some(c => c.status === 'failed') || !report.cleanup.serverFixturesRemoved || !report.cleanup.browser.profileRemoved || report.cleanup.browser.errors.length || report.cleanup.browser.warnings.length) process.exitCode = 1
 }

@@ -53,3 +53,7 @@ export function validatedIconConflicts(rows) {
 export function isCanceledNetworkResponse(row) {
   return row.canceled === true && row.error === 'net::ERR_ABORTED' && Number.isInteger(row.status) && row.status >= 400
 }
+
+export function isExpectedOfflineFailure(errorText, offlineActive) {
+  return offlineActive === true && errorText === 'net::ERR_INTERNET_DISCONNECTED'
+}

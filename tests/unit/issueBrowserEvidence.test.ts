@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse } from '../../scripts/lib/issueBrowserEvidence.mjs'
+import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure } from '../../scripts/lib/issueBrowserEvidence.mjs'
 const origin = 'https://nav.example.test'
 describe('per-operation browser network evidence', () => {
   it.each([
@@ -110,4 +110,10 @@ it('separates cancelled responses without waiving operation-level reload budgets
   expect(isCanceledNetworkResponse({...canceled,canceled:false})).toBe(false)
   expect(isCanceledNetworkResponse({...canceled,error:'net::ERR_FAILED'})).toBe(false)
   expect(assessStableIcons([canceled]).passed).toBe(false)
+})
+
+it('waives only the exact error while this test actively injects offline mode',()=>{
+  expect(isExpectedOfflineFailure('net::ERR_INTERNET_DISCONNECTED',true)).toBe(true)
+  expect(isExpectedOfflineFailure('net::ERR_INTERNET_DISCONNECTED',false)).toBe(false)
+  expect(isExpectedOfflineFailure('net::ERR_FAILED',true)).toBe(false)
 })
