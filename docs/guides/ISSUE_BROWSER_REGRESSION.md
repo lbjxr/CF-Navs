@@ -8,7 +8,7 @@
 - 仅在当前任务明确授权测试站临时数据写入后，设置 `ISSUE_BROWSER_WRITE_FIXTURES=1` 并运行 `node scripts/issue-browser-regression.mjs`。
 - 创建独立有头 Chrome profile；真实 UI 登录。测试专用 Chrome 禁用 Windows 原生窗口遮挡暂停，避免窗口被其他应用覆盖时懒加载/动画帧停滞；不覆盖 visibilityState、不改图片 loading，真实标签切换与生命周期仍然生效。报告记录该环境边界，不能拿它证明原生窗口遮挡下的性能。API 仅用于创建、核验和删除本轮合成数据，不替代被验收的 UI 保存、菜单、登录或退出动作。
 - 本轮数据：唯一名称的父分类、子分类、两个公开书签与一个私密书签。书签和分类使用不同的合成像素签名；一般用 base64 控制格式，专门的代理回退用例才切换至 URL 编码格式，避免一种失败污染所有独立用例。
-- `ISSUE_CASES` 可用逗号指定独立用例；登录、基线、开启偏好仍执行；冷加载作为独立用例选择，未选项明确记录为 not-run。
+- `ISSUE_CASES` 可用逗号指定独立用例；登录、基线、开启偏好仍执行；冷加载作为独立用例选择，未选项明确记录为 not-run。`28-COPY-TIMEOUT` 是额外 opt-in，全量默认命令也不隐式运行，必须在 `ISSUE_CASES` 中点名。
 - 字段使用完整原生按键序列替换，保存前逐字核验 value；只读投影造成的数据丢失会保留为失败，再恢复本轮自己的 fixture 隔离后续用例。
 - 不修改既有书签、全站设置、密码，不批量导入；不触发部署或 Issue 状态变化。
 - 最终按记录 ID 删除本轮对象并重新读取验证不存在；撤销测试会话；关闭本次 target/浏览器并验证 profile 清理。失败仍保存报告，清理失败为整轮失败。
@@ -17,7 +17,7 @@
 
 报告与截图写入系统临时目录，路径由终端返回，不进入仓库。报告记录被测入口脚本路径；本地构建成功不代表测试站已部署相同代码。
 
-- 请求从发起时绑定场景，记录 requestId、时间、类型、initiator 类型、无查询参数路径、对象类型/ID、响应码、浏览器缓存/SW 标记、取消和错误。
+- 请求从发起时绑定场景，记录 requestId、时间、类型、initiator 类型、无查询参数路径、对象类型/ID、响应码、浏览器缓存/SW 标记、取消和错误。终止事件记录 CDP `terminalTime`、`terminalKind`、`durationMs`，并保留 `finishedTime` / `failureTime`；未终止请求没有这些字段，不能记为耗时 0。响应增加 `protocol`（如 h3）和仅含有限数值的 `timing`，`-1` 表示该阶段未提供测量，不是负耗时；不新增远端 IP、原始 header/body 采集。`Network.dataReceived` 另记首/末数据时间、数据块数和累计明文/编码字节数；`loadingFinished` 记最终 `encodedDataLength`，`loadingFailed` 保留 `blockedReason`。没有对应事件时字段缺失，不伪造 0 字节完成。
 - 普通书签图标、分类图标、两类副本、Iconify、外部图片必须区分。data/blob 资源不计作外网请求；有正向 DOM 归属证据的编辑预览单列。HTTP 200 和取消的网络请求都计入额外工作量，不能只看失败请求。
 - 可用性判定：独立 fixture 清单、实际图像解码/像素，以及每个展示位置的存在性。缺失不通过，图片能解码也不等于内容正确。
 - 过程判定：操作前安装 rAF 采集，记录 missing/text/unloaded/src-changed；没有采集到帧不能通过。单图修改仅豁免该对象，不豁免分类或其他书签。
@@ -48,6 +48,7 @@
 | 30-嵌套移动 | 先进入排序草稿，再打开移动分类选择 | 嵌套列表可用；Escape/取消退出；不能在普通菜单里假定存在“移动” |
 | 28-CANCEL-REACQUIRE | 暂扣私密副本与授权回复，先放行授权；图标在线 URL 在复制未完成时变化 | 被取消操作不能让新申请卡住；必须观测到新申请并校验真实图像 |
 | 28-COPY-503 | 本 profile 清理副本；只对目标副本请求返回 503 | 故障确实命中；在线回退内容正确；记录有界重试和实际正文 |
+| 28-COPY-TIMEOUT（显式可选） | UI 清理副本，原生 IDB 核验目标公开 fixture 的 entry/body 均不存在；完整重载清除内存句柄，暂扣该对象真实副本请求，HTTP 缓存/SW 暂时旁路 | 9–15 秒内由前端自行取消被扣请求；15 秒内真实普通代理显示正确像素，错误不落 IDB；解除拦截后自动发起新副本请求，正确 Blob 及内容哈希写入 IDB；只核准具体注入取消 requestId |
 | 29-OLD-ADMIN-RESPONSE / 29-OLD-ANONYMOUS-RESPONSE | 真正焦点刷新，暂扣对应聚合响应，身份切换后释放 | 旧成功响应不能污染新身份视图 |
 | 28-STORAGE-QUOTA / UNAVAILABLE | 清理本 profile 副本，注入 IDB 写配额或打开失败 | 注入命中且控制样本仍显示正确 |
 | 28-CLOCK-BEHIND-600MS | 测试页面时钟慢 600ms，不改服务端 | 页面仍正确恢复图像，不据此扩展到过期边界 |
@@ -57,6 +58,38 @@
 | CSP-THEME-COLOR | 真实切换亮/暗模式并读取当前 HTML 响应策略 | meta theme-color 与实际模式一致，严格脚本策略和 no-transform 均存在 |
 | 28-RELOGIN-ICONS | 同 profile 退出后重新 UI 登录并完整加载 | 新会话下所有 fixture 图像重新正确显示，不与数据乱序前置混淆 |
 | 29-LOGOUT | UI 退出 | 私密对象清除，不仅检查登录按钮变化 |
+
+## 独立的持续挂起验收：28-COPY-TIMEOUT
+
+由负责运行的会话在确认测试站已更新后执行；编辑脚本不意味着已完成浏览器验证：
+
+```powershell
+$env:ISSUE_BROWSER_WRITE_FIXTURES='1'
+$env:ISSUE_CACHE_MODE='on'
+$env:ISSUE_CASES='28-COPY-TIMEOUT'
+node scripts/issue-browser-regression.mjs
+```
+
+上述环境变量已有值时，运行前保存、结束后恢复；不要复制凭据到命令中。命令沿用目标/凭据解析器，执行登录、图像基线、延迟开启缓存三个必需前置；其他案例记 not-run。不依赖先跑 503、取消重申请或热加载，不允许 cache-off 代替。
+
+- 选择本轮一个公开书签，避免把私密 grant URL 替换的 owner 取消误认成网络期限。私密 grant 交错由 `28-CANCEL-REACQUIRE` 覆盖；本例不声称覆盖私密超时、全部队列槽位耗尽或各类连接故障。
+- 通过真实设置 UI 清副本；原生 `indexedDB.databases/open` 只读核验库已存在且启用、目标 `entries` / `bodies` 均缺失，再验证新 document。不存在/不可用的库不算冷缺失。HTTP 缓存与 SW 仅在案例内旁路，不改许可、快照、Loader 或 IDB 实现。
+- 现有 CDP Fetch Request 阶段仅暂扣该 fixture 的真实副本，不 fulfill、不主动 fail、不用测试自己的 abort 定时器。报告关联 Fetch ID、Network requestId、暂扣时刻、单调请求/终止时间。早于 9 秒的 owner 取消、晚于 15 秒的结束、503 或连接关闭均不能冒充 10 秒期限通过。
+- 故障仍在时读取实际 DOM 图像，要求目标 `/api/icon/<id>` 的真实 Image 请求：200、image MIME、非兜底、非 HTTP 缓存/SW、正文完成且像素符合独立 fixture。blob/data 热图、单纯 200、诊断 fetch、重载或解除暂扣后才显示均不算回退证据。随后 IDB 仍须 entry/body 均缺失；同一故障窗口出现第二个目标副本请求会保留现场并失败，不把多次取消合并成一次成功。
+- 解除拦截后不改数据、不再次清库、不调用 Loader 或手工 fetch；等待挂载组件现有有界重试发出晚于恢复时刻的新请求。要求 protocol=1、session-scoped、正确描述符和正文字节数、正确 Blob 像素；IDB 原生 Blob 按协议前缀 + MIME + 正文计算的 SHA-256、大小及描述符必须与响应相符（不是裸正文 SHA-256）。被解除暂扣的旧请求不能当成新申请。
+- `cases[].timeout` 保留冷前置、注入请求、失败前截图/存储元数据、取消耗时、代理 requestId、恢复新 requestId 及 IDB 校验。故障失败在 Fetch 恢复前持久化；后续恢复不改写失败。既有 intercept finally 及案例 finally 恢复 Fetch、HTTP 缓存/SW；全局 finally 删除本轮服务器 fixture 并清理专用浏览器。恢复失败使整轮失败。
+- `expectedTimeoutRequests` 仅在冷缺失、时限、真实代理和像素全部通过后加入暂扣的确切 requestId；`28-CANCEL-REACQUIRE` 同样只记录自己的被扣请求。最终 `validatedInjectedCancellations` 还须核对 `canceled=true + net::ERR_ABORTED`。**未注入取消不再默认成功**；另一个 requestId、其他网络错误、HTTP 错误和控制台异常仍进失败门。旧用例若显露取消，必须核对证据，不能恢复整体豁免。
+
+无需浏览器的判定逻辑检查：
+
+```powershell
+node --check scripts/issue-browser-regression.mjs
+node --check scripts/lib/issueBrowserEvidence.mjs
+node --check scripts/lib/iconCopyStorageProbe.mjs
+node --experimental-sqlite node_modules/vitest/vitest.mjs run tests/unit/issueBrowserEvidence.test.ts tests/unit/iconCopyStorageProbe.test.ts
+```
+
+`protocol` / timing 是观测证据，不是连接异常根因结论。副本队列 10 秒期限与普通 `<img>` 持续挂起是两条链路：即使同路径 `fetch(cache:no-store)` 成功，原 Image 仍未响应/显示时也不能判通过，不能由副本修复推断匿名图片挂起根因已定位。不得延长既有等待或用额外请求掩盖失败；保留原图片 requestId 与独立诊断请求。纯判定单测通过不代表测试站案例通过。
 
 ## 扩展用例：不得用上述结果替代
 
@@ -82,7 +115,7 @@
 
 若 Chrome 在客户端取消后不再提供 Network 响应正文，浏览器只读克隆观察器保留真实响应的协议元数据，通过对象/描述符/时间匹配原 requestId；不改变响应或存储图像正文。无法匹配或读取时仍不豁免冲突。
 
-客户端已取消的响应保留在 `canceledResponses`，不冒充已验证的 409 协商；其请求仍受操作级稳定性检查约束。仅具有真实 CSS URL 匹配的站点背景请求可移出图标正文预算，外部图像不得整体豁免。
+经具体注入 requestId 核准的已取消错误响应保留在 `canceledResponses`，不冒充已验证的 409 协商；其请求仍受操作级稳定性检查约束。未注入取消保留在 `failedRequests` 并进入失败门。仅具有真实 CSS URL 匹配的站点背景请求可移出图标正文预算，外部图像不得整体豁免。
 
 独立热路径用例必须先核验原生 IndexedDB 已保存各 fixture 正文，再重载检查对象 URL 与对象正文零请求；其他页面图片请求继续在报告中计数，不把首次填充叫作热命中。弹层点击优先保持已可见目标，仅在需要时最小滚动，始终复核实际命中。
 

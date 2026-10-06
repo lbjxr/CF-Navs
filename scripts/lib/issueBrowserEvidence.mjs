@@ -57,3 +57,62 @@ export function isCanceledNetworkResponse(row) {
 export function isExpectedOfflineFailure(errorText, offlineActive) {
   return offlineActive === true && errorText === 'net::ERR_INTERNET_DISCONNECTED'
 }
+
+// The timeout probe must prove cold storage, a still-held transport cancelled by
+// the app's 10s deadline, and pixels from a real, uncached ordinary proxy. Timing
+// uses CDP monotonic seconds; wall time only joins the DOM observation to it.
+export function assessCopyTimeoutFallback(rows, evidence) {
+  const errors = []
+  const { object, requestId, proxyRequestId, cold, afterTimeout, displayedPath, pixelsPassed, observedWallTime } = evidence
+  const copy = rows.find(row => row.requestId === requestId)
+  const proxy = rows.find(row => row.requestId === proxyRequestId)
+  const missing = state => state?.available === true && state.enabled === true && state.entryPresent === false && state.bodyPresent === false
+  if (!missing(cold)) errors.push('not-cold')
+  if (!missing(afterTimeout)) errors.push('timeout-persisted-data')
+  if (!copy || copy.stage !== '28-COPY-TIMEOUT' || copy.kind !== 'icon-copy' || copy.object !== object || copy.status != null ||
+      copy.canceled !== true || copy.error !== 'net::ERR_ABORTED') errors.push('not-held-copy-cancellation')
+  const abortElapsedMs = (copy?.failureTime - copy?.time) * 1000
+  const imageElapsedMs = observedWallTime - copy?.wallTime * 1000
+  if (!Number.isFinite(abortElapsedMs) || abortElapsedMs < 9000 || abortElapsedMs > 15000) errors.push('deadline-not-observed')
+  if (!Number.isFinite(imageElapsedMs) || imageElapsedMs < abortElapsedMs - 100 || imageElapsedMs > 15000) errors.push('fallback-not-bounded')
+  const headers = Object.fromEntries(Object.entries(proxy?.headers ?? {}).map(([key, value]) => [key.toLowerCase(), value]))
+  if (!proxy || proxy.stage !== '28-COPY-TIMEOUT' || proxy.kind !== 'icon-body' || proxy.object !== object || proxy.type !== 'Image' ||
+      proxy.status !== 200 || proxy.error || proxy.canceled || proxy.disk || proxy.sw || !Number.isFinite(proxy.finishedTime) ||
+      !(proxy.time >= copy?.failureTime - 0.1 && proxy.finishedTime >= copy?.failureTime) ||
+      proxy.path !== displayedPath || !/^image\//i.test(headers['content-type'] ?? '') || headers['x-icon-fallback'] === '1' || pixelsPassed !== true) errors.push('not-real-proxy-image')
+  // A second cancellation, even for the same object, has no timeout exemption.
+  const unexpectedFailures = rows.filter(row => row.error && row.requestId !== requestId).map(row => row.requestId)
+  if (unexpectedFailures.length) errors.push('unrelated-network-failure')
+  if (rows.some(row => row.status >= 400)) errors.push('unexpected-http')
+  return { passed: errors.length === 0, errors, abortElapsedMs, imageElapsedMs, unexpectedFailures,
+    expectedCanceledRequests: errors.length ? [] : [requestId] }
+}
+
+export function assessCopyTimeoutRecovery(rows, evidence) {
+  const { object, requestId, restoredWallTime, persisted, blobDisplayed, pixelsPassed } = evidence
+  const row = rows.find(row => row.requestId === requestId), result = row?.copyResult, d = result?.descriptor
+  const keys = ['object_type', 'object_id', 'dataset_epoch', 'write_epoch', 'content_revision', 'state']
+  const errors = []
+  if (!row || row.stage !== '28-COPY-TIMEOUT' || row.kind !== 'icon-copy' || row.object !== object || row.status !== 200 || row.error || row.canceled ||
+      !Number.isFinite(restoredWallTime) || !(row.wallTime * 1000 >= restoredWallTime) || !Number.isFinite(row.finishedTime) ||
+      result?.protocol !== 1 || result.persistence !== 'session-scoped' || result.hasImage !== true || !(result.imageBytes > 0) ||
+      d?.state !== 'ready' || !['bookmark','category'].includes(d?.object_type) || !Number.isSafeInteger(d?.object_id) || d.object_id <= 0 ||
+      object !== d?.object_type + ':' + d?.object_id || !/^[a-f0-9]{32}$/.test(d?.dataset_epoch ?? '') ||
+      !Number.isSafeInteger(d?.write_epoch) || d.write_epoch < 0 || !/^sha256-[a-f0-9]{64}$/.test(d?.content_revision ?? '') ||
+      row.copyRequest?.dataset_epoch !== d?.dataset_epoch) errors.push('no-fresh-copy-success')
+  if (persisted?.available !== true || persisted.enabled !== true || persisted.entryPresent !== true || persisted.bodyPresent !== true ||
+      !(persisted.bodyBytes > 0) || persisted.bodyBytes !== result?.imageBytes || !d ||
+      persisted.bodyRevision !== d.content_revision || !keys.every(key => persisted.descriptor?.[key] === d[key])) errors.push('not-valid-persisted-body')
+  if (blobDisplayed !== true || pixelsPassed !== true) errors.push('not-recovered-blob-image')
+  return { passed: errors.length === 0, errors, requestId }
+}
+
+// CDP timing may contain unavailable (-1) phases. Retain numeric measurements,
+// never addresses, headers, bodies or nested vendor-specific metadata.
+export function numericNetworkTiming(timing) {
+  return Object.fromEntries(Object.entries(timing ?? {}).filter(([, value]) => typeof value === 'number' && Number.isFinite(value)))
+}
+
+export function isExpectedInjectedCancellation(row, expectedRequestIds) {
+  return expectedRequestIds.has(row.requestId) && row.canceled === true && row.error === 'net::ERR_ABORTED'
+}

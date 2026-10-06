@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure } from '../../scripts/lib/issueBrowserEvidence.mjs'
+import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from '../../scripts/lib/issueBrowserEvidence.mjs'
 const origin = 'https://nav.example.test'
 describe('per-operation browser network evidence', () => {
   it.each([
@@ -116,4 +116,89 @@ it('waives only the exact error while this test actively injects offline mode',(
   expect(isExpectedOfflineFailure('net::ERR_INTERNET_DISCONNECTED',true)).toBe(true)
   expect(isExpectedOfflineFailure('net::ERR_INTERNET_DISCONNECTED',false)).toBe(false)
   expect(isExpectedOfflineFailure('net::ERR_FAILED',true)).toBe(false)
+})
+
+
+describe('copy timeout requires cold, timed, request-owned network evidence', () => {
+  const absent = { available:true, enabled:true, entryPresent:false, bodyPresent:false }
+  function fixture() {
+    const copy = { requestId:'held', stage:'28-COPY-TIMEOUT', kind:'icon-copy', object:'bookmark:12', time:100, wallTime:1000, failureTime:110, canceled:true, error:'net::ERR_ABORTED' }
+    const proxy = { requestId:'proxy', stage:'28-COPY-TIMEOUT', kind:'icon-body', object:'bookmark:12', path:'/api/icon/12', type:'Image', time:110.01, finishedTime:110.1, status:200, headers:{'content-type':'image/svg+xml'} }
+    return { rows:[copy,proxy], evidence:{object:'bookmark:12',requestId:'held',proxyRequestId:'proxy',cold:{...absent},afterTimeout:{...absent},displayedPath:'/api/icon/12',pixelsPassed:true,observedWallTime:1010200} }
+  }
+  it('accepts only the actual held request and records the bounded wait', () => {
+    const {rows,evidence}=fixture()
+    expect(assessCopyTimeoutFallback(rows,evidence)).toEqual({passed:true,errors:[],abortElapsedMs:10000,imageElapsedMs:10200,unexpectedFailures:[],expectedCanceledRequests:['held']})
+  })
+  it.each([
+    {cold:{...absent,entryPresent:true}}, {cold:{...absent,bodyPresent:true}}, {cold:{...absent,available:false}}, {cold:{...absent,enabled:false}},
+    {afterTimeout:{...absent,entryPresent:true}}, {afterTimeout:{...absent,bodyPresent:true}}, {afterTimeout:{...absent,available:false}},
+    {pixelsPassed:false}, {displayedPath:'[blob]'}, {observedWallTime:1020000}, {observedWallTime:1001000}, {observedWallTime:NaN}, {requestId:'not-held'},
+  ])('fails closed for missing/false storage, pixels or timing: %j', patch => {
+    const {rows,evidence}=fixture()
+    expect(assessCopyTimeoutFallback(rows,{...evidence,...patch})).toMatchObject({passed:false,expectedCanceledRequests:[]})
+  })
+  it.each([
+    {failureTime:101}, {failureTime:116}, {failureTime:undefined}, {time:undefined}, {status:503}, {status:200},
+    {canceled:false}, {error:'net::ERR_CONNECTION_CLOSED'}, {error:'net::ERR_FAILED'}, {object:'bookmark:13'}, {kind:'icon-body'}, {stage:'other'},
+  ])('does not confuse an owner cancellation or connection error with a timeout: %j', patch => {
+    const {rows,evidence}=fixture()
+    expect(assessCopyTimeoutFallback([{...rows[0],...patch},rows[1]],evidence)).toMatchObject({passed:false,expectedCanceledRequests:[]})
+  })
+  it.each([
+    {status:503}, {status:304}, {object:'bookmark:13'}, {type:'Fetch'}, {disk:true}, {sw:true}, {error:'net::ERR_FAILED'},
+    {time:105}, {finishedTime:undefined}, {path:'/api/icon/13'}, {headers:{'content-type':'application/json'}},
+    {headers:{'Content-Type':'image/svg+xml','X-Icon-Fallback':'1'}},
+  ])('requires the actual uncached ordinary proxy image: %j', patch => {
+    const {rows,evidence}=fixture()
+    expect(assessCopyTimeoutFallback([rows[0],{...rows[1],...patch}],evidence).passed).toBe(false)
+  })
+  it.each(['net::ERR_ABORTED','net::ERR_CONNECTION_CLOSED'])('does not exempt an unrelated %s', error => {
+    const {rows,evidence}=fixture()
+    expect(assessCopyTimeoutFallback([...rows,{requestId:'other',canceled:true,error}],evidence)).toMatchObject({passed:false,unexpectedFailures:['other'],expectedCanceledRequests:[]})
+  })
+})
+
+describe('copy timeout recovery requires a new request and valid persisted bytes', () => {
+  function fixture() {
+    const descriptor={object_type:'bookmark',object_id:12,dataset_epoch:'c'.repeat(32),write_epoch:3,content_revision:'sha256-'+'a'.repeat(64),state:'ready'}
+    const row={requestId:'fresh',stage:'28-COPY-TIMEOUT',kind:'icon-copy',object:'bookmark:12',wallTime:1012,finishedTime:112.2,status:200,
+      copyRequest:{dataset_epoch:descriptor.dataset_epoch},copyResult:{protocol:1,persistence:'session-scoped',hasImage:true,imageBytes:512,descriptor}}
+    const persisted={available:true,enabled:true,entryPresent:true,bodyPresent:true,bodyBytes:512,bodyRevision:descriptor.content_revision,descriptor}
+    return {row,evidence:{object:'bookmark:12',requestId:'fresh',restoredWallTime:1011000,persisted,blobDisplayed:true,pixelsPassed:true}}
+  }
+  it('accepts a fresh real response matching native IDB and displayed pixels', () => {
+    const {row,evidence}=fixture()
+    expect(assessCopyTimeoutRecovery([row],evidence)).toEqual({passed:true,errors:[],requestId:'fresh'})
+  })
+  it.each([{wallTime:1010},{wallTime:undefined},{status:409},{error:'net::ERR_ABORTED'},{finishedTime:undefined},{object:'bookmark:13'},{copyResult:{protocol:1,reason:'unavailable'}}])('rejects released old requests and non-successes: %j', patch => {
+    const {row,evidence}=fixture()
+    expect(assessCopyTimeoutRecovery([{...row,...patch}],evidence).passed).toBe(false)
+  })
+  it.each([{bodyPresent:false},{entryPresent:false},{available:false},{enabled:false},{bodyBytes:0},{bodyBytes:511},{bodyRevision:'wrong'},{descriptor:{state:'empty'}}])('rejects poisoned or missing persistence: %j', patch => {
+    const {row,evidence}=fixture()
+    expect(assessCopyTimeoutRecovery([row],{...evidence,persisted:{...evidence.persisted,...patch}}).passed).toBe(false)
+  })
+  it('rejects a missing image or missing restoration time', () => {
+    const {row,evidence}=fixture()
+    for(const patch of [{blobDisplayed:false},{pixelsPassed:false},{restoredWallTime:undefined}]) expect(assessCopyTimeoutRecovery([row],{...evidence,...patch}).passed).toBe(false)
+  })
+})
+
+describe('network diagnostics and exact injected cancellation exemptions', () => {
+  it('keeps finite timing values including unavailable -1, not other data', () => {
+    expect(numericNetworkTiming({requestTime:4.2,sslStart:-1,receiveHeadersEnd:12.5,remoteIPAddress:'192.0.2.1',headers:{secret:'value'},body:'private',bad:NaN,infinite:Infinity,flag:true,nested:{time:2}}))
+      .toEqual({requestTime:4.2,sslStart:-1,receiveHeadersEnd:12.5})
+    expect(numericNetworkTiming(undefined)).toEqual({})
+  })
+  it('does not exempt un-injected aborts or differently failed injected requests', () => {
+    const injected = new Set(['held'])
+    expect(isExpectedInjectedCancellation({requestId:'held',canceled:true,error:'net::ERR_ABORTED'},injected)).toBe(true)
+    for(const row of [
+      {requestId:'other',canceled:true,error:'net::ERR_ABORTED'},
+      {requestId:'held',canceled:false,error:'net::ERR_ABORTED'},
+      {requestId:'held',canceled:true,error:'net::ERR_CONNECTION_CLOSED'},
+      {requestId:'held',canceled:true,error:'net::ERR_FAILED'},
+    ]) expect(isExpectedInjectedCancellation(row,injected)).toBe(false)
+  })
 })

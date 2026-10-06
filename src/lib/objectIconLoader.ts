@@ -44,6 +44,30 @@ export function createObjectIconLoader(options: Options) {
   }, error => device.reportStorageError(error))
   const decode = options.decode ?? decodeIconBlob
   const fetchCopy = options.fetchCopy ?? fetchIconCopy
+  // Bound only the copy transport (including its response body), not storage or
+  // time spent waiting for a slot. The origin fetch budget is 5s; allow another
+  // 5s for network/protocol work before using the existing retryable fallback.
+  async function requestCopy(payload: Parameters<typeof fetchIconCopy>[0], signal: AbortSignal): Promise<IconCopyResult> {
+    signal.throwIfAborted()
+    const controller = new AbortController()
+    let rejectAbort!: (reason: unknown) => void
+    const aborted = new Promise<never>((_resolve, reject) => { rejectAbort = reject })
+    const cancel = (reason: unknown) => { rejectAbort(reason); controller.abort(reason) }
+    const onAbort = () => cancel(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    const timer = setTimeout(() => cancel(new DOMException('Icon copy request timed out', 'TimeoutError')), 10_000)
+    try {
+      // Race as well as abort: a delayed/non-cooperating transport must never
+      // retain a queue slot or let its late bytes reach descriptor/storage writes.
+      return await Promise.race([
+        Promise.resolve().then(() => { controller.signal.throwIfAborted(); return fetchCopy(payload, controller.signal) }),
+        aborted,
+      ])
+    } finally {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', onAbort)
+    }
+  }
   const createUrl = options.createUrl ?? (blob => URL.createObjectURL(blob))
   const revokeUrl = options.revokeUrl ?? (url => URL.revokeObjectURL(url))
   let onDescriptor: (next: IconDescriptor, previous: IconDescriptor) => void = () => undefined
@@ -114,7 +138,7 @@ export function createObjectIconLoader(options: Options) {
           if (protocolUnavailable) return { blob: null, descriptor, status: 'unavailable' }
           let response: IconCopyResult
           try {
-            response = await fetchCopy({ protocol: ICON_COPY_PROTOCOL, object_type: descriptor.object_type, object_id: descriptor.object_id,
+            response = await requestCopy({ protocol: ICON_COPY_PROTOCOL, object_type: descriptor.object_type, object_id: descriptor.object_id,
               dataset_epoch: descriptor.dataset_epoch, expected_write_epoch: descriptor.write_epoch, expected_content_revision: descriptor.content_revision }, signal)
           } catch (error) {
             const data = error instanceof ApiError ? error.data as Partial<IconCopyResult> : null

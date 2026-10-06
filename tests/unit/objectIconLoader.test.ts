@@ -233,3 +233,130 @@ describe('cancelled loader ownership',()=>{
     two.release()
   })
 })
+
+
+describe('bounded icon copy requests', () => {
+  it('releases all occupied slots after a deadline so a queued object can load', async () => {
+    vi.useFakeTimers()
+    const f = await fixture()
+    const signals: AbortSignal[] = []
+    f.fetchCopy.mockImplementation((...args: any[]) => {
+      signals.push(args[1])
+      return args[0].object_id <= 4 ? new Promise(() => {}) : Promise.resolve(f.response({ ...f.ready, object_id: args[0].object_id }))
+    })
+    const handles = Array.from({ length: 5 }, (_, i) => f.loader.acquire({ ...f.unknown, object_id: i + 1 }))
+    const settled: string[] = []
+    handles.forEach(handle => { void handle.result.then(result => settled.push(result.status)) })
+    await vi.waitFor(() => expect(f.fetchCopy).toHaveBeenCalledTimes(4))
+    await vi.advanceTimersByTimeAsync(10_001)
+    expect(settled.filter(status => status === 'retryable')).toHaveLength(4)
+    expect(f.fetchCopy).toHaveBeenCalledTimes(5)
+    // The queued response hashes real bytes; crypto completion is not driven by fake timers.
+    expect((await handles[4].result).status).toBe('ready')
+    expect(settled).toHaveLength(5)
+    expect(signals.slice(0, 4).every(signal => signal.aborted)).toBe(true)
+    expect(f.storage.put).toHaveBeenCalledOnce()
+    handles.forEach(handle => handle.release())
+  })
+
+  it('retains the authorized old image on timeout, ignores late bytes and permits retry', async () => {
+    vi.useFakeTimers()
+    const f = await fixture()
+    const old = { entry: { key: 'bookmark:1', descriptor: f.ready }, blob: new Blob([f.icon.bytes], { type: f.icon.contentType }) }
+    f.data.set('bookmark:1', old)
+    let finish!: (value: any) => void
+    f.fetchCopy.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const changed = { ...f.ready, write_epoch: 1, content_revision: 'sha256-' + 'd'.repeat(64) }
+    const handle = f.loader.acquire(changed)
+    let result: Awaited<typeof handle.result> | undefined
+    void handle.result.then(value => { result = value })
+    await vi.waitFor(() => expect(f.fetchCopy).toHaveBeenCalledOnce())
+    await vi.advanceTimersByTimeAsync(10_001)
+    expect(result?.status).toBe('retryable')
+    expect(result?.blob).toBe(old.blob)
+    expect(f.data.get('bookmark:1')).toBe(old)
+    expect(f.storage.put).not.toHaveBeenCalled()
+    finish(f.response()); await vi.advanceTimersByTimeAsync(0)
+    expect(f.storage.put).not.toHaveBeenCalled()
+    const retry = f.loader.acquire(changed, undefined, true)
+    expect((await retry.result).status).toBe('ready')
+    expect(f.fetchCopy).toHaveBeenCalledTimes(2)
+    handle.release(); retry.release()
+  })
+
+  it('cancels an abandoned request immediately without waiting for its deadline', async () => {
+    vi.useFakeTimers()
+    const f = await fixture()
+    let signal!: AbortSignal
+    f.fetchCopy.mockImplementationOnce((...args: any[]) => { signal = args[1]; return new Promise(() => {}) })
+    const old = f.loader.acquire(f.unknown)
+    let status: string | undefined
+    void old.result.then(result => { status = result.status })
+    await vi.waitFor(() => expect(f.fetchCopy).toHaveBeenCalledOnce())
+    old.release(); await vi.advanceTimersByTimeAsync(0)
+    expect(signal.aborted).toBe(true)
+    expect(status).toBe('blocked')
+    const current = f.loader.acquire(f.unknown)
+    expect((await current.result).status).toBe('ready')
+    current.release()
+  })
+
+  it('starts the deadline only when a queued request acquires its slot', async () => {
+    vi.useFakeTimers()
+    const f = await fixture()
+    const releaseFirst: Array<() => void> = []
+    const signals: AbortSignal[] = []
+    f.fetchCopy.mockImplementation((...args: any[]) => {
+      signals.push(args[1])
+      return new Promise(resolve => { if (args[0].object_id <= 4) releaseFirst.push(() => resolve(f.response({ ...f.ready, object_id: args[0].object_id }))) })
+    })
+    const handles = Array.from({ length: 5 }, (_, i) => f.loader.acquire({ ...f.unknown, object_id: i + 1 }))
+    let fifth: string | undefined
+    void handles[4].result.then(value => { fifth = value.status })
+    await vi.waitFor(() => expect(f.fetchCopy).toHaveBeenCalledTimes(4))
+    await vi.advanceTimersByTimeAsync(8_000)
+    releaseFirst.forEach(resolve => resolve())
+    await vi.waitFor(() => expect(f.fetchCopy).toHaveBeenCalledTimes(5))
+    await vi.advanceTimersByTimeAsync(2_100)
+    expect(fifth).toBeUndefined()
+    expect(signals.every(signal => !signal.aborted)).toBe(true)
+    await vi.advanceTimersByTimeAsync(8_000)
+    expect(fifth).toBe('retryable')
+    expect(signals.slice(0, 4).every(signal => !signal.aborted)).toBe(true)
+    handles.forEach(handle => handle.release())
+  })
+
+  it('does not retain a deadline or abort listener after a successful request', async () => {
+    vi.useFakeTimers()
+    const f = await fixture()
+    const signals: AbortSignal[] = []
+    f.fetchCopy.mockImplementation((...args: any[]) => { signals.push(args[1]); return Promise.resolve(f.response()) })
+    const handle = f.loader.acquire(f.unknown)
+    expect((await handle.result).status).toBe('ready')
+    expect(vi.getTimerCount()).toBe(0)
+    f.invalidate()
+    await vi.advanceTimersByTimeAsync(10_001)
+    expect(signals[0].aborted).toBe(false)
+  })
+
+  it('revokes a hanging request and never publishes its late success', async () => {
+    vi.useFakeTimers()
+    const f = await fixture()
+    let finish!: (value: any) => void
+    let signal!: AbortSignal
+    f.fetchCopy.mockImplementationOnce((...args: any[]) => { signal = args[1]; return new Promise(resolve => { finish = resolve }) })
+    const publish = vi.fn()
+    f.loader.configure(publish)
+    const handle = f.loader.acquire(f.unknown)
+    let result: string | undefined
+    void handle.result.then(value => { result = value.status })
+    await vi.waitFor(() => expect(f.fetchCopy).toHaveBeenCalledOnce())
+    f.invalidate(); await vi.advanceTimersByTimeAsync(0)
+    expect(result).toBe('blocked')
+    expect(signal.aborted).toBe(true)
+    finish(f.response()); await vi.advanceTimersByTimeAsync(0)
+    expect(f.storage.put).not.toHaveBeenCalled()
+    expect(publish).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+})

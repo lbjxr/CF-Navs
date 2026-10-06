@@ -8,11 +8,12 @@ import { randomUUID } from 'node:crypto'
 import { CdpSession, sleep } from './lib/cdpSession.mjs'
 import { verifiedLogoutFailures } from './lib/logoutEvidence.mjs'
 import { pageLegacySnapshots } from './lib/legacySnapshotProbe.mjs'
+import { pageReadFixtureCopy } from './lib/iconCopyStorageProbe.mjs'
 import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
 import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.mjs'
-import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure } from './lib/issueBrowserEvidence.mjs'
+import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from './lib/issueBrowserEvidence.mjs'
 if (process.env.ISSUE_BROWSER_WRITE_FIXTURES !== '1') throw new Error('Explicit ISSUE_BROWSER_WRITE_FIXTURES=1 required for temporary test-site records')
 const base = resolveBaseUrl(), credentials = requireAdminCredentials()
 const selectedCases=new Set((process.env.ISSUE_CASES??'').split(',').filter(Boolean))
@@ -20,6 +21,7 @@ const cacheMode=process.env.ISSUE_CACHE_MODE??'on'
 assert(['on','off'].includes(cacheMode),'Invalid ISSUE_CACHE_MODE')
 if(cacheMode==='off') assert(selectedCases.size>0&&[...selectedCases].every(id=>['28-EDIT-TITLE-DATA','28-EDIT-CANCEL','28-IDLE-CONTROL','28-RIGHT-CLICK-OFF'].includes(id)),'Off mode requires explicit compatible cases')
 const requiredCases=new Set(['LOGIN-UI','28-BASELINE','28-ENABLE-DEFERRED'])
+const optionalCases = new Set(['28-COPY-TIMEOUT'])
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const output = await fs.mkdtemp(path.join(os.tmpdir(), 'cf-navs-issue-browser-'))
 const profile = path.join(os.tmpdir(), 'cf-navs-chrome-profile-issue-' + run)
@@ -36,6 +38,8 @@ let editorObject = null
 let operationImageUrls = null
 const injectedRequests = new Set()
 const expectedOfflineRequests = new Set()
+const expectedTimeoutRequests = new Set()
+const expectedReacquireRequests = new Set()
 let offlineActive = false
 function safe(value) { return redactCredentials(String(value), credentials).replaceAll(base, '[test-origin]').replaceAll(token || '\u0000', '[token]').replace(/([?&](?:key|token)=)[^\s&"']+/g, '$1[redacted]') }
 async function persist() { await fs.writeFile(path.join(output, 'report.json'), safe(JSON.stringify(report, null, 2))) }
@@ -207,10 +211,11 @@ async function traceEnd() {
   return b.call(()=>{const t=window.__issueTrace;t?.stop();if(window.__issueUrls)window.__issueUrls.active=false;const events=window.__issueUrls?.events??[];return t?{objectUrls:events,protectedRevocations:events.filter(e=>e.kind==='revoke'&&t.protectedIds.has(e.id)).map(e=>({key:t.protectedIds.get(e.id),id:e.id,at:e.at})),changes:t.changes,frames:t.samples.frames,timeOrigin:performance.timeOrigin}:null})
 }
 async function scenario(id, action) {
+  if(optionalCases.has(id)&&!selectedCases.has(id)){const skipped={id,status:'not-run',reason:'Explicit ISSUE_CASES opt-in required'};report.cases.push(skipped);return skipped}
   if(id==='28-ENABLE-DEFERRED'&&cacheMode==='off'){const skipped={id,status:'not-run',reason:'Explicit cache-off matrix'};report.cases.push(skipped);return skipped}
   if(selectedCases.size&&!selectedCases.has(id)&&!requiredCases.has(id)){const skipped={id,status:'not-run'};report.cases.push(skipped);return skipped}
   stage = id; editorObject=null; const start = report.requests.length, consoles = b.consoleErrors.length, exceptions = b.pageExceptions.length
-  const entry = { id, expectedFault: ['28-COPY-503', '29-OLD-401', '29-OFFLINE-FOCUS'].includes(id), started: new Date().toISOString(), status: 'running' }; report.cases.push(entry)
+  const entry = { id, expectedFault: ['28-COPY-503', '28-COPY-TIMEOUT', '29-OLD-401', '29-OFFLINE-FOCUS'].includes(id), started: new Date().toISOString(), status: 'running' }; report.cases.push(entry)
   try {
     // Each scenario starts independently; the 300px menu viewport must not leak
     // into later login/storage flows. Menu cases set their own viewport afterward.
@@ -257,8 +262,7 @@ async function focusCycle() {
 }
 async function intercept(patterns, handler, action) {
   fetchHandler=handler
-  await b.send('Fetch.enable',{patterns})
-  try { return await action() } finally { fetchHandler=null; await b.send('Fetch.disable') }
+  try { await b.send('Fetch.enable',{patterns}); return await action() } finally { fetchHandler=null; await b.send('Fetch.disable') }
 }
 async function signInPlace() {
   await homeAction('login'); await fill('input[autocomplete="username"]',credentials.username)
@@ -273,6 +277,7 @@ async function clearCopies() {
   await click('.device-actions button:nth-child(2)')
   await wait(()=>document.querySelector('.device-status')?.textContent.startsWith('已启用'),[],30000)
 }
+async function readFixtureCopy(object) { return b.call(pageReadFixtureCopy, object) }
 async function enterSort() {
   const desktop = `#category-${category.id} button[aria-label="排序"]`
   const visible=await b.call(sel=>{const e=document.querySelector(sel);const r=e?.getBoundingClientRect();return r?.width>0},desktop)
@@ -368,7 +373,7 @@ try {
       void b.call(url=>[...document.querySelectorAll('[data-testid="bookmark-modal"] img')].some(img=>img.src===url||img.currentSrc===url),e.request.url).then(matches=>{if(matches){row.surface='editor-preview';row.previewFor=previewFor}}).catch(()=>{})
     }
   })
-  b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,responseTime:e.timestamp,disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','cache-control','x-icon-fallback','content-security-policy'].includes(name.toLowerCase()))) }) })
+  b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,responseTime:e.timestamp,protocol:e.response.protocol,timing:numericNetworkTiming(e.response.timing),disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','cache-control','x-icon-fallback','content-security-policy'].includes(name.toLowerCase()))) }) })
   function inspectCopyResponse(requestId) {
     const row=requests.get(requestId)
     if(row?.path === '/api/logout' && row.status === 200) {
@@ -386,8 +391,9 @@ try {
     }).catch(()=>{row.copyResult={unreadable:true}})
     responseReads.add(read);void read.finally(()=>responseReads.delete(read))
   }
-  b.on('Network.loadingFinished', e => inspectCopyResponse(e.requestId))
-  b.on('Network.loadingFailed', e => { if(isExpectedOfflineFailure(e.errorText,offlineActive))expectedOfflineRequests.add(e.requestId); const row = requests.get(e.requestId); if (row) Object.assign(row, { error: e.errorText, canceled: Boolean(e.canceled) }); inspectCopyResponse(e.requestId) })
+  b.on('Network.dataReceived', e => { const row=requests.get(e.requestId); if(row)Object.assign(row,{firstDataTime:row.firstDataTime??e.timestamp,lastDataTime:e.timestamp,dataEvents:(row.dataEvents??0)+1,receivedDataLength:(row.receivedDataLength??0)+e.dataLength,receivedEncodedDataLength:(row.receivedEncodedDataLength??0)+e.encodedDataLength}) })
+  b.on('Network.loadingFinished', e => { const row=requests.get(e.requestId); if(row)Object.assign(row,{finishedTime:e.timestamp,terminalTime:e.timestamp,terminalKind:'finished',durationMs:(e.timestamp-row.time)*1000,encodedDataLength:e.encodedDataLength}); inspectCopyResponse(e.requestId) })
+  b.on('Network.loadingFailed', e => { if(isExpectedOfflineFailure(e.errorText,offlineActive))expectedOfflineRequests.add(e.requestId); const row = requests.get(e.requestId); if (row) Object.assign(row, { error: e.errorText, canceled: Boolean(e.canceled), failureTime: e.timestamp, terminalTime:e.timestamp, terminalKind:'failed', durationMs:(e.timestamp-row.time)*1000, blockedReason:e.blockedReason }); inspectCopyResponse(e.requestId) })
   await b.setViewport({ width: 1366, height: 900, scale: 1 })
   await scenario('LOGIN-UI', async () => { await login(); return { authenticated: true } })
   assert(token, 'Login prerequisite failed')
@@ -561,7 +567,9 @@ try {
         // The real grant changes the online URL while the copy is pending. Its
         // cancelled owner must not poison the new acquisition.
         await localWait(()=>copies>=2,'Fresh acquisition after pending URL change',10000)
-        await verifyImages();return {copyAttempts:copies,grantReleased:true,imageRecovered:true}
+        await verifyImages();
+        if(firstCopy.networkId)expectedReacquireRequests.add(firstCopy.networkId)
+        return {copyAttempts:copies,grantReleased:true,imageRecovered:true,injectedCanceledRequestId:firstCopy.networkId??null}
       } finally {
         if(grant&&!grantReleased)await b.send('Fetch.continueRequest',{requestId:grant.requestId}).catch(()=>{})
         if(firstCopy)await b.send('Fetch.continueRequest',{requestId:firstCopy.requestId}).catch(()=>{})
@@ -584,6 +592,109 @@ try {
       finally {await setFixtureIcon(targetIndex,fixtures[bookmarks[targetIndex].imageKey].base64Uri)}
     }
     return {variants}
+  })
+  await scenario('28-COPY-TIMEOUT', async () => {
+    // Use one public fixture: startup private-grant URL replacement is covered
+    // by CANCEL-REACQUIRE and must not masquerade as this transport deadline.
+    const target = manifest().find(row => row.key === 'bookmark:' + bookmarks[0].id)
+    const entry = report.cases.at(-1)
+    const evidence = entry.timeout = { object:target.key, expectedDeadlineMs:10000, deadlineWindowMs:[9000,15000], held:[], recovery:{} }
+    await clearCopies() // real settings UI, then the target view is unmounted
+    evidence.cold = await readFixtureCopy(target.key)
+    assert(evidence.cold.available && evidence.cold.enabled && !evidence.cold.entryPresent && !evidence.cold.bodyPresent, 'Timeout requires native cold entry AND body absence')
+    const beforeDocument = await b.call(() => performance.timeOrigin)
+    // Bypass both HTTP cache and SW, not the app loader or its authorization.
+    // Otherwise a previously displayed normal image could fake network recovery.
+    const start = report.requests.length
+    let faultSucceeded = false
+    try {
+      await b.send('Network.setCacheDisabled', { cacheDisabled:true })
+      await b.send('Network.setBypassServiceWorker', { bypass:true })
+      await intercept([{urlPattern:'*/api/icon-local-copy',requestStage:'Request'}], async event => {
+        let payload; try { payload=JSON.parse(event.request.postData) } catch { return false }
+        if (new URL(event.request.url).origin !== base || payload.object_type !== 'bookmark' || payload.object_id !== bookmarks[0].id) return false
+        assert(event.networkId, 'Held copy has no Network requestId')
+        evidence.held.push({requestId:event.networkId,fetchRequestId:event.requestId,heldAt:Date.now()})
+        // No fulfill/fail/continue call: ONLY the actual frontend may time out.
+        await persist()
+        return true
+      }, async () => {
+        try {
+          await home({waitForImages:false})
+          evidence.newDocument = await b.call(() => performance.timeOrigin) !== beforeDocument
+          assert(evidence.newDocument, 'Cold timeout cannot reuse in-memory loader handles')
+          await localWait(() => evidence.held.length > 0, 'Fixture copy suspension', 10000)
+          const held = evidence.held[0]
+          await localWait(() => requests.get(held.requestId)?.error, 'Frontend timeout cancellation', 16000)
+          const row = requests.get(held.requestId)
+          evidence.abortElapsedMs = (row.failureTime-row.time)*1000
+          assert(row.canceled && row.error === 'net::ERR_ABORTED' && row.status == null && evidence.abortElapsedMs >= 9000 && evidence.abortElapsedMs <= 15000, 'Held transport was not cancelled by the 10s deadline')
+          // Inspect the displayed image itself; no diagnostic fetch, fake image
+          // or post-failure reload is allowed to provide fallback evidence.
+          evidence.displayed = await wait((selector, id) => {
+            const image = document.querySelector(selector)?.querySelector('img')
+            if (!image?.complete || !image.naturalWidth) return null
+            const url = new URL(image.currentSrc || image.src, location.href)
+            return url.origin === location.origin && url.pathname === '/api/icon/'+id
+              ? {path:url.pathname,observedWallTime:performance.timeOrigin+performance.now()} : null
+          }, [target.selector, bookmarks[0].id], 5000)
+          const observed = await b.call(collectIconFixtures, [target])
+          evidence.pixels = evaluateIconFixtures([target], observed)
+          evidence.afterTimeout = await readFixtureCopy(target.key)
+          const proxy = report.requests.slice(start).find(row => row.kind === 'icon-body' && row.object === target.key && row.type === 'Image' && row.time >= requests.get(held.requestId).failureTime-0.1 && row.status === 200)
+          if (proxy) await localWait(() => Number.isFinite(proxy.finishedTime), 'Ordinary proxy body completion', 1500)
+          evidence.fallback = assessCopyTimeoutFallback(report.requests.slice(start), {
+            object:target.key, requestId:held.requestId, proxyRequestId:proxy?.requestId, cold:evidence.cold, afterTimeout:evidence.afterTimeout,
+            displayedPath:evidence.displayed.path, pixelsPassed:evidence.pixels.passed, observedWallTime:evidence.displayed.observedWallTime,
+          })
+          evidence.proxyRequestId = proxy?.requestId
+          assert(evidence.held.length === 1, 'Repeated copy attempts before fallback verification; inspect held request journal')
+          assert(evidence.fallback.passed, 'Timeout fallback: '+JSON.stringify(evidence.fallback))
+          for (const id of evidence.fallback.expectedCanceledRequests) expectedTimeoutRequests.add(id)
+          faultSucceeded = true
+        } catch (error) {
+          // Persist the failed state BEFORE disabling Fetch can release a held
+          // request and make the page look healed. scenario() preserves failure.
+          evidence.failure = safe(error.message)
+          evidence.failureStorage = await readFixtureCopy(target.key).catch(error => ({error:safe(error.message)}))
+          await shot('28-copy-timeout-before-restore').catch(error => { evidence.screenshotError=safe(error.message) })
+          await persist()
+          throw error
+        }
+      }) // existing finally disables Fetch even when the timed assertions fail
+      evidence.recovery.restoredWallTime = Date.now()
+      evidence.recovery.interceptionDisabled = true
+      await persist()
+      // Let the mounted icon's real bounded retry reacquire; do not call the
+      // loader, fetch the copy manually, edit the icon, or clear IDB a second time.
+      await localWait(() => report.requests.slice(start).some(row => row.kind === 'icon-copy' && row.object === target.key && row.wallTime*1000 >= evidence.recovery.restoredWallTime && row.status === 200 && row.copyResult?.hasImage), 'Fresh real frontend copy after restoring interception', 20000)
+      const recovered = report.requests.slice(start).find(row => row.kind === 'icon-copy' && row.object === target.key && row.wallTime*1000 >= evidence.recovery.restoredWallTime && row.status === 200 && row.copyResult?.hasImage)
+      await wait(selector => {
+        const image=document.querySelector(selector)?.querySelector('img')
+        return image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:')
+      }, [target.selector], 10000)
+      evidence.recovery.pixels = await verifyImages([target])
+      evidence.recovery.persisted = await readFixtureCopy(target.key)
+      evidence.recovery.result = assessCopyTimeoutRecovery(report.requests.slice(start), {
+        object:target.key, requestId:recovered.requestId, restoredWallTime:evidence.recovery.restoredWallTime,
+        persisted:evidence.recovery.persisted, blobDisplayed:true, pixelsPassed:evidence.recovery.pixels.passed,
+      })
+      assert(evidence.recovery.result.passed, 'Timeout recovery: '+JSON.stringify(evidence.recovery.result))
+      const unexpected = report.requests.slice(start).filter(row => row.error && !expectedTimeoutRequests.has(row.requestId))
+      assert(!unexpected.length, 'Unrelated network failures: '+JSON.stringify(unexpected.map(row=>({requestId:row.requestId,error:row.error}))))
+      await shot('28-copy-timeout-recovered')
+      return {object:target.key, expectedCanceledRequests:evidence.fallback.expectedCanceledRequests, proxyRequestId:evidence.proxyRequestId,
+        abortElapsedMs:evidence.fallback.abortElapsedMs, imageElapsedMs:evidence.fallback.imageElapsedMs, freshCopyRequestId:recovered.requestId, nativeStorageVerified:true}
+    } finally {
+      // Always attempt all three restorations; a cleanup error remains a failure.
+      const restored = await Promise.allSettled([
+        b.send('Fetch.disable'), b.send('Network.setCacheDisabled',{cacheDisabled:false}), b.send('Network.setBypassServiceWorker',{bypass:false}),
+      ])
+      evidence.restoration = {faultSucceeded, fetchDisabled:restored[0].status==='fulfilled', httpCacheRestored:restored[1].status==='fulfilled', serviceWorkerRestored:restored[2].status==='fulfilled',
+        errors:restored.filter(row=>row.status==='rejected').map(row=>safe(row.reason.message))}
+      await persist()
+      assert(!evidence.restoration.errors.length, 'Timeout probe restoration failed: '+JSON.stringify(evidence.restoration))
+    }
   })
   await scenario('29-OLD-ADMIN-RESPONSE', async () => {
     await home({waitForImages:false}); let held=null, forced=false
@@ -754,15 +865,19 @@ finally {
   }
   const protocolConflicts=new Set(validatedIconConflicts(report.requests))
   report.validatedConflicts=[...protocolConflicts]
-  const canceledHttp=new Set(report.requests.filter(isCanceledNetworkResponse).map(row=>row.requestId))
+  const expectedInjectedCancellations = new Set([...expectedTimeoutRequests,...expectedReacquireRequests])
+  const canceledHttp=new Set(report.requests.filter(row=>isExpectedInjectedCancellation(row,expectedInjectedCancellations)&&isCanceledNetworkResponse(row)).map(row=>row.requestId))
   report.canceledResponses=[...canceledHttp]
   const revokedRequests = new Set(verifiedLogoutFailures(report.requests))
   report.verifiedLogoutFailures = [...revokedRequests]
   report.unexpectedHttp = report.requests.filter(e => e.status >= 400 && !injectedRequests.has(e.requestId) && !protocolConflicts.has(e.requestId) && !canceledHttp.has(e.requestId) && !revokedRequests.has(e.requestId))
   report.failedRequests = report.requests.filter(e => e.error)
   report.expectedOfflineRequests=[...expectedOfflineRequests]
-  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!(e.canceled&&e.error==='net::ERR_ABORTED'))
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||revokedRequests.has(e.requestId))))
+  report.expectedTimeoutRequests=[...expectedTimeoutRequests]
+  report.expectedReacquireRequests=[...expectedReacquireRequests]
+  report.validatedInjectedCancellations=report.failedRequests.filter(row=>isExpectedInjectedCancellation(row,expectedInjectedCancellations)).map(row=>row.requestId)
+  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||revokedRequests.has(e.requestId))))
   report.injectedRequests=[...injectedRequests]
   await persist()
   console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))
