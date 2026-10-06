@@ -70,9 +70,11 @@
     // bound variable would invalidate Svelte and recursively trigger afterUpdate.
     const element = menuElement
     const previousMaxHeight = element.style.maxHeight
+    const scrollPositions = [element, ...element.querySelectorAll<HTMLElement>('[role="tree"]')].map(node => ({ node, top: node.scrollTop, left: node.scrollLeft }))
     element.style.maxHeight = 'none'
     const naturalHeight = element.scrollHeight
     element.style.maxHeight = previousMaxHeight
+    for (const { node, top, left } of scrollPositions) { node.scrollTop = top; node.scrollLeft = left }
     if (naturalHeight <= 0) return
 
     const anchorRect = anchor.getBoundingClientRect()
@@ -82,8 +84,10 @@
     // Home publishes the fixed sorting bar's exclusion area. Other hosts omit
     // the variable and retain the full viewport as before.
     const toolbarInset = Math.max(0, Number.parseFloat(getComputedStyle(anchor).getPropertyValue('--home-sort-bottom-inset')) || 0)
-    const viewportTop = window.visualViewport?.offsetTop ?? 0
-    const visualBottom = viewportTop + (window.visualViewport?.height ?? window.innerHeight)
+    const topInset = Math.max(0, Number.parseFloat(getComputedStyle(anchor).getPropertyValue('--home-top-inset')) || 0)
+    const visualTop = window.visualViewport?.offsetTop ?? 0
+    const viewportTop = Math.max(visualTop, topInset)
+    const visualBottom = visualTop + (window.visualViewport?.height ?? window.innerHeight)
     const viewportBottom = Math.max(viewportTop, Math.min(visualBottom, window.innerHeight - toolbarInset))
     const spaceBelow = viewportBottom - downStart - VIEWPORT_MARGIN_PX
     const spaceAbove = upStart - viewportTop - VIEWPORT_MARGIN_PX
@@ -117,6 +121,13 @@
     if (nextMaxHeight !== maxHeight) maxHeight = nextMaxHeight
   }
 
+  function handleViewportScroll(event: Event): void {
+    // Internal tree scrolling changes neither the anchor nor available space.
+    // Remeasuring it would expand the scroller and reset the user's scrollTop.
+    if (event.target instanceof Node && menuElement?.contains(event.target)) return
+    scheduleMeasure()
+  }
+
   function scheduleMeasure(): void {
     if (remeasureQueued) return
     remeasureQueued = true
@@ -132,14 +143,14 @@
   onMount(() => {
     measurePlacement()
     window.addEventListener('resize', scheduleMeasure)
-    window.addEventListener('scroll', scheduleMeasure, true)
+    window.addEventListener('scroll', handleViewportScroll, true)
     window.visualViewport?.addEventListener('resize', scheduleMeasure)
     window.visualViewport?.addEventListener('scroll', scheduleMeasure)
   })
 
   onDestroy(() => {
     window.removeEventListener('resize', scheduleMeasure)
-    window.removeEventListener('scroll', scheduleMeasure, true)
+    window.removeEventListener('scroll', handleViewportScroll, true)
     window.visualViewport?.removeEventListener('resize', scheduleMeasure)
     window.visualViewport?.removeEventListener('scroll', scheduleMeasure)
   })

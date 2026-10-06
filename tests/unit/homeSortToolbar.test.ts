@@ -77,3 +77,14 @@ describe('sort toolbar geometry', () => {
     expect(getSortToolbarInset(viewport, top, height)).toBe(expected)
   })
 })
+
+it('publishes actual top-navigation bounds and removes the inset in left mode',async()=>{
+  vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(function(){
+    return (this as HTMLElement).classList.contains('top-navigation')?{top:12,bottom:64,height:52,left:0,right:1000,width:1000} as DOMRect:{top:0,bottom:0,height:0,left:0,right:0,width:0} as DOMRect
+  })
+  const {container,rerender}=render(Home,{props:{categories,bookmarks,isAuthenticated:true,settings:{navigation:{position:'top',always_expanded:false}} as any}})
+  const shell=container.querySelector('.home-shell') as HTMLElement
+  await waitFor(()=>expect(shell.style.getPropertyValue('--home-top-inset')).toBe('64px'))
+  await rerender({categories,bookmarks,isAuthenticated:true,settings:{navigation:{position:'left',always_expanded:false}} as any})
+  await waitFor(()=>expect(shell.style.getPropertyValue('--home-top-inset')).toBe('0px'))
+})

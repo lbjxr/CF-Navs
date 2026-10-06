@@ -334,6 +334,7 @@ try {
   await b.setViewport({ width: 1366, height: 900, scale: 1 })
   await scenario('LOGIN-UI', async () => { await login(); return { authenticated: true } })
   assert(token, 'Login prerequisite failed')
+  if(process.env.ISSUE_TEST_TOP_NAV==='1'){assert(new URL(base).hostname==='127.0.0.1'&&process.env.SETUP_TOKEN,'Top-navigation setup is allowed only in the disposable local instance');await api('/settings',{navigation:{position:'top',always_expanded:false,top_layout:'scroll'}},'PUT')}
   report.applicationScripts=await b.call(()=>[...document.scripts].map(e=>e.src?new URL(e.src).pathname:null).filter(Boolean))
   category = await api('/categories', { title: 'Browser regression ' + run, icon: fixtures.category.base64Uri, sort: 999999 }); ownedCategories.push(category.id)
   child = await api('/categories', { parent_id: category.id, title: 'Browser child ' + run, icon: fixtures.bookmark.base64Uri }); ownedCategories.push(child.id)

@@ -27,6 +27,7 @@
   export let onNavigate: ((id: string | number) => void) | undefined = undefined
   export let onPersistentExpansionChange: ((expanded: boolean) => void) | undefined = undefined
   export let onTopNavHeightChange: ((height: number) => void) | undefined = undefined
+  export let onTopNavBottomChange: ((bottom: number) => void) | undefined = undefined
   /**
    * 对匿名访客可见的分类 id 集合。登录态下导航会列出私密分类，不在该集合里的分类图标
    * 需带授权 key 才能取到真实图片（Issue #28）。
@@ -327,7 +328,9 @@
   }
   function reportTopNavHeight(): void {
     if (!isTop || !navigationRoot) return
-    onTopNavHeightChange?.(navigationRoot.getBoundingClientRect().height)
+    const rect = navigationRoot.getBoundingClientRect()
+    onTopNavHeightChange?.(rect.height)
+    onTopNavBottomChange?.(rect.height > 0 ? Math.max(0, rect.bottom) : 0)
   }
 
   function scheduleOverflowUpdate(): void {

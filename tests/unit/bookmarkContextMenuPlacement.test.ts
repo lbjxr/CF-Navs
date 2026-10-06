@@ -264,3 +264,39 @@ describe('move picker uses the available viewport instead of one card side',()=>
     } finally {cleanup();delete (window as any).visualViewport}
   })
 })
+
+it('reserves the measured top navigation as well as the sorting bar',async()=>{
+  Object.defineProperty(window,'innerHeight',{configurable:true,value:300})
+  stubMenuGeometry(350);stubAnchorRect(120)
+  const {anchor,menu}=renderMenu({canMove:true,categories:[{id:1,title:'Root',children:[]}],onMoveBookmark:()=>undefined})
+  anchor.style.setProperty('--home-sort-bottom-inset','50px')
+  anchor.style.setProperty('--home-top-inset','64px')
+  await fireEvent.click(menu.querySelector('[data-testid="bookmark-context-move"]')!)
+  await waitFor(()=>expect(menu.style.maxHeight).toBe('170px'))
+  expect(menu.style.top).toBe('-48px')
+})
+
+it('preserves internal tree scroll while measuring and does not measure on internal scroll',async()=>{
+  Object.defineProperty(window,'innerHeight',{configurable:true,value:300})
+  let reads=0
+  Object.defineProperty(HTMLElement.prototype,'scrollHeight',{configurable:true,get(){
+    if(!this.classList.contains('bookmark-context-menu'))return 0
+    reads++;const tree=this.querySelector('[role="tree"]') as HTMLElement|null
+    if(tree&&this.style.maxHeight==='none')tree.scrollTop=0
+    return 350
+  }})
+  stubAnchorRect(120)
+  const {menu}=renderMenu({canMove:true,categories:[{id:1,title:'Root',children:[]}],onMoveBookmark:()=>undefined})
+  await fireEvent.click(menu.querySelector('[data-testid="bookmark-context-move"]')!)
+  await fireEvent.click(menu.querySelector('[data-testid="bookmark-context-move-select"]')!)
+  const tree=menu.querySelector('[role="tree"]') as HTMLElement
+  await waitFor(()=>expect(menu.style.maxHeight).toBe('284px'))
+  tree.scrollTop=37
+  window.dispatchEvent(new Event('resize'))
+  await new Promise(resolve=>setTimeout(resolve,0))
+  expect(tree.scrollTop).toBe(37)
+  const previous=reads
+  await fireEvent.scroll(tree)
+  await new Promise(resolve=>setTimeout(resolve,0))
+  expect(reads).toBe(previous)
+})

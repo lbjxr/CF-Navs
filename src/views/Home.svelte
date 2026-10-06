@@ -150,6 +150,7 @@
   $: categoryDisplay = settings?.category_display ?? CATEGORY_DISPLAY_DEFAULTS
   $: cardTextColor = settings?.card_text_color?.trim() ?? ''
   let topNavHeight = 0
+  let topNavBottom = 0
   // 顶部分行导航高度增长时，用实测高度驱动首页顶部留白（+ 12px 顶距 + 12px 余量）。
   $: topNavPadding = isTopNavigation && topNavHeight > 0 ? `${Math.round(topNavHeight + 24)}px` : ''
   $: homeShellStyle = [
@@ -158,6 +159,7 @@
     `--content-margin-top: ${contentLayout.margin_top}%`,
     `--content-margin-bottom: ${contentLayout.margin_bottom}%`,
     `--home-sort-bottom-inset: ${homeSortBottomInset}px`,
+    `--home-top-inset: ${isTopNavigation ? topNavBottom : 0}px`,
     `--category-root-font-size-base: ${categoryDisplay.root_font_size}px`,
     `--category-root-icon-size-base: ${categoryDisplay.root_icon_size}px`,
     `--category-child-font-size-base: ${categoryDisplay.child_font_size}px`,
@@ -468,6 +470,7 @@
     onNavigate={handleNavigate}
     onPersistentExpansionChange={(expanded) => (persistentLeftExpanded = expanded)}
     onTopNavHeightChange={(height) => (topNavHeight = height)}
+    onTopNavBottomChange={(bottom) => (topNavBottom = bottom)}
     {publicCategoryIds}
     iconAccessKey={visibleIconAccessKey}
   />

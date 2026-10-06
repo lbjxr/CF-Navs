@@ -245,6 +245,7 @@
               class="tree-option tree-root-option"
               class:selected={String(value) === String(item.id)}
               class:has-notice={!!item.notice}
+              title={item.title}
               data-tree-root-id={item.id}
               role="treeitem"
               aria-level="1"
@@ -254,7 +255,7 @@
               on:click={() => selectValue(item.id)}
             >
               <span class="tree-folder-mark" aria-hidden="true"></span>
-              <span>{item.title}</span>
+              <span class="tree-option-label">{item.title}</span>
               {#if item.notice}
                 <span class="tree-option-notice" id={`category-tree-notice-${item.id}`}>{item.notice}</span>
               {/if}
@@ -269,6 +270,7 @@
                   class="tree-option tree-child-option"
                   class:selected={String(value) === String(child.id)}
                   class:has-notice={!!child.notice}
+                  title={child.title}
                   data-tree-parent-id={item.id}
                   role="treeitem"
                   aria-level="2"
@@ -277,7 +279,7 @@
                   on:click={() => selectValue(child.id)}
                 >
                   <span class="tree-branch-mark" aria-hidden="true"></span>
-                  <span>{child.title}</span>
+                  <span class="tree-option-label">{child.title}</span>
                   {#if child.notice}
                     <span class="tree-option-notice" id={`category-tree-notice-${child.id}`}>{child.notice}</span>
                   {/if}
@@ -499,6 +501,16 @@
     font: inherit;
     text-align: left;
     cursor: pointer;
+  }
+
+  /* Dense inline menus keep names on one row; the full name remains in the
+     accessible text and title. Privacy notices retain their own wrapping row. */
+  .inline-menu .tree-option-label {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .tree-option:hover,

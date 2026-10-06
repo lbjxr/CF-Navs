@@ -195,3 +195,12 @@ describe('CategoryTreeSelect 折叠与键盘导航', () => {
     expect(screen.queryByRole('tree')).toBeNull()
   })
 })
+
+it('keeps the full accessible label and tooltip in the compact inline menu',async()=>{
+  const title='A long synthetic category name that must not consume several rows'
+  const {container}=render(CategoryTreeSelect,{props:{items:[{id:7,title,children:[]}],inlineMenu:true}})
+  await fireEvent.click(container.querySelector('.category-select-trigger')!)
+  const option=await screen.findByRole('treeitem',{name:title})
+  expect(option.getAttribute('title')).toBe(title)
+  expect(option.querySelector('.tree-option-label')?.textContent).toBe(title)
+})
