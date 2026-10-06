@@ -28,6 +28,7 @@ const report = { run, cacheMode, browserLog: [], cases: [], requests: [], cleanu
 let stage = 'setup', token = '', category, child, bookmarks = [], ownedCategories = [], ownedBookmarks = [], secondary = null
 const requests = new Map()
 const responseReads = new Set()
+const observedCopyResponses = []
 let fetchHandler = null
 let editorObject = null
 let operationImageUrls = null
@@ -41,6 +42,7 @@ async function wait(fn, args = [], timeout = 20000) {
   throw new Error('UI condition timed out: ' + fn.toString().slice(0, 140)+' args='+JSON.stringify(args))
 }
 async function click(selector, button = 'left') {
+  await b.send('Page.bringToFront')
   const hover=await b.call(sel=>{const e=document.querySelector(sel);if(!e)return null;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return r.width&&r.height?{x:r.x+r.width/2,y:r.y+r.height/2}:null},selector)
   if(hover) { await b.send('Input.dispatchMouseEvent',{type:'mouseMoved',...hover,button:'none'}); await sleep(250) }
   const point = await wait(sel => {
@@ -195,6 +197,7 @@ async function stableOperation(action, allowed = []) {
   const trace = await traceEnd(), network = assessStableIcons(report.requests.slice(start), allowed, editorObject ? [editorObject] : [], true)
   const traceResult = assessIconTrace(trace, allowed), regressions = traceResult.regressions
   report.cases.at(-1).detail={network,trace}
+  report.cases.at(-1).trace=trace
   assert(network.passed && traceResult.passed, JSON.stringify({ network, regressions: regressions.slice(0, 15),revocations:traceResult.revocations }))
   for(const item of manifest()) await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),item.selector)
   await verifyImages(); return { network, traceFrames: trace?.frames, regressions }
@@ -257,6 +260,31 @@ try {
     await fetch(base+'/api/logout',{method:'POST',headers:{authorization:'Bearer '+bootstrap.data.token}})
   }
   await b.start(); await b.attach()
+  await b.send('Runtime.addBinding',{name:'__issueCopyObserved'})
+  b.on('Runtime.bindingCalled',event=>{if(event.name==='__issueCopyObserved'){try{observedCopyResponses.push(JSON.parse(event.payload))}catch{}}})
+  // Observe the same response without substituting bytes or changing the request.
+  // Chrome may drop Network.getResponseBody after an owner aborts an already-read
+  // response. Retain only protocol metadata, never image bytes or auth headers.
+  await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{
+    const original=window.fetch.bind(window);
+    window.fetch=async function(...args){
+      const start=performance.timeOrigin+performance.now();
+      const response=await original(...args);
+      try {
+        const [input,init]=args,url=new URL(typeof input==='string'?input:input.url,location.href);
+        if(url.origin===location.origin&&url.pathname==='/api/icon-local-copy'){
+          const request=JSON.parse(init?.body??'null');
+          void response.clone().text().then(text=>{
+            if(text.length>1048576)return;const data=JSON.parse(text).data;
+            window.__issueCopyObserved(JSON.stringify({start,status:response.status,object:request?.object_type+':'+request?.object_id,
+              request:{dataset_epoch:request?.dataset_epoch,expected_write_epoch:request?.expected_write_epoch,expected_content_revision:request?.expected_content_revision},
+              result:{protocol:data?.protocol,reason:data?.reason,persistence:data?.persistence,descriptor:data?.descriptor,hasImage:Boolean(data?.image),imageBytes:data?.image?.byte_length??0}}));
+          }).catch(()=>{});
+        }
+      }catch{}
+      return response;
+    };
+  })()`})
   await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(() => {
     const create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL),ids=new Map();let sequence=0;
     const state=window.__issueUrls={active:false,events:[],ids};
@@ -403,6 +431,31 @@ try {
     await wait((categoryId,bookmarkId)=>Boolean(document.querySelector(`[data-sort-category-id="${categoryId}"] [data-sort-id="${bookmarkId}"]`)),[category.id,bookmarks[2].id])
     return { geometry,nested,editOpened:true,draftMoved:true,cancelRestored:true,serverUnchanged:true }
   })
+  await scenario('28-CANCEL-REACQUIRE', async () => {
+    await clearCopies()
+    let grant=null,firstCopy=null,copies=0,grantReleased=false
+    return intercept([{urlPattern:'*/api/icon-access',requestStage:'Response'},{urlPattern:'*/api/icon-local-copy',requestStage:'Request'}],async event=>{
+      if(new URL(event.request.url).pathname==='/api/icon-access'&&!grant){grant=event;return true}
+      let payload;try{payload=JSON.parse(event.request.postData)}catch{return false}
+      if(payload.object_type==='bookmark'&&payload.object_id===bookmarks[2].id){
+        copies++
+        if(!firstCopy){firstCopy=event;return true}
+      }
+      return false
+    },async()=>{
+      try {
+        await home({waitForImages:false});await localWait(()=>grant&&firstCopy,'Pending image plus held grant')
+        await b.send('Fetch.continueRequest',{requestId:grant.requestId});grantReleased=true
+        // The real grant changes the online URL while the copy is pending. Its
+        // cancelled owner must not poison the new acquisition.
+        await localWait(()=>copies>=2,'Fresh acquisition after pending URL change',10000)
+        await verifyImages();return {copyAttempts:copies,grantReleased:true,imageRecovered:true}
+      } finally {
+        if(grant&&!grantReleased)await b.send('Fetch.continueRequest',{requestId:grant.requestId}).catch(()=>{})
+        if(firstCopy)await b.send('Fetch.continueRequest',{requestId:firstCopy.requestId}).catch(()=>{})
+      }
+    })
+  })
   await scenario('28-COPY-503', async () => {
     await b.setViewport({width:1366,height:900,scale:1});
     await setFixtureIcon(0,fixtures[bookmarks[0].imageKey].uri); await clearCopies()
@@ -530,6 +583,12 @@ finally {
   if (secondary) await b.send('Target.closeTarget', { targetId: secondary }).catch(() => {})
   await Promise.allSettled([...responseReads])
   report.cleanup.browser = await b.cleanup()
+  for(const packet of observedCopyResponses){
+    const candidates=report.requests.filter(row=>row.kind==='icon-copy'&&row.object===packet.object&&row.status===packet.status&&
+      ['dataset_epoch','expected_write_epoch','expected_content_revision'].every(key=>row.copyRequest?.[key]===packet.request?.[key])&&Math.abs(row.wallTime*1000-packet.start)<1000)
+    candidates.sort((a,b)=>Math.abs(a.wallTime*1000-packet.start)-Math.abs(b.wallTime*1000-packet.start))
+    if(candidates[0]){candidates[0].copyResult=packet.result;candidates[0].responseEvidence='observed-clone'}
+  }
   const protocolConflicts=new Set(validatedIconConflicts(report.requests))
   report.validatedConflicts=[...protocolConflicts]
   report.unexpectedHttp = report.requests.filter(e => e.status >= 400 && !injectedRequests.has(e.requestId) && !protocolConflicts.has(e.requestId))

@@ -159,6 +159,7 @@ export function createObjectIconLoader(options: Options) {
     if (!capture || !isIconDescriptor(descriptor) || descriptor.dataset_epoch !== capture.lease.scope.split(':')[0]) return { result: Promise.resolve({ blob: null, descriptor, url: null, status: 'blocked' }), release: () => undefined }
     const id = key(capture, descriptor)
     let entry = entries.get(id)
+    if (entry?.abort.signal.aborted) { deleteEntry(entry); entry = undefined }
     if (entry?.settled && retry && entry.result?.status !== 'ready') { deleteEntry(entry); entry = undefined }
     if (!entry) {
       const abort = new AbortController()
@@ -166,6 +167,9 @@ export function createObjectIconLoader(options: Options) {
       const owned = entry
       entry.promise = load(capture, { ...descriptor }, inline, abort.signal).then(result => {
         owned.settled = true; owned.result = result
+        // An abandoned operation may finish after its replacement. It no longer
+        // owns any index aliases or descriptor publication rights.
+        if (owned.abort.signal.aborted) return result
         if (result.source === 'local' && device.isCurrent(capture)) touchFlush.request()
         const alias = key(capture, result.descriptor)
         if (!entries.has(alias)) { entries.set(alias, owned); owned.aliases.add(alias) }
@@ -184,7 +188,12 @@ export function createObjectIconLoader(options: Options) {
       released = true; handles.delete(release); if (url) revokeUrl(url)
       owned.refs--
       if (!owned.refs) {
-        if (!owned.settled) owned.abort.abort()
+        if (!owned.settled) {
+          owned.abort.abort()
+          // Reacquisition in this same task must start a live operation, not
+          // inherit the cancelled promise before a cleanup timer runs.
+          deleteEntry(owned)
+        }
         owned.cleanup = setTimeout(() => { if (!owned.refs) deleteEntry(owned) }, 0)
       }
     }

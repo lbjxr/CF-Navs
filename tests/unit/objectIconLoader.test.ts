@@ -200,3 +200,36 @@ describe('versioned object icon orchestration', () => {
     expect(maximum).toBe(4); handles.forEach(handle => handle.release())
   })
 })
+
+describe('cancelled loader ownership',()=>{
+  it('reacquires a fresh operation rather than reusing an aborted promise',async()=>{
+    const f=await fixture()
+    const old=f.loader.acquire(f.ready);old.release()
+    const current=f.loader.acquire(f.ready)
+    expect((await current.result).status).toBe('ready')
+    expect((await old.result).status).toBe('blocked')
+    current.release()
+  })
+  it('does not let a late aborted read recreate an index alias',async()=>{
+    vi.useFakeTimers()
+    const f=await fixture()
+    let resolve!: (value:null)=>void
+    f.storage.read.mockImplementationOnce(()=>new Promise(done=>{resolve=done}))
+    const old=f.loader.acquire(f.ready);old.release()
+    const current=f.loader.acquire(f.ready)
+    expect((await current.result).status).toBe('ready')
+    current.release();await vi.advanceTimersByTimeAsync(1)
+    resolve(null);await old.result
+    const next=f.loader.acquire(f.ready)
+    expect((await next.result).status).toBe('ready')
+    next.release()
+  })
+  it('keeps an in-flight operation while another owner still needs it',async()=>{
+    const f=await fixture()
+    const one=f.loader.acquire(f.ready),two=f.loader.acquire(f.ready)
+    one.release()
+    expect((await two.result).status).toBe('ready')
+    expect(f.fetchCopy).toHaveBeenCalledOnce()
+    two.release()
+  })
+})
