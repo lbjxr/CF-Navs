@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts } from '../../scripts/lib/issueBrowserEvidence.mjs'
+import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse } from '../../scripts/lib/issueBrowserEvidence.mjs'
 const origin = 'https://nav.example.test'
 describe('per-operation browser network evidence', () => {
   it.each([
@@ -95,4 +95,19 @@ it('rejects revocation of an existing offscreen handle, not just visible flashes
   const trace={frames:10,changes:[],protectedRevocations:[{key:'category:1',id:4}]}
   expect(assessIconTrace(trace,['bookmark:1']).passed).toBe(false)
   expect(assessIconTrace(trace,['category:1']).passed).toBe(true)
+})
+
+it('excludes only positively identified site backgrounds from icon traffic',()=>{
+  const background={kind:'external-image',path:'[external]',object:null,resourceRole:'site-background'}
+  expect(assessStableIcons([background]).passed).toBe(true)
+  expect(assessStableIcons([{...background,kind:'icon-body',object:'bookmark:1'}]).passed).toBe(false)
+  expect(assessStableIcons([{...background,resourceRole:undefined}]).passed).toBe(false)
+})
+
+it('separates cancelled responses without waiving operation-level reload budgets',()=>{
+  const canceled={requestId:'a',status:409,canceled:true,error:'net::ERR_ABORTED',kind:'icon-copy',object:'bookmark:1'}
+  expect(isCanceledNetworkResponse(canceled)).toBe(true)
+  expect(isCanceledNetworkResponse({...canceled,canceled:false})).toBe(false)
+  expect(isCanceledNetworkResponse({...canceled,error:'net::ERR_FAILED'})).toBe(false)
+  expect(assessStableIcons([canceled]).passed).toBe(false)
 })

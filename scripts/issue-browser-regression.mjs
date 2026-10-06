@@ -10,7 +10,7 @@ import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
 import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.mjs'
-import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts } from './lib/issueBrowserEvidence.mjs'
+import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse } from './lib/issueBrowserEvidence.mjs'
 if (process.env.ISSUE_BROWSER_WRITE_FIXTURES !== '1') throw new Error('Explicit ISSUE_BROWSER_WRITE_FIXTURES=1 required for temporary test-site records')
 const base = resolveBaseUrl(), credentials = requireAdminCredentials()
 const selectedCases=new Set((process.env.ISSUE_CASES??'').split(',').filter(Boolean))
@@ -304,6 +304,13 @@ try {
     const row = { requestId: e.requestId, stage, time: e.timestamp, wallTime: e.wallTime, method: e.request.method, type: e.type, initiator: e.initiator?.type, initiatorFrames:e.initiator?.stack?.callFrames?.slice(0,4).map(f=>({function:f.functionName,url:safe(f.url),line:f.lineNumber,column:f.columnNumber})), ...classifyIssueRequest(e.request.url, e.request.postData, base) }
     if(operationImageUrls) row.wasDisplayed=operationImageUrls.has(e.request.url)
     if (row.kind === 'external' && row.type === 'Image') row.kind = 'external-image'
+    if(row.kind==='external-image') {
+      if(requests.get(e.requestId)?.resourceRole==='site-background')row.resourceRole='site-background'
+      void b.call(url=>{
+        const style=getComputedStyle(document.documentElement),css=style.getPropertyValue('--home-background')+' '+style.backgroundImage
+        return [...css.matchAll(/url\(["']?([^"')]+)["']?\)/g)].some(match=>new URL(match[1],location.href).href===url)
+      },e.request.url).then(matches=>{if(matches){for(const request of report.requests)if(request.requestId===row.requestId)request.resourceRole='site-background';row.resourceRole='site-background'}}).catch(()=>{})
+    }
     if(row.kind==='icon-copy') {try{const body=JSON.parse(e.request.postData);row.copyRequest={dataset_epoch:body.dataset_epoch,expected_write_epoch:body.expected_write_epoch,expected_content_revision:body.expected_content_revision}}catch{}}
     requests.set(e.requestId, row); report.requests.push(row)
     if(editorObject && ['icon-body','icon-copy','iconify-body','external-image'].includes(row.kind)) {
@@ -457,16 +464,21 @@ try {
     })
   })
   await scenario('28-COPY-503', async () => {
-    await b.setViewport({width:1366,height:900,scale:1});
-    await setFixtureIcon(0,fixtures[bookmarks[0].imageKey].uri); await clearCopies()
-    let injected=0
-    try { return await intercept([{urlPattern:'*/api/icon-local-copy',requestStage:'Request'}], async event => {
-      let payload; try { payload=JSON.parse(event.request.postData) } catch { return false }
-      if(payload.object_type!=='bookmark'||payload.object_id!==bookmarks[0].id) return false
-      injected++; report.cases.at(-1).injection={kind:'target-copy-503',count:injected}; if(event.networkId) injectedRequests.add(event.networkId)
-      await b.send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:503,responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'private, no-store'}],body:Buffer.from(JSON.stringify({code:5000,message:'Injected temporary copy failure'})).toString('base64')})
-      return true
-    },async()=>{ await home(); await verifyImages(); assert(injected>0,'Copy fault not exercised'); await shot('28-copy-fallback'); return {injected,images:'correct'} }) } finally { await setFixtureIcon(0,fixtures[bookmarks[0].imageKey].base64Uri) }
+    const variants=[]
+    for(const targetIndex of [0,2]) {
+      await b.setViewport({width:1366,height:900,scale:1})
+      await setFixtureIcon(targetIndex,fixtures[bookmarks[targetIndex].imageKey].uri);await clearCopies()
+      let injected=0
+      try {variants.push(await intercept([{urlPattern:'*/api/icon-local-copy',requestStage:'Request'}],async event=>{
+        let payload;try{payload=JSON.parse(event.request.postData)}catch{return false}
+        if(payload.object_type!=='bookmark'||payload.object_id!==bookmarks[targetIndex].id)return false
+        injected++;report.cases.at(-1).injection={kind:'target-copy-503',targetIndex,count:injected};if(event.networkId)injectedRequests.add(event.networkId)
+        await b.send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:503,responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'private, no-store'}],body:Buffer.from(JSON.stringify({code:5000,message:'Injected temporary copy failure'})).toString('base64')})
+        return true
+      },async()=>{await home();await verifyImages();assert(injected>0,'Copy fault not exercised');await shot('28-copy-fallback-'+targetIndex);return {private:targetIndex===2,injected,images:'correct'}}))}
+      finally {await setFixtureIcon(targetIndex,fixtures[bookmarks[targetIndex].imageKey].base64Uri)}
+    }
+    return {variants}
   })
   await scenario('29-OLD-ADMIN-RESPONSE', async () => {
     await home(); let held=null, forced=false
@@ -591,9 +603,11 @@ finally {
   }
   const protocolConflicts=new Set(validatedIconConflicts(report.requests))
   report.validatedConflicts=[...protocolConflicts]
-  report.unexpectedHttp = report.requests.filter(e => e.status >= 400 && !injectedRequests.has(e.requestId) && !protocolConflicts.has(e.requestId))
+  const canceledHttp=new Set(report.requests.filter(isCanceledNetworkResponse).map(row=>row.requestId))
+  report.canceledResponses=[...canceledHttp]
+  report.unexpectedHttp = report.requests.filter(e => e.status >= 400 && !injectedRequests.has(e.requestId) && !protocolConflicts.has(e.requestId) && !canceledHttp.has(e.requestId))
   report.failedRequests = report.requests.filter(e => e.error)
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&canceledHttp.has(e.requestId)))
   report.injectedRequests=[...injectedRequests]
   await persist()
   console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))

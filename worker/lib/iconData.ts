@@ -1,3 +1,4 @@
+import { decodeIconDataUri } from '../../shared/iconDataUri'
 import { readBoundedBody } from './boundedBody'
 import type { IconSource } from '../../shared/types'
 
@@ -192,23 +193,8 @@ export function iconBytesToDataUri(icon: FetchedIcon): string {
 }
 
 export function dataUriToResponse(dataUri: string, cacheControl: string): Response | null {
-  const match = dataUri.match(/^data:([^;,]+);base64,(.+)$/)
-  if (!match) return null
-
-  try {
-    const mime = match[1] || 'image/png'
-    const bytes = Uint8Array.from(atob(match[2]), (char) => char.charCodeAt(0))
-    return new Response(bytes, {
-      status: 200,
-      headers: {
-        'Content-Type': mime,
-        'Content-Length': String(bytes.byteLength),
-        'Cache-Control': cacheControl,
-      },
-    })
-  } catch {
-    return null
-  }
+  const decoded = decodeIconDataUri(dataUri)
+  return decoded ? iconBytesToResponse({ bytes: decoded.bytes, contentType: decoded.mime }, cacheControl) : null
 }
 
 function normalizeIconifyPair(prefix: string, name: string): boolean {

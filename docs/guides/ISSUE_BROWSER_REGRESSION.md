@@ -70,10 +70,12 @@
 
 ## 已知失败不能折算为通过
 
-`tests/unit/iconProxyDataUriRegression.test.ts` 的两个 `it.fails` 表达当前未修复的代理格式契约缺口。它们是预期失败，不是产品成功；修复后应移除 `.fails`，并再次运行真实普通代理路径。基线 CSP 错误、输入/定位前置失败、产品断言失败要分别呈现，不以总测试数宣称验收完成。
+`tests/unit/iconProxyDataUriRegression.test.ts` 的两个 URL 编码图标用例在修复前是明确的预期失败，现已转为普通回归。新增已知失败不得折算为产品成功；移除预期失败标记必须同时验证真实普通代理路径。基线 CSP 错误、输入/定位前置失败、产品断言失败要分别呈现，不以总测试数宣称验收完成。
 
 本地验证使用 `node scripts/smoke-local.mjs --issues`，由现有隔离 Worker/D1 生命周期提供一次性凭据；仍须显式设置 `ISSUE_BROWSER_WRITE_FIXTURES=1`。`ISSUE_CASES=28-EDIT-TITLE-DATA` 可独立验证编辑数据完整性。409 只在对应新描述符重试并收到正确正文后按 requestId 标记为已验证协商，不整体豁免。
 
 `ISSUE_CACHE_MODE=off` 只允许显式选择兼容的编辑/普通路径用例，用于区分始终存在的快照投影与可信设备副本；默认仍为 on。不得用关闭模式冒充可信副本验收。
 
 若 Chrome 在客户端取消后不再提供 Network 响应正文，浏览器只读克隆观察器保留真实响应的协议元数据，通过对象/描述符/时间匹配原 requestId；不改变响应或存储图像正文。无法匹配或读取时仍不豁免冲突。
+
+客户端已取消的响应保留在 `canceledResponses`，不冒充已验证的 409 协商；其请求仍受操作级稳定性检查约束。仅具有真实 CSS URL 匹配的站点背景请求可移出图标正文预算，外部图像不得整体豁免。

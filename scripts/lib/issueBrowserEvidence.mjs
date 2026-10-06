@@ -18,7 +18,7 @@ export function classifyIssueRequest(url, postData, origin) {
   return { kind: path.startsWith('/api/') ? 'api' : 'resource', object: null, path }
 }
 export function assessStableIcons(requests, allowedObjects = [], allowedPreviewObjects = [], existingImagesOnly = false) {
-  const unexpected = requests.filter(row => ['icon-body', 'icon-copy', 'iconify-body', 'external-image'].includes(row.kind) && !(existingImagesOnly && ['external-image','iconify-body'].includes(row.kind) && row.wasDisplayed === false) && !allowedObjects.includes(row.object) && !(row.surface === 'editor-preview' && allowedPreviewObjects.includes(row.previewFor)))
+  const unexpected = requests.filter(row => !(row.kind === 'external-image' && row.resourceRole === 'site-background') && ['icon-body', 'icon-copy', 'iconify-body', 'external-image'].includes(row.kind) && !(existingImagesOnly && ['external-image','iconify-body'].includes(row.kind) && row.wasDisplayed === false) && !allowedObjects.includes(row.object) && !(row.surface === 'editor-preview' && allowedPreviewObjects.includes(row.previewFor)))
   return { passed: unexpected.length === 0, unexpected: unexpected.map(row => ({ requestId: row.requestId, object: row.object, path: row.path, status: row.status ?? null, canceled: row.canceled ?? false })) }
 }
 
@@ -46,4 +46,10 @@ export function validatedIconConflicts(rows) {
     if(success) ids.push(row.requestId)
   }
   return ids
+}
+
+// A response whose consumer was cancelled is not a verified protocol success.
+// Keep it in the journal; operation-level request/handle budgets still count it.
+export function isCanceledNetworkResponse(row) {
+  return row.canceled === true && row.error === 'net::ERR_ABORTED' && Number.isInteger(row.status) && row.status >= 400
 }
