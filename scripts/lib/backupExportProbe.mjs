@@ -151,8 +151,9 @@ export async function pageExportControl(kind, sample) {
     throw new Error(`Unknown export control: ${kind}`)
   }
   if (!element) return null
-  element.scrollIntoView({ block: 'center', inline: 'center' })
-  await new Promise((resolve) => requestAnimationFrame(resolve))
+  // Instant scrolling + getBoundingClientRect synchronously flush layout.
+  // A background/occluded page may never receive an animation frame.
+  element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' })
   const rect = element.getBoundingClientRect()
   if (!rect.width || !rect.height) return null
   return {

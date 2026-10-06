@@ -89,6 +89,7 @@ npm run perf:audit
 | `prob38-ancestor-privacy-flip` | PROB-38 | 公开祖先→私密、私密祖先→公开分别验证深层 bookmark/category-icon 的拒绝与恢复 |
 | `prob38-orphan-cycle-fail-closed` | PROB-38 | 缺失父级、孤儿分类和循环分类的 bookmark/category-icon 匿名请求均 `no-store` fallback |
 | `prob38-sw-cache-migration` | PROB-38 | 新 SW 激活后旧 `cf-navs-v*` runtime cache 删除，`/api/category-icon/*` 不进入 Cache Storage |
+| `export-control-restores-test-target` | PROB-13 | 主动切到本轮自建空标签，测量前激活原测试页，防止后台 requestAnimationFrame 永久等待；精确清理额外标签 |
 | `partial-export-rejects-empty-selection` | PROB-14 | 清空真实分类选择后，导出按钮禁用 |
 | `partial-export-child-with-parent-no-settings` | PROB-14 | 实际下载只含所选非空子分类、必要父分类及该子分类的全部书签，设置为 `null` |
 | `partial-export-child-with-settings` | PROB-14 | 同一子集在设置开关开启后带出完整设置，分类与书签内容不变 |

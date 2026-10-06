@@ -322,6 +322,7 @@ async function waitForPrecache(session, timeoutMs = 10000) {
 async function runFirstVisitChecks(session) {
   phase('L1 / L3 首访与预缓存')
 
+  await session.send('Page.bringToFront')
   await session.navigate(TARGET_URL)
   await waitForModal(async () => (await session.call(pageHomeSummary)).appMounted, 'initial home ready', 30000)
   await session.call(pageClearSiteState)
@@ -665,7 +666,11 @@ async function runExportCheck(session, token) {
     }
     throw new Error(`Timed out waiting for ${description}`)
   }
-  const control = (kind) => session.call(pageExportControl, kind, sample)
+  const control = async (kind) => {
+    // requestAnimationFrame is suspended for background/occluded pages.
+    await session.send('Page.bringToFront')
+    return session.call(pageExportControl, kind, sample)
+  }
   const click = async (kind) => {
     const target = await waitFor(async () => {
       const state = await control(kind)
@@ -688,11 +693,20 @@ async function runExportCheck(session, token) {
     check(id, 'PROB-14', result.passed, JSON.stringify(result))
   }
 
+  let backgroundTarget = null
+  let foregroundRecovered = false
+  let backgroundState = null
   let captureInstalled = false
   try {
     await session.setViewport({ width: 1440, height: 900, mobile: false, scale: 1 })
     await session.navigate(`${TARGET_ORIGIN}/admin`)
+    backgroundTarget = (await session.send('Target.createTarget', { url: 'about:blank' })).targetId
+    await session.send('Target.activateTarget', { targetId: backgroundTarget })
+    backgroundState = await session.call(() => ({ visibility: document.visibilityState, focused: document.hasFocus() }))
     await click('backup')
+    foregroundRecovered = await session.call(() => document.visibilityState === 'visible' && document.hasFocus())
+    check('export-control-restores-test-target', 'PROB-13', foregroundRecovered && backgroundState.focused === false, 'test target regains focus before synchronous layout measurement')
+    await session.send('Target.closeTarget', { targetId: backgroundTarget }); backgroundTarget = null
     // Fail closed if capture misses an application download: never save production data to disk.
     await session.send('Page.setDownloadBehavior', { behavior: 'deny' })
     captureInstalled = await session.call(pageInstallExportCapture)
@@ -707,11 +721,14 @@ async function runExportCheck(session, token) {
     await download('partial-export-root-includes-children', sample.rootCategoryIds, true)
     return {
       status: emptyRejected && exports.every((result) => result.passed) ? 'pass' : 'fail',
+      foregroundRecovered,
+      backgroundState,
       sourceCategories: source.categories.length,
       sourceBookmarks: source.bookmarks.length,
       exports,
     }
   } finally {
+    if (backgroundTarget) await session.send('Target.closeTarget', { targetId: backgroundTarget })
     if (captureInstalled && !await session.call(pageRestoreExportCapture)) {
       throw new Error('Export capture could not be restored')
     }
@@ -776,6 +793,7 @@ async function main() {
   try {
     await session.start()
     await session.attach()
+    await session.send('Page.bringToFront')
     report.browserMode = session.startedByTest ? 'isolated-temp-browser' : 'existing-browser-on-port'
     report.profile = session.startedByTest ? PROFILE_DIR : '(not started by this run)'
     report.ownership = { browserStartedByTest: session.startedByTest, pid: session.chromeProcess?.pid ?? null, targetId: session.targetId, port: DEBUG_PORT }
