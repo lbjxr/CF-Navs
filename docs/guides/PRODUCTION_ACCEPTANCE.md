@@ -94,7 +94,10 @@ npm run perf:audit
 | `partial-export-child-with-settings` | PROB-14 | 同一子集在设置开关开启后带出完整设置，分类与书签内容不变 |
 | `partial-export-root-includes-children` | PROB-14 | 选择父分类时，下载包含该父分类、全部直接子分类及其书签并集 |
 | `bookmark-modal-*`（3 项） | PROB-13 U1–U4 | 桌面与 390x844 下弹窗渲染、圆角一致、不溢出视口 |
-| `bookmark-modal-actions-single-row-on-mobile` | PROB-13 U1–U4 | 移动端底部操作栏所有按钮同一行且不溢出 |
+| `bookmark-modal-actions-single-row-on-mobile` | PROB-13 U1–U4 | 精确匹配表单直属动作栏，取消/保存两按钮可见、同一行、可命中且不溢出卡片或视口；缺失/隐藏/空栏一律失败 |
+| `modal-real-input-*` | PROB-13 U1–U4 | 桌面与移动视口用真实鼠标打开/取消分类和书签弹窗，点击表单输入框后用 Tab/Enter 取消书签；等待懒加载可见，不合成 DOM 事件 |
+| `modal-negative-control-*` | PROB-13 U1–U4 | 在本轮页面依次注入动作栏缺失、空栏、隐藏、溢出和遮挡，断言均被拒绝；每项恢复 DOM 后重新通过，不写服务端 |
+| `modal-flow-no-server-writes` / `modal-flow-browser-diagnostics` | PROB-13 U1–U4 | 弹窗阶段无业务写入、非预期 HTTP/网络错误、Chrome Log 错误、console error 或页面异常；导航/交互及取消分别留证 |
 | `viewport-screenshots-captured` | PROB-17 | 430x932 / 768x1024 / 1440x900 三档截图落盘 |
 | `logout-accepted` + `revoked-token-rejected-within-window` | PROB-19v | 登出后旧 token 在窗口内被拒，并记录实际生效毫秒数 |
 | `no-page-exceptions` / `no-console-errors` | PROB-13 | 全程无页面异常与 console error |
@@ -103,7 +106,11 @@ npm run perf:audit
 
 导出验证通过真实鼠标操作备份面板，在应用的下载边界捕获实际 Blob；不由探针自行构造备份。按 ID 和完整字段比对分类、书签及设置，整站备份冒充子集、缺失父分类、混入父级/兄弟书签、丢记录或设置开关失效都会失败。生产备份正文只驻留内存，原生磁盘下载被禁止，报告只保存计数与判定，不保存书签内容。
 
+定向定位可设置 `ACCEPT_SCOPE=modals`；报告会列出未执行的首访、离线、匿名、导出及三档首页截图，不得把定向通过当全量验收。默认 `all` 仍运行完整流程。中途异常也记录失败、已执行检查及资源清理，不能丢失报告。
+
 报告与截图写到 `tmp/acceptance/`（该目录已被 Git 忽略）。报告在落盘前过一遍脱敏，凭据不会出现在文件里。
+
+**必需 UI 缺失不是 `SKIP`。** 动作栏定位失败、无按钮、懒加载超时或取消无效均失败；报告中的 `modals` 保存几何、真实输入结果、负向对照和该阶段请求。分类弹窗未定义 Escape 关闭，不凭空要求该行为；书签键盘取消先通过真实点击进入输入框，再使用 Tab 到取消按钮并按 Enter。报告同时保留 `initialFocusInside`；该路径不等于首次打开自动聚焦或完整焦点陷阱通过。首访/离线等待可观测页面就绪，不用固定短延时替代；清站点状态后先离开旧文档再开始首访计数。
 
 **`SKIP` 不是失败。** 实例上不存在被测对象（例如一个私密分类都没有）时记为 skip 并说明原因，不计入失败，也不影响退出码 —— 否则真失败会被噪声淹没。要验证私密对象的匿名边界，实例上至少得有一个私密分类和一个挂在它下面的书签。
 

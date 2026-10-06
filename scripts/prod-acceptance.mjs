@@ -24,6 +24,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CdpSession, sleep } from './lib/cdpSession.mjs'
+import { pageModalMetrics, pageModalControl, pageModalsClosed, assessModalActions, waitForModal, pageModalFault } from './lib/modalAcceptanceProbe.mjs'
 import {
   pickExportSample,
   verifyExportDownload,
@@ -52,6 +53,8 @@ const PROFILE_DIR = path.join(
 )
 const HEADLESS = process.env.ACCEPT_HEADED !== '1'
 const NO_SANDBOX = process.env.CHROME_NO_SANDBOX === '1'
+const SCOPE = process.env.ACCEPT_SCOPE || 'all'
+if (!['all', 'modals'].includes(SCOPE)) throw new Error('ACCEPT_SCOPE must be all or modals')
 const ALLOW_FAILURES = process.env.ACCEPT_ALLOW_FAILURES === '1'
 const MAX_CACHE_BYTES = Number.parseInt(process.env.ACCEPT_MAX_CACHE_BYTES || '', 10) || 5 * 1024 * 1024
 const REVOCATION_WINDOW_MS = Number.parseInt(process.env.ACCEPT_REVOCATION_WINDOW_MS || '', 10) || 15000
@@ -268,86 +271,17 @@ function pageProbeRevoked(origin, token) {
 }
 
 
-function pageModalMetrics() {
-  return (async () => {
-    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-    const waitFor = async (read) => {
-      const deadline = Date.now() + 10000
-      while (Date.now() < deadline) {
-        const value = read()
-        if (value) return value
-        await wait(50)
-      }
-      return null
+async function closeModals(session) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (await session.call(pageModalsClosed)) return { closed: true }
+    const cancel = await session.call(pageModalControl, 'cancel') ?? await session.call(pageModalControl, 'category-cancel')
+    if (cancel) { await session.mouse(cancel.x, cancel.y); await sleep(180); continue }
+    for (const type of ['keyDown', 'keyUp']) {
+      await session.send('Input.dispatchKeyEvent', { type, key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
     }
-    const rect = (element) => {
-      if (!element) return null
-      const box = element.getBoundingClientRect()
-      const style = getComputedStyle(element)
-      return {
-        width: Math.round(box.width),
-        height: Math.round(box.height),
-        borderRadius: style.borderRadius,
-        overflowsViewport: box.left < -0.5 || box.right > window.innerWidth + 0.5,
-      }
-    }
-
-    const results = {}
-
-    // 分类弹窗：首页「新增主分类」浮动按钮
-    const createCategory = document.querySelector('[data-testid="home-create-root-category"]')
-    if (createCategory) {
-      createCategory.click()
-      const categoryModal = await waitFor(() => document.querySelector('[aria-labelledby="category-modal-title"]'))
-      results.categoryModal = rect(categoryModal)
-      categoryModal?.querySelector('button')?.click()
-      await waitFor(() => !document.querySelector('[aria-labelledby="category-modal-title"]'))
-    }
-
-    // 书签弹窗：分类区「更多操作」→「新增书签」
-    const scope = document.querySelector('[data-home-category-scope]')
-    const moreTrigger = scope?.querySelector('.scope-more-trigger')
-    if (moreTrigger) {
-      moreTrigger.click()
-      const addBookmark = await waitFor(() => [...document.querySelectorAll('.scope-more-item')].find((node) =>
-        (node.textContent ?? '').includes('新增书签'),
-      ))
-      addBookmark?.click()
-      await waitFor(() => document.querySelector('[data-testid="bookmark-modal"]'))
-    }
-    const bookmarkCard = document.querySelector('[data-testid="bookmark-modal"]')
-    results.bookmarkModal = rect(bookmarkCard)
-    if (bookmarkCard) {
-      const actionBar = bookmarkCard.querySelector('.modal-actions, .bookmark-modal-actions, footer')
-      if (actionBar) {
-        const buttons = [...actionBar.querySelectorAll('button')]
-        const tops = buttons.map((button) => Math.round(button.getBoundingClientRect().top))
-        const bar = actionBar.getBoundingClientRect()
-        results.bookmarkActions = {
-          buttons: buttons.length,
-          // 所有按钮 top 相同即未换行
-          wrapped: new Set(tops).size > 1,
-          overflowsViewport: bar.right > window.innerWidth + 0.5 || bar.left < -0.5,
-          overflowsCard: bar.right > bookmarkCard.getBoundingClientRect().right + 0.5,
-        }
-      }
-    }
-
-    return { viewportWidth: window.innerWidth, results }
-  })()
-}
-
-function pageCloseModals() {
-  return (async () => {
-    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-      await wait(160)
-      if (!document.querySelector('.modal-card, .confirm-dialog, .link-modal')) return { closed: true }
-    }
-    return { closed: !document.querySelector('.modal-card, .confirm-dialog, .link-modal') }
-  })()
+    await sleep(180)
+  }
+  return { closed: await session.call(pageModalsClosed) }
 }
 
 function pageDeployedBundle() {
@@ -389,12 +323,16 @@ async function runFirstVisitChecks(session) {
   phase('L1 / L3 首访与预缓存')
 
   await session.navigate(TARGET_URL)
+  await waitForModal(async () => (await session.call(pageHomeSummary)).appMounted, 'initial home ready', 30000)
   await session.call(pageClearSiteState)
+  await session.send('Page.navigate', { url: 'about:blank' })
+  await waitForModal(() => session.call(() => location.href === 'about:blank'), 'old document disposed')
   session.resetEvidence()
 
   // 清空站点状态后的首访：安装状态探测应当恰好出现一次
   await session.navigate(TARGET_URL)
-  await sleep(1600)
+  await waitForModal(async () => (await session.call(pageHomeSummary)).appMounted, 'home ready', 30000)
+  await session.waitForNetworkIdle()
   const firstVisitInstallProbes = session.responses.filter((item) =>
     item.url.includes('/api/install/status'),
   ).length
@@ -412,7 +350,8 @@ async function runFirstVisitChecks(session) {
   // 二访：安装状态不再探测，且应有响应来自 Service Worker
   session.resetEvidence()
   await session.navigate(TARGET_URL)
-  await sleep(1600)
+  await waitForModal(async () => (await session.call(pageHomeSummary)).appMounted, 'home ready', 30000)
+  await session.waitForNetworkIdle()
 
   const secondVisitInstallProbes = session.responses.filter((item) =>
     item.url.includes('/api/install/status'),
@@ -459,7 +398,7 @@ async function runOfflineCheck(session) {
   try {
     session.resetEvidence()
     await session.navigate(TARGET_URL, { waitIdleMs: 900, timeoutMs: 20000 }).catch(() => { })
-    await sleep(1500)
+    await waitForModal(async () => (await session.call(pageHomeSummary)).appMounted, 'offline home ready', 15000).catch(() => {})
     const offline = await session.call(pageHomeSummary)
     check(
       'offline-navigation-renders-shell',
@@ -561,62 +500,123 @@ async function runAnonymousProbes(session, ids, token) {
 }
 
 async function runModalChecks(session) {
-  phase('PROB-13 U1–U4 弹窗尺寸（桌面 + 390x844）')
-
-  const measured = {}
-  for (const [label, viewport] of [
-    ['desktop', { width: 1440, height: 900, mobile: false, scale: 1 }],
-    ['mobile', { width: 390, height: 844, mobile: true, scale: 2 }],
-  ]) {
-    await session.setViewport(viewport)
-    await session.navigate(TARGET_URL)
-    await sleep(1300)
-    measured[label] = await session.call(pageModalMetrics)
-    await session.call(pageCloseModals)
+  phase('PROB-13 U1–U4 真实弹窗操作（桌面 + 390x844）')
+  const measured = {}, requests = new Map(), browserErrors = []
+  let active = true, stage = 'navigation', viewportLabel = ''
+  session.on('Network.requestWillBeSent', (event) => {
+    if (!active) return
+    const url = new URL(event.request.url)
+    if (!['http:', 'https:'].includes(url.protocol)) return
+    requests.set(event.requestId, {
+      requestId: event.requestId, viewport: viewportLabel, stage,
+      path: url.pathname, sameOrigin: url.origin === TARGET_ORIGIN, method: event.request.method,
+    })
+  })
+  session.on('Network.responseReceived', (event) => {
+    if (active && requests.has(event.requestId)) requests.get(event.requestId).status = event.response.status
+  })
+  session.on('Network.loadingFailed', (event) => {
+    if (active && requests.has(event.requestId)) Object.assign(requests.get(event.requestId), { error: event.errorText, canceled: Boolean(event.canceled) })
+  })
+  session.on('Log.entryAdded', ({ entry }) => {
+    if (active && entry.level === 'error') browserErrors.push({ source: entry.source, text: entry.text, viewport: viewportLabel })
+  })
+  const consoleStart = session.consoleErrors.length, exceptionStart = session.pageExceptions.length
+  const click = async (kind) => {
+    const point = await waitForModal(() => session.call(pageModalControl, kind), kind)
+    await session.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point, button: 'none' })
+    await sleep(120)
+    const ready = await waitForModal(() => session.call(pageModalControl, kind), kind + ' hit target')
+    await session.mouse(ready.x, ready.y)
   }
-  await session.clearViewport()
-
-  const desktopBookmark = measured.desktop?.results?.bookmarkModal
-  const mobileBookmark = measured.mobile?.results?.bookmarkModal
-
-  check(
-    'bookmark-modal-renders-on-both-viewports',
-    'PROB-13 U1–U4',
-    Boolean(desktopBookmark && mobileBookmark),
-    `desktop=${desktopBookmark?.width ?? 'n/a'} mobile=${mobileBookmark?.width ?? 'n/a'}`,
-  )
-
-  if (desktopBookmark && mobileBookmark) {
-    check(
-      'bookmark-modal-radius-consistent',
-      'PROB-13 U1–U4',
-      desktopBookmark.borderRadius === mobileBookmark.borderRadius,
-      `desktop=${desktopBookmark.borderRadius} mobile=${mobileBookmark.borderRadius}`,
-    )
-    check(
-      'bookmark-modal-stays-inside-viewport',
-      'PROB-13 U1–U4',
-      desktopBookmark.overflowsViewport === false && mobileBookmark.overflowsViewport === false,
-      `desktopOverflow=${desktopBookmark.overflowsViewport} mobileOverflow=${mobileBookmark.overflowsViewport}`,
-    )
+  const openBookmark = async () => {
+    if (await session.call(pageModalControl, 'desktop-add')) await click('desktop-add')
+    else { await click('more'); await click('add') }
+    await waitForModal(async () => (await session.call(pageModalMetrics)).results.bookmarkModal?.visible, 'bookmark dialog')
   }
-
-  const mobileActions = measured.mobile?.results?.bookmarkActions
-  if (!mobileActions) {
-    skip(
-      'bookmark-modal-actions-single-row-on-mobile',
-      'PROB-13 U1–U4',
-      'action bar not found; verify the selector against the deployed markup',
-    )
-  } else {
-    check(
-      'bookmark-modal-actions-single-row-on-mobile',
-      'PROB-13 U1–U4',
-      mobileActions.wrapped === false && mobileActions.overflowsViewport === false,
-      `buttons=${mobileActions.buttons} wrapped=${mobileActions.wrapped} overflow=${mobileActions.overflowsViewport}`,
-    )
+  try {
+    for (const [label, viewport] of [
+      ['desktop', { width: 1440, height: 900, mobile: false, scale: 1 }],
+      ['mobile', { width: 390, height: 844, mobile: true, scale: 2 }],
+    ]) {
+      viewportLabel = label
+      stage = 'navigation'
+      const result = measured[label] = { results: {} }
+      try {
+        await session.setViewport(viewport)
+        await session.navigate(TARGET_URL)
+        await session.send('Page.bringToFront')
+        stage = 'interaction'
+        await waitForModal(() => session.call(function homeReady() { return Boolean(document.querySelector('[data-home-category-scope]')) }), 'home category')
+        if (!await session.call(pageModalControl, 'category')) await click('actions')
+        await click('category')
+        await waitForModal(async () => (await session.call(pageModalMetrics)).results.categoryModal?.visible, 'category dialog')
+        await sleep(250)
+        result.results.categoryModal = (await session.call(pageModalMetrics)).results.categoryModal
+        await click('category-cancel')
+        await waitForModal(() => session.call(pageModalsClosed), 'category cancel')
+        await openBookmark()
+        await sleep(250)
+        const metrics = await session.call(pageModalMetrics)
+        Object.assign(result.results, { bookmarkModal: metrics.results.bookmarkModal, bookmarkActions: metrics.results.bookmarkActions })
+        result.viewportWidth = metrics.viewportWidth
+        result.actions = assessModalActions(result.results.bookmarkActions)
+        if (label === 'mobile' && result.actions.passed) {
+          result.negativeControls = []
+          for (const fault of ['missing', 'empty', 'hidden', 'overflow', 'covered']) {
+            const saved = await session.call(pageModalFault, fault)
+            let rejected
+            try { rejected = !assessModalActions((await session.call(pageModalMetrics)).results.bookmarkActions).passed }
+            finally { await session.call(pageModalFault, 'restore', saved) }
+            const restored = assessModalActions((await session.call(pageModalMetrics)).results.bookmarkActions).passed
+            result.negativeControls.push({ fault, rejected, restored })
+            check('modal-negative-control-' + fault, 'PROB-13 U1–U4', rejected && restored, 'rejected=' + rejected + ' restored=' + restored)
+          }
+        }
+        await mkdir(SHOT_DIR, { recursive: true })
+        await writeFile(path.join(SHOT_DIR, 'bookmark-modal-' + label + '.png'), Buffer.from(await session.screenshotBase64(), 'base64'))
+        await click('cancel')
+        result.cancelClosed = Boolean(await waitForModal(() => session.call(pageModalsClosed), 'cancel closes bookmark dialog'))
+        await openBookmark()
+        result.initialFocusInside = await session.call(() => Boolean(document.activeElement?.closest('[data-testid="bookmark-modal"]')))
+        await click('field')
+        let cancelFocused = false
+        for (let tab = 0; tab < 50; tab += 1) {
+          cancelFocused = await session.call(function cancelHasFocus() {
+            return document.activeElement?.matches('[data-testid="bookmark-modal"] form > .modal-actions button.ghost-button') === true
+          })
+          if (cancelFocused) break
+          for (const type of ['keyDown', 'keyUp']) await session.send('Input.dispatchKeyEvent', { type, key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 })
+          await sleep(30)
+        }
+        if (!cancelFocused) throw new Error('Cancel action not reachable by real Tab')
+        for (const type of ['keyDown', 'keyUp']) await session.send('Input.dispatchKeyEvent', { type, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, ...(type === 'keyDown' ? { text: '\r', unmodifiedText: '\r' } : {}) })
+        result.keyboardCancelClosed = Boolean(await waitForModal(() => session.call(pageModalsClosed), 'keyboard cancel'))
+        await session.waitForNetworkIdle()
+      } catch (error) {
+        result.error = String(error?.message ?? error)
+      } finally {
+        result.cleanup = await closeModals(session)
+      }
+      check('modal-real-input-' + label, 'PROB-13 U1–U4', !result.error && result.cancelClosed === true && result.keyboardCancelClosed === true && result.cleanup.closed === true, result.error ?? 'real mouse open/cancel; click input then Tab/Enter cancel')
+    }
+  } finally {
+    active = false
+    await session.clearViewport()
   }
-
+  const desktop = measured.desktop?.results?.bookmarkModal, mobile = measured.mobile?.results?.bookmarkModal
+  check('bookmark-modal-renders-on-both-viewports', 'PROB-13 U1–U4', Boolean(desktop?.visible && mobile?.visible), 'required visible dialogs')
+  check('bookmark-modal-radius-consistent', 'PROB-13 U1–U4', Boolean(desktop && mobile && desktop.borderRadius === mobile.borderRadius), 'desktop and mobile radius')
+  check('bookmark-modal-stays-inside-viewport', 'PROB-13 U1–U4', desktop?.overflowsViewport === false && mobile?.overflowsViewport === false, 'both axes')
+  const verdict = assessModalActions(measured.mobile?.results?.bookmarkActions)
+  check('bookmark-modal-actions-single-row-on-mobile', 'PROB-13 U1–U4', verdict.passed, verdict.passed ? 'two visible, contained and hit-testable controls' : verdict.failures.join(', '))
+  const traffic = [...requests.values()]
+  const unexpected = traffic.filter((r) => (r.status >= 400) || (r.error && !r.canceled))
+  const writes = traffic.filter((r) => r.sameOrigin && !['GET', 'HEAD', 'OPTIONS'].includes(r.method))
+  const consoleErrors = session.consoleErrors.slice(consoleStart), exceptions = session.pageExceptions.slice(exceptionStart)
+  check('modal-flow-no-server-writes', 'PROB-13 U1–U4', writes.length === 0, 'writes=' + writes.length)
+  check('modal-flow-browser-diagnostics', 'PROB-13 U1–U4', unexpected.length === 0 && browserErrors.length === 0 && consoleErrors.length === 0 && exceptions.length === 0, 'unexpected=' + unexpected.length + ' log=' + browserErrors.length + ' console=' + consoleErrors.length + ' exceptions=' + exceptions.length)
+  measured.evidence = { requests: traffic, unexpected, writes, browserErrors, consoleErrors, exceptions }
   return measured
 }
 
@@ -771,13 +771,15 @@ async function main() {
   })
 
   let cleanupOutcome = null
-  const report = { startedAt, target: TARGET_URL, tier: 0, writeOperations: 'none' }
+  const report = { startedAt, target: TARGET_URL, tier: 0, writeOperations: 'none', scope: SCOPE, excluded: SCOPE === 'modals' ? ['first-visit', 'offline', 'anonymous', 'export', 'viewport-screenshots'] : [] }
 
   try {
     await session.start()
     await session.attach()
     report.browserMode = session.startedByTest ? 'isolated-temp-browser' : 'existing-browser-on-port'
     report.profile = session.startedByTest ? PROFILE_DIR : '(not started by this run)'
+    report.ownership = { browserStartedByTest: session.startedByTest, pid: session.chromeProcess?.pid ?? null, targetId: session.targetId, port: DEBUG_PORT }
+    report.headed = !HEADLESS
 
     phase('部署版本')
     await session.navigate(TARGET_URL)
@@ -794,8 +796,10 @@ async function main() {
       bundle.entry ?? `scripts=${bundle.scripts.join(', ')}`,
     )
 
-    report.firstVisit = await runFirstVisitChecks(session)
-    await runOfflineCheck(session)
+    if (SCOPE === 'all') {
+      report.firstVisit = await runFirstVisitChecks(session)
+      await runOfflineCheck(session)
+    }
 
     phase('登录（仅用于读取管理数据）')
     const login = await session.call(pageLogin, TARGET_ORIGIN, credentials.username, credentials.password)
@@ -803,17 +807,20 @@ async function main() {
       throw new Error('login failed; cannot run authenticated read-only probes')
     }
 
-    const ids = await session.call(pageFindPrivateIds, TARGET_ORIGIN, login.token)
-    report.instance = {
-      categories: ids.categoryCount,
-      bookmarks: ids.bookmarkCount,
-      hasPrivateCategory: ids.categoryId != null,
-    }
+    if (SCOPE === 'all') {
+      const ids = await session.call(pageFindPrivateIds, TARGET_ORIGIN, login.token)
+      report.instance = {
+        categories: ids.categoryCount,
+        bookmarks: ids.bookmarkCount,
+        hasPrivateCategory: ids.categoryId != null,
+      }
 
-    report.anonymous = await runAnonymousProbes(session, ids, login.token)
-    report.export = await runExportCheck(session, login.token)
+      report.anonymous = await runAnonymousProbes(session, ids, login.token)
+      report.export = await runExportCheck(session, login.token)
+
+    }
     report.modals = await runModalChecks(session)
-    report.screenshots = await captureViewportScreenshots(session)
+    if (SCOPE === 'all') report.screenshots = await captureViewportScreenshots(session)
 
     // 登出必须最后做：它作废本次的 token，后续读取都会 401
     await session.navigate(TARGET_URL)
@@ -837,6 +844,9 @@ async function main() {
       session.consoleErrors.length === 0,
       `errors=${session.consoleErrors.length}`,
     )
+  } catch (error) {
+    report.fatal = redactCredentials(String(error?.message ?? error), credentials)
+    check('acceptance-run-completed', 'PROB-13', false, report.fatal)
   } finally {
     cleanupOutcome = await session.cleanup()
   }
@@ -862,7 +872,7 @@ async function main() {
   console.log(`  report: ${path.relative(process.cwd(), reportFile)}`)
 
   // 清理失败时不能报告完整通过——清理属于测试结果。
-  const cleanupFailed = (cleanupOutcome?.errors.length ?? 0) > 0
+  const cleanupFailed = (cleanupOutcome?.errors.length ?? 0) > 0 || (session.startedByTest && cleanupOutcome?.profileRemoved !== true)
   if (cleanupFailed) console.error('  cleanup failed:', cleanupOutcome.errors.join('; '))
 
   if (!ALLOW_FAILURES && (report.failed > 0 || cleanupFailed)) process.exitCode = 1

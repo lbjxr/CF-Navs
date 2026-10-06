@@ -1,56 +1,119 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { assessModalActions, pageModalMetrics, pageModalsClosed, waitForModal, pageModalFault } from '../../scripts/lib/modalAcceptanceProbe.mjs'
 
-function readFunction(name: string, next: string) {
-  const source = readFileSync('scripts/prod-acceptance.mjs', 'utf8')
-  const start = source.indexOf('function ' + name + '(')
-  const end = source.indexOf('function ' + next + '(', start)
-  if (start < 0 || end < 0) throw new Error('probe function boundary missing')
-  return new Function(source.slice(start, end) + '; return ' + name)()
+function bounds(element: Element, left: number, top: number, width: number, height: number) {
+  Object.defineProperty(element, 'getBoundingClientRect', { configurable: true, value: () => ({ left, top, right: left + width, bottom: top + height, x: left, y: top, width, height }) })
 }
+function fixture() {
+  document.body.innerHTML = '<div data-testid="bookmark-modal"><form><div class="modal-actions"><button type="button">取消</button><button type="submit" disabled>保存</button></div></form></div>'
+  const card = document.querySelector('[data-testid="bookmark-modal"]')!
+  const bar = card.querySelector('.modal-actions')!
+  const [cancel, save] = [...bar.querySelectorAll('button')]
+  bounds(card, 10, 10, 370, 824)
+  bounds(bar, 24, 770, 342, 54)
+  bounds(cancel, 218, 781, 60, 32)
+  bounds(save, 286, 781, 60, 32)
+  Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: (x: number, y: number) => [...bar.querySelectorAll('button')].find((e) => { const b = e.getBoundingClientRect(); return x >= b.left && x <= b.right && y >= b.top && y <= b.bottom }) ?? card })
+  return { card, bar, cancel, save }
+}
+const measure = () => pageModalMetrics().results.bookmarkActions
 
-afterEach(() => { vi.useRealTimers(); document.body.innerHTML = '' })
+beforeEach(() => { vi.stubGlobal('innerWidth', 390); vi.stubGlobal('innerHeight', 844) })
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); document.body.innerHTML = '' })
 
-describe('acceptance modal readiness', () => {
-  it('waits for lazy modal modules rather than measuring before they render', async () => {
+describe('acceptance modal readiness and action bar contract', () => {
+  it('waits for lazy UI readiness without synthesizing input', async () => {
     vi.useFakeTimers()
-    document.body.innerHTML = '<button data-testid="home-create-root-category"></button><section data-home-category-scope><button class="scope-more-trigger"></button></section>'
-    let categoryClosed = false
-    document.querySelector('[data-testid="home-create-root-category"]')!.addEventListener('click', () => {
-      setTimeout(() => {
-        const dialog = document.createElement('div')
-        dialog.className = 'modal-card'
-        dialog.setAttribute('aria-labelledby', 'category-modal-title')
-        dialog.innerHTML = '<button>取消</button>'
-        dialog.querySelector('button')!.onclick = () => { categoryClosed = true; dialog.remove() }
-        document.body.append(dialog)
-      }, 900)
-    })
-    document.querySelector('.scope-more-trigger')!.addEventListener('click', () => {
-      setTimeout(() => {
-        const button = document.createElement('button')
-        button.className = 'scope-more-item'
-        button.textContent = '新增书签'
-        button.onclick = () => { setTimeout(() => { const modal = document.createElement('div'); modal.className = 'modal-card'; modal.dataset.testid = 'bookmark-modal'; document.body.append(modal) }, 1200) }
-        document.body.append(button)
-      }, 700)
-    })
-    const pending = readFunction('pageModalMetrics', 'pageCloseModals')()
-    await vi.runAllTimersAsync()
-    const result = await pending
-    expect(categoryClosed).toBe(true)
-    expect(result.results.categoryModal).not.toBeNull()
-    expect(result.results.bookmarkModal).not.toBeNull()
+    let ready = false
+    setTimeout(() => { ready = true }, 900)
+    const pending = waitForModal(async () => ready, 'lazy dialog')
+    await vi.advanceTimersByTimeAsync(960)
+    expect(await pending).toBe(true)
   })
-
-  it('still reports a missing bookmark modal instead of accepting another dialog', async () => {
+  it('fails a missing required element rather than skipping', async () => {
     vi.useFakeTimers()
-    document.body.innerHTML = '<section data-home-category-scope><button class="scope-more-trigger"></button></section><div class="modal-card" aria-labelledby="unrelated-dialog"></div>'
-    const pending = readFunction('pageModalMetrics', 'pageCloseModals')()
-    await vi.runAllTimersAsync()
-    const result = await pending
-    expect(result.results.bookmarkModal).toBeNull()
+    const pending = expect(waitForModal(async () => null, 'missing dialog', 160)).rejects.toThrow('missing dialog')
+    await vi.advanceTimersByTimeAsync(240)
+    await pending
+    expect(assessModalActions(null)).toEqual({ passed: false, failures: ['missing-action-bar'] })
+  })
+  it('does not accept an unrelated dialog as the bookmark modal', () => {
+    document.body.innerHTML = '<div class="modal-card" aria-labelledby="unrelated-dialog"></div>'
+    expect(pageModalMetrics().results.bookmarkModal).toBeNull()
+  })
+  it('accepts the actual form action bar including a disabled empty-form save button', () => {
+    fixture()
+    expect(assessModalActions(measure())).toEqual({ passed: true, failures: [] })
+  })
+  it('does not measure an unrelated footer as the action bar', () => {
+    const { bar } = fixture()
+    bar.className = 'different-contract'
+    bar.innerHTML = '<footer><button>取消</button><button>保存</button></footer>'
+    expect(measure()).toBeNull()
+    expect(assessModalActions(measure()).passed).toBe(false)
+  })
+  it('rejects an empty bar rather than passing zero buttons on one row', () => {
+    fixture().bar.innerHTML = ''
+    expect(assessModalActions(measure()).failures).toContain('missing-required-controls')
+  })
+  it('rejects a missing cancel or save control', () => {
+    fixture().save.remove()
+    expect(assessModalActions(measure()).passed).toBe(false)
+  })
+  it('rejects invisible controls and disabled cancel', () => {
+    const { cancel } = fixture()
+    cancel.style.display = 'none'
+    expect(assessModalActions(measure()).passed).toBe(false)
+    cancel.style.display = ''
+    cancel.disabled = true
+    expect(assessModalActions(measure()).passed).toBe(false)
+  })
+  it('rejects hidden action bars', () => {
+    fixture().bar.style.visibility = 'hidden'
+    expect(assessModalActions(measure()).failures).toContain('hidden-action-bar')
+  })
+  it('rejects wrapping and buttons outside the bar', () => {
+    const { save } = fixture()
+    bounds(save, 286, 813, 60, 32)
+    expect(assessModalActions(measure()).failures).toEqual(expect.arrayContaining(['wrapped', 'buttonsInside']))
+  })
+  it('allows subpixel alignment differences but not a second row', () => {
+    const { save } = fixture()
+    bounds(save, 286, 781.4, 60, 32)
+    expect(assessModalActions(measure()).passed).toBe(true)
+  })
+  it('rejects card overflow even when the viewport is not exceeded', () => {
+    bounds(fixture().bar, 0, 770, 390, 54)
+    expect(assessModalActions(measure()).failures).toContain('overflowsCard')
+  })
+  it('rejects vertical viewport overflow', () => {
+    bounds(fixture().bar, 24, 820, 342, 54)
+    expect(assessModalActions(measure()).failures).toContain('overflowsViewport')
+  })
+  it('rejects an occluding overlay', () => {
+    fixture()
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => document.body })
+    expect(assessModalActions(measure()).failures).toContain('hitTargets')
+  })
+  it.each(['missing', 'empty', 'hidden', 'overflow', 'covered'])('restores the original DOM after %s negative control', (fault) => {
+    fixture()
+    const original = document.body.innerHTML
+    const saved = pageModalFault(fault)
+    expect(document.body.innerHTML).not.toBe(original)
+    expect(pageModalFault('restore', saved)).toBe(true)
+    expect(document.body.innerHTML).toBe(original)
+    expect(assessModalActions(measure()).passed).toBe(true)
+  })
+  it('keeps dialog close verification read-only', () => {
+    const { card } = fixture()
+    const cancel = vi.fn()
+    card.addEventListener('click', cancel)
+    expect(pageModalsClosed()).toBe(false)
+    expect(cancel).not.toHaveBeenCalled()
+    card.remove()
+    expect(pageModalsClosed()).toBe(true)
   })
 })
 
