@@ -7,6 +7,7 @@ import net from 'node:net'
 import { randomUUID } from 'node:crypto'
 import { CdpSession, sleep } from './lib/cdpSession.mjs'
 import { verifiedLogoutFailures } from './lib/logoutEvidence.mjs'
+import { pageLegacySnapshots } from './lib/legacySnapshotProbe.mjs'
 import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
@@ -123,23 +124,36 @@ function manifest() {
   return [{ key: `category:${child.id}`, selector: `#home-category-tab-${child.id} [data-category-icon]`, kind:'image', pixels: fixtures.bookmark.pixels }, { key: `category:${category.id}`, selector: `${scope()} > .scope-heading > [data-category-icon]`, kind: 'image', pixels: fixtures.category.pixels },
     ...bookmarks.map((item, i) => ({ key: `bookmark:${item.id}`, selector: card(i), kind: 'image', pixels: item.pixels }))]
 }
-async function home({ waitForImages = true } = {}) {
+async function home({ waitForImages = true, anonymous = false } = {}) {
   await b.send('Page.bringToFront')
+  await wait(() => document.visibilityState === 'visible', [], 10000)
   await b.navigate(base)
   await wait(sel => Boolean(document.querySelector(sel)), [scope()], 30000)
   await click(scope() + ' .scope-root-trigger')
-  await wait(id => document.querySelectorAll(`[data-sort-category-id="${id}"] .bookmark-card-shell`).length >= 3, [category.id], 30000)
-  if (waitForImages) for (const item of manifest()) {
+  await wait((id, count) => document.querySelectorAll(`[data-sort-category-id="${id}"] .bookmark-card-shell`).length >= count, [category.id, anonymous ? 2 : 3], 30000)
+  const imageWaitStart = Date.now()
+  if (waitForImages) for (const item of manifest().filter(row => !anonymous || row.key !== `bookmark:${bookmarks[2].id}`)) {
     await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),item.selector)
-    await wait(sel=>{const e=document.querySelector(sel),img=e?.matches('img')?e:e?.querySelector('img');return img?.complete&&img.naturalWidth>0},[item.selector],20000)
+    await wait(sel=>{const e=document.querySelector(sel),img=e?.matches('img')?e:e?.querySelector('img');return img?.complete&&img.naturalWidth>0},[item.selector],60000).catch(async error=>{
+      report.cases.at(-1).imageReadiness = await b.call(sel=>{const e=document.querySelector(sel),img=e?.querySelector('img'),r=e?.getBoundingClientRect();return {selector:sel,exists:!!e,visibility:document.visibilityState,focused:document.hasFocus(),rect:r?{x:r.x,y:r.y,width:r.width,height:r.height}:null,display:e?getComputedStyle(e).display:null,image:img?{complete:img.complete,width:img.naturalWidth,loading:img.loading,source:img.src.startsWith('blob:')?'blob':img.src.startsWith('data:')?'data':new URL(img.src,location.href).pathname}:null,anonymous:!localStorage.getItem('cf-navs.auth')}},item.selector)
+      await shot('image-readiness-before-recovery').catch(()=>{})
+      report.cases.at(-1).imageReadiness.networkProbe = await b.call(async sel => {
+        const img = document.querySelector(sel)?.querySelector('img')
+        if (!img || !img.src.startsWith(location.origin)) return { applicable: false }
+        try { const response = await fetch(img.src, { cache: 'no-store', signal: AbortSignal.timeout(8000) }); const body = await response.arrayBuffer(); return { status: response.status, bytes: body.byteLength, type: response.headers.get('content-type'), imageStillPending: !img.complete } }
+        catch (error) { return { error: error.name, imageStillPending: !img.complete } }
+      }, item.selector)
+      throw error
+    })
   }
+  if (report.cases.at(-1)) (report.cases.at(-1).imageWaits ??= []).push({ anonymous, elapsedMs: Date.now() - imageWaitStart })
   await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),card(0))
   await b.waitForNetworkIdle(900, 15000)
 }
-async function verifyImages() {
+async function verifyImages(items = manifest()) {
   for (let attempt = 0; attempt < 60; attempt++) {
-    const observed = await b.call(collectIconFixtures, manifest())
-    const result = evaluateIconFixtures(manifest(), observed)
+    const observed = await b.call(collectIconFixtures, items)
+    const result = evaluateIconFixtures(items, observed)
     if (result.passed) return result
     if (attempt === 59) { report.cases.at(-1).imageEvidence={result,observed}; throw new Error('Fixture images: ' + result.errors.join(',')) }
     await sleep(250)
@@ -197,7 +211,11 @@ async function scenario(id, action) {
   if(selectedCases.size&&!selectedCases.has(id)&&!requiredCases.has(id)){const skipped={id,status:'not-run'};report.cases.push(skipped);return skipped}
   stage = id; editorObject=null; const start = report.requests.length, consoles = b.consoleErrors.length, exceptions = b.pageExceptions.length
   const entry = { id, expectedFault: ['28-COPY-503', '29-OLD-401', '29-OFFLINE-FOCUS'].includes(id), started: new Date().toISOString(), status: 'running' }; report.cases.push(entry)
-  try { if((id.startsWith('29-')||id.startsWith('30-')||id.startsWith('28-STORAGE'))&&!await b.call(()=>Boolean(JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token))) await login(); entry.detail = await action(); entry.status = 'passed' } catch (error) { entry.status = 'failed'; entry.error = safe(error.message);
+  try {
+    // Each scenario starts independently; the 300px menu viewport must not leak
+    // into later login/storage flows. Menu cases set their own viewport afterward.
+    await b.setViewport({ width: 1366, height: 900, scale: 1 })
+    if((id.startsWith('29-')||id.startsWith('30-')||id.startsWith('28-STORAGE'))&&!await b.call(()=>Boolean(JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token))) await login(); entry.detail = await action(); entry.status = 'passed' } catch (error) { entry.status = 'failed'; entry.error = safe(error.message);
     entry.visibleUi=await b.call(()=>({heading:document.querySelector('h1')?.textContent?.slice(0,120),splash:document.querySelector('.app-splash-card')?.textContent?.trim().slice(0,250),dialogs:document.querySelectorAll('[role="dialog"]').length,inputs:[...document.querySelectorAll('input')].map(e=>({type:e.type,autocomplete:e.autocomplete})),ready:document.readyState})).catch(()=>null);
     entry.iconState=await b.call(async ids=>{
       const script=[...document.scripts].find(e=>e.type==='module'&&e.src.includes('/assets/index-'))
@@ -319,7 +337,7 @@ try {
   })()`})
   await b.send('Log.enable')
   b.on('Log.entryAdded',({entry})=>{if(['warning','error'].includes(entry.level)) report.browserLog.push({stage,level:entry.level,source:entry.source,requestId:entry.networkRequestId,text:safe(entry.text)})})
-  report.ownership = { profile, pid: b.chromeProcess.pid, port, targetId: b.targetId, headed: true }
+  report.ownership = { profile, pid: b.chromeProcess.pid, port, targetId: b.targetId, headed: true, nativeWindowOcclusionDisabled: true }
   await fs.writeFile(path.join(output, 'ownership.json'), JSON.stringify(report.ownership))
   b.on('Fetch.requestPaused', event => {
     Promise.resolve(fetchHandler ? fetchHandler(event) : false).then(handled => {
@@ -409,6 +427,36 @@ try {
     assert(await b.call(manifest=>manifest.every(row=>document.querySelector(row.selector)?.querySelector('img')?.src.startsWith('blob:')),manifest()),'Warm fixture did not use object URLs')
     const rows=report.requests.slice(start),network=assessStableIcons(rows.filter(row=>['icon-body','icon-copy'].includes(row.kind)))
     assert(network.passed,JSON.stringify(network));return {persisted,network,otherImageRequests:rows.filter(row=>['external-image','iconify-body'].includes(row.kind)).length}
+  })
+  for (const access of ['admin', 'public']) await scenario('28-LEGACY-SNAPSHOT-' + access.toUpperCase(), async () => {
+    const anonymous = access === 'public'
+    const ids = bookmarks.filter((_, i) => !anonymous || i < 2).map(row => row.id)
+    const expected = manifest().filter(row => !anonymous || row.key !== 'bookmark:' + bookmarks[2].id)
+    try {
+      if (anonymous) { await home(); await homeAction('logout'); await wait(() => !localStorage.getItem('cf-navs.auth')) }
+      report.cases.at(-1).progress = 'anonymous/login baseline'
+      await home({ anonymous })
+      await verifyImages(expected)
+      await wait(async (ids, access) => {
+        const prefix = 'cf-navs.' + access + '-data.'
+        return Object.keys(localStorage).some(key => key.startsWith(prefix) && ids.every(id => JSON.parse(localStorage.getItem(key)).data?.bookmarks?.some(row => row.id === id)))
+      }, [ids, access])
+      report.cases.at(-1).progress = 'seed old snapshot'
+      const seeded = await b.call(pageLegacySnapshots, ids, access, 'seed')
+      assert(seeded.length > 0 && seeded.every(row => row.version === null && row.empty === ids.length), 'Legacy empty snapshot was not seeded for all owned records')
+      const start = report.requests.length, beforeDocument = await b.call(() => performance.timeOrigin)
+      await home({ anonymous })
+      const images = await verifyImages(expected)
+      const refreshed = await b.call(pageLegacySnapshots, ids, access)
+      assert(refreshed.length > 0 && refreshed.every(row => row.version === 1 && row.images === ids.length && row.empty === 0), 'Snapshot was not rewritten with correct image metadata')
+      const metadata = report.requests.slice(start).filter(row => row.path === (anonymous ? '/api/public/data' : '/api/admin/data') && row.status === 200)
+      assert(metadata.length > 0, 'Old data version skipped authoritative metadata refresh')
+      assert(await b.call(() => performance.timeOrigin) !== beforeDocument, 'Upgrade simulation did not replace the document')
+      if (anonymous) assert(await b.call(id => !document.querySelector('[data-sort-id="' + id + '"]'), bookmarks[2].id), 'Anonymous recovery exposed the private fixture')
+      return { scope: access, seeded, refreshed, metadataResponses: metadata.map(row => row.requestId), images, sameProfile: true, distinctBuildUpgrade: false }
+    } finally {
+      if (anonymous) { await login(); await home() }
+    }
   })
   await scenario('28-RIGHT-CLICK-ON', async () => stableOperation(async () => { await click(card(0), 'right'); await key('Escape'); }))
   await scenario('29-TAB-FOCUS', async () => stableOperation(async () => {
@@ -580,8 +628,9 @@ try {
   await scenario('29-LOGOUT-LOGIN-INTENT', async () => {
     await home()
     let held = null
-    return intercept([{ urlPattern: '*/api/public/data*', requestStage: 'Response' }], async event => {
-      if (held) return false
+    return intercept([{ urlPattern: '*/api/public/data*', requestStage: 'Response' }, { urlPattern: '*/api/data/version*', requestStage: 'Response' }], async event => {
+      const authenticated = Object.entries(event.request.headers ?? {}).some(([key, value]) => key.toLowerCase() === 'authorization' && String(value).startsWith('Bearer '))
+      if (held || authenticated) return false
       held = event
       return true
     }, async () => {
@@ -590,7 +639,7 @@ try {
       await localWait(() => held, 'Logout public refresh')
       await homeAction('login')
       await fill('input[autocomplete="username"]', 'Synthetic pending login')
-      report.cases.at(-1).preconditions = { logoutRefreshHeld: true, newLoginOpened: true }
+      report.cases.at(-1).preconditions = { logoutRefreshHeld: true, newLoginOpened: true, heldPath: new URL(held.request.url).pathname }
       await b.send('Fetch.continueRequest', { requestId: held.requestId })
       await sleep(1500)
       const retained = await b.call(() => ({ open: Boolean(document.querySelector('[aria-labelledby="login-modal-title"]')), value: document.querySelector('input[autocomplete="username"]')?.value === 'Synthetic pending login' }))
