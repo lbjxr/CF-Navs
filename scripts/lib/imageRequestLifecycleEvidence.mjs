@@ -1,0 +1,203 @@
+// Pure, conservative evidence matching. Network time/wallTime/terminal times are
+// CDP seconds; probe timeOrigin/event.time and all returned wall times are ms.
+// This does not classify any other cancellation, mutate journals, or inspect URLs.
+const positiveId = value => Number.isSafeInteger(value) && value > 0
+const nonempty = value => typeof value === 'string' && value.trim().length > 0
+const iconObject = value => typeof value === 'string' && /^(bookmark|category):[1-9]\d*$/.test(value)
+const originValid = value => Number.isFinite(value) && value >= 0
+
+function nativeImage(row) {
+  return row?.kind === 'icon-body' && row.type === 'Image' && nonempty(row.requestId) &&
+    nonempty(row.stage) && nonempty(row.documentLoaderId) && iconObject(row.object) &&
+    originValid(row.imageLifecycle?.timeOrigin) && positiveId(row.imageLifecycle?.sourceId)
+}
+
+function wallRange(row, terminal) {
+  if (![row.time, row.wallTime, row[terminal]].every(Number.isFinite) || row[terminal] < row.time) return null
+  const start = row.wallTime * 1000
+  const end = start + (row[terminal] - row.time) * 1000
+  return Number.isFinite(start) && Number.isFinite(end) ? { start, end } : null
+}
+
+function completeEvent(event) {
+  if (!event || !Number.isFinite(event.time) || event.time < 0 || !positiveId(event.nodeId) ||
+      !iconObject(event.object) || !(event.sourceId === null || positiveId(event.sourceId))) return false
+  if (event.kind === 'src-changed') return (event.previousSourceId === null || positiveId(event.previousSourceId)) &&
+    (event.previousObject === null || iconObject(event.previousObject)) &&
+    Array.isArray(event.changedQueryKeys) && event.changedQueryKeys.every(key => typeof key === 'string')
+  if (!positiveId(event.sourceId)) return false
+  if (event.kind === 'loaded') return typeof event.complete === 'boolean' &&
+    Number.isFinite(event.naturalWidth) && event.naturalWidth >= 0 &&
+    Number.isFinite(event.naturalHeight) && event.naturalHeight >= 0
+  return event.kind === 'observed' || event.kind === 'removed' || event.kind === 'error'
+}
+
+function documentSnapshot(row, snapshots) {
+  const sameDocument = snapshots.filter(snapshot => snapshot?.loaderId === row.documentLoaderId &&
+    snapshot.timeOrigin === row.imageLifecycle.timeOrigin)
+  // A later zero cannot repair an earlier gap. Stage is capture metadata here:
+  // snapshots are cumulative within a document, whereas request stages must match.
+  if (sameDocument.some(snapshot => snapshot.dropped > 0)) return null
+  let best = null
+  for (const snapshot of sameDocument) {
+    if (snapshot.dropped === 0 && Array.isArray(snapshot.events) &&
+        (!best || snapshot.events.length > best.events.length)) best = snapshot
+  }
+  if (!best || !best.events.every((event, index) => completeEvent(event) &&
+      (index === 0 || event.time >= best.events[index - 1].time))) return null
+  return best
+}
+
+function realImageResponse(row) {
+  if (row.status !== 200 || row.error || row.canceled) return false
+  const headers = Object.entries(row.headers ?? {})
+  const contentTypes = headers.filter(([name]) => name.toLowerCase() === 'content-type')
+  if (!contentTypes.length || !contentTypes.every(([, value]) => typeof value === 'string' &&
+      /^image\/[a-z0-9!#$&^_.+-]+(?:\s*;|$)/i.test(value.trim()))) return false
+  return !headers.some(([name, value]) => name.toLowerCase() === 'x-icon-fallback' &&
+    String(value).split(',').some(part => part.trim() === '1'))
+}
+
+function continuousOwner(events, transitionIndex, loadedIndex, old, startWallTime) {
+  const transition = events[transitionIndex]
+  const loadedWallTime = old.imageLifecycle.timeOrigin + events[loadedIndex].time
+  return !events.some((event, index) => {
+    const wallTime = old.imageLifecycle.timeOrigin + event.time
+    if (event.nodeId !== transition.nodeId || wallTime < startWallTime || wallTime > loadedWallTime) return false
+    if (event.kind === 'removed') return true
+    if (event.kind !== 'src-changed' || index === transitionIndex) return false
+    // Before the refresh the owner must still use the old source; afterwards it
+    // must keep the replacement. A switch away and back is not continuous proof.
+    return event.sourceId !== (index < transitionIndex ? old.imageLifecycle.sourceId : transition.sourceId)
+  })
+}
+
+// The deadline includes MutationObserver's existing 100ms delivery allowance.
+// Only states observed by that deadline count; later mounts are not consumers of
+// this canceled request. A src change on an already removed node does not reattach it.
+function oldConsumersRetired(events, old, canceledWallTime) {
+  const states = new Map()
+  for (const event of events) {
+    if (old.imageLifecycle.timeOrigin + event.time > canceledWallTime + 100) break
+    const previous = states.get(event.nodeId)
+    const connected = event.kind === 'removed' ? false : event.kind === 'observed' ? true : previous?.connected ?? true
+    states.set(event.nodeId, { connected, sourceId: event.sourceId })
+  }
+  return ![...states.values()].some(state => state.connected && state.sourceId === old.imageLifecycle.sourceId)
+}
+
+function verifiedOwnerPath(events, transitionIndex, loadedIndex, old, startWallTime) {
+  const transition = events[transitionIndex]
+  const loaded = events[loadedIndex]
+  if (loaded.nodeId === transition.nodeId) return continuousOwner(events, transitionIndex, loadedIndex, old, startWallTime)
+  if (!continuousOwner(events, transitionIndex, transitionIndex, old, startWallTime)) return false
+
+  // Cross-node success needs an explicit handoff, never just matching pixels.
+  // The departing node must be removed with the replacement source still current.
+  let removedIndex = -1
+  for (let index = transitionIndex + 1; index < loadedIndex; index++) {
+    const event = events[index]
+    if (event.nodeId !== transition.nodeId) continue
+    if (event.kind === 'src-changed') return false
+    if (event.kind === 'removed') {
+      if (event.sourceId !== transition.sourceId || event.object !== old.object) return false
+      removedIndex = index
+      break
+    }
+  }
+  if (removedIndex < 0) return false
+
+  // An existing node (even if re-observed later) is not proof of a fresh mount.
+  const observedIndex = events.findIndex(event => event.nodeId === loaded.nodeId)
+  const observed = events[observedIndex]
+  if (observedIndex <= removedIndex || observedIndex >= loadedIndex || observed.kind !== 'observed' ||
+      observed.object !== old.object || observed.sourceId !== transition.sourceId) return false
+  for (let index = observedIndex + 1; index < loadedIndex; index++) {
+    const event = events[index]
+    if (event.nodeId === loaded.nodeId && (event.kind === 'removed' || event.kind === 'src-changed' ||
+        event.sourceId !== transition.sourceId || event.object !== old.object)) return false
+  }
+  return true
+}
+
+/**
+ * rows: the runner's request journal (headers contain Content-Type/X-Icon-Fallback).
+ * snapshots: flat {loaderId, timeOrigin, dropped, events, ...captureMetadata} entries.
+ * Returns only request-specific, unambiguous completed key-refresh evidence.
+ */
+export function verifiedSignedImageReplacements(rows, snapshots) {
+  if (!Array.isArray(rows) || !Array.isArray(snapshots)) return []
+  const candidates = []
+  for (const old of rows) {
+    if (!nativeImage(old) || old.error !== 'net::ERR_ABORTED' || old.canceled !== true ||
+        (old.status != null && (!Number.isInteger(old.status) || old.status < 100 || old.status >= 400))) continue
+    const canceled = wallRange(old, 'failureTime')
+    if (!canceled) continue
+    const snapshot = documentSnapshot(old, snapshots)
+    if (!snapshot || !oldConsumersRetired(snapshot.events, old, canceled.end)) continue
+    const { events, timeOrigin } = snapshot
+    for (let transitionIndex = 0; transitionIndex < events.length; transitionIndex++) {
+      const transition = events[transitionIndex]
+      const transitionWallTime = timeOrigin + transition.time
+      if (transition.kind !== 'src-changed' || transition.previousSourceId !== old.imageLifecycle.sourceId ||
+          transition.object !== old.object || transition.previousObject !== old.object ||
+          !positiveId(transition.sourceId) || transition.sourceId === old.imageLifecycle.sourceId ||
+          transition.changedQueryKeys.length !== 1 || transition.changedQueryKeys[0] !== 'key' ||
+          !Number.isFinite(transitionWallTime) || transitionWallTime < canceled.start ||
+          transitionWallTime > canceled.end + 100 || Math.abs(transitionWallTime - canceled.end) > 500) continue
+      const ownedBefore = events.slice(0, transitionIndex).some(event =>
+        (event.kind === 'observed' || event.kind === 'src-changed') && event.nodeId === transition.nodeId &&
+        event.sourceId === old.imageLifecycle.sourceId && event.object === old.object)
+      if (!ownedBefore) continue
+      for (const replacement of rows) {
+        if (!nativeImage(replacement) || replacement.requestId === old.requestId || replacement.stage !== old.stage ||
+            replacement.documentLoaderId !== old.documentLoaderId || replacement.object !== old.object ||
+            replacement.imageLifecycle.timeOrigin !== timeOrigin || replacement.imageLifecycle.sourceId !== transition.sourceId ||
+            !realImageResponse(replacement)) continue
+        const finished = wallRange(replacement, 'finishedTime')
+        if (!finished || finished.start < transitionWallTime - 100 || finished.start > transitionWallTime + 500) continue
+        for (let loadedIndex = transitionIndex + 1; loadedIndex < events.length; loadedIndex++) {
+          const loaded = events[loadedIndex]
+          const loadedWallTime = timeOrigin + loaded.time
+          if (loaded.kind !== 'loaded' || loaded.sourceId !== transition.sourceId ||
+              loaded.object !== old.object || loaded.complete !== true || !(loaded.naturalWidth > 0 && loaded.naturalHeight > 0) ||
+              !Number.isFinite(loadedWallTime) || loadedWallTime < transitionWallTime || loadedWallTime < finished.end - 100 ||
+              !verifiedOwnerPath(events, transitionIndex, loadedIndex, old, canceled.start)) continue
+          candidates.push({
+            evidence: { requestId: old.requestId, replacementRequestId: replacement.requestId, object: old.object,
+              nodeId: transition.nodeId, replacementNodeId: loaded.nodeId, timeOrigin, transitionWallTime, canceledWallTime: canceled.end, loadedWallTime,
+              reason: 'signed-icon-key-refresh' },
+            transitionKey: JSON.stringify([old.documentLoaderId, timeOrigin, transition.nodeId,
+              transition.previousSourceId, transition.sourceId, transitionIndex, transitionWallTime]),
+          })
+          break
+        }
+      }
+    }
+  }
+
+  // Never select the first request arbitrarily if the same transition/completion
+  // could explain multiple Network IDs. Multiple verified consumers of the same
+  // old/new request pair are valid shared-request evidence: keep the first full
+  // chain as the representative, without turning them into extra exemptions.
+  const byRequest = new Map()
+  const byTransition = new Map()
+  const byReplacement = new Map()
+  for (const candidate of candidates) {
+    const { requestId, replacementRequestId } = candidate.evidence
+    if (!byRequest.has(requestId)) byRequest.set(requestId, new Map())
+    if (!byRequest.get(requestId).has(replacementRequestId)) byRequest.get(requestId).set(replacementRequestId, candidate)
+    for (const [map, key] of [[byTransition, candidate.transitionKey], [byReplacement, replacementRequestId]]) {
+      if (!map.has(key)) map.set(key, new Set())
+      map.get(key).add(requestId)
+    }
+  }
+  const evidence = []
+  for (const matches of byRequest.values()) {
+    if (matches.size !== 1) continue
+    const match = matches.values().next().value
+    if (byTransition.get(match.transitionKey).size === 1 &&
+        byReplacement.get(match.evidence.replacementRequestId).size === 1) evidence.push(match.evidence)
+  }
+  return evidence
+}

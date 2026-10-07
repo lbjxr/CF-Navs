@@ -9,6 +9,8 @@ import { CdpSession, sleep } from './lib/cdpSession.mjs'
 import { verifiedLogoutFailures } from './lib/logoutEvidence.mjs'
 import { pageLegacySnapshots } from './lib/legacySnapshotProbe.mjs'
 import { pageReadFixtureCopy } from './lib/iconCopyStorageProbe.mjs'
+import { pageInstallImageLifecycleProbe } from './lib/imageRequestLifecycleProbe.mjs'
+import { verifiedSignedImageReplacements } from './lib/imageRequestLifecycleEvidence.mjs'
 import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
@@ -31,6 +33,9 @@ const b = new CdpSession({ chromeExe: resolveSetting('CHROME_EXE', 'chromeExe', 
 const report = { run, cacheMode, browserLog: [], cases: [], requests: [], cleanup: {}, excluded: [], limitations: [] }
 let stage = 'setup', token = '', category, child, bookmarks = [], ownedCategories = [], ownedBookmarks = [], secondary = null
 const requests = new Map()
+const imageRequestUrls = new Map()
+report.imageLifecycles = []
+report.imageLifecycleErrors = []
 const responseReads = new Set()
 const observedCopyResponses = []
 let fetchHandler = null
@@ -44,6 +49,26 @@ let offlineActive = false
 function safe(value) { return redactCredentials(String(value), credentials).replaceAll(base, '[test-origin]').replaceAll(token || '\u0000', '[token]').replace(/([?&](?:key|token)=)[^\s&"']+/g, '$1[redacted]') }
 async function persist() { await fs.writeFile(path.join(output, 'report.json'), safe(JSON.stringify(report, null, 2))) }
 function assert(value, message) { if (!value) throw new Error(message) }
+async function collectImageLifecycle(reason) {
+  try {
+    const loaderId = (await b.send('Page.getFrameTree')).frameTree.frame.loaderId
+    const rows = report.requests.filter(row => row.documentLoaderId === loaderId && imageRequestUrls.has(row.requestId))
+    if (!rows.length) return
+    const captured = await b.call(urls => {
+      const probe=window.__issueImageLifecycle
+      if(!probe)return null
+      return {snapshot:probe.read(),sourceIds:urls.map(url=>probe.sourceId(url))}
+    }, rows.map(row=>imageRequestUrls.get(row.requestId)))
+    if (!captured) throw new Error('Image lifecycle probe missing in active document')
+    rows.forEach((row,index)=>{row.imageLifecycle={timeOrigin:captured.snapshot.timeOrigin,sourceId:captured.sourceIds[index]}})
+    report.imageLifecycles.push({stage,reason,loaderId,...captured.snapshot})
+  } catch (error) { report.imageLifecycleErrors.push({stage,reason,error:safe(error.message)}) }
+}
+const navigate = b.navigate.bind(b)
+b.navigate = async (...args) => {
+  await collectImageLifecycle('before-navigation')
+  return navigate(...args)
+}
 async function wait(fn, args = [], timeout = 20000) {
   const end = Date.now() + timeout
   while (Date.now() < end) { const result = await b.call(fn, ...args); if (result) return result; await sleep(120) }
@@ -232,6 +257,7 @@ async function scenario(id, action) {
       return {deviceFound:!!device,storeFound:!!store,phase:state?.phase,epoch:state?.epoch,trusted:state?.trusted,enabled:state?.enabledForPage,hasLease:!!state?.lease,categories:data?.categories?.filter(e=>ids.includes(e.id)).map(e=>({id:e.id,sourcePresent:!!e.icon,display:e.icon_display,revision:e.icon_revision,write:e.icon_write_epoch}))}
     },ownedCategories).catch(()=>null);
     if(category && !await b.call(()=>Boolean(document.querySelector('input[type="password"]'))).catch(()=>true)) await shot(id+'-failed').catch(()=>{}) }
+  await collectImageLifecycle('scenario-end')
   entry.requests = report.requests.slice(start).map(r => r.requestId)
   entry.console = b.consoleErrors.slice(consoles).map(e => safe(JSON.stringify(e)))
   entry.exceptions = b.pageExceptions.slice(exceptions).map(e => safe(JSON.stringify(e)))
@@ -309,6 +335,7 @@ try {
     await fetch(base+'/api/logout',{method:'POST',headers:{authorization:'Bearer '+bootstrap.data.token}})
   }
   await b.start(); await b.attach()
+  await b.send('Page.addScriptToEvaluateOnNewDocument', {source:`(${pageInstallImageLifecycleProbe.toString()})()`})
   await b.send('Runtime.addBinding',{name:'__issueCopyObserved'})
   b.on('Runtime.bindingCalled',event=>{if(event.name==='__issueCopyObserved'){try{observedCopyResponses.push(JSON.parse(event.payload))}catch{}}})
   // Observe the same response without substituting bytes or changing the request.
@@ -367,6 +394,8 @@ try {
       },e.request.url).then(matches=>{if(matches){for(const request of report.requests)if(request.requestId===row.requestId)request.resourceRole='site-background';row.resourceRole='site-background'}}).catch(()=>{})
     }
     if(row.kind==='icon-copy') {try{const body=JSON.parse(e.request.postData);row.copyRequest={dataset_epoch:body.dataset_epoch,expected_write_epoch:body.expected_write_epoch,expected_content_revision:body.expected_content_revision}}catch{}}
+    row.documentLoaderId=e.loaderId
+    if(row.kind==='icon-body'&&row.type==='Image')imageRequestUrls.set(e.requestId,e.request.url)
     requests.set(e.requestId, row); report.requests.push(row)
     if(editorObject && ['icon-body','icon-copy','iconify-body','external-image'].includes(row.kind)) {
       const previewFor=editorObject
@@ -857,6 +886,8 @@ finally {
   } catch (error) { report.cleanup.serverError = safe(error.message) }
   if (secondary) await b.send('Target.closeTarget', { targetId: secondary }).catch(() => {})
   await Promise.allSettled([...responseReads])
+  await collectImageLifecycle('before-browser-close')
+  imageRequestUrls.clear()
   report.cleanup.browser = await b.cleanup()
   for(const packet of observedCopyResponses){
     const candidates=report.requests.filter(row=>row.kind==='icon-copy'&&row.object===packet.object&&row.status===packet.status&&
@@ -872,15 +903,17 @@ finally {
   const revokedRequests = new Set(verifiedLogoutFailures(report.requests))
   report.verifiedLogoutFailures = [...revokedRequests]
   report.unexpectedHttp = report.requests.filter(e => e.status >= 400 && !injectedRequests.has(e.requestId) && !protocolConflicts.has(e.requestId) && !canceledHttp.has(e.requestId) && !revokedRequests.has(e.requestId))
+  report.verifiedSignedImageReplacements = verifiedSignedImageReplacements(report.requests, report.imageLifecycles)
+  const signedImageCancellations = new Set(report.verifiedSignedImageReplacements.map(row=>row.requestId))
   report.failedRequests = report.requests.filter(e => e.error)
   report.expectedOfflineRequests=[...expectedOfflineRequests]
   report.expectedTimeoutRequests=[...expectedTimeoutRequests]
   report.expectedReacquireRequests=[...expectedReacquireRequests]
   report.validatedInjectedCancellations=report.failedRequests.filter(row=>isExpectedInjectedCancellation(row,expectedInjectedCancellations)).map(row=>row.requestId)
-  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations))
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||revokedRequests.has(e.requestId))))
+  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||revokedRequests.has(e.requestId))))
   report.injectedRequests=[...injectedRequests]
   await persist()
   console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))
-  if (report.fatal || report.interceptionError || report.unexpectedHttp.length || report.unexpectedFailures.length || report.consoleFindings.length || report.cases.some(c => c.status === 'failed') || !report.cleanup.serverFixturesRemoved || !report.cleanup.browser.profileRemoved || report.cleanup.browser.errors.length || report.cleanup.browser.warnings.length) process.exitCode = 1
+  if (report.fatal || report.interceptionError || report.imageLifecycleErrors.length || report.unexpectedHttp.length || report.unexpectedFailures.length || report.consoleFindings.length || report.cases.some(c => c.status === 'failed') || !report.cleanup.serverFixturesRemoved || !report.cleanup.browser.profileRemoved || report.cleanup.browser.errors.length || report.cleanup.browser.warnings.length) process.exitCode = 1
 }

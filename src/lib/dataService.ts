@@ -121,7 +121,10 @@ export function applyPublicData(data: PublicData, version = getDataVersion(data)
   const merged = mergePublicData(currentState.data, cleanData)
 
   if (!currentState.loaded || merged !== currentState.data) {
-    if (progressive) {
+    // A restored snapshot is already visible. Replaying the first 60-item batch
+    // would tear down its later categories/icons, then recreate identical requests.
+    // Replacement still removes revoked/deleted data immediately; only cold loads batch.
+    if (progressive && !currentState.loaded) {
       publicStore.setDataProgressively(merged)
     } else {
       publicStore.setData(merged)

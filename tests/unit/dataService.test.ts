@@ -675,3 +675,56 @@ describe('dataService authoritative edit reads', () => {
     expect(adminCache.readCachedAdminDataEntry).not.toHaveBeenCalled()
   })
 })
+
+
+describe('warm public snapshot rendering', () => {
+  function largeData(version: string, count = 150): PublicData {
+    const data = makePublicData(version)
+    data.bookmarks = Array.from({ length: count }, (_, index) => makePublicBookmark({ ...bookmark, id: index + 1, title: 'Synthetic ' + index }))
+    return data
+  }
+  it('does not retract an already visible full list into a first batch on refresh', async () => {
+    vi.useFakeTimers()
+    const lengths: number[] = []
+    let stop = () => {}
+    try {
+      applyPublicData(largeData('before'))
+      stop = publicStore.subscribe(state => { if (state.data) lengths.push(state.data.bookmarks.length) })
+      const next = largeData('after'); next.bookmarks[149].title = 'Changed synthetic title'
+      applyPublicData(next, 'after', true)
+      expect(lengths).toEqual([150, 150])
+      expect(get(publicStore).data?.bookmarks[149].title).toBe('Changed synthetic title')
+      await vi.runAllTimersAsync()
+      expect(lengths).toEqual([150, 150])
+    } finally { stop(); vi.useRealTimers() }
+  })
+  it('keeps restored cached data complete while applying the authoritative response', async () => {
+    vi.useFakeTimers()
+    const lengths: number[] = []
+    const stop = publicStore.subscribe(state => { if (state.data) lengths.push(state.data.bookmarks.length) })
+    try {
+      publicCache.readCachedPublicDataEntry.mockResolvedValueOnce({data:largeData('before'),version:'before'})
+      api.data.version.mockResolvedValueOnce({version:'after',site_title:'Synthetic',public_mode:true})
+      const next=largeData('after');next.bookmarks[149].title='Refreshed'
+      api.public.getData.mockResolvedValueOnce(next)
+      await refreshPublicData(true)
+      expect(lengths).toEqual([150,150])
+      expect(dataHooks.onLocalSnapshotRestored).toHaveBeenCalledOnce()
+      expect(publicCache.writeCachedPublicData).toHaveBeenCalledOnce()
+      expect(get(publicStore).data?.bookmarks[149].title).toBe('Refreshed')
+    } finally { stop(); await vi.runAllTimersAsync(); vi.useRealTimers() }
+  })
+  it('applies removal immediately and invalidates previous first-load batches', async () => {
+    vi.useFakeTimers()
+    try {
+      applyPublicData(largeData('first'), 'first', true)
+      expect(get(publicStore).data?.bookmarks).toHaveLength(60)
+      applyPublicData(largeData('replacement',149), 'replacement', true)
+      expect(get(publicStore).data?.bookmarks).toHaveLength(149)
+      await vi.runAllTimersAsync()
+      expect(get(publicStore).data?.bookmarks).toHaveLength(149)
+      expect(get(publicStore).data?.bookmarks.some(item=>item.id===150)).toBe(false)
+      expect(getCurrentDataVersion()).toBe('replacement')
+    } finally { vi.useRealTimers() }
+  })
+})

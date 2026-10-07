@@ -78,7 +78,7 @@ node scripts/issue-browser-regression.mjs
 - 故障仍在时读取实际 DOM 图像，要求目标 `/api/icon/<id>` 的真实 Fetch 请求：200、image MIME、非兜底、非 HTTP 缓存/SW、正文完成且像素符合独立 fixture。要求该响应结束后新创建并已显示的 Blob（创建时间、MIME、大小与独立像素证据）；原生 Image 假设、既有 blob/data 热图、单纯 200、诊断 fetch、重载或解除暂扣后才显示均不算回退证据。随后 IDB 仍须 entry/body 均缺失；同一故障窗口出现第二个目标副本请求会保留现场并失败，不把多次取消合并成一次成功。
 - 解除拦截后不改数据、不再次清库、不调用 Loader 或手工 fetch；等待挂载组件现有有界重试发出晚于恢复时刻的新请求。要求 protocol=1、session-scoped、正确描述符和正文字节数、正确 Blob 像素；IDB 原生 Blob 按协议前缀 + MIME + 正文计算的 SHA-256、大小及描述符必须与响应相符（不是裸正文 SHA-256）。被解除暂扣的旧请求不能当成新申请。
 - `cases[].timeout` 保留冷前置、注入请求、失败前截图/存储元数据、取消耗时、代理 requestId、恢复新 requestId 及 IDB 校验。故障失败在 Fetch 恢复前持久化；后续恢复不改写失败。既有 intercept finally 及案例 finally 恢复 Fetch、HTTP 缓存/SW；全局 finally 删除本轮服务器 fixture 并清理专用浏览器。恢复失败使整轮失败。
-- `expectedTimeoutRequests` 仅在冷缺失、时限、真实代理和像素全部通过后加入暂扣的确切 requestId；`28-CANCEL-REACQUIRE` 同样只记录自己的被扣请求。最终 `validatedInjectedCancellations` 还须核对 `canceled=true + net::ERR_ABORTED`。**未注入取消不再默认成功**；另一个 requestId、其他网络错误、HTTP 错误和控制台异常仍进失败门。旧用例若显露取消，必须核对证据，不能恢复整体豁免。
+- `expectedTimeoutRequests` 仅在冷缺失、时限、真实代理和像素全部通过后加入暂扣的确切 requestId；`28-CANCEL-REACQUIRE` 同样只记录自己的被扣请求。最终 `validatedInjectedCancellations` 还须核对 `canceled=true + net::ERR_ABORTED`。**未注入取消不再默认成功**；只有下节规定的完整原生图片签名换源链可另行核准。另一个 requestId、其他网络错误、HTTP 错误和控制台异常仍进失败门，不能恢复整体豁免。
 
 无需浏览器的判定逻辑检查：
 
@@ -90,6 +90,17 @@ node --experimental-sqlite node_modules/vitest/vitest.mjs run tests/unit/issueBr
 ```
 
 `protocol` / timing 是观测证据，不是连接异常根因结论。副本队列 10 秒期限与普通 `<img>` 持续挂起是两条链路：即使同路径 `fetch(cache:no-store)` 成功，原 Image 仍未响应/显示时也不能判通过，不能由副本修复推断匿名图片挂起根因已定位。不得延长既有等待或用额外请求掩盖失败；保留原图片 requestId 与独立诊断请求。纯判定单测通过不代表测试站案例通过。
+
+## 原生图片签名换源的取消证据
+
+原生 Image 的取消不等于网络故障，也不能按 ERR_ABORTED 整体忽略。runner 在每个 document 安装只读 MutationObserver/load/error 探针，导航前与场景结束时批量关联请求；不更改 src、loading、网络响应或产品 store。
+
+- URL 与 query 值只在本轮内存中用于关联，不写入报告。报告只含 sourceId、nodeId、对象类型/ID、参数名、文档时间原点、加载尺寸和时间。每个文档最多保留 2000 条事件；丢事件、探针缺失、错误时间线均不能形成成功证明。
+- `verifiedSignedImageReplacements` 要求同一文档/场景/对象：旧请求确实 ERR_ABORTED；src 只更换 key 参数；取消前所有旧 source 使用者都已换源或移除；准确的新请求返回 200 图像、非兜底，正文完成，并有对应节点完成解码的原生 load 事件。
+- 支持同节点换源，或完整的“换 key → 旧节点 removed → 新节点 observed → loaded”交接链；单纯另一张图片成功不够。节点期间再次换源、仍有旧使用者、替代请求未完成、HTTP 错误或文档不匹配，全部拒绝。
+- 时间关联使用 CDP 单调时间与文档 performance.timeOrigin；MutationObserver 只保证观察时刻，允许 100ms 交付容差和明确的 500ms 换源关联窗口。没有时间字段时不填零、不猜测。
+- 已核准旧 requestId 保留在 failedRequests，并单独列出 replacementRequestId、nodeId/replacementNodeId、换源/取消/加载时间。其他取消、真正的超时或连接错误仍进入失败门。采证失败本身也使整轮失败。
+- 暖快照刷新应直接应用完整权威数据；不能为渐进首屏优化把已显示的完整列表重新缩为首批。只有冷状态继续分批，权限变化/删除仍立即生效。本轮不改变 Chrome 协议偏好，不通过禁用 QUIC 或强制 eager 制造通过。
 
 ## 扩展用例：不得用上述结果替代
 
@@ -115,7 +126,7 @@ node --experimental-sqlite node_modules/vitest/vitest.mjs run tests/unit/issueBr
 
 若 Chrome 在客户端取消后不再提供 Network 响应正文，浏览器只读克隆观察器保留真实响应的协议元数据，通过对象/描述符/时间匹配原 requestId；不改变响应或存储图像正文。无法匹配或读取时仍不豁免冲突。
 
-经具体注入 requestId 核准的已取消错误响应保留在 `canceledResponses`，不冒充已验证的 409 协商；其请求仍受操作级稳定性检查约束。未注入取消保留在 `failedRequests` 并进入失败门。仅具有真实 CSS URL 匹配的站点背景请求可移出图标正文预算，外部图像不得整体豁免。
+经具体注入 requestId 核准的已取消错误响应保留在 `canceledResponses`，不冒充已验证的 409 协商；其请求仍受操作级稳定性检查约束。未注入取消始终保留在 `failedRequests`；缺少下述完整签名换源证明时仍进入失败门。仅具有真实 CSS URL 匹配的站点背景请求可移出图标正文预算，外部图像不得整体豁免。
 
 独立热路径用例必须先核验原生 IndexedDB 已保存各 fixture 正文，再重载检查对象 URL 与对象正文零请求；其他页面图片请求继续在报告中计数，不把首次填充叫作热命中。弹层点击优先保持已可见目标，仅在需要时最小滚动，始终复核实际命中。
 
