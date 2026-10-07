@@ -20,6 +20,7 @@ describe('native image watchdog', () => {
     } as IntersectionObserverEntry], observer)
   }
   function update(source = url, enabled = true) {
+    if (image.getAttribute('src') !== source) image.src = source
     watchdog.update({ url: source, enabled })
   }
   function hidden(value: boolean) {
@@ -108,6 +109,7 @@ describe('native image watchdog', () => {
     update()
     intersection(true)
     vi.advanceTimersByTime(5000)
+    if (event === 'load') Object.defineProperties(image, { complete: { configurable: true, value: true }, naturalWidth: { configurable: true, value: 24 } })
     image.dispatchEvent(new Event(event))
     intersection(true)
     update()
@@ -300,5 +302,31 @@ describe('native image watchdog', () => {
     expect(setAttribute).not.toHaveBeenCalled()
     expect(src).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not let the old completed source settle a new URL before its DOM update', () => {
+    Object.defineProperties(image,{complete:{configurable:true,value:true},naturalWidth:{configurable:true,value:24}})
+    watchdog.update({url:nextUrl,enabled:true})
+    intersection(true)
+    image.src=nextUrl
+    Object.defineProperties(image,{complete:{configurable:true,value:false},naturalWidth:{configurable:true,value:0}})
+    vi.advanceTimersByTime(10000)
+    expect(onTimeout).toHaveBeenCalledExactlyOnceWith(nextUrl)
+  })
+
+  it('ignores stale completion events and refuses to time out a different DOM source', () => {
+    update();intersection(true)
+    image.src=nextUrl
+    image.dispatchEvent(new Event('load'))
+    vi.advanceTimersByTime(10000)
+    expect(onTimeout).not.toHaveBeenCalled()
+  })
+
+  it('still times out the requested URL while currentSrc retains the old decoded source', () => {
+    image.src=nextUrl
+    Object.defineProperties(image,{currentSrc:{configurable:true,value:new URL(url,document.baseURI).href},complete:{configurable:true,value:false},naturalWidth:{configurable:true,value:24}})
+    watchdog.update({url:nextUrl,enabled:true});intersection(true)
+    vi.advanceTimersByTime(10000)
+    expect(onTimeout).toHaveBeenCalledExactlyOnceWith(nextUrl)
   })
 })

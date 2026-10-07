@@ -29,6 +29,14 @@ export function createNativeImageWatchdog(
       && rect.bottom > 0 && rect.right > 0 && rect.top < height && rect.left < width
   }
 
+  function matchesRequestedSource() {
+    try { return image.src === new URL(url, document.baseURI).href } catch { return false }
+  }
+
+  function matchesSource() {
+    try { return (image.currentSrc || image.src) === new URL(url, document.baseURI).href } catch { return false }
+  }
+
   function canWait() {
     return !destroyed && enabled && !!url && !settled && !timedOutUrls.has(url)
       && visible && !document.hidden && window.navigator.onLine !== false
@@ -37,7 +45,7 @@ export function createNativeImageWatchdog(
   function reconcile() {
     if (destroyed) return
     if (!observer) visible = inViewport()
-    if (image.complete && image.naturalWidth > 0) settled = true
+    if (matchesSource() && image.complete && image.naturalWidth > 0) settled = true
     if (!canWait()) {
       cancel()
       return
@@ -50,8 +58,8 @@ export function createNativeImageWatchdog(
       if (destroyed || expectedGeneration !== generation || expectedUrl !== url) return
       timer = undefined
       if (!observer) visible = inViewport()
-      if (image.complete && image.naturalWidth > 0) settled = true
-      if (!canWait()) return
+      if (matchesSource() && image.complete && image.naturalWidth > 0) settled = true
+      if (!canWait() || !matchesRequestedSource()) return
       settled = true
       timedOutUrls.add(expectedUrl)
       onTimeout(expectedUrl)
@@ -70,8 +78,9 @@ export function createNativeImageWatchdog(
     }, { root: null, rootMargin: '0px', threshold: 0 })
     : null
 
-  function finish() {
-    if (destroyed || !enabled) return
+  function finish(event: Event) {
+    if (destroyed || !enabled || !matchesSource()) return
+    if (event.type === 'load' && (!image.complete || image.naturalWidth <= 0)) return
     settled = true
     cancel()
   }

@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import net from 'node:net'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
 import { CdpSession, sleep } from './lib/cdpSession.mjs'
 import { verifiedLogoutFailures } from './lib/logoutEvidence.mjs'
 import { pageLegacySnapshots } from './lib/legacySnapshotProbe.mjs'
@@ -312,7 +312,7 @@ async function waitForAnonymousBaseline(expected) {
   await wait(id=>!document.querySelector('[data-sort-id="'+id+'"]'),[bookmarks[2].id],30000)
   for(const item of expected) {
     await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),item.selector)
-    await wait(sel=>{const image=document.querySelector(sel)?.querySelector('img');return image?.complete&&image.naturalWidth>0},[item.selector],60000)
+    await wait(sel=>{const element=document.querySelector(sel),image=element?.querySelector('img');if(element&&(!image?.complete||!image.naturalWidth))element.scrollIntoView({block:'center',behavior:'instant'});return image?.complete&&image.naturalWidth>0},[item.selector],60000)
   }
   const images=await verifyImages(expected)
   await wait((ids,privateId)=>Object.keys(localStorage).some(key=>{
@@ -601,10 +601,18 @@ try {
       await api('/categories/'+child.id,{parent_id:category.id,title:'Browser child '+run,icon:'data:image/svg+xml;base64,'+Buffer.from(diagnosticSvg).toString('base64')},'PUT')
       await home();await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
       await waitForAnonymousBaseline(expected)
+      // Materialization may publish a newer icon revision after the first image
+      // succeeds. Confirm that version through the app before suspending a URL.
+      const expectedRevision='sha256-'+createHash('sha256').update('cf-navs-icon-v1\nimage/svg+xml\n').update(diagnosticSvg).digest('hex')
+      await home({anonymous:true});await waitForAnonymousBaseline(expected)
+      await wait((id,revision)=>Object.keys(localStorage).some(key=>{if(!key.startsWith('cf-navs.public-data.'))return false;try{return JSON.parse(localStorage.getItem(key)).data?.categories?.some(row=>row.id===id&&row.icon_revision===revision)}catch{return false}}),[child.id,expectedRevision],20000)
+      const suspendedUrl=await b.call(sel=>document.querySelector(sel)?.querySelector('img')?.src,target.selector)
+      assert(suspendedUrl&&new URL(suspendedUrl).pathname==='/api/category-icon/'+child.id,'Native fixture URL is not ready')
+      evidence.materializedRevisionConfirmed=true
       await b.send('Network.setCacheDisabled',{cacheDisabled:true})
       await intercept([{urlPattern:'*/api/category-icon/'+child.id+'*',requestStage:'Response'}],async event=>{
         const url=new URL(event.request.url)
-        if(url.origin!==base||url.pathname!=='/api/category-icon/'+child.id||url.searchParams.has('retry')||event.resourceType!=='Image')return false
+        if(event.request.url!==suspendedUrl||url.origin!==base||url.pathname!=='/api/category-icon/'+child.id||url.searchParams.has('retry')||event.resourceType!=='Image')return false
         assert(event.responseStatusCode===200&&event.networkId,'Native timeout requires a real successful upstream image')
         evidence.held.push({requestId:event.networkId,responseStatus:event.responseStatusCode});await persist();return true
       },async()=>{
