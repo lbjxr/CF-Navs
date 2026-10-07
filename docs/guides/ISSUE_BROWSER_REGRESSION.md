@@ -91,6 +91,12 @@ node --experimental-sqlite node_modules/vitest/vitest.mjs run tests/unit/issueBr
 
 `protocol` / timing 是观测证据，不是连接异常根因结论。副本队列 10 秒期限与普通 `<img>` 持续挂起是两条链路：即使同路径 `fetch(cache:no-store)` 成功，原 Image 仍未响应/显示时也不能判通过，不能由副本修复推断匿名图片挂起根因已定位。不得延长既有等待或用额外请求掩盖失败；保留原图片 requestId 与独立诊断请求。纯判定单测通过不代表测试站案例通过。
 
+## 匿名旧快照的前置与快速导航竞态
+
+旧快照用例不应只等 localStorage 登录标记消失就立刻导航。退出仍可能正在刷新公开数据；现在先在原文档确认私密 fixture 已移除、公开 fixture 图像与公共快照均就绪，再开始完整重载及旧格式注入。report.cases[].anonymousBaseline 记录同文档、像素和持久化前置，不使用固定延时伪造完成。
+
+“退出尚未完成就立即再次导航”是独立的交错路径。该对照曾复现原生分类图像挂起，单纯改用 Page.reload 没有消除；旧失败报告保留在本地证据，不能由正常前置的旧快照通过推断此竞态已解决。
+
 ## 真正关闭重开：同一 profile 的在线与离线恢复
 
 ```powershell
@@ -115,6 +121,7 @@ node scripts/issue-browser-regression.mjs
 - `verifiedSignedImageReplacements` 要求同一文档/场景/对象：旧请求确实 ERR_ABORTED；src 只更换 key 参数；取消前所有旧 source 使用者都已换源或移除；准确的新请求返回 200 图像、非兜底，正文完成，并有对应节点完成解码的原生 load 事件。
 - 支持同节点换源，或完整的“换 key → 旧节点 removed → 新节点 observed → loaded”交接链；单纯另一张图片成功不够。节点期间再次换源、仍有旧使用者、替代请求未完成、HTTP 错误或文档不匹配，全部拒绝。
 - 时间关联使用 CDP 单调时间与文档 performance.timeOrigin；MutationObserver 只保证观察时刻，允许 100ms 交付容差和明确的 500ms 换源关联窗口。没有时间字段时不填零、不猜测。
+- 用户更换图标时，已发出的副本请求可能被完整保存响应中的已验证正文替代。`verifiedEditCopyCancellations` 只接受成功的真实图标保存场景：同会话、同对象的唯一 PUT 成功；取消发生在保存响应附近；请求描述符匹配已知保存前/后版本；独立像素通过，原生 IDB 正文及哈希确实更换且持久化。未知描述符、缺少前后记录、其他会话、错误状态或失败场景仍拒绝；旧报告缺少这些证据时不回填通过。
 - 已核准旧 requestId 保留在 failedRequests，并单独列出 replacementRequestId、nodeId/replacementNodeId、换源/取消/加载时间。其他取消、真正的超时或连接错误仍进入失败门。采证失败本身也使整轮失败。
 - 暖快照刷新应直接应用完整权威数据；不能为渐进首屏优化把已显示的完整列表重新缩为首批。只有冷状态继续分批，权限变化/删除仍立即生效。本轮不改变 Chrome 协议偏好，不通过禁用 QUIC 或强制 eager 制造通过。
 
