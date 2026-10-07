@@ -13,6 +13,7 @@ import { assessBrowserRestartEvidence } from './lib/browserRestartEvidence.mjs'
 import { verifiedEditCopyCancellations } from './lib/editCopyCancellationEvidence.mjs'
 import { pageInstallImageLifecycleProbe } from './lib/imageRequestLifecycleProbe.mjs'
 import { verifiedSignedImageReplacements, verifiedNativeCategoryRetries, verifiedNavigationImageCancellations } from './lib/imageRequestLifecycleEvidence.mjs'
+import { createVerificationCleanup } from './lib/verificationCleanup.mjs'
 import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
@@ -25,8 +26,13 @@ const cacheMode=process.env.ISSUE_CACHE_MODE??'on'
 assert(['on','off'].includes(cacheMode),'Invalid ISSUE_CACHE_MODE')
 if(cacheMode==='off') assert(selectedCases.size>0&&[...selectedCases].every(id=>['28-EDIT-TITLE-DATA','28-EDIT-CANCEL','28-IDLE-CONTROL','28-RIGHT-CLICK-OFF'].includes(id)),'Off mode requires explicit compatible cases')
 const requiredCases=new Set(['LOGIN-UI','28-BASELINE','28-ENABLE-DEFERRED'])
+const cleanupFault=process.env.ISSUE_CLEANUP_FAULT??''
+assert(['','detached-page'].includes(cleanupFault),'Invalid cleanup fault')
 const optionalCases = new Set(['28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE','29-LOGOUT-NAVIGATION-RACE','28-NATIVE-CATEGORY-TIMEOUT'])
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
+const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
+const sessionCaptureErrors = []
+const loginCaptures = new Set()
 const output = await fs.mkdtemp(path.join(os.tmpdir(), 'cf-navs-issue-browser-'))
 const profile = path.join(os.tmpdir(), 'cf-navs-chrome-profile-issue-' + run)
 const probe = net.createServer(); await new Promise(r => probe.listen(0, '127.0.0.1', r))
@@ -51,7 +57,7 @@ const expectedOfflineRequests = new Set()
 const expectedTimeoutRequests = new Set()
 const expectedReacquireRequests = new Set()
 let offlineActive = false
-function safe(value) { return redactCredentials(String(value), credentials).replaceAll(base, '[test-origin]').replaceAll(token || '\u0000', '[token]').replace(/([?&](?:key|token)=)[^\s&"']+/g, '$1[redacted]') }
+function safe(value) { return serverCleanup.redact(redactCredentials(String(value), credentials)).replaceAll(base, '[test-origin]').replaceAll(token || '\u0000', '[token]').replace(/([?&](?:key|token)=)[^\s&"']+/g, '$1[redacted]') }
 async function persist() { await fs.writeFile(path.join(output, 'report.json'), safe(JSON.stringify(report, null, 2))) }
 function assert(value, message) { if (!value) throw new Error(message) }
 async function collectImageLifecycle(reason) {
@@ -147,6 +153,7 @@ async function login() {
   await wait(() => Boolean(document.querySelector('[data-testid="admin-tab-settings"]')), [], 30000)
   token = await b.call(() => JSON.parse(localStorage.getItem('cf-navs.auth') || 'null')?.token || '')
   assert(token, 'UI login did not establish a session')
+  serverCleanup.rememberSession(token)
 }
 async function api(route, body, method = 'POST') {
   const result = await b.call(async (route, body, method, token) => {
@@ -309,6 +316,7 @@ async function signInPlace() {
   await click('[aria-labelledby="login-modal-title"] form button[type="submit"]')
   await wait(()=>!document.querySelector('input[autocomplete="current-password"]'))
   token=await b.call(()=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token||'')
+  if(token)serverCleanup.rememberSession(token)
   assert(token,'In-page login did not establish a session')
 }
 async function clearCopies() {
@@ -432,6 +440,7 @@ try {
     const response = await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:credentials.username,password:credentials.password})})
     const bootstrap = await response.json()
     assert(bootstrap.code===0&&bootstrap.data?.token,'Disposable local bootstrap failed')
+    serverCleanup.rememberSession(bootstrap.data.token)
     await fetch(base+'/api/logout',{method:'POST',headers:{authorization:'Bearer '+bootstrap.data.token}})
   }
   await b.start(); await b.attach()
@@ -448,7 +457,8 @@ try {
   b.on('Network.requestWillBeSent', e => {
     const row = { requestId: e.requestId, stage, time: e.timestamp, wallTime: e.wallTime, method: e.request.method, type: e.type, initiator: e.initiator?.type, initiatorFrames:e.initiator?.stack?.callFrames?.slice(0,4).map(f=>({function:f.functionName,url:safe(f.url),line:f.lineNumber,column:f.columnNumber})), ...classifyIssueRequest(e.request.url, e.request.postData, base) }
     const authorization = Object.entries(e.request.headers ?? {}).find(([key]) => key.toLowerCase() === 'authorization')?.[1]
-    if (typeof authorization === 'string' && authorization.startsWith('Bearer ')) {
+    if (new URL(e.request.url).origin === new URL(base).origin && typeof authorization === 'string' && authorization.startsWith('Bearer ')) {
+      serverCleanup.rememberSession(authorization.slice(7))
       if (!authSessions.has(authorization)) authSessions.set(authorization, authSessions.size + 1)
       row.authSession = authSessions.get(authorization)
     }
@@ -473,6 +483,18 @@ try {
   b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,responseTime:e.timestamp,protocol:e.response.protocol,timing:numericNetworkTiming(e.response.timing),disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','cache-control','x-icon-fallback','content-security-policy'].includes(name.toLowerCase()))) }) })
   function inspectCopyResponse(requestId) {
     const row=requests.get(requestId)
+    if(row?.path==='/api/login' && row.status===200 && row.terminalKind==='finished' && !loginCaptures.has(requestId)) {
+      loginCaptures.add(requestId)
+      const read=b.send('Network.getResponseBody',{requestId}).then(response=>{
+        const body=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body)
+        if(body.code===0) {
+          row.issuedSession=serverCleanup.rememberSession(body.data?.token)
+          row.sessionCaptured=true
+        }
+      }).catch(()=>sessionCaptureErrors.push({requestId,error:'Issued session response could not be captured'}))
+      responseReads.add(read);void read.finally(()=>responseReads.delete(read))
+      return
+    }
     if(row?.path === '/api/logout' && row.status === 200) {
       const read=b.send('Network.getResponseBody',{requestId}).then(response=>{
         const body=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body)
@@ -1097,23 +1119,25 @@ try {
 finally {
   stage = 'cleanup'
   try {
-    await b.send('Fetch.disable').catch(() => {})
-    await b.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }).catch(() => {})
-    if (ownedCategories.length) {
-      await login()
-      for (const id of [...ownedBookmarks].reverse()) await api('/bookmarks/' + id, undefined, 'DELETE')
-      for (const id of [...ownedCategories].reverse()) await api('/categories/' + id, undefined, 'DELETE')
-      const data = await api('/admin/data', undefined, 'GET')
-      assert(!data.bookmarks.some(e => ownedBookmarks.includes(e.id)) && !data.categories.some(e => ownedCategories.includes(e.id)), 'Synthetic data remains')
-      report.cleanup.serverFixturesRemoved = true
-      const logout=await api('/logout', undefined)
-      assert(logout?.revoked===true, 'Test session revocation was not confirmed')
-      report.cleanup.sessionRevoked=true
-    }
-  } catch (error) { report.cleanup.serverError = safe(error.message) }
-  if (secondary) await b.send('Target.closeTarget', { targetId: secondary }).catch(() => {})
+    await b.send('Fetch.disable',{},5000)
+    await b.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 },5000)
+  } catch { report.cleanup.pagePreparationFailed=true }
   await Promise.allSettled([...responseReads])
-  await collectImageLifecycle('before-browser-close')
+  await collectImageLifecycle('before-server-cleanup')
+  if (secondary) await b.send('Target.closeTarget', { targetId: secondary }).catch(() => {})
+  try {
+    await b.send('Page.setWebLifecycleState',{state:'frozen'},5000)
+    if(cleanupFault==='detached-page') {
+      await b.send('Target.detachFromTarget',{sessionId:b.sessionId},5000)
+      let rejected=false
+      try { await b.send('Runtime.evaluate',{expression:'1',returnByValue:true},1000) } catch { rejected=true }
+      assert(rejected,'Detached cleanup fault did not disable page evaluation')
+      report.cleanup.injectedFault={kind:cleanupFault,pageEvaluationUnavailable:true}
+    }
+  } catch (error) { report.cleanup.preparationError=safe(error.message) }
+  // No page evaluation here: preserve cleanup even when renderer/CDP has failed.
+  Object.assign(report.cleanup,await serverCleanup.cleanup({categories:ownedCategories,bookmarks:ownedBookmarks}))
+  report.cleanup.sessionCaptureErrors=sessionCaptureErrors
   imageRequestUrls.clear()
   report.cleanup.browser = await b.cleanup()
   for(const packet of observedCopyResponses){
@@ -1148,5 +1172,5 @@ finally {
   report.injectedRequests=[...injectedRequests]
   await persist()
   console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))
-  if (report.fatal || report.interceptionError || report.imageLifecycleErrors.length || report.unexpectedHttp.length || report.unexpectedFailures.length || report.consoleFindings.length || report.cases.some(c => c.status === 'failed') || !report.cleanup.serverFixturesRemoved || !report.cleanup.sessionRevoked || !report.cleanup.browser.profileRemoved || report.cleanup.browser.errors.length || report.cleanup.browser.warnings.length) process.exitCode = 1
+  if (report.fatal || report.interceptionError || report.imageLifecycleErrors.length || report.unexpectedHttp.length || report.unexpectedFailures.length || report.consoleFindings.length || report.cases.some(c => c.status === 'failed') || !report.cleanup.serverFixturesRemoved || !report.cleanup.sessionRevoked || report.cleanup.preparationError || report.cleanup.pagePreparationFailed || sessionCaptureErrors.length || report.cleanup.errors?.length || !report.cleanup.browser.profileRemoved || report.cleanup.browser.errors.length || report.cleanup.browser.warnings.length) process.exitCode = 1
 }
