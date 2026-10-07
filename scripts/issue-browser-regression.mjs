@@ -648,11 +648,22 @@ try {
     const diagnosticSvg=Buffer.from(fixtures.bookmark.base64Uri.split(',')[1],'base64').toString('utf8').replace('</svg>','<!-- native-timeout-'+run+' --></svg>')
     try {
       await api('/categories/'+child.id,{parent_id:category.id,title:'Browser child '+run,icon:'data:image/svg+xml;base64,'+Buffer.from(diagnosticSvg).toString('base64')},'PUT')
-      await home();await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
+      await home()
+      const expectedRevision='sha256-'+createHash('sha256').update('cf-navs-icon-v1\nimage/svg+xml\n').update(diagnosticSvg).digest('hex')
+      const materializationDeadline=Date.now()+60000
+      let materialized=null
+      do {
+        await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center',behavior:'instant'}),target.selector)
+        materialized=await readFixtureCopy(target.key)
+        if(materialized.entryPresent&&materialized.bodyPresent&&materialized.bodyRevision===expectedRevision&&materialized.descriptor?.content_revision===expectedRevision)break
+        await sleep(150)
+      } while(Date.now()<materializationDeadline)
+      assert(materialized?.bodyRevision===expectedRevision&&materialized.descriptor?.content_revision===expectedRevision,'Native timeout setup did not materialize the edited fixture before logout')
+      evidence.materializedBeforeLogout={bodyRevision:materialized.bodyRevision,descriptorRevision:materialized.descriptor.content_revision,bodyBytes:materialized.bodyBytes}
+      await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
       await waitForAnonymousBaseline(expected)
       // Materialization may publish a newer icon revision after the first image
       // succeeds. Confirm that version through the app before suspending a URL.
-      const expectedRevision='sha256-'+createHash('sha256').update('cf-navs-icon-v1\nimage/svg+xml\n').update(diagnosticSvg).digest('hex')
       await home({anonymous:true});await waitForAnonymousBaseline(expected)
       await wait((id,revision)=>Object.keys(localStorage).some(key=>{if(!key.startsWith('cf-navs.public-data.'))return false;try{return JSON.parse(localStorage.getItem(key)).data?.categories?.some(row=>row.id===id&&row.icon_revision===revision)}catch{return false}}),[child.id,expectedRevision],20000)
       const suspendedUrl=await b.call(sel=>{const image=document.querySelector(sel)?.querySelector('img');if(!image)return null;const url=new URL(image.src);url.searchParams.delete('retry');return url.href},target.selector)
