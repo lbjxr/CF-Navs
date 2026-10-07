@@ -606,7 +606,7 @@ try {
       const expectedRevision='sha256-'+createHash('sha256').update('cf-navs-icon-v1\nimage/svg+xml\n').update(diagnosticSvg).digest('hex')
       await home({anonymous:true});await waitForAnonymousBaseline(expected)
       await wait((id,revision)=>Object.keys(localStorage).some(key=>{if(!key.startsWith('cf-navs.public-data.'))return false;try{return JSON.parse(localStorage.getItem(key)).data?.categories?.some(row=>row.id===id&&row.icon_revision===revision)}catch{return false}}),[child.id,expectedRevision],20000)
-      const suspendedUrl=await b.call(sel=>document.querySelector(sel)?.querySelector('img')?.src,target.selector)
+      const suspendedUrl=await b.call(sel=>{const image=document.querySelector(sel)?.querySelector('img');if(!image)return null;const url=new URL(image.src);url.searchParams.delete('retry');return url.href},target.selector)
       assert(suspendedUrl&&new URL(suspendedUrl).pathname==='/api/category-icon/'+child.id,'Native fixture URL is not ready')
       evidence.materializedRevisionConfirmed=true
       await b.send('Network.setCacheDisabled',{cacheDisabled:true})
@@ -980,18 +980,26 @@ try {
       if(held) return false; held=event; return true
     },async()=>{
       await focusCycle(); await localWait(()=>held,'Old version response')
+      const heldDocument=await b.call(()=>performance.timeOrigin)
       await homeAction('logout'); await wait(()=>!localStorage.getItem('cf-navs.auth'))
       await signInPlace(); const currentToken=token
       assert(currentToken&&currentToken!==previousToken,'Fresh-session prerequisite failed')
       await wait(id=>Boolean(document.querySelector(`[data-sort-id="${id}"]`)),[bookmarks[2].id])
-      report.cases.at(-1).preconditions={freshSession:true,privateVisibleBeforeRelease:true}
+      await click(scope()+' .scope-root-trigger')
+      for(const item of manifest()) {
+        await wait(sel=>{const element=document.querySelector(sel),img=element?.querySelector('img');if(element&&(!img?.complete||!img.naturalWidth))element.scrollIntoView({block:'center',behavior:'instant'});return img?.complete&&img.naturalWidth>0},[item.selector],60000)
+      }
+      const beforeImages=await verifyImages()
+      assert(await b.call(()=>performance.timeOrigin)===heldDocument,'Old-401 setup navigated away from its held response')
+      report.cases.at(-1).preconditions={freshSession:true,privateVisibleBeforeRelease:true,imagesReadyBeforeRelease:beforeImages.passed,sameDocument:true}
       if(held.networkId) injectedRequests.add(held.networkId)
       await b.send('Fetch.fulfillRequest',{requestId:held.requestId,responseCode:401,responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'no-store'}],body:Buffer.from(JSON.stringify({code:1001,msg:'Injected old session failure',data:null})).toString('base64')})
       await sleep(1500)
       const retained=await b.call(expected=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token===expected,currentToken)
       report.cases.at(-1).afterRelease={sessionRetained:retained}
       assert(retained,'Old 401 cleared new session')
-      await click(scope()+' .scope-root-trigger'); await verifyImages(); return {oldResponseDelivered:true,newSessionRetained:true}
+      for(const item of manifest())await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center',behavior:'instant'}),item.selector)
+      await verifyImages(); return {oldResponseDelivered:true,newSessionRetained:true,imagesReadyBeforeRelease:true}
     })
   })
   await scenario('29-CROSS-TAB-LOGOUT', async () => {
