@@ -43,3 +43,10 @@ export function getCategoryIconFallbackText(value: CategoryIconValue): string {
   const title = value.title.trim()
   return [...title][0] ?? '分'
 }
+
+/** Retry addresses are document-scoped to avoid reusing an earlier document's
+ * retry address. The Worker ignores retry in edge keys. */
+export function createCategoryRetryUrl(source: string, attempt: number, timeOrigin: number): string {
+  if (!source.startsWith('/api/category-icon/') || !Number.isSafeInteger(attempt) || attempt < 1 || !Number.isFinite(timeOrigin) || timeOrigin <= 0) throw new Error('Invalid native category retry identity')
+  return source + (source.includes('?') ? '&' : '?') + 'retry=' + attempt + '-' + Math.trunc(timeOrigin).toString(36)
+}

@@ -176,3 +176,6 @@ node scripts/issue-browser-regression.mjs
 旧 401 的旧响应在新会话图像基线验证期间仍保持暂扣，禁止通过重新导航让它消失。该用例验证“新会话就绪之后”的迟到错误；初始化中的图像交错仍属于扩展矩阵，不由此结果代替。
 
 主动文档导航的原生图标取消单独记录为 verifiedNavigationImageCancellations：必须有本轮 b.navigate 发起、明确新 loader 提交，旧 Image/GET 图标请求属于旧 loader，且取消发生在该导航区间；HTTP 错误、API/写请求、未完成导航或区间外取消仍失败。原始 failedRequests 不删除，不为旧报告补造导航证据。
+
+
+原生分类重试使用 `retry=<attempt>-<documentScope>`，作用域取文档 timeOrigin，不复用上一文档的重试地址；Worker 缓存键仍仅保留版本和缓存命名空间，不随该参数增长。快速路径上限按四个 10 秒加载窗口、1.2/4/10 秒退避及 10 秒导航基线合计 65.2 秒；旧 30 秒断言与产品预算不符，历史失败不追认。副本故障前置必须证明所有合成对象的原生 entry/body 已清空；Blob 追踪在新文档初始化时启用，不能在导航结束后清空已经发生的回退事件。

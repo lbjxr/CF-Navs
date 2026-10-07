@@ -315,6 +315,17 @@ async function clearCopies() {
   await home(); await settings()
   await click('.device-actions button:nth-child(2)')
   await wait(()=>document.querySelector('.device-status')?.textContent.startsWith('已启用'),[],30000)
+  const deadline=Date.now()+30000
+  let copies=[]
+  do {
+    copies=await Promise.all(manifest().map(async item=>({key:item.key,record:await readFixtureCopy(item.key)})))
+    if(copies.every(copy=>copy.record.available&&copy.record.enabled&&!copy.record.entryPresent&&!copy.record.bodyPresent)) {
+      ;(report.cases.at(-1).clearCopyProofs??=[]).push(copies.map(copy=>({key:copy.key,entryPresent:false,bodyPresent:false})))
+      return
+    }
+    await sleep(120)
+  } while(Date.now()<deadline)
+  throw new Error('Clear copies did not reach native entry/body absence')
 }
 async function readFixtureCopy(object) { return b.call(pageReadFixtureCopy, object) }
 async function waitForAnonymousBaseline(expected) {
@@ -452,7 +463,7 @@ try {
     }
     if(row.kind==='icon-copy') {try{const body=JSON.parse(e.request.postData);row.copyRequest={dataset_epoch:body.dataset_epoch,expected_write_epoch:body.expected_write_epoch,expected_content_revision:body.expected_content_revision}}catch{}}
     row.documentLoaderId=e.loaderId
-    if(row.kind==='icon-body'&&row.type==='Image'){imageRequestUrls.set(e.requestId,e.request.url);const retry=Number(new URL(e.request.url).searchParams.get('retry')??0);row.nativeRetryAttempt=Number.isSafeInteger(retry)&&retry>=0?retry:null}
+    if(row.kind==='icon-body'&&row.type==='Image'){imageRequestUrls.set(e.requestId,e.request.url);const retry=new URL(e.request.url).searchParams.get('retry'),parsed=retry?.match(/^([1-9]\d*)(?:-([a-z0-9]+))?$/);row.nativeRetryAttempt=retry==null?0:parsed?Number(parsed[1]):null;row.nativeRetryScope=parsed?.[2]??null}
     requests.set(e.requestId, row); report.requests.push(row)
     if(editorObject && ['icon-body','icon-copy','iconify-body','external-image'].includes(row.kind)) {
       const previewFor=editorObject
@@ -591,11 +602,16 @@ try {
       await wait(items=>items.every(item=>{const img=document.querySelector(item.selector)?.querySelector('img');return img?.complete&&img.naturalWidth>0}),[expected],25000)
       evidence.images=await verifyImages(expected)
       evidence.elapsedMs=Date.now()-started
-      assert(evidence.elapsedMs<30000,'Rapid-navigation images exceeded bounded recovery')
+      // Four visible load windows (initial + 3 retries), existing backoffs,
+      // and 10s for the navigation/data baseline. Do not invent a 30s limit
+      // that contradicts the product's already-tested retry budget.
+      evidence.recoveryBudgetMs=4*10000+1200+4000+10000+10000
+      assert(evidence.elapsedMs<evidence.recoveryBudgetMs,'Rapid-navigation images exceeded the retry budget')
+      assert(report.requests.slice(requestStart).filter(row=>expected.some(item=>item.key===row.object)).every(row=>!row.nativeRetryAttempt||row.nativeRetryAttempt<=3),'Rapid navigation exceeded three automatic retries')
       assert(await b.call(id=>!document.querySelector('[data-sort-id="'+id+'"]'),bookmarks[2].id),'Private fixture survived anonymous navigation')
-      evidence.retryRequests=report.requests.slice(requestStart).filter(row=>row.kind==='icon-body'&&row.nativeRetryAttempt>0).map(row=>({requestId:row.requestId,object:row.object,attempt:row.nativeRetryAttempt,status:row.status}))
+      evidence.retryRequests=report.requests.slice(requestStart).filter(row=>row.kind==='icon-body'&&row.nativeRetryAttempt>0).map(row=>({requestId:row.requestId,object:row.object,attempt:row.nativeRetryAttempt,documentScope:row.nativeRetryScope,status:row.status}))
       await shot('29-rapid-navigation-recovered')
-      return {newDocument:true,anonymous:true,privateRemoved:true,images:evidence.images,elapsedMs:evidence.elapsedMs,retryRequests:evidence.retryRequests}
+      return {newDocument:true,anonymous:true,privateRemoved:true,images:evidence.images,elapsedMs:evidence.elapsedMs,recoveryBudgetMs:evidence.recoveryBudgetMs,retryRequests:evidence.retryRequests}
     } catch(error) {
       evidence.failure=safe(error.message)
       evidence.failureImages=await b.call(items=>items.map(item=>{const img=document.querySelector(item.selector)?.querySelector('img');return {key:item.key,exists:!!img,complete:img?.complete,width:img?.naturalWidth}}),expected).catch(()=>null)
@@ -631,10 +647,11 @@ try {
         await home({anonymous:true,waitForImages:false})
         await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),target.selector)
         await localWait(()=>evidence.held.length>0,'Native image suspension',10000)
-        await wait(sel=>{const img=document.querySelector(sel)?.querySelector('img');return img?.complete&&img.naturalWidth>0&&Number(new URL(img.src,location.href).searchParams.get('retry'))>0},[target.selector],25000)
+        await wait(sel=>{const img=document.querySelector(sel)?.querySelector('img');return img?.complete&&img.naturalWidth>0&&parseInt(new URL(img.src,location.href).searchParams.get('retry')??'0',10)>0},[target.selector],25000)
         evidence.images=await verifyImages(expected)
         const held=requests.get(evidence.held[0].requestId), retry=report.requests.slice(start).find(row=>row.object===target.key&&row.type==='Image'&&row.nativeRetryAttempt===1&&row.status===200)
         assert(evidence.held.length===1&&retry,'Timeout must recover through the first real retry, not another initial request')
+        assert(retry.nativeRetryScope===await b.call(()=>Math.trunc(performance.timeOrigin).toString(36)),'Retry URL is not owned by the current document')
         await localWait(()=>Number.isFinite(retry.finishedTime),'Native retry body completion',1500)
         evidence.elapsedMs=(retry.finishedTime-held.time)*1000
         assert(evidence.elapsedMs>=10000&&evidence.elapsedMs<22000,'Native timeout did not use the bounded product deadline')
@@ -832,10 +849,11 @@ try {
     // Bypass both HTTP cache and SW, not the app loader or its authorization.
     // Otherwise a previously displayed normal image could fake network recovery.
     const start = report.requests.length
-    let faultSucceeded = false
+    let faultSucceeded = false, urlTraceScript = null
     try {
       await b.send('Network.setCacheDisabled', { cacheDisabled:true })
       await b.send('Network.setBypassServiceWorker', { bypass:true })
+      urlTraceScript=(await b.send('Page.addScriptToEvaluateOnNewDocument',{source:'if(window.__issueUrls)window.__issueUrls.active=true'})).identifier
       await intercept([{urlPattern:'*/api/icon-local-copy',requestStage:'Request'}], async event => {
         let payload; try { payload=JSON.parse(event.request.postData) } catch { return false }
         if (new URL(event.request.url).origin !== base || payload.object_type !== 'bookmark' || payload.object_id !== bookmarks[0].id) return false
@@ -851,7 +869,7 @@ try {
           assert(evidence.newDocument, 'Cold timeout cannot reuse in-memory loader handles')
           await localWait(() => evidence.held.length > 0, 'Fixture copy suspension', 10000)
           const held = evidence.held[0]
-          await b.call(() => { window.__issueUrls.active = true; window.__issueUrls.events = [] })
+          assert(await b.call(()=>window.__issueUrls?.active===true),'Copy timeout tracing was not active at document start')
           await localWait(() => requests.get(held.requestId)?.error, 'Frontend timeout cancellation', 16000)
           const row = requests.get(held.requestId)
           evidence.abortElapsedMs = (row.failureTime-row.time)*1000
@@ -916,6 +934,8 @@ try {
       // Always attempt all three restorations; a cleanup error remains a failure.
       const restored = await Promise.allSettled([
         b.send('Fetch.disable'), b.send('Network.setCacheDisabled',{cacheDisabled:false}), b.send('Network.setBypassServiceWorker',{bypass:false}),
+        urlTraceScript?b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier:urlTraceScript}):Promise.resolve(),
+        b.call(()=>{if(window.__issueUrls)window.__issueUrls.active=false}),
       ])
       evidence.restoration = {faultSucceeded, fetchDisabled:restored[0].status==='fulfilled', httpCacheRestored:restored[1].status==='fulfilled', serviceWorkerRestored:restored[2].status==='fulfilled',
         errors:restored.filter(row=>row.status==='rejected').map(row=>safe(row.reason.message))}

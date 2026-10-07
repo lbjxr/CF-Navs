@@ -5,6 +5,7 @@
   import type { CategoryIconValue } from '../lib/categoryIconDisplay'
   import {
     getCategoryIconFallbackText,
+    createCategoryRetryUrl,
     getCategoryImageIconUrl,
     getCategoryTextIcon,
     normalizeCategoryIcon,
@@ -31,7 +32,7 @@
   let retryAttempt = 0
   const nativeRetry = createIconRetry(() => {
     retryAttempt += 1
-    retryUrl = sourceUrl + (sourceUrl.includes('?') ? '&' : '?') + 'retry=' + retryAttempt
+    retryUrl = createCategoryRetryUrl(sourceUrl, retryAttempt, performance.timeOrigin)
   })
 
   $: iconValue = normalizeCategoryIcon(category) || category.icon_display === 'image'

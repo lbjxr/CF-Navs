@@ -16,7 +16,7 @@ describe('native category request recovery',()=>{
   await vi.advanceTimersByTimeAsync(10000)
   expect(image()).toBeNull()
   await vi.advanceTimersByTimeAsync(1200)
-  expect(image()!.getAttribute('src')).toBe('/api/category-icon/7?v=1&retry=1')
+  expect(image()!.getAttribute('src')).toBe('/api/category-icon/7?v=1&retry=1-'+Math.trunc(performance.timeOrigin).toString(36))
   expect(state.failed).not.toHaveBeenCalled()
  })
  it('does not wait indefinitely when the active native fallback emits an error',async()=>{
