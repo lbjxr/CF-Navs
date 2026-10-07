@@ -14,7 +14,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { get as httpGet } from 'node:http'
 import { existsSync } from 'node:fs'
-import { mkdir, rm } from 'node:fs/promises'
+import { mkdir, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import WebSocket from 'ws'
 
@@ -44,7 +44,11 @@ export class CdpSession {
   constructor(options) {
     this.chromeExe = options.chromeExe
     this.debugPort = String(options.debugPort)
-    this.userDataDir = options.userDataDir
+    // The exact absolute launch profile is immutable for the whole session, including restarts.
+    // Otherwise changing a public option between spawn/count/rm could delete a different directory.
+    Object.defineProperty(this, 'userDataDir', {
+      value: path.resolve(options.userDataDir), enumerable: true, writable: false, configurable: false,
+    })
     this.noSandbox = Boolean(options.noSandbox)
     this.headless = Boolean(options.headless)
     this.allowExisting = Boolean(options.allowExisting)
@@ -57,6 +61,9 @@ export class CdpSession {
     this.targetId = null
     this.createdTarget = false
     this.sessionId = null
+    this.cancelSocketOpen = null
+    this.browserWsUrl = null
+    this.restarting = false
 
     this.consoleErrors = []
     this.pageExceptions = []
@@ -66,7 +73,7 @@ export class CdpSession {
   }
 
   get profileIsSafeToDelete() {
-    return SAFE_PROFILE_PATTERN.test(path.basename(path.resolve(this.userDataDir)))
+    return SAFE_PROFILE_PATTERN.test(path.basename(this.userDataDir))
   }
 
   on(method, handler) {
@@ -77,7 +84,10 @@ export class CdpSession {
 
   async isDebugPortReady() {
     try {
-      await fetchJson(`http://127.0.0.1:${this.debugPort}/json/version`)
+      const version = await fetchJson(`http://127.0.0.1:${this.debugPort}/json/version`)
+      if (this.startedByTest && this.chromeProcess?.exitCode === null) {
+        this.browserWsUrl = version.webSocketDebuggerUrl ?? null
+      }
       return true
     } catch {
       return false
@@ -139,9 +149,13 @@ export class CdpSession {
 
     this.chromeProcess = spawn(this.chromeExe, args, { stdio: 'ignore', detached: false })
     this.startedByTest = true
+    let launchError = null
+    this.chromeProcess.once('error', (error) => { launchError = error })
 
     for (let attempt = 0; attempt < 60; attempt += 1) {
-      if (await this.isDebugPortReady()) return
+      const ready = await this.isDebugPortReady()
+      if (launchError) throw new Error('Chrome process failed to start', { cause: launchError })
+      if (ready) return
       await sleep(500)
     }
     throw new Error(`Chrome debug port ${this.debugPort} did not become ready`)
@@ -153,6 +167,7 @@ export class CdpSession {
     const browserWs = version.webSocketDebuggerUrl
     if (!browserWs) throw new Error('Browser WebSocket endpoint unavailable')
 
+    this.browserWsUrl = browserWs
     await this.#openSocket(browserWs)
 
     const created = await this.send('Target.createTarget', { url: 'about:blank' })
@@ -172,15 +187,61 @@ export class CdpSession {
   }
 
   #openSocket(url) {
+    if (this.ws) return Promise.reject(new Error('CDP socket already owned'))
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(url, { perMessageDeflate: false, maxPayload: 256 * 1024 * 1024 })
+      // Record connecting sockets too, so a partial attach can be cleaned up.
+      this.ws = socket
+      const finish = (error) => {
+        clearTimeout(timer)
+        if (this.cancelSocketOpen === cancel) this.cancelSocketOpen = null
+        if (error) reject(error)
+        else resolve()
+      }
+      const cancel = (error) => finish(error)
+      const timer = setTimeout(() => {
+        if (this.ws === socket) {
+          try { this.#disconnectSocket('CDP socket open timeout') } catch { /* reject below */ }
+        }
+        finish(new Error('CDP socket open timeout'))
+      }, 10000)
+      this.cancelSocketOpen = cancel
       socket.on('open', () => {
-        this.ws = socket
-        resolve()
+        finish(this.ws === socket ? null : new Error('CDP socket no longer owned'))
       })
-      socket.on('error', reject)
-      socket.on('message', (raw) => this.#handleMessage(raw))
+      socket.on('error', () => {
+        finish(new Error('CDP socket error'))
+        if (this.ws === socket) this.#rejectPending('CDP socket error')
+      })
+      socket.on('close', () => {
+        finish(new Error('CDP socket closed'))
+        if (this.ws === socket) {
+          this.ws = null
+          this.#rejectPending('CDP socket closed')
+        }
+      })
+      socket.on('message', (raw) => {
+        // Buffered events/responses from an old socket must never reach a new connection.
+        if (this.ws === socket) this.#handleMessage(raw)
+      })
     })
+  }
+
+  #rejectPending(reason) {
+    for (const { reject, timer } of this.pending.values()) {
+      clearTimeout(timer)
+      reject(new Error(reason))
+    }
+    this.pending.clear()
+  }
+
+  #disconnectSocket(reason) {
+    const socket = this.ws
+    this.ws = null
+    this.cancelSocketOpen?.(new Error(reason))
+    this.cancelSocketOpen = null
+    this.#rejectPending(reason)
+    socket?.close()
   }
 
   #handleMessage(raw) {
@@ -256,7 +317,8 @@ export class CdpSession {
   }
 
   send(method, params = {}, timeoutMs = 30000) {
-    if (!this.ws) return Promise.reject(new Error('CDP socket is not open'))
+    const socket = this.ws
+    if (socket?.readyState !== WebSocket.OPEN) return Promise.reject(new Error('CDP socket is not open'))
 
     const id = this.nextId++
     const payload = { id, method, params }
@@ -271,7 +333,17 @@ export class CdpSession {
         reject(new Error(`CDP timeout: ${method}`))
       }, timeoutMs)
       this.pending.set(id, { resolve, reject, timer })
-      this.ws.send(JSON.stringify(payload))
+      const fail = (error) => {
+        if (!error || !this.pending.has(id)) return
+        clearTimeout(timer)
+        this.pending.delete(id)
+        reject(error)
+      }
+      try {
+        socket.send(JSON.stringify(payload), fail)
+      } catch (error) {
+        fail(error)
+      }
     })
   }
 
@@ -394,31 +466,109 @@ export class CdpSession {
   }
 
   /**
-   * 清理。只关闭本次创建的 target；只有本次启动且 profile 名匹配时才关浏览器。
-   * 返回清理结果——清理失败属于测试结果的一部分，不能被静默吞掉。
+   * Restart only our live, dedicated browser, keeping its on-disk profile.
+   * Host listeners/evidence/command IDs survive; page bindings and init scripts do not.
+   * A failed restart exposes evidence and leaves new ownership intact for finally cleanup.
    */
-  async cleanup() {
+  async restart() {
+    const snapshot = () => ({
+      pid: this.chromeProcess?.pid ?? null,
+      targetId: this.targetId,
+      profile: this.userDataDir,
+    })
+    const evidence = {
+      previous: { ...snapshot(), remainingProcesses: null }, closed: null, current: null, sameProfile: false,
+    }
+    if (this.restarting || this.startedByTest !== true || this.allowExisting !== false ||
+        !this.profileIsSafeToDelete || this.ws?.readyState !== WebSocket.OPEN ||
+        !this.createdTarget || !this.targetId || !this.sessionId || !this.chromeProcess?.pid) {
+      const error = new Error('Restart requires a live test-owned target/browser and a safe dedicated profile')
+      error.restartEvidence = evidence
+      throw error
+    }
+
+    this.restarting = true
+    try {
+      // A probe that always reports zero cannot prove a live browser was actually shut down.
+      evidence.previous.remainingProcesses = this.#countProcessesUsingProfile()
+      if (evidence.previous.remainingProcesses <= 0) {
+        throw new Error('Restart stopped: live browser profile process count must be positive')
+      }
+      evidence.closed = await this.cleanup({ preserveProfile: true })
+      const closed = evidence.closed
+      if (closed.errors.length || !closed.targetClosed || !closed.browserClosed ||
+          closed.remainingProcesses !== 0 || !closed.profilePreserved || closed.profileRemoved) {
+        throw new Error('Restart stopped: previous browser/profile cleanup was not confirmed')
+      }
+
+      // Clear connection ownership, not host listeners, evidence arrays or the global ID counter.
+      this.ws = null
+      this.browserWsUrl = null
+      this.sessionId = null
+      this.targetId = null
+      this.createdTarget = false
+      this.chromeProcess = null
+      this.startedByTest = false
+      await this.start()
+      await this.attach()
+      evidence.current = snapshot()
+      evidence.sameProfile = evidence.current.profile === evidence.previous.profile
+      return evidence
+    } catch (cause) {
+      evidence.current = snapshot()
+      const error = new Error(cause.message, { cause })
+      error.restartEvidence = evidence
+      throw error
+    } finally {
+      this.restarting = false
+    }
+  }
+
+  /**
+   * Only close owned resources. Unknown process counts are errors, never zero.
+   * preserveProfile requires confirmed closure and an existing directory; never removes it.
+   * Return diagnostics so a runner's finally block can still write its report.
+   */
+  async cleanup({ preserveProfile = false } = {}) {
     const outcome = {
       startedByTest: this.startedByTest,
       targetClosed: false,
       browserClosed: false,
       profileRemoved: false,
-      // errors 只装安全相关失败：浏览器没关掉、进程没归零。
+      profilePreserved: false,
+      remainingProcesses: null,
       errors: [],
-      // warnings 装不影响安全的残留，例如临时目录删不掉（磁盘垃圾，不是安全问题）。
       warnings: [],
     }
+    const ownsProfile = this.startedByTest && this.profileIsSafeToDelete
+    const profile = this.userDataDir
 
-    if (this.createdTarget && this.targetId && this.ws) {
+    // A partial start/attach can leave an owned process without a usable socket.
+    // Reconnect only for our dedicated browser; never discover or borrow another target.
+    if (ownsProfile && !this.allowExisting && this.ws?.readyState !== WebSocket.OPEN) {
       try {
-        await this.send('Target.closeTarget', { targetId: this.targetId }, 10000)
+        this.#disconnectSocket('CDP cleanup reconnecting')
+        // Never rediscover a port that another browser may have acquired after ours exited.
+        if (!this.browserWsUrl) throw new Error('Owned browser WebSocket endpoint unavailable')
+        await this.#openSocket(this.browserWsUrl)
+      } catch {
+        outcome.errors.push('Browser.close: owned browser connection unavailable')
+      }
+    }
+
+    if (this.createdTarget && this.targetId && this.ws?.readyState === WebSocket.OPEN) {
+      try {
+        const result = await this.send('Target.closeTarget', { targetId: this.targetId }, 10000)
+        if (result.success !== true) throw new Error('target closure was not confirmed')
         outcome.targetClosed = true
       } catch (error) {
         outcome.errors.push(`closeTarget: ${error.message}`)
       }
+    } else if (this.createdTarget && this.targetId) {
+      outcome.errors.push('closeTarget: owned target connection unavailable')
     }
 
-    if (this.startedByTest && this.profileIsSafeToDelete && this.ws) {
+    if (ownsProfile && this.ws?.readyState === WebSocket.OPEN) {
       try {
         await this.send('Browser.close', {}, 10000)
         outcome.browserClosed = true
@@ -428,38 +578,44 @@ export class CdpSession {
     }
 
     try {
-      this.ws?.close()
+      this.#disconnectSocket('CDP session cleaned up')
     } catch {
-      // 套接字已断开时无需处理。
+      outcome.errors.push('CDP socket close failed')
     }
-
-    // 已经关过浏览器了，别再让 event loop 为这个子进程等下去——不 unref 的话脚本
-    // 输出完结果还会挂几分钟，看起来像卡死。
     try {
       this.chromeProcess?.unref()
     } catch {
-      // 进程已退出时无需处理。
+      // An already-exited process needs no unref.
     }
 
-    if (this.startedByTest && this.profileIsSafeToDelete) {
-      // Browser.close 返回后进程退出仍需要一点时间，等到计数归零再删目录。
-      let remaining = this.#countProcessesUsingProfile()
-      for (let attempt = 0; attempt < 10 && remaining > 0; attempt += 1) {
-        await sleep(500)
-        remaining = this.#countProcessesUsingProfile()
+    if (ownsProfile) {
+      try {
+        let remaining = this.#countProcessesUsingProfile()
+        for (let attempt = 0; attempt < 10 && remaining > 0; attempt += 1) {
+          await sleep(500)
+          remaining = this.#countProcessesUsingProfile()
+        }
+        outcome.remainingProcesses = remaining
+      } catch (error) {
+        outcome.errors.push(error.message)
+        return outcome // Unknown means preserve, with no deletion or restart.
       }
 
-      if (remaining > 0) {
-        outcome.errors.push(
-          `${remaining} Chrome process(es) still using ${this.userDataDir}; profile not deleted`,
-        )
+      if (outcome.remainingProcesses > 0) {
+        outcome.errors.push(`${outcome.remainingProcesses} Chrome process(es) still using the test profile; profile not deleted`)
+      } else if (preserveProfile) {
+        try {
+          if (!(await stat(profile)).isDirectory()) throw new Error('not a directory')
+          outcome.profilePreserved = true
+        } catch {
+          outcome.errors.push('preserveProfile: test profile directory could not be confirmed')
+        }
       } else {
-        // 进程数已归零，但 Chrome 刚退出时文件句柄可能还没释放（常见于词典文件 *.bdic），
-        // 直接删会拿到 EBUSY。退避重试，最后一次失败才算清理失败。
+        // Chrome can release file handles shortly after the process count reaches zero.
         let lastError = null
         for (let attempt = 0; attempt < 12; attempt += 1) {
           try {
-            await rm(this.userDataDir, { recursive: true, force: true, maxRetries: 3 })
+            await rm(profile, { recursive: true, force: true, maxRetries: 3 })
             outcome.profileRemoved = true
             lastError = null
             break
@@ -469,7 +625,6 @@ export class CdpSession {
           }
         }
         if (lastError) {
-          // 进程已归零，所以没有安全问题；剩下的只是留在磁盘上的临时目录。
           outcome.warnings.push(
             `temp profile not deleted after 18s of retries (${lastError.message}). ` +
             'No browser process is left running; this is disk residue only. ' +
@@ -477,32 +632,55 @@ export class CdpSession {
           )
         }
       }
+    } else if (preserveProfile) {
+      outcome.errors.push('preserveProfile: no safe test-owned profile')
     }
 
     return outcome
   }
 
-  /**
-   * 统计命令行里精确包含本次 profile 路径的 chrome 进程数。
-   * 只按 profile 路径匹配——绝不按进程名，那会杀掉使用者自己的浏览器。
-   */
+  /** Count exact profile arguments without ever logging process command lines. */
   #countProcessesUsingProfile() {
-    if (process.platform !== 'win32') {
-      const result = spawnSync('pgrep', ['-f', this.userDataDir], { encoding: 'utf8' })
-      return (result.stdout ?? '').split('\n').filter((line) => line.trim()).length
-    }
-
+    const windows = process.platform === 'win32'
+    const space = windows ? '\\s' : '[[:space:]]'
+    const escaped = this.userDataDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = `(^|${space})("--user-data-dir=${escaped}"|--user-data-dir="${escaped}"|--user-data-dir=${escaped})(${space}|$)`
+    const options = { encoding: 'utf8', timeout: 10000, windowsHide: true }
     const script = [
-      `$profileDir = ${JSON.stringify(this.userDataDir)}`,
-      "$matched = Get-CimInstance Win32_Process -Filter \"Name = 'chrome.exe'\" |",
-      '  Where-Object { $_.CommandLine -and $_.CommandLine.Contains($profileDir) }',
-      'if ($matched) { @($matched).Count } else { 0 }',
+      "$ErrorActionPreference = 'Stop'",
+      // PowerShell single-quoted literals escape only apostrophes, not Windows backslashes.
+      `$profileDir = '${this.userDataDir.replaceAll("'", "''")}'`,
+      '$escapedProfile = [regex]::Escape($profileDir)',
+      `$profileArgument = '(^|\\s)("--user-data-dir=' + $escapedProfile + '"|--user-data-dir="' + $escapedProfile + '"|--user-data-dir=' + $escapedProfile + ')(\\s|$)'`,
+      '$matched = @(Get-CimInstance Win32_Process -Filter "Name = \'chrome.exe\'" -ErrorAction Stop |',
+      '  Where-Object { $_.CommandLine -and $_.CommandLine -match $profileArgument })',
+      '$matched.Count',
     ].join('\n')
-
-    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-      encoding: 'utf8',
-    })
-    return Number.parseInt((result.stdout ?? '').trim(), 10) || 0
+    const unknown = (reason) => { throw new Error(`Profile process count unknown: ${reason}; profile retained`) }
+    let result
+    try {
+      result = windows
+        ? spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], options)
+        : spawnSync('pgrep', ['-f', '--', pattern], options)
+    } catch {
+      unknown('query failed') // Do not expose subprocess errors containing command lines.
+    }
+    if (!result || result.error || result.signal || result.status === null) unknown('query failed')
+    if (typeof result.stdout !== 'string') unknown('missing query output')
+    const output = result.stdout.trim()
+    if (!windows && result.status === 1 && output === '') return 0
+    if (result.status !== 0) unknown('query exit status was not successful')
+    if (windows) {
+      if (!/^(0|[1-9][0-9]*)$/.test(output) || !Number.isSafeInteger(Number(output))) {
+        unknown('invalid integer output')
+      }
+      return Number(output)
+    }
+    const pids = output.split(/\r?\n/)
+    if (pids.some(pid => !/^[1-9][0-9]*$/.test(pid) || !Number.isSafeInteger(Number(pid)))) {
+      unknown('invalid PID output')
+    }
+    return pids.length
   }
 }
 

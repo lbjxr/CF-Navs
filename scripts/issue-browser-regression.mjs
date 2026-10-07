@@ -9,6 +9,7 @@ import { CdpSession, sleep } from './lib/cdpSession.mjs'
 import { verifiedLogoutFailures } from './lib/logoutEvidence.mjs'
 import { pageLegacySnapshots } from './lib/legacySnapshotProbe.mjs'
 import { pageReadFixtureCopy } from './lib/iconCopyStorageProbe.mjs'
+import { assessBrowserRestartEvidence } from './lib/browserRestartEvidence.mjs'
 import { pageInstallImageLifecycleProbe } from './lib/imageRequestLifecycleProbe.mjs'
 import { verifiedSignedImageReplacements } from './lib/imageRequestLifecycleEvidence.mjs'
 import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
@@ -23,7 +24,7 @@ const cacheMode=process.env.ISSUE_CACHE_MODE??'on'
 assert(['on','off'].includes(cacheMode),'Invalid ISSUE_CACHE_MODE')
 if(cacheMode==='off') assert(selectedCases.size>0&&[...selectedCases].every(id=>['28-EDIT-TITLE-DATA','28-EDIT-CANCEL','28-IDLE-CONTROL','28-RIGHT-CLICK-OFF'].includes(id)),'Off mode requires explicit compatible cases')
 const requiredCases=new Set(['LOGIN-UI','28-BASELINE','28-ENABLE-DEFERRED'])
-const optionalCases = new Set(['28-COPY-TIMEOUT'])
+const optionalCases = new Set(['28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE'])
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const output = await fs.mkdtemp(path.join(os.tmpdir(), 'cf-navs-issue-browser-'))
 const profile = path.join(os.tmpdir(), 'cf-navs-chrome-profile-issue-' + run)
@@ -304,6 +305,25 @@ async function clearCopies() {
   await wait(()=>document.querySelector('.device-status')?.textContent.startsWith('已启用'),[],30000)
 }
 async function readFixtureCopy(object) { return b.call(pageReadFixtureCopy, object) }
+async function readRestartState() {
+  const items=manifest()
+  const state=await b.call(async (items, privateId) => {
+    const script=[...document.scripts].find(e=>e.type==='module'&&e.src.includes('/assets/index-'))
+    if(!script)throw new Error('Application entry missing')
+    const values=Object.values(await import(script.src))
+    const device=values.find(v=>v&&typeof v==='object'&&typeof v.snapshot==='function'&&typeof v.acceptMetadata==='function')
+    const snapshot=device?.snapshot(), saved=JSON.parse(localStorage.getItem('cf-navs.icon-device-v1')||'null'), session=JSON.parse(localStorage.getItem('cf-navs.auth')||'null')
+    return {authenticated:!!session?.token&&session.expires_at>Date.now(),trusted:saved?.trusted===true&&snapshot?.trusted===true,
+      enabledForPage:snapshot?.enabledForPage===true,phase:snapshot?.phase,hasLease:!!snapshot?.lease,
+      privateVisible:!!document.querySelector('[data-sort-id="'+privateId+'"] .bookmark-card-shell'),
+      blobImages:items.every(item=>{const image=document.querySelector(item.selector)?.querySelector('img');return image?.complete&&image.naturalWidth>0&&image.src.startsWith('blob:')}),
+      documentTimeOrigin:performance.timeOrigin,applicationScript:new URL(script.src).pathname}
+  },items,bookmarks[2].id)
+  state.imagesPassed=(await verifyImages(items)).passed
+  state.copies=[]
+  for(const item of items)state.copies.push({key:item.key,record:await readFixtureCopy(item.key)})
+  return state
+}
 async function enterSort() {
   const desktop = `#category-${category.id} button[aria-label="排序"]`
   const visible=await b.call(sel=>{const e=document.querySelector(sel);const r=e?.getBoundingClientRect();return r?.width>0},desktop)
@@ -323,21 +343,9 @@ async function sessionCall(sessionId,fn,...args) {
   if(response.exceptionDetails) throw new Error('Secondary page evaluation failed')
   return response.result?.value
 }
-async function settings() { await homeAction('admin'); await wait(() => document.querySelector('[data-testid="admin-tab-settings"]')); await click('[data-testid="admin-tab-settings"]'); await wait(() => [...document.querySelectorAll('.settings-submenu button')].some(e => e.textContent.includes('设备缓存'))); const selector = await b.call(() => { const buttons = [...document.querySelectorAll('.settings-submenu button')]; return '.settings-submenu button:nth-child(' + (buttons.findIndex(e => e.textContent.includes('设备缓存')) + 1) + ')' }); await click(selector); await wait(() => document.querySelector('.device-cache input')) }
-async function edit(index) { editorObject=`bookmark:${bookmarks[index].id}`; await click(card(index), 'right'); await click('[data-testid="bookmark-context-edit"]'); await wait(() => document.querySelector('[data-testid="bookmark-modal"]')) }
-try {
-  // smoke-local owns the empty D1 and its one-time bootstrap credentials. Match
-  // the existing icon smoke setup, then still exercise the real login form.
-  if (new URL(base).hostname === '127.0.0.1' && process.env.SETUP_TOKEN) {
-    const response = await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:credentials.username,password:credentials.password})})
-    const bootstrap = await response.json()
-    assert(bootstrap.code===0&&bootstrap.data?.token,'Disposable local bootstrap failed')
-    await fetch(base+'/api/logout',{method:'POST',headers:{authorization:'Bearer '+bootstrap.data.token}})
-  }
-  await b.start(); await b.attach()
+async function installPageInstrumentation() {
   await b.send('Page.addScriptToEvaluateOnNewDocument', {source:`(${pageInstallImageLifecycleProbe.toString()})()`})
   await b.send('Runtime.addBinding',{name:'__issueCopyObserved'})
-  b.on('Runtime.bindingCalled',event=>{if(event.name==='__issueCopyObserved'){try{observedCopyResponses.push(JSON.parse(event.payload))}catch{}}})
   // Observe the same response without substituting bytes or changing the request.
   // Chrome may drop Network.getResponseBody after an owner aborts an already-read
   // response. Retain only protocol metadata, never image bytes or auth headers.
@@ -368,9 +376,29 @@ try {
     URL.revokeObjectURL=function(url){if(state.active&&state.events.length<2000)state.events.push({kind:'revoke',id:ids.get(url),at:performance.now(),stack:new Error().stack});ids.delete(url);return revoke(url)};
   })()`})
   await b.send('Log.enable')
+}
+async function recordBrowserOwnership(reason) {
+  const ownership={profile,pid:b.chromeProcess.pid,port,targetId:b.targetId,headed:true,nativeWindowOcclusionDisabled:true,reason}
+  report.ownership=ownership
+  ;(report.browserLifetimes ??= []).push(ownership)
+  await fs.writeFile(path.join(output, 'ownership.json'), JSON.stringify(ownership))
+}
+async function settings() { await homeAction('admin'); await wait(() => document.querySelector('[data-testid="admin-tab-settings"]')); await click('[data-testid="admin-tab-settings"]'); await wait(() => [...document.querySelectorAll('.settings-submenu button')].some(e => e.textContent.includes('设备缓存'))); const selector = await b.call(() => { const buttons = [...document.querySelectorAll('.settings-submenu button')]; return '.settings-submenu button:nth-child(' + (buttons.findIndex(e => e.textContent.includes('设备缓存')) + 1) + ')' }); await click(selector); await wait(() => document.querySelector('.device-cache input')) }
+async function edit(index) { editorObject=`bookmark:${bookmarks[index].id}`; await click(card(index), 'right'); await click('[data-testid="bookmark-context-edit"]'); await wait(() => document.querySelector('[data-testid="bookmark-modal"]')) }
+try {
+  // smoke-local owns the empty D1 and its one-time bootstrap credentials. Match
+  // the existing icon smoke setup, then still exercise the real login form.
+  if (new URL(base).hostname === '127.0.0.1' && process.env.SETUP_TOKEN) {
+    const response = await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:credentials.username,password:credentials.password})})
+    const bootstrap = await response.json()
+    assert(bootstrap.code===0&&bootstrap.data?.token,'Disposable local bootstrap failed')
+    await fetch(base+'/api/logout',{method:'POST',headers:{authorization:'Bearer '+bootstrap.data.token}})
+  }
+  await b.start(); await b.attach()
+  await installPageInstrumentation()
+  b.on('Runtime.bindingCalled',event=>{if(event.name==='__issueCopyObserved'){try{observedCopyResponses.push(JSON.parse(event.payload))}catch{}}})
   b.on('Log.entryAdded',({entry})=>{if(['warning','error'].includes(entry.level)) report.browserLog.push({stage,level:entry.level,source:entry.source,requestId:entry.networkRequestId,text:safe(entry.text)})})
-  report.ownership = { profile, pid: b.chromeProcess.pid, port, targetId: b.targetId, headed: true, nativeWindowOcclusionDisabled: true }
-  await fs.writeFile(path.join(output, 'ownership.json'), JSON.stringify(report.ownership))
+  await recordBrowserOwnership('initial')
   b.on('Fetch.requestPaused', event => {
     Promise.resolve(fetchHandler ? fetchHandler(event) : false).then(handled => {
       if (!handled) return b.send('Fetch.continueRequest', { requestId:event.requestId })
@@ -462,6 +490,58 @@ try {
     assert(await b.call(manifest=>manifest.every(row=>document.querySelector(row.selector)?.querySelector('img')?.src.startsWith('blob:')),manifest()),'Warm fixture did not use object URLs')
     const rows=report.requests.slice(start),network=assessStableIcons(rows.filter(row=>['icon-body','icon-copy'].includes(row.kind)))
     assert(network.passed,JSON.stringify(network));return {persisted,network,otherImageRequests:rows.filter(row=>['external-image','iconify-body'].includes(row.kind)).length}
+  })
+  for (const mode of ['online','offline']) await scenario('28-BROWSER-RESTART-'+mode.toUpperCase(), async () => {
+    const entry=report.cases.at(-1), evidence=entry.restart={mode,fixtureKeys:manifest().map(item=>item.key)}
+    const markerKey='cf-navs.restart-proof.'+run+'.'+mode, marker=randomUUID()
+    let afterRestartStart=0
+    try {
+      await home();await verifyImages()
+      evidence.before=await readRestartState()
+      assert(evidence.before.authenticated&&evidence.before.trusted&&evidence.before.enabledForPage&&evidence.before.phase==='ready'&&evidence.before.privateVisible&&evidence.before.blobImages,'Restart requires a trusted authenticated visible baseline')
+      assert(evidence.before.copies.every(copy=>copy.record.enabled&&copy.record.entryPresent&&copy.record.bodyPresent&&copy.record.bodyBytes>0&&copy.record.bodyRevision===copy.record.descriptor?.content_revision),'Restart requires native persisted fixture bodies before closure')
+      if(mode==='offline') {
+        await wait(()=>Boolean(navigator.serviceWorker?.controller),[],20000)
+        evidence.serviceWorkerControlledBeforeClose=true
+      }
+      const previousToken=await b.call(()=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token)
+      assert(previousToken,'Restart requires a persisted session')
+      await b.call((key,value)=>localStorage.setItem(key,value),markerKey,marker)
+      await collectImageLifecycle('before-browser-restart')
+      await Promise.allSettled([...responseReads]);await persist()
+      try { evidence.process=await b.restart() }
+      catch(error) { evidence.process=error.restartEvidence;throw error }
+      await recordBrowserOwnership('restart-'+mode)
+      afterRestartStart=report.requests.length
+      await installPageInstrumentation()
+      await b.setViewport({width:1366,height:900,scale:1})
+      if(mode==='offline') {
+        await b.send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0})
+        offlineActive=true
+      }
+      await home();evidence.after=await readRestartState()
+      const retained=await b.call((key,value,previous)=>({markerPreserved:localStorage.getItem(key)===value,sameSession:JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token===previous}),markerKey,marker,previousToken)
+      Object.assign(evidence.after,retained,{newDocument:evidence.after.documentTimeOrigin!==evidence.before.documentTimeOrigin,offlineDuringNavigation:mode==='offline'&&offlineActive})
+      evidence.assessment=assessBrowserRestartEvidence({mode,restart:evidence.process,before:evidence.before,after:evidence.after,fixtureKeys:evidence.fixtureKeys,requests:report.requests.slice(afterRestartStart)})
+      assert(evidence.assessment.passed,'Browser restart: '+JSON.stringify(evidence.assessment))
+      await shot('28-restart-'+mode)
+      if(mode==='offline') {
+        await b.send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});offlineActive=false
+        await home();evidence.onlineRecovery=(await verifyImages()).passed
+        assert(evidence.onlineRecovery,'Restart did not recover online')
+      }
+      await b.call(key=>localStorage.removeItem(key),markerKey)
+      return {mode,sameProfile:evidence.process.sameProfile,previousPid:evidence.process.previous.pid,currentPid:evidence.process.current.pid,
+        previousProcesses:evidence.process.previous.remainingProcesses,closedProcesses:evidence.process.closed.remainingProcesses,
+        sameSession:evidence.after.sameSession,privateVisible:evidence.after.privateVisible,fixtureBodyRequests:evidence.assessment.fixtureBodyRequests,
+        authenticatedMetadataRequests:evidence.assessment.authenticatedMetadataRequests,onlineRecovery:evidence.onlineRecovery??null,imagesPassed:evidence.after.imagesPassed}
+    } catch(error) { evidence.failure=safe(error.message);await persist();throw error }
+    finally {
+      if(offlineActive) {
+        try {await b.send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});offlineActive=false;evidence.offlineRestored=true}
+        catch(error){evidence.offlineRestoreError=safe(error.message);throw error}
+      }
+    }
   })
   for (const access of ['admin', 'public']) await scenario('28-LEGACY-SNAPSHOT-' + access.toUpperCase(), async () => {
     const anonymous = access === 'public'
@@ -881,7 +961,9 @@ finally {
       const data = await api('/admin/data', undefined, 'GET')
       assert(!data.bookmarks.some(e => ownedBookmarks.includes(e.id)) && !data.categories.some(e => ownedCategories.includes(e.id)), 'Synthetic data remains')
       report.cleanup.serverFixturesRemoved = true
-      await api('/logout', undefined)
+      const logout=await api('/logout', undefined)
+      assert(logout?.revoked===true, 'Test session revocation was not confirmed')
+      report.cleanup.sessionRevoked=true
     }
   } catch (error) { report.cleanup.serverError = safe(error.message) }
   if (secondary) await b.send('Target.closeTarget', { targetId: secondary }).catch(() => {})
@@ -915,5 +997,5 @@ finally {
   report.injectedRequests=[...injectedRequests]
   await persist()
   console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))
-  if (report.fatal || report.interceptionError || report.imageLifecycleErrors.length || report.unexpectedHttp.length || report.unexpectedFailures.length || report.consoleFindings.length || report.cases.some(c => c.status === 'failed') || !report.cleanup.serverFixturesRemoved || !report.cleanup.browser.profileRemoved || report.cleanup.browser.errors.length || report.cleanup.browser.warnings.length) process.exitCode = 1
+  if (report.fatal || report.interceptionError || report.imageLifecycleErrors.length || report.unexpectedHttp.length || report.unexpectedFailures.length || report.consoleFindings.length || report.cases.some(c => c.status === 'failed') || !report.cleanup.serverFixturesRemoved || !report.cleanup.sessionRevoked || !report.cleanup.browser.profileRemoved || report.cleanup.browser.errors.length || report.cleanup.browser.warnings.length) process.exitCode = 1
 }

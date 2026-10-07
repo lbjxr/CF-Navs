@@ -8,7 +8,7 @@
 - 仅在当前任务明确授权测试站临时数据写入后，设置 `ISSUE_BROWSER_WRITE_FIXTURES=1` 并运行 `node scripts/issue-browser-regression.mjs`。
 - 创建独立有头 Chrome profile；真实 UI 登录。测试专用 Chrome 禁用 Windows 原生窗口遮挡暂停，避免窗口被其他应用覆盖时懒加载/动画帧停滞；不覆盖 visibilityState、不改图片 loading，真实标签切换与生命周期仍然生效。报告记录该环境边界，不能拿它证明原生窗口遮挡下的性能。API 仅用于创建、核验和删除本轮合成数据，不替代被验收的 UI 保存、菜单、登录或退出动作。
 - 本轮数据：唯一名称的父分类、子分类、两个公开书签与一个私密书签。书签和分类使用不同的合成像素签名；一般用 base64 控制格式，专门的代理回退用例才切换至 URL 编码格式，避免一种失败污染所有独立用例。
-- `ISSUE_CASES` 可用逗号指定独立用例；登录、基线、开启偏好仍执行；冷加载作为独立用例选择，未选项明确记录为 not-run。`28-COPY-TIMEOUT` 是额外 opt-in，全量默认命令也不隐式运行，必须在 `ISSUE_CASES` 中点名。
+- `ISSUE_CASES` 可用逗号指定独立用例；登录、基线、开启偏好仍执行；冷加载作为独立用例选择，未选项明确记录为 not-run。`28-COPY-TIMEOUT`、`28-BROWSER-RESTART-ONLINE`、`28-BROWSER-RESTART-OFFLINE` 是额外 opt-in，全量默认命令也不隐式运行，必须在 `ISSUE_CASES` 中点名。
 - 字段使用完整原生按键序列替换，保存前逐字核验 value；只读投影造成的数据丢失会保留为失败，再恢复本轮自己的 fixture 隔离后续用例。
 - 不修改既有书签、全站设置、密码，不批量导入；不触发部署或 Issue 状态变化。
 - 最终按记录 ID 删除本轮对象并重新读取验证不存在；撤销测试会话；关闭本次 target/浏览器并验证 profile 清理。失败仍保存报告，清理失败为整轮失败。
@@ -90,6 +90,22 @@ node --experimental-sqlite node_modules/vitest/vitest.mjs run tests/unit/issueBr
 ```
 
 `protocol` / timing 是观测证据，不是连接异常根因结论。副本队列 10 秒期限与普通 `<img>` 持续挂起是两条链路：即使同路径 `fetch(cache:no-store)` 成功，原 Image 仍未响应/显示时也不能判通过，不能由副本修复推断匿名图片挂起根因已定位。不得延长既有等待或用额外请求掩盖失败；保留原图片 requestId 与独立诊断请求。纯判定单测通过不代表测试站案例通过。
+
+## 真正关闭重开：同一 profile 的在线与离线恢复
+
+```powershell
+$env:ISSUE_BROWSER_WRITE_FIXTURES='1'
+$env:ISSUE_CASES='28-BROWSER-RESTART-ONLINE,28-BROWSER-RESTART-OFFLINE'
+node scripts/issue-browser-regression.mjs
+```
+
+- 三个必需前置仍执行，其他未选择场景明列 not-run。在线和离线场景各自先验证本轮公开/私密书签及两类分类图标均为正确 Blob，原生 IDB 中 entry/body 存在且协议哈希一致。
+- 仅关闭本轮创建的浏览器：关闭前精确 profile 进程计数为正，关闭 target 和 Browser 后计数归零，目录保留；随后在相同绝对路径创建新进程与新标签。复用用户浏览器、仅刷新、仅关闭标签、计数未知、换 profile 均不能通过。
+- 使用本轮 localStorage 标记证明 profile 连续性，比较原会话仅输出相等布尔值，不记录凭据。重开后不得调用登录接口，不清理或拷贝站点数据，也不人工补发副本请求。逐项复核持久化描述符、正文大小/协议哈希、真实像素、Blob 展示和私密对象。
+- 在线重开要求页面自己发起并成功完成真实鉴权元数据刷新；离线重开先确认旧页面已由 SW 接管，在新目标首次导航前断网，必须观察到真实 API 断网失败且没有成功的鉴权数据响应，同时保留有效许可范围内的本地展示。随后恢复网络并复验图像。
+- 零图标正文请求只针对本轮五个 fixture，其他请求仍完整记录并受全局错误门约束。该用例不声称覆盖过期许可、真实24小时等待、服务器已撤销的离线会话、不同构建升级或回滚。
+- 中间关闭结果 profilePreserved=true 是有意保留，不是最终清理。report.browserLifetimes 与 cases[].restart 记录每次 PID/target 及关闭计数，最终 cleanup 必须删除同一临时 profile、撤销会话并删除本轮服务器数据。
+- CdpSession.restart 保留主机事件监听和证据数组，runner 重新安装新页面的 bindings/采证脚本；不重复注册 b.on。进程查询失败或空输出不能解释为0，PowerShell路径使用正确的单引号字面量。
 
 ## 原生图片签名换源的取消证据
 
