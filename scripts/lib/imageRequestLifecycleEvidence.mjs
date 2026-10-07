@@ -293,3 +293,18 @@ export function verifiedNativeCategoryRetries(rows, snapshots) {
   }
   return evidence
 }
+
+// An explicit runner navigation retires the old document. Only canceled native
+// read-only icon requests inside that confirmed navigation interval qualify.
+export function verifiedNavigationImageCancellations(rows, navigations) {
+  const result=[]
+  for(const row of rows) {
+    if(row?.type!=='Image'||row.kind!=='icon-body'||row.method!=='GET'||row.error!=='net::ERR_ABORTED'||row.canceled!==true||row.status!=null&&row.status!==200||!nonempty(row.requestId)||!nonempty(row.documentLoaderId))continue
+    const range=wallRange(row,'failureTime')
+    if(!range)continue
+    const matches=navigations.filter(nav=>nav?.completed===true&&nav.beforeLoaderId===row.documentLoaderId&&nonempty(nav.afterLoaderId)&&nav.afterLoaderId!==nav.beforeLoaderId&&Number.isFinite(nav.startedAt)&&Number.isFinite(nav.committedAt)&&nav.committedAt>=nav.startedAt&&range.start<=nav.committedAt&&range.end>=nav.startedAt-100&&range.end<=nav.committedAt+200)
+    if(matches.length!==1)continue
+    result.push({requestId:row.requestId,navigationId:matches[0].id,oldLoaderId:row.documentLoaderId,newLoaderId:matches[0].afterLoaderId,reason:'explicit-document-replacement'})
+  }
+  return result
+}

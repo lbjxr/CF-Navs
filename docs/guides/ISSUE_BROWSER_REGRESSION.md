@@ -174,3 +174,5 @@ node scripts/issue-browser-regression.mjs
 退出期间的 401 只在同一场景、同一匿名化会话序号、请求在撤销回复前发出（或在已记录的双标签确认本地退出前发出）且 401 跨过撤销开始时刻、并读到退出响应明确 revoked=true 时单独分类。其他会话、失败撤销、缺少时间/响应证据或后发请求均不豁免；报告保存具体 requestId，不记录认证头。
 
 旧 401 的旧响应在新会话图像基线验证期间仍保持暂扣，禁止通过重新导航让它消失。该用例验证“新会话就绪之后”的迟到错误；初始化中的图像交错仍属于扩展矩阵，不由此结果代替。
+
+主动文档导航的原生图标取消单独记录为 verifiedNavigationImageCancellations：必须有本轮 b.navigate 发起、明确新 loader 提交，旧 Image/GET 图标请求属于旧 loader，且取消发生在该导航区间；HTTP 错误、API/写请求、未完成导航或区间外取消仍失败。原始 failedRequests 不删除，不为旧报告补造导航证据。

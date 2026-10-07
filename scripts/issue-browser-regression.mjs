@@ -12,7 +12,7 @@ import { pageReadFixtureCopy } from './lib/iconCopyStorageProbe.mjs'
 import { assessBrowserRestartEvidence } from './lib/browserRestartEvidence.mjs'
 import { verifiedEditCopyCancellations } from './lib/editCopyCancellationEvidence.mjs'
 import { pageInstallImageLifecycleProbe } from './lib/imageRequestLifecycleProbe.mjs'
-import { verifiedSignedImageReplacements, verifiedNativeCategoryRetries } from './lib/imageRequestLifecycleEvidence.mjs'
+import { verifiedSignedImageReplacements, verifiedNativeCategoryRetries, verifiedNavigationImageCancellations } from './lib/imageRequestLifecycleEvidence.mjs'
 import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
@@ -38,6 +38,9 @@ const requests = new Map()
 const imageRequestUrls = new Map()
 report.imageLifecycles = []
 report.imageLifecycleErrors = []
+report.navigations=[]
+const documentCommits=new Map()
+b.on('Page.frameNavigated',({frame})=>{if(frame&&!frame.parentId&&frame.loaderId)documentCommits.set(frame.loaderId,{frameId:frame.id,at:Date.now()})})
 const responseReads = new Set()
 const observedCopyResponses = []
 let fetchHandler = null
@@ -69,7 +72,15 @@ async function collectImageLifecycle(reason) {
 const navigate = b.navigate.bind(b)
 b.navigate = async (...args) => {
   await collectImageLifecycle('before-navigation')
-  return navigate(...args)
+  const before=(await b.send('Page.getFrameTree')).frameTree.frame
+  const event={id:report.navigations.length+1,stage,beforeLoaderId:before.loaderId,startedAt:Date.now(),completed:false}
+  report.navigations.push(event)
+  try {
+    const result=await navigate(...args)
+    const after=(await b.send('Page.getFrameTree')).frameTree.frame,commit=documentCommits.get(after.loaderId)
+    Object.assign(event,{afterLoaderId:after.loaderId,committedAt:commit?.at,completed:before.loaderId!==after.loaderId&&commit?.frameId===after.id})
+    return result
+  } catch(error) {event.error=safe(error.message);throw error}
 }
 async function wait(fn, args = [], timeout = 20000) {
   const end = Date.now() + timeout
@@ -1105,13 +1116,15 @@ finally {
   const editedCopyCancellations=new Set(report.verifiedEditCopyCancellations.map(row=>row.requestId))
   report.verifiedNativeCategoryRetries=verifiedNativeCategoryRetries(report.requests,report.imageLifecycles)
   const nativeCategoryRetries=new Set(report.verifiedNativeCategoryRetries.map(row=>row.requestId))
+  report.verifiedNavigationImageCancellations=verifiedNavigationImageCancellations(report.requests,report.navigations)
+  const navigationImageCancellations=new Set(report.verifiedNavigationImageCancellations.map(row=>row.requestId))
   report.failedRequests = report.requests.filter(e => e.error)
   report.expectedOfflineRequests=[...expectedOfflineRequests]
   report.expectedTimeoutRequests=[...expectedTimeoutRequests]
   report.expectedReacquireRequests=[...expectedReacquireRequests]
   report.validatedInjectedCancellations=report.failedRequests.filter(row=>isExpectedInjectedCancellation(row,expectedInjectedCancellations)).map(row=>row.requestId)
-  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId))
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||revokedRequests.has(e.requestId))))
+  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId)&&!navigationImageCancellations.has(e.requestId))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||navigationImageCancellations.has(e.requestId)||revokedRequests.has(e.requestId))))
   report.injectedRequests=[...injectedRequests]
   await persist()
   console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))
