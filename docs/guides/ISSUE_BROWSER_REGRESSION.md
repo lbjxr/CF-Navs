@@ -8,7 +8,7 @@
 - 仅在当前任务明确授权测试站临时数据写入后，设置 `ISSUE_BROWSER_WRITE_FIXTURES=1` 并运行 `node scripts/issue-browser-regression.mjs`。
 - 创建独立有头 Chrome profile；真实 UI 登录。测试专用 Chrome 禁用 Windows 原生窗口遮挡暂停，避免窗口被其他应用覆盖时懒加载/动画帧停滞；不覆盖 visibilityState、不改图片 loading，真实标签切换与生命周期仍然生效。报告记录该环境边界，不能拿它证明原生窗口遮挡下的性能。API 仅用于创建、核验和删除本轮合成数据，不替代被验收的 UI 保存、菜单、登录或退出动作。
 - 本轮数据：唯一名称的父分类、子分类、两个公开书签与一个私密书签。书签和分类使用不同的合成像素签名；一般用 base64 控制格式，专门的代理回退用例才切换至 URL 编码格式，避免一种失败污染所有独立用例。
-- `ISSUE_CASES` 可用逗号指定独立用例；登录、基线、开启偏好仍执行；冷加载作为独立用例选择，未选项明确记录为 not-run。`28-COPY-TIMEOUT`、`28-BROWSER-RESTART-ONLINE`、`28-BROWSER-RESTART-OFFLINE` 是额外 opt-in，全量默认命令也不隐式运行，必须在 `ISSUE_CASES` 中点名。
+- `ISSUE_CASES` 可用逗号指定独立用例；登录、基线、开启偏好仍执行；冷加载作为独立用例选择，未选项明确记录为 not-run。`28-COPY-TIMEOUT`、`28-BROWSER-RESTART-ONLINE`、`28-BROWSER-RESTART-OFFLINE`、`29-LOGOUT-NAVIGATION-RACE`、`28-NATIVE-CATEGORY-TIMEOUT` 是额外 opt-in，全量默认命令也不隐式运行，必须在 `ISSUE_CASES` 中点名。
 - 字段使用完整原生按键序列替换，保存前逐字核验 value；只读投影造成的数据丢失会保留为失败，再恢复本轮自己的 fixture 隔离后续用例。
 - 不修改既有书签、全站设置、密码，不批量导入；不触发部署或 Issue 状态变化。
 - 最终按记录 ID 删除本轮对象并重新读取验证不存在；撤销测试会话；关闭本次 target/浏览器并验证 profile 清理。失败仍保存报告，清理失败为整轮失败。
@@ -90,6 +90,20 @@ node --experimental-sqlite node_modules/vitest/vitest.mjs run tests/unit/issueBr
 ```
 
 `protocol` / timing 是观测证据，不是连接异常根因结论。副本队列 10 秒期限与普通 `<img>` 持续挂起是两条链路：即使同路径 `fetch(cache:no-store)` 成功，原 Image 仍未响应/显示时也不能判通过，不能由副本修复推断匿名图片挂起根因已定位。不得延长既有等待或用额外请求掩盖失败；保留原图片 requestId 与独立诊断请求。纯判定单测通过不代表测试站案例通过。
+
+## 快速退出导航与原生分类图片超时
+
+```powershell
+$env:ISSUE_BROWSER_WRITE_FIXTURES='1'
+$env:ISSUE_CASES='28-BROWSER-RESTART-OFFLINE,29-LOGOUT-NAVIGATION-RACE,28-NATIVE-CATEGORY-TIMEOUT'
+node scripts/issue-browser-regression.mjs
+```
+
+- 快速导航用例保留旧反例：退出后只确认本地会话清除，不等匿名图片/快照就绪，立即完整导航；保留原 home 首个分类图像等待顺序。先证明原页面仍未就绪，再检查新文档、私密对象移除、独立像素和有界恢复，不以普通旧快照用例的就绪前置替代它。
+- 原生超时用例单独先建立匿名就绪前置。仅修改本轮子分类 SVG 的无视觉注释，产生同像素但新内容版本，避免继承另一用例的悬空 URL；该 fixture 最终统一删除。通过 CDP 暂扣真实原生图片的 200 响应，不主动发送 error/load，也不直接改图片 URL；允许产品自己用 retry=1 发出新请求并校验完整正文和像素。
+- 原生加载仅在元素实际可见、document 可见且在线时计 10 秒；成功、错误、换源、离屏、隐藏、离线和销毁均取消对应期限。重试复用有界退避，最多三次自动重试，之后仅由限频的 focus/online 事件恢复；成功后保留已恢复的 retry URL，避免重新请求原悬空 URL。可信 Blob 仍由可信副本模块管理，外部/data 预览不走该网络看门狗。
+- `verifiedNativeCategoryRetries` 仅单列有完整恢复链的旧 ERR_ABORTED：至少九秒等待、同文档/场景/对象、旧使用者退出、新节点首次挂载、同一原始 URL 身份（只删除 retry，保留 key/v）、重试序号递增、200 非兜底完整响应和原生解码成功。没有终止事件时不虚构取消，HTTP 错误、丢事件、换 key/v 和未完成替代仍失败。
+- 报告只记录 retry 数字与不透明 baseSourceId，不记录完整 URL 或签名参数。普通请求统计、授权边界和所有失败门保持有效。
 
 ## 匿名旧快照的前置与快速导航竞态
 

@@ -201,3 +201,95 @@ export function verifiedSignedImageReplacements(rows, snapshots) {
   }
   return evidence
 }
+
+/**
+ * Proves only completed native category retry handoffs, never inferred failures.
+ * baseSourceId is assigned by the runner within the document after removing only
+ * `retry`; this module neither reads URLs nor treats key/version changes as retries.
+ */
+export function verifiedNativeCategoryRetries(rows, snapshots) {
+  if (!Array.isArray(rows) || !Array.isArray(snapshots)) return []
+  const candidates = []
+  for (const old of rows) {
+    if (!nativeImage(old) || !old.object.startsWith('category:') ||
+        old.error !== 'net::ERR_ABORTED' || old.canceled !== true ||
+        (old.status != null && old.status !== 200) ||
+        !positiveId(old.imageLifecycle.baseSourceId) ||
+        !Number.isSafeInteger(old.nativeRetryAttempt) || old.nativeRetryAttempt < 0) continue
+    const canceled = wallRange(old, 'failureTime')
+    if (!canceled || old.failureTime - old.time < 9) continue
+    const snapshot = documentSnapshot(old, snapshots)
+    if (!snapshot || !oldConsumersRetired(snapshot.events, old, canceled.end)) continue
+    const { events, timeOrigin } = snapshot
+
+    for (let removedIndex = 0; removedIndex < events.length; removedIndex++) {
+      const removed = events[removedIndex]
+      const removedWall = timeOrigin + removed.time
+      if (removed.kind !== 'removed' || removed.sourceId !== old.imageLifecycle.sourceId ||
+          removed.object !== old.object || !Number.isFinite(removedWall) ||
+          Math.abs(removedWall - canceled.end) > 100) continue
+      // A matching removed record alone does not establish the departing owner.
+      const observedIndex = events.findIndex(event => event.nodeId === removed.nodeId &&
+        (event.kind === 'observed' || event.kind === 'src-changed') &&
+        event.sourceId === old.imageLifecycle.sourceId && event.object === old.object)
+      if (observedIndex < 0 || observedIndex >= removedIndex ||
+          events.slice(observedIndex + 1, removedIndex).some(event => event.nodeId === removed.nodeId &&
+            (event.kind === 'removed' || event.kind === 'src-changed' ||
+             event.sourceId !== removed.sourceId || event.object !== old.object))) continue
+
+      for (let mountedIndex = removedIndex + 1; mountedIndex < events.length; mountedIndex++) {
+        const mounted = events[mountedIndex]
+        if (mounted.kind !== 'observed' || mounted.nodeId === removed.nodeId || mounted.object !== old.object ||
+            mounted.sourceId === old.imageLifecycle.sourceId ||
+            events.findIndex(event => event.nodeId === mounted.nodeId) !== mountedIndex) continue
+        for (const replacement of rows) {
+          if (!nativeImage(replacement) || replacement.requestId === old.requestId ||
+              replacement.stage !== old.stage || replacement.documentLoaderId !== old.documentLoaderId ||
+              replacement.object !== old.object || replacement.imageLifecycle.timeOrigin !== timeOrigin ||
+              replacement.imageLifecycle.sourceId !== mounted.sourceId ||
+              replacement.imageLifecycle.baseSourceId !== old.imageLifecycle.baseSourceId ||
+              !Number.isSafeInteger(replacement.nativeRetryAttempt) ||
+              replacement.nativeRetryAttempt !== old.nativeRetryAttempt + 1 || !realImageResponse(replacement)) continue
+          const finished = wallRange(replacement, 'finishedTime')
+          if (!finished || finished.start < canceled.end - 100 || finished.start > canceled.end + 12000) continue
+          for (let loadedIndex = mountedIndex + 1; loadedIndex < events.length; loadedIndex++) {
+            const loaded = events[loadedIndex]
+            if (loaded.nodeId !== mounted.nodeId) continue
+            // Once broken, this fresh-node ownership chain cannot be repaired by
+            // switching back or by a later load from a different request.
+            if (loaded.kind === 'removed' || loaded.kind === 'src-changed' || loaded.kind === 'error' ||
+                loaded.sourceId !== mounted.sourceId || loaded.object !== old.object) break
+            const loadedWall = timeOrigin + loaded.time
+            if (loaded.kind !== 'loaded' || loaded.complete !== true ||
+                !(loaded.naturalWidth > 0 && loaded.naturalHeight > 0) ||
+                !Number.isFinite(loadedWall) || loadedWall < finished.end - 100) continue
+            candidates.push({ requestId: old.requestId, replacementRequestId: replacement.requestId,
+              object: old.object, nodeId: removed.nodeId, replacementNodeId: mounted.nodeId,
+              timeOrigin, retryAttempt: replacement.nativeRetryAttempt, reason: 'completed-native-category-retry' })
+            break
+          }
+        }
+      }
+    }
+  }
+
+  // Shared consumers may yield several chains for one pair. They do not yield
+  // extra exemptions, and neither end may ambiguously match multiple Network IDs.
+  const byOld = new Map()
+  const byReplacement = new Map()
+  for (const candidate of candidates) {
+    if (!byOld.has(candidate.requestId)) byOld.set(candidate.requestId, new Map())
+    if (!byOld.get(candidate.requestId).has(candidate.replacementRequestId)) {
+      byOld.get(candidate.requestId).set(candidate.replacementRequestId, candidate)
+    }
+    if (!byReplacement.has(candidate.replacementRequestId)) byReplacement.set(candidate.replacementRequestId, new Set())
+    byReplacement.get(candidate.replacementRequestId).add(candidate.requestId)
+  }
+  const evidence = []
+  for (const matches of byOld.values()) {
+    if (matches.size !== 1) continue
+    const match = matches.values().next().value
+    if (byReplacement.get(match.replacementRequestId).size === 1) evidence.push(match)
+  }
+  return evidence
+}

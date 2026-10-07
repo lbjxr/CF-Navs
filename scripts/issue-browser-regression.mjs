@@ -12,7 +12,7 @@ import { pageReadFixtureCopy } from './lib/iconCopyStorageProbe.mjs'
 import { assessBrowserRestartEvidence } from './lib/browserRestartEvidence.mjs'
 import { verifiedEditCopyCancellations } from './lib/editCopyCancellationEvidence.mjs'
 import { pageInstallImageLifecycleProbe } from './lib/imageRequestLifecycleProbe.mjs'
-import { verifiedSignedImageReplacements } from './lib/imageRequestLifecycleEvidence.mjs'
+import { verifiedSignedImageReplacements, verifiedNativeCategoryRetries } from './lib/imageRequestLifecycleEvidence.mjs'
 import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
@@ -25,7 +25,7 @@ const cacheMode=process.env.ISSUE_CACHE_MODE??'on'
 assert(['on','off'].includes(cacheMode),'Invalid ISSUE_CACHE_MODE')
 if(cacheMode==='off') assert(selectedCases.size>0&&[...selectedCases].every(id=>['28-EDIT-TITLE-DATA','28-EDIT-CANCEL','28-IDLE-CONTROL','28-RIGHT-CLICK-OFF'].includes(id)),'Off mode requires explicit compatible cases')
 const requiredCases=new Set(['LOGIN-UI','28-BASELINE','28-ENABLE-DEFERRED'])
-const optionalCases = new Set(['28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE'])
+const optionalCases = new Set(['28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE','29-LOGOUT-NAVIGATION-RACE','28-NATIVE-CATEGORY-TIMEOUT'])
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const output = await fs.mkdtemp(path.join(os.tmpdir(), 'cf-navs-issue-browser-'))
 const profile = path.join(os.tmpdir(), 'cf-navs-chrome-profile-issue-' + run)
@@ -59,10 +59,10 @@ async function collectImageLifecycle(reason) {
     const captured = await b.call(urls => {
       const probe=window.__issueImageLifecycle
       if(!probe)return null
-      return {snapshot:probe.read(),sourceIds:urls.map(url=>probe.sourceId(url))}
+      return {snapshot:probe.read(),sourceIds:urls.map(url=>probe.sourceId(url)),baseSourceIds:urls.map(url=>{const base=new URL(url);base.searchParams.delete('retry');return probe.sourceId(base.href)})}
     }, rows.map(row=>imageRequestUrls.get(row.requestId)))
     if (!captured) throw new Error('Image lifecycle probe missing in active document')
-    rows.forEach((row,index)=>{row.imageLifecycle={timeOrigin:captured.snapshot.timeOrigin,sourceId:captured.sourceIds[index]}})
+    rows.forEach((row,index)=>{row.imageLifecycle={timeOrigin:captured.snapshot.timeOrigin,sourceId:captured.sourceIds[index],baseSourceId:captured.baseSourceIds[index]}})
     report.imageLifecycles.push({stage,reason,loaderId,...captured.snapshot})
   } catch (error) { report.imageLifecycleErrors.push({stage,reason,error:safe(error.message)}) }
 }
@@ -242,7 +242,7 @@ async function scenario(id, action) {
   if(id==='28-ENABLE-DEFERRED'&&cacheMode==='off'){const skipped={id,status:'not-run',reason:'Explicit cache-off matrix'};report.cases.push(skipped);return skipped}
   if(selectedCases.size&&!selectedCases.has(id)&&!requiredCases.has(id)){const skipped={id,status:'not-run'};report.cases.push(skipped);return skipped}
   stage = id; editorObject=null; const start = report.requests.length, consoles = b.consoleErrors.length, exceptions = b.pageExceptions.length
-  const entry = { id, expectedFault: ['28-COPY-503', '28-COPY-TIMEOUT', '29-OLD-401', '29-OFFLINE-FOCUS'].includes(id), started: new Date().toISOString(), status: 'running' }; report.cases.push(entry)
+  const entry = { id, expectedFault: ['28-COPY-503', '28-COPY-TIMEOUT', '28-NATIVE-CATEGORY-TIMEOUT', '29-OLD-401', '29-OFFLINE-FOCUS'].includes(id), started: new Date().toISOString(), status: 'running' }; report.cases.push(entry)
   try {
     // Each scenario starts independently; the 300px menu viewport must not leak
     // into later login/storage flows. Menu cases set their own viewport afterward.
@@ -306,6 +306,23 @@ async function clearCopies() {
   await wait(()=>document.querySelector('.device-status')?.textContent.startsWith('已启用'),[],30000)
 }
 async function readFixtureCopy(object) { return b.call(pageReadFixtureCopy, object) }
+async function waitForAnonymousBaseline(expected) {
+  const ids=bookmarks.slice(0,2).map(row=>row.id)
+  const documentBefore=await b.call(()=>performance.timeOrigin), started=Date.now()
+  await wait(id=>!document.querySelector('[data-sort-id="'+id+'"]'),[bookmarks[2].id],30000)
+  for(const item of expected) {
+    await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),item.selector)
+    await wait(sel=>{const image=document.querySelector(sel)?.querySelector('img');return image?.complete&&image.naturalWidth>0},[item.selector],60000)
+  }
+  const images=await verifyImages(expected)
+  await wait((ids,privateId)=>Object.keys(localStorage).some(key=>{
+    if(!key.startsWith('cf-navs.public-data.'))return false
+    try {const rows=JSON.parse(localStorage.getItem(key)).data?.bookmarks;return Array.isArray(rows)&&ids.every(id=>rows.some(row=>row.id===id))&&!rows.some(row=>row.id===privateId)}catch{return false}
+  }),[ids,bookmarks[2].id])
+  const sameDocument=await b.call(()=>performance.timeOrigin)===documentBefore
+  assert(sameDocument,'Anonymous completion unexpectedly replaced the document')
+  return {images,privateRemoved:true,snapshotReady:true,sameDocument,elapsedMs:Date.now()-started}
+}
 async function readRestartState() {
   const items=manifest()
   const state=await b.call(async (items, privateId) => {
@@ -424,7 +441,7 @@ try {
     }
     if(row.kind==='icon-copy') {try{const body=JSON.parse(e.request.postData);row.copyRequest={dataset_epoch:body.dataset_epoch,expected_write_epoch:body.expected_write_epoch,expected_content_revision:body.expected_content_revision}}catch{}}
     row.documentLoaderId=e.loaderId
-    if(row.kind==='icon-body'&&row.type==='Image')imageRequestUrls.set(e.requestId,e.request.url)
+    if(row.kind==='icon-body'&&row.type==='Image'){imageRequestUrls.set(e.requestId,e.request.url);const retry=Number(new URL(e.request.url).searchParams.get('retry')??0);row.nativeRetryAttempt=Number.isSafeInteger(retry)&&retry>=0?retry:null}
     requests.set(e.requestId, row); report.requests.push(row)
     if(editorObject && ['icon-body','icon-copy','iconify-body','external-image'].includes(row.kind)) {
       const previewFor=editorObject
@@ -544,6 +561,71 @@ try {
       }
     }
   })
+  await scenario('29-LOGOUT-NAVIGATION-RACE', async () => {
+    const entry=report.cases.at(-1), evidence=entry.rapidNavigation={}
+    const expected=manifest().filter(row=>row.key!=='bookmark:'+bookmarks[2].id)
+    try {
+      await home();await verifyImages()
+      const oldDocument=await b.call(()=>performance.timeOrigin)
+      await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
+      evidence.beforeNavigation=await b.call((items,privateId)=>({authenticated:!!localStorage.getItem('cf-navs.auth'),privatePresent:!!document.querySelector('[data-sort-id="'+privateId+'"]'),imagesReady:items.every(item=>{const img=document.querySelector(item.selector)?.querySelector('img');return img?.complete&&img.naturalWidth>0})}),expected,bookmarks[2].id)
+      assert(!evidence.beforeNavigation.authenticated,'Logout did not clear local session')
+      assert(evidence.beforeNavigation.privatePresent||!evidence.beforeNavigation.imagesReady,'Rapid-navigation overlap was not exercised')
+      const started=Date.now(), requestStart=report.requests.length
+      // Deliberately NO anonymous-ready wait: preserve the original fast path,
+      // including its first-visible-category image wait after navigation.
+      await home({anonymous:true})
+      evidence.newDocument=await b.call(()=>performance.timeOrigin)!==oldDocument
+      assert(evidence.newDocument,'Rapid navigation did not replace the document')
+      await wait(items=>items.every(item=>{const img=document.querySelector(item.selector)?.querySelector('img');return img?.complete&&img.naturalWidth>0}),[expected],25000)
+      evidence.images=await verifyImages(expected)
+      evidence.elapsedMs=Date.now()-started
+      assert(evidence.elapsedMs<30000,'Rapid-navigation images exceeded bounded recovery')
+      assert(await b.call(id=>!document.querySelector('[data-sort-id="'+id+'"]'),bookmarks[2].id),'Private fixture survived anonymous navigation')
+      evidence.retryRequests=report.requests.slice(requestStart).filter(row=>row.kind==='icon-body'&&row.nativeRetryAttempt>0).map(row=>({requestId:row.requestId,object:row.object,attempt:row.nativeRetryAttempt,status:row.status}))
+      await shot('29-rapid-navigation-recovered')
+      return {newDocument:true,anonymous:true,privateRemoved:true,images:evidence.images,elapsedMs:evidence.elapsedMs,retryRequests:evidence.retryRequests}
+    } catch(error) {
+      evidence.failure=safe(error.message)
+      evidence.failureImages=await b.call(items=>items.map(item=>{const img=document.querySelector(item.selector)?.querySelector('img');return {key:item.key,exists:!!img,complete:img?.complete,width:img?.naturalWidth}}),expected).catch(()=>null)
+      await persist();throw error
+    } finally {await login();await home()}
+  })
+  await scenario('28-NATIVE-CATEGORY-TIMEOUT', async () => {
+    const entry=report.cases.at(-1), evidence=entry.nativeTimeout={held:[]}
+    const expected=manifest().filter(row=>row.key!=='bookmark:'+bookmarks[2].id),target=expected.find(row=>row.key==='category:'+child.id)
+    // Same pixels, fresh fixture-only revision: do not inherit a hung URL from
+    // the rapid-navigation case. All owned records are deleted in global cleanup.
+    const diagnosticSvg=Buffer.from(fixtures.bookmark.base64Uri.split(',')[1],'base64').toString('utf8').replace('</svg>','<!-- native-timeout-'+run+' --></svg>')
+    try {
+      await api('/categories/'+child.id,{parent_id:category.id,title:'Browser child '+run,icon:'data:image/svg+xml;base64,'+Buffer.from(diagnosticSvg).toString('base64')},'PUT')
+      await home();await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
+      await waitForAnonymousBaseline(expected)
+      await b.send('Network.setCacheDisabled',{cacheDisabled:true})
+      await intercept([{urlPattern:'*/api/category-icon/'+child.id+'*',requestStage:'Response'}],async event=>{
+        const url=new URL(event.request.url)
+        if(url.origin!==base||url.pathname!=='/api/category-icon/'+child.id||url.searchParams.has('retry')||event.resourceType!=='Image')return false
+        assert(event.responseStatusCode===200&&event.networkId,'Native timeout requires a real successful upstream image')
+        evidence.held.push({requestId:event.networkId,responseStatus:event.responseStatusCode});await persist();return true
+      },async()=>{
+        const start=report.requests.length
+        await home({anonymous:true,waitForImages:false})
+        await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),target.selector)
+        await localWait(()=>evidence.held.length>0,'Native image suspension',10000)
+        await wait(sel=>{const img=document.querySelector(sel)?.querySelector('img');return img?.complete&&img.naturalWidth>0&&Number(new URL(img.src,location.href).searchParams.get('retry'))>0},[target.selector],25000)
+        evidence.images=await verifyImages(expected)
+        const held=requests.get(evidence.held[0].requestId), retry=report.requests.slice(start).find(row=>row.object===target.key&&row.type==='Image'&&row.nativeRetryAttempt===1&&row.status===200)
+        assert(evidence.held.length===1&&retry,'Timeout must recover through the first real retry, not another initial request')
+        await localWait(()=>Number.isFinite(retry.finishedTime),'Native retry body completion',1500)
+        evidence.elapsedMs=(retry.finishedTime-held.time)*1000
+        assert(evidence.elapsedMs>=10000&&evidence.elapsedMs<22000,'Native timeout did not use the bounded product deadline')
+        evidence.retryRequestId=retry.requestId
+        await shot('28-native-timeout-recovered')
+      })
+      return {heldRequests:evidence.held,elapsedMs:evidence.elapsedMs,retryRequestId:evidence.retryRequestId,images:evidence.images}
+    } catch(error) {evidence.failure=safe(error.message);await persist();throw error}
+    finally {await b.send('Fetch.disable').catch(()=>{});await b.send('Network.setCacheDisabled',{cacheDisabled:false});await login();await home()}
+  })
   for (const access of ['admin', 'public']) await scenario('28-LEGACY-SNAPSHOT-' + access.toUpperCase(), async () => {
     const anonymous = access === 'public'
     const ids = bookmarks.filter((_, i) => !anonymous || i < 2).map(row => row.id)
@@ -554,20 +636,7 @@ try {
         // This is a snapshot-recovery case, not the separate immediate-navigation
         // logout race. Observe completion in the CURRENT document before reloading.
         report.cases.at(-1).progress='wait for current anonymous logout completion'
-        const documentBefore=await b.call(()=>performance.timeOrigin), started=Date.now()
-        await wait(id=>!document.querySelector('[data-sort-id="'+id+'"]'),[bookmarks[2].id],30000)
-        for(const item of expected) {
-          await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),item.selector)
-          await wait(sel=>{const image=document.querySelector(sel)?.querySelector('img');return image?.complete&&image.naturalWidth>0},[item.selector],60000)
-        }
-        const images=await verifyImages(expected)
-        await wait((ids,privateId)=>Object.keys(localStorage).some(key=>{
-          if(!key.startsWith('cf-navs.public-data.'))return false
-          try {const rows=JSON.parse(localStorage.getItem(key)).data?.bookmarks;return Array.isArray(rows)&&ids.every(id=>rows.some(row=>row.id===id))&&!rows.some(row=>row.id===privateId)}catch{return false}
-        }),[ids,bookmarks[2].id])
-        const sameDocument=await b.call(()=>performance.timeOrigin)===documentBefore
-        assert(sameDocument,'Anonymous completion unexpectedly replaced the document')
-        report.cases.at(-1).anonymousBaseline={images,privateRemoved:true,snapshotReady:true,sameDocument,elapsedMs:Date.now()-started}
+        report.cases.at(-1).anonymousBaseline=await waitForAnonymousBaseline(expected)
       }
       report.cases.at(-1).progress = 'anonymous/login baseline'
       await home({ anonymous })
@@ -1018,13 +1087,15 @@ finally {
   const signedImageCancellations = new Set(report.verifiedSignedImageReplacements.map(row=>row.requestId))
   report.verifiedEditCopyCancellations=verifiedEditCopyCancellations(report.requests,report.cases)
   const editedCopyCancellations=new Set(report.verifiedEditCopyCancellations.map(row=>row.requestId))
+  report.verifiedNativeCategoryRetries=verifiedNativeCategoryRetries(report.requests,report.imageLifecycles)
+  const nativeCategoryRetries=new Set(report.verifiedNativeCategoryRetries.map(row=>row.requestId))
   report.failedRequests = report.requests.filter(e => e.error)
   report.expectedOfflineRequests=[...expectedOfflineRequests]
   report.expectedTimeoutRequests=[...expectedTimeoutRequests]
   report.expectedReacquireRequests=[...expectedReacquireRequests]
   report.validatedInjectedCancellations=report.failedRequests.filter(row=>isExpectedInjectedCancellation(row,expectedInjectedCancellations)).map(row=>row.requestId)
-  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId))
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||revokedRequests.has(e.requestId))))
+  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||revokedRequests.has(e.requestId))))
   report.injectedRequests=[...injectedRequests]
   await persist()
   console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))

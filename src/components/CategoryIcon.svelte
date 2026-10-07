@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
+  import { createIconRetry } from '../lib/iconRetry'
+  import { createNativeImageWatchdog } from '../lib/nativeImageWatchdog'
   import type { CategoryIconValue } from '../lib/categoryIconDisplay'
   import {
     getCategoryIconFallbackText,
@@ -21,16 +23,16 @@
   let trustedState: TrustedIconState = emptyTrustedIcon
   const trustedView = createTrustedIconView(value => { trustedState = value })
 
-  // 分类代理对上游瞬时失败返回 503，避免把文字兜底伪装成成功图片。页面刷新时如果
-  // 恰好撞上上游限流，按退避持续重试，直到代理恢复；真正不存在的图标仍由 Worker
-  // 返回 200 兜底，不会进入这条循环。
-  const ICON_RETRY_DELAYS_MS = [1200, 4000, 10000, 30000]
-
-  let baseUrl = ''
+  // One native source owns its retry budget. Blob failures remain with the
+  // trusted-copy owner; native fallbacks also need recovery while it is active.
+  let sourceUrl = ''
   let retryUrl = ''
   let failedUrl = ''
   let retryAttempt = 0
-  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  const nativeRetry = createIconRetry(() => {
+    retryAttempt += 1
+    retryUrl = sourceUrl + (sourceUrl.includes('?') ? '&' : '?') + 'retry=' + retryAttempt
+  })
 
   $: iconValue = normalizeCategoryIcon(category) || category.icon_display === 'image'
   $: trustedView.set({ object_type: 'category', id: Number(category.id), icon: category.icon, icon_blob: category.icon_blob,
@@ -39,47 +41,45 @@
   $: previewValue = normalizeCategoryIcon(category)
   $: previewSource = /^data:image\//i.test(previewValue) ? previewValue : /^https?:\/\//i.test(previewValue) ? previewValue : ''
   $: nextImageUrl = preview ? previewSource : withIconAccessKey(getCategoryImageIconUrl(category), iconAccessKey)
-  // 图标或授权 key 变化（换图标、key 续签）时必须重新计数，否则上一条 URL 的失败态
-  // 会挡住新图标。
-  $: if (nextImageUrl !== baseUrl) {
-    baseUrl = nextImageUrl
+  $: selectedUrl = trustedState.active ? trustedState.url : nextImageUrl
+  $: if (selectedUrl !== sourceUrl) {
+    sourceUrl = selectedUrl
     retryUrl = ''
     failedUrl = ''
     retryAttempt = 0
-    clearRetryTimer()
+    nativeRetry.reset()
   }
-  $: imageUrl = trustedState.active ? trustedState.url : retryUrl || baseUrl
+  $: nativeSource = !preview && sourceUrl.startsWith('/api/category-icon/')
+  $: isTrustedBlob = trustedState.active && sourceUrl.startsWith('blob:')
+  $: imageUrl = nativeSource ? retryUrl || sourceUrl : sourceUrl
   $: textIcon = getCategoryTextIcon(category)
 
-  function clearRetryTimer(): void {
-    if (retryTimer) {
-      clearTimeout(retryTimer)
-      retryTimer = null
-    }
-  }
-
   function handleImageError(): void {
-    if (trustedState.active) { trustedView.failed(); return }
-    // 只有同源代理地址值得重试：data URI 加载失败不是网络问题，重试也不会变好。
-    if (!baseUrl.startsWith('/api/')) {
-      failedUrl = retryUrl || baseUrl
-      return
-    }
-
-    clearRetryTimer()
-    failedUrl = retryUrl || baseUrl
-    const delay = ICON_RETRY_DELAYS_MS[Math.min(retryAttempt, ICON_RETRY_DELAYS_MS.length - 1)]
-    retryAttempt += 1
-    retryTimer = setTimeout(() => {
-      retryTimer = null
-      retryUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}retry=${retryAttempt}`
-    }, delay)
+    if (isTrustedBlob) { trustedView.failed(); return }
+    failedUrl = imageUrl
+    if (nativeSource) nativeRetry.failed()
   }
 
-  // 成功加载后不清空 retryUrl：那会把 src 换回失败过的 baseUrl，形成失败—重试的循环。
-  // retryUrl 只在下一次 baseUrl 变化时重置。
+  function handleImageLoad(): void {
+    if (nativeSource) nativeRetry.reset()
+    // Keep retryUrl: reverting to the stalled original would restart the failure.
+  }
 
-  onDestroy(() => { clearRetryTimer(); trustedView.destroy() })
+  function watchNativeImage(node: HTMLImageElement, url: string) {
+    let watchdog: ReturnType<typeof createNativeImageWatchdog> | null = null
+    const update = (nextUrl: string) => {
+      const enabled = !preview && nextUrl.startsWith('/api/category-icon/')
+      if (!enabled) { watchdog?.destroy(); watchdog = null; return }
+      watchdog ??= createNativeImageWatchdog(node, expiredUrl => {
+        if (imageUrl === expiredUrl && nativeSource) handleImageError()
+      })
+      watchdog.update({ url: nextUrl, enabled: true })
+    }
+    update(url)
+    return { update, destroy: () => watchdog?.destroy() }
+  }
+
+  onDestroy(() => { nativeRetry.dispose(); trustedView.destroy() })
 </script>
 
 {#if iconValue}
@@ -90,8 +90,8 @@
     aria-hidden={label ? undefined : 'true'}
     aria-label={label || undefined}
   >
-    {#if imageUrl && (trustedState.active || imageUrl !== failedUrl)}
-      <img src={imageUrl} alt="" loading={imageLoading} decoding="async" on:error={handleImageError} />
+    {#if imageUrl && (isTrustedBlob || imageUrl !== failedUrl)}
+      <img src={imageUrl} alt="" loading={imageLoading} decoding="async" use:watchNativeImage={imageUrl} on:load={handleImageLoad} on:error={handleImageError} />
     {:else if textIcon}
       <span class="category-icon-text">{textIcon}</span>
     {:else}
