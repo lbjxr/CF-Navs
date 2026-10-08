@@ -2,6 +2,7 @@ import { isIconRevision, type IconDescriptor } from '../../shared/iconLocalCopy'
 import { iconDevice, type IconDeviceSnapshot } from './iconDeviceState'
 import { objectIconLoader, type ObjectIconHandle } from './objectIconLoader'
 import { createIconRetry } from './iconRetry'
+import { createIconVersion } from './bookmarkIconDisplay'
 
 export interface IconViewInput { online_url?: string; icon_cached?: boolean | number | null; id: number; object_type?: IconDescriptor['object_type']; icon?: string | null; icon_blob?: string | null; icon_revision?: string | null; icon_write_epoch?: number; icon_display?: 'image' | 'text' | 'empty'; visible: boolean; preview?: boolean }
 export interface TrustedIconState { active: boolean; url: string; pending: boolean }
@@ -69,7 +70,7 @@ export function createTrustedIconView(onChange: (value: TrustedIconState) => voi
       const route = `/api/${input.object_type === 'category' ? 'category-icon' : 'icon'}/${input.id}`
       const url = input.online_url
       const onlineUrl = url === route || url?.startsWith(route + '?')
-        ? url : `${route}?v=${encodeURIComponent(input.icon_revision ?? input.icon_write_epoch ?? 0)}`
+        ? url : `${route}?v=${input.icon_revision ? createIconVersion(input.icon_revision) : encodeURIComponent(input.icon_write_epoch ?? 0)}`
       publish({ active: true, url: input.visible ? onlineUrl : '', pending: false })
       return
     }

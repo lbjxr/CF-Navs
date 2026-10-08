@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IconDeviceSnapshot } from '../../src/lib/iconDeviceState'
 import { bookmarkDescriptor, createTrustedIconView } from '../../src/lib/trustedIconView'
+import { iconCacheKey } from '../../worker/lib/iconResponses'
 
 const harness = vi.hoisted(() => ({ state: {} as IconDeviceSnapshot, listeners: new Set<(state: IconDeviceSnapshot) => void>(), acquire: vi.fn() }))
 vi.mock('../../src/lib/iconDeviceState', () => ({ iconDevice: {
@@ -109,6 +110,19 @@ describe('trusted icon activation for the current document', () => {
       view.set({ ...image, object_type: 'category', online_url })
       expect(changed).toHaveBeenLastCalledWith({ active: true, pending: false, url: '/api/category-icon/1?v=0' })
     } } finally { view.destroy() }
+  })
+  it.each(['bookmark','category'] as const)('keeps a %s fallback revision through edge key normalization', object_type => {
+    pendingState(); publish({ enabledForPage:true,phase:'expired' })
+    const changed=vi.fn(),view=createTrustedIconView(changed)
+    try {
+      const keys=['a','b'].map(letter=>{
+        view.set({...image,object_type,icon_revision:'sha256-'+letter.repeat(64)})
+        const url=new URL(changed.mock.calls.at(-1)![0].url,'https://example.test')
+        return iconCacheKey(new Request(url)).url
+      })
+      expect(keys[0]).not.toBe(keys[1])
+      expect(new URL(keys[0]).searchParams.get('v')).not.toBeNull()
+    } finally {view.destroy()}
   })
   it('restores warm copies before the startup grace interval without an online request', async () => {
     vi.useFakeTimers(); pendingState(); publish({ enabledForPage: true, phase: 'checking' })
