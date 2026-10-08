@@ -29,7 +29,7 @@ let generation = 0
 export const iconAccessKey = writable('')
 
 function publish(state: GrantState | null, now = Date.now()): string {
- const usable = state && state.expiresAt - RENEW_BEFORE_MS > now ? state.key : ''
+ const usable = state && state.expiresAt > now ? state.key : ''
  iconAccessKey.set(usable)
  return usable
 }
@@ -46,30 +46,30 @@ export function clearIconAccessKey(): void {
 }
 
 /**
- * 保证有一个可用的 key，返回它。请求失败时返回空串——预览退回兜底图标是可接受的降级，
- * 不该让调用方的整个流程失败。
+ * 临近到期时合并续签请求，但旧 key 到实际过期前仍可用。续签失败保留有效 key；
+ * 已过期或已切换会话时返回空串，不延长服务端签名寿命。
  */
 export async function ensureIconAccessKey(
  fetchGrant: () => Promise<IconAccessResp>,
  now = Date.now(),
 ): Promise<string> {
  const cached = readIconAccessKey(now)
- if (cached) return cached
+ if (cached && get(grantStore)!.expiresAt - RENEW_BEFORE_MS > now) return cached
  if (inflight) return await inflight
 
  const requestGeneration = generation
 
  inflight = (async () => {
   try {
-   const next = await fetchGrant()
-   if (typeof next?.key !== 'string' || !next.key || typeof next.expires_at !== 'number') return ''
+   const next = await Promise.resolve().then(fetchGrant)
    // 期间发生过 clear（登出/改密）：丢弃这次结果，不把旧 key 重新发布出去。
    if (requestGeneration !== generation) return ''
+   if (typeof next?.key !== 'string' || !next.key || !Number.isSafeInteger(next.expires_at) || next.expires_at <= Date.now()) return readIconAccessKey()
    const state: GrantState = { key: next.key, expiresAt: next.expires_at }
    grantStore.set(state)
    return publish(state)
   } catch {
-   return ''
+   return requestGeneration === generation ? readIconAccessKey() : ''
   } finally {
    // 只清理属于本次代次的 in-flight 标记，避免把后来者的请求标记抹掉。
    if (requestGeneration === generation) inflight = null

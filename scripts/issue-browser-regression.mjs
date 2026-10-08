@@ -28,7 +28,7 @@ if(cacheMode==='off') assert(selectedCases.size>0&&[...selectedCases].every(id=>
 const requiredCases=new Set(['LOGIN-UI','28-BASELINE','28-ENABLE-DEFERRED'])
 const cleanupFault=process.env.ISSUE_CLEANUP_FAULT??''
 assert(['','detached-page'].includes(cleanupFault),'Invalid cleanup fault')
-const optionalCases = new Set(['28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE','29-LOGOUT-NAVIGATION-RACE','28-NATIVE-CATEGORY-TIMEOUT'])
+const optionalCases = new Set(['28-SIGNATURE-RENEWAL','28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE','29-LOGOUT-NAVIGATION-RACE','28-NATIVE-CATEGORY-TIMEOUT'])
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
 const sessionCaptureErrors = []
@@ -473,6 +473,7 @@ try {
     }
     if(row.kind==='icon-copy') {try{const body=JSON.parse(e.request.postData);row.copyRequest={dataset_epoch:body.dataset_epoch,expected_write_epoch:body.expected_write_epoch,expected_content_revision:body.expected_content_revision}}catch{}}
     row.documentLoaderId=e.loaderId
+    if(row.kind==='icon-body')row.signed=new URL(e.request.url).searchParams.has('key')
     if(row.kind==='icon-body'&&row.type==='Image'){imageRequestUrls.set(e.requestId,e.request.url);const retry=new URL(e.request.url).searchParams.get('retry'),parsed=retry?.match(/^([1-9]\d*)(?:-([a-z0-9]+))?$/);row.nativeRetryAttempt=retry==null?0:parsed?Number(parsed[1]):null;row.nativeRetryScope=parsed?.[2]??null}
     requests.set(e.requestId, row); report.requests.push(row)
     if(editorObject && ['icon-body','icon-copy','iconify-body','external-image'].includes(row.kind)) {
@@ -528,6 +529,62 @@ try {
   const baseline = await scenario('28-BASELINE', async () => { await home(); const images = await verifyImages(); await shot('28-baseline'); return images }); assert(baseline.status === 'passed', 'Baseline prerequisite failed; dependent cases not run')
   await scenario('28-IDLE-CONTROL',async()=>stableOperation(async()=>{await sleep(2500)}))
   await scenario('28-RIGHT-CLICK-OFF', async () => stableOperation(async () => { await click(card(0), 'right'); await key('Escape'); }))
+  await scenario('28-SIGNATURE-RENEWAL', async () => {
+    // Before enabling local copies: exercise the real private proxy image path.
+    // Advance only this document's clock; retain unmodified server signatures.
+    let expiresAt = 0, held = null, renewals = 0, recovering = false
+    const entry = report.cases.at(-1)
+    return intercept([{urlPattern:'*/api/icon-access',requestStage:'Response'}], async event => {
+      if (!expiresAt) {
+        const response = await b.send('Fetch.getResponseBody',{requestId:event.requestId})
+        const data = JSON.parse(response.base64Encoded ? Buffer.from(response.body,'base64').toString() : response.body).data
+        expiresAt = data?.expires_at
+        assert(Number.isSafeInteger(expiresAt), 'Missing real signature expiry')
+        return false
+      }
+      renewals++
+      if (!recovering) { held=event; return true }
+      return false
+    }, async () => {
+      try {
+        const initialStart=report.requests.length
+        await home(); await verifyImages()
+        assert(expiresAt > Date.now()+120000,'Initial signature is not outside its renewal window')
+        assert(report.requests.slice(initialStart).some(row=>row.object===`bookmark:${bookmarks[2].id}`&&row.kind==='icon-body'&&row.signed&&row.status===200),'Private image did not exercise the signed proxy')
+        const documentBefore=await b.call(()=>performance.timeOrigin)
+        await traceStart()
+        const start=report.requests.length
+        await b.call(expiry=>{window.__issueRealNow=Date.now;const offset=expiry-90000-Date.now();Date.now=()=>window.__issueRealNow()+offset},expiresAt)
+        await focusCycle()
+        await localWait(()=>held,'Real signature renewal')
+        assert(renewals===1,'Concurrent focus signals did not share renewal')
+        entry.renewal={heldRequestId:held.networkId,remainingMs:await b.call(expiry=>expiry-Date.now(),expiresAt)}
+        await sleep(1200); await verifyImages()
+        injectedRequests.add(held.networkId)
+        await b.send('Fetch.fulfillRequest',{requestId:held.requestId,responseCode:503,responseHeaders:[{name:'Content-Type',value:'application/json'}],body:Buffer.from(JSON.stringify({success:false,error:'controlled renewal outage'})).toString('base64')})
+        held=null
+        await sleep(1200); await verifyImages()
+        const trace=await traceEnd(), assessment=assessIconTrace(trace)
+        const network=assessStableIcons(report.requests.slice(start))
+        entry.trace=trace
+        Object.assign(entry.renewal,{traceFrames:trace?.frames,network,assessment})
+        assert(assessment.passed&&network.passed,'Valid signature was discarded during renewal: '+JSON.stringify({assessment,network}))
+        recovering=true
+        await focusCycle()
+        await localWait(()=>renewals===2,'Natural renewal retry after recovery')
+        await b.waitForNetworkIdle(900,15000); await verifyImages()
+        const recovery=report.requests.slice(start).filter(row=>row.path==='/api/icon-access'&&row.status===200)
+        assert(recovery.length===1,'Recovery must complete one real renewal')
+        assert(await b.call(()=>performance.timeOrigin)===documentBefore,'Renewal replaced the document')
+        return {...entry.renewal,renewals,recoveryRequestId:recovery[0].requestId,imagesPassed:true,clockOnly:true}
+      } finally {
+        const trace=await traceEnd().catch(()=>null)
+        if(!entry.trace&&trace)entry.trace=trace
+        await b.call(()=>{if(window.__issueRealNow){Date.now=window.__issueRealNow;delete window.__issueRealNow}}).catch(()=>{})
+        if(held)await b.send('Fetch.continueRequest',{requestId:held.requestId}).catch(()=>{})
+      }
+    })
+  })
   await scenario('28-ENABLE-DEFERRED', async () => {
     await home(); const documentStart = await b.call(()=>performance.timeOrigin); await settings(); const start = report.requests.length
     await click('.device-cache input'); await wait(() => document.querySelector('.device-status')?.textContent.includes('下次刷新'))
