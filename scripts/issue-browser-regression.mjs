@@ -29,6 +29,8 @@ const requiredCases=new Set(['LOGIN-UI','28-BASELINE','28-ENABLE-DEFERRED'])
 const cleanupFault=process.env.ISSUE_CLEANUP_FAULT??''
 assert(['','detached-page'].includes(cleanupFault),'Invalid cleanup fault')
 const optionalCases = new Set(['28-CATEGORY-PERMISSIONS','28-LEASE-EXPIRED-OFFLINE','28-CLOCK-ROLLBACK-OFFLINE','28-SIGNATURE-RENEWAL','28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE','29-LOGOUT-NAVIGATION-RACE','28-NATIVE-CATEGORY-TIMEOUT'])
+for(const failure of ['408','429','500','WRONG-IMAGE'])optionalCases.add('28-COPY-FAILURE-'+failure)
+optionalCases.add('29-FROZEN-TAB-LOGOUT')
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
 const sessionCaptureErrors = []
@@ -981,6 +983,56 @@ try {
     }
     return {variants}
   })
+  for(const failure of ['408','429','500','WRONG-IMAGE'])await scenario('28-COPY-FAILURE-'+failure, async()=>{
+    const targets=[0,2],evidence=report.cases.at(-1).copyFailure={failure,requests:[],cold:[],recovered:[]}
+    try {
+      for(const index of targets)await setFixtureIcon(index,fixtures[bookmarks[index].imageKey].uri)
+      await clearCopies()
+      const cold=await Promise.all(targets.map(index=>readFixtureCopy('bookmark:'+bookmarks[index].id)))
+      assert(cold.every(row=>row.available&&row.enabled&&!row.entryPresent&&!row.bodyPresent),'Fault matrix requires native cold absence')
+      await intercept([{urlPattern:'*/api/icon-local-copy',requestStage:'Request'}],async event=>{
+        let request;try{request=JSON.parse(event.request.postData)}catch{return false}
+        const index=targets.find(index=>request.object_type==='bookmark'&&request.object_id===bookmarks[index].id)
+        if(index===undefined)return false
+        let data={protocol:1,reason:'unavailable'}
+        if(failure==='WRONG-IMAGE') {
+          const expected=Buffer.from(fixtures[bookmarks[index].imageKey].base64Uri.split(',')[1],'base64')
+          const wrong=Buffer.from(fixtures[bookmarks[index].imageKey==='bookmark'?'category':'bookmark'].base64Uri.split(',')[1],'base64')
+          const revision=request.expected_content_revision??'sha256-'+createHash('sha256').update('cf-navs-icon-v1\nimage/svg+xml\n').update(expected).digest('hex')
+          data={protocol:1,persistence:'session-scoped',descriptor:{object_type:'bookmark',object_id:request.object_id,dataset_epoch:request.dataset_epoch,
+            write_epoch:request.expected_write_epoch,state:'ready',content_revision:revision},image:{mime:'image/svg+xml',byte_length:wrong.length,base64:wrong.toString('base64')}}
+        }
+        evidence.requests.push({requestId:event.networkId,object:'bookmark:'+request.object_id})
+        if(event.networkId)injectedRequests.add(event.networkId)
+        await b.send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:failure==='WRONG-IMAGE'?200:Number(failure),
+          responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'private, no-store'}],
+          body:Buffer.from(JSON.stringify({code:0,msg:'controlled copy failure',data})).toString('base64')})
+        return true
+      },async()=>{
+        await home();await verifyImages()
+        for(const index of targets) {
+          const object='bookmark:'+bookmarks[index].id
+          assert(evidence.requests.some(row=>row.object===object),'Fault did not reach '+object)
+          const state=await readFixtureCopy(object)
+          evidence.cold.push({object,entryPresent:state.entryPresent,bodyPresent:state.bodyPresent})
+          assert(state.available&&state.enabled&&!state.entryPresent&&!state.bodyPresent,'Failed copy reached persistent storage')
+        }
+      })
+      // The existing retry schedule / focus cooldown owns recovery, not a test fetch.
+      await sleep(31000);await focusCycle()
+      const deadline=Date.now()+20000
+      do {
+        evidence.recovered=await Promise.all(targets.map(async index=>({object:'bookmark:'+bookmarks[index].id,state:await readFixtureCopy('bookmark:'+bookmarks[index].id)})))
+        if(evidence.recovered.every(row=>row.state.entryPresent&&row.state.bodyPresent&&row.state.bodyRevision===row.state.descriptor?.content_revision))break
+        await sleep(250)
+      }while(Date.now()<deadline)
+      assert(evidence.recovered.every(row=>row.state.entryPresent&&row.state.bodyPresent&&row.state.bodyRevision===row.state.descriptor?.content_revision),'Natural retry did not restore valid persistent copies')
+      await verifyImages();evidence.imagesPassed=true
+      return {failure,publicAndPrivate:true,injected:evidence.requests.length,faultNotPersisted:true,naturalRecovery:true,imagesPassed:true}
+    } finally {
+      for(const index of targets)await setFixtureIcon(index,fixtures[bookmarks[index].imageKey].base64Uri)
+    }
+  })
   await scenario('28-COPY-TIMEOUT', async () => {
     // Use one public fixture: startup private-grant URL replacement is covered
     // by CANCEL-REACQUIRE and must not masquerade as this transport deadline.
@@ -1178,7 +1230,7 @@ try {
       await verifyImages(); return {oldResponseDelivered:true,newSessionRetained:true,imagesReadyBeforeRelease:true}
     })
   })
-  await scenario('29-CROSS-TAB-LOGOUT', async () => {
+  for(const frozen of [false,true])await scenario(frozen?'29-FROZEN-TAB-LOGOUT':'29-CROSS-TAB-LOGOUT', async () => {
     await home({waitForImages:false}); secondary=(await b.send('Target.createTarget',{url:'about:blank'})).targetId
     const {sessionId}=await b.send('Target.attachToTarget',{targetId:secondary,flatten:true})
     for(const method of ['Page.enable','Runtime.enable','Network.enable','Log.enable']) await sessionSend(sessionId,method)
@@ -1187,14 +1239,23 @@ try {
       let ready=false
       for(let i=0;i<100;i++){ready=await sessionCall(sessionId,id=>Boolean(document.querySelector(`[data-sort-id="${id}"]`)),bookmarks[2].id);if(ready)break;await sleep(150)}
       assert(ready,'Private fixture missing in the second authenticated tab')
+      if(frozen) {
+        await sessionCall(sessionId,()=>{window.__issueFreezeObserved=false;document.addEventListener('freeze',()=>{window.__issueFreezeObserved=true},{once:true})})
+        await b.send('Target.activateTarget',{targetId:b.targetId})
+        await sessionSend(sessionId,'Page.setWebLifecycleState',{state:'frozen'})
+      }
       await b.send('Target.activateTarget',{targetId:b.targetId});await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
+      if(frozen) {
+        await sessionSend(sessionId,'Page.setWebLifecycleState',{state:'active'})
+        assert(await sessionCall(sessionId,()=>window.__issueFreezeObserved===true),'Browser did not deliver the real freeze lifecycle event')
+      }
       let removed=false
       for(let i=0;i<100;i++){removed=await sessionCall(sessionId,id=>!document.querySelector(`[data-sort-id="${id}"]`)&&!localStorage.getItem('cf-navs.auth'),bookmarks[2].id);if(removed)break;await sleep(100)}
       assert(removed,'Other tab retained private data after logout')
       const clearedAt = await b.call(() => (performance.timeOrigin + performance.now()) / 1000)
       for (const row of report.requests) if (row.stage === stage && row.path === '/api/logout') row.clientClearedAt = clearedAt
       await signInPlace()
-      return {privatePresentBefore:true,privateRemovedInOtherTab:true}
+      return {privatePresentBefore:true,privateRemovedInOtherTab:true,frozen}
     } finally {await b.send('Target.closeTarget',{targetId:secondary});secondary=null;await b.send('Target.activateTarget',{targetId:b.targetId})}
   })
   for (const failure of ['quota','unavailable']) await scenario('28-STORAGE-'+failure.toUpperCase(), async () => {
