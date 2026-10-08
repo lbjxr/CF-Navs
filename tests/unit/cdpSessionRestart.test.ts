@@ -137,6 +137,14 @@ afterEach(() => {
 })
 
 describe('CdpSession cleanup ownership and profile policy', () => {
+  it.each([false, true])('keeps the explicit QUIC diagnostic setting across restart: %s', async disableQuic => {
+    const value = await live({ disableQuic })
+    await value.restart()
+    for (const [, args] of io.spawn.mock.calls) {
+      expect(args.includes('--disable-quic')).toBe(disableQuic)
+      expect(args).toContain(`--user-data-dir=${profile}`)
+    }
+  })
   it('deletes the default profile only after closing the exact target/browser and counting zero', async () => {
     const value = await live()
     const result = await value.cleanup()

@@ -28,7 +28,7 @@ if(cacheMode==='off') assert(selectedCases.size>0&&[...selectedCases].every(id=>
 const requiredCases=new Set(['LOGIN-UI','28-BASELINE','28-ENABLE-DEFERRED'])
 const cleanupFault=process.env.ISSUE_CLEANUP_FAULT??''
 assert(['','detached-page'].includes(cleanupFault),'Invalid cleanup fault')
-const optionalCases = new Set(['28-LEASE-EXPIRED-OFFLINE','28-CLOCK-ROLLBACK-OFFLINE','28-SIGNATURE-RENEWAL','28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE','29-LOGOUT-NAVIGATION-RACE','28-NATIVE-CATEGORY-TIMEOUT'])
+const optionalCases = new Set(['28-CATEGORY-PERMISSIONS','28-LEASE-EXPIRED-OFFLINE','28-CLOCK-ROLLBACK-OFFLINE','28-SIGNATURE-RENEWAL','28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE','29-LOGOUT-NAVIGATION-RACE','28-NATIVE-CATEGORY-TIMEOUT'])
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
 const sessionCaptureErrors = []
@@ -37,7 +37,8 @@ const output = await fs.mkdtemp(path.join(os.tmpdir(), 'cf-navs-issue-browser-')
 const profile = path.join(os.tmpdir(), 'cf-navs-chrome-profile-issue-' + run)
 const probe = net.createServer(); await new Promise(r => probe.listen(0, '127.0.0.1', r))
 const port = probe.address().port; await new Promise(r => probe.close(r))
-const b = new CdpSession({ chromeExe: resolveSetting('CHROME_EXE', 'chromeExe', 'C:/Program Files/Google/Chrome/Application/chrome.exe'), debugPort: port, userDataDir: profile, headless: false })
+const disableQuic=process.env.ISSUE_DISABLE_QUIC==='1'
+const b = new CdpSession({ chromeExe: resolveSetting('CHROME_EXE', 'chromeExe', 'C:/Program Files/Google/Chrome/Application/chrome.exe'), debugPort: port, userDataDir: profile, headless: false, disableQuic })
 const report = { run, cacheMode, browserLog: [], cases: [], requests: [], cleanup: {}, excluded: [], limitations: [] }
 let stage = 'setup', token = '', category, child, bookmarks = [], ownedCategories = [], ownedBookmarks = [], secondary = null
 const requests = new Map()
@@ -156,12 +157,19 @@ async function login() {
   serverCleanup.rememberSession(token)
 }
 async function api(route, body, method = 'POST') {
-  const result = await b.call(async (route, body, method, token) => {
-    const response = await fetch('/api' + route, { method, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token }, ...(body == null ? {} : { body: JSON.stringify(body) }) })
-    const envelope = await response.json(); return { status: response.status, code: envelope.code, data: envelope.data }
-  }, route, body ?? null, method, token)
-  assert(result.status < 400 && result.code === 0, `Fixture API failed ${method} ${route} status=${result.status} code=${result.code}`)
-  return result.data
+  // Fixture setup/readback is not the UI under test. Keep it independent of a
+  // stalled renderer, as cleanup already is; UI requests remain CDP-observed.
+  const entry={stage,route,method,transport:'host-fetch',startedAt:Date.now()}
+  ;(report.fixtureRequests??=[]).push(entry)
+  try {
+    const response=await fetch(base+'/api'+route,{method,redirect:'error',signal:AbortSignal.timeout(30000),
+      headers:{'content-type':'application/json',authorization:'Bearer '+token,'cache-control':'no-cache',pragma:'no-cache'},
+      ...(body==null?{}:{body:JSON.stringify(body)})})
+    entry.status=response.status
+    const envelope=await response.json();entry.code=envelope.code
+    assert(response.status<400&&envelope.code===0,`Fixture API failed ${method} ${route} status=${response.status} code=${envelope.code}`)
+    return envelope.data
+  } finally {entry.durationMs=Date.now()-entry.startedAt}
 }
 async function setFixtureIcon(index,icon) {
   const item=bookmarks[index]
@@ -426,7 +434,7 @@ async function installPageInstrumentation() {
   await b.send('Log.enable')
 }
 async function recordBrowserOwnership(reason) {
-  const ownership={profile,pid:b.chromeProcess.pid,port,targetId:b.targetId,headed:true,nativeWindowOcclusionDisabled:true,reason}
+  const ownership={profile,pid:b.chromeProcess.pid,port,targetId:b.targetId,headed:true,nativeWindowOcclusionDisabled:true,disableQuic,reason}
   report.ownership=ownership
   ;(report.browserLifetimes ??= []).push(ownership)
   await fs.writeFile(path.join(output, 'ownership.json'), JSON.stringify(ownership))
@@ -1202,6 +1210,71 @@ try {
     const {identifier}=await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{const now=Date.now.bind(Date);Date.now=()=>now()-600})()`})
     try {await home();return await verifyImages()}finally{await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier});await b.navigate(base)}
   })
+  await scenario('28-CATEGORY-PERMISSIONS', async()=>{
+    await home(); await verifyImages()
+    const evidence=report.cases.at(-1).categoryPermissions={responses:[]}
+    const hashes={root:createHash('sha256').update(Buffer.from(fixtures.category.base64Uri.split(',')[1],'base64')).digest('hex'),
+      child:createHash('sha256').update(Buffer.from(fixtures.bookmark.base64Uri.split(',')[1],'base64')).digest('hex')}
+    async function probe(label, route, {body,authorization,status=200}={}) {
+      // Server permission/header probes are distinct from the UI image evidence.
+      // Host fetch has no browser cookie jar; tokens and response bodies stay in memory.
+      const response=await fetch(base+'/api'+route,{method:body?'POST':'GET',redirect:'error',signal:AbortSignal.timeout(15000),
+        headers:{'content-type':'application/json',...(authorization?{authorization:'Bearer '+authorization}:{})},
+        ...(body?{body:JSON.stringify(body)}:{})})
+      const bytes=Buffer.from(await response.arrayBuffer()),type=response.headers.get('content-type')??''
+      const payload=type.includes('application/json')?JSON.parse(bytes.toString()):null
+      const row={label,status:response.status,type,cache:response.headers.get('cache-control'),cdn:response.headers.get('cdn-cache-control'),
+        cloudflare:response.headers.get('cloudflare-cdn-cache-control'),fallback:response.headers.get('x-icon-fallback'),
+        hash:createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length,code:payload?.code,reason:payload?.data?.reason,
+        protocol:payload?.data?.protocol,persistence:payload?.data?.persistence,
+        imageHash:payload?.data?.image?createHash('sha256').update(Buffer.from(payload.data.image.base64,'base64')).digest('hex'):null}
+      evidence.responses.push(row)
+      assert(row.status===status,label+' status='+row.status)
+      assert(row.cache?.includes('no-store'),label+' lacks client no-store')
+      if(body)assert(row.cache.includes('private')&&row.cdn==='no-store'&&row.cloudflare==='no-store',label+' lacks private copy cache headers')
+      return row
+    }
+    async function copyPayload(id) {
+      const data=await api('/admin/data',undefined,'GET'),item=data.categories.find(row=>row.id===id)
+      return {protocol:1,object_type:'category',object_id:id,dataset_epoch:data.dataset_epoch,
+        expected_write_epoch:item?.icon_write_epoch??0,expected_content_revision:item?.icon_revision??null}
+    }
+    const rootUrl='/category-icon/'+category.id,childUrl='/category-icon/'+child.id
+    const missingId=2147483647
+    assert(!(await api('/admin/data',undefined,'GET')).categories.some(row=>row.id===missingId),'Missing-ID control exists')
+    let changed=false
+    try {
+      assert((await probe('anonymous-public-root',rootUrl)).hash===hashes.root,'Public root bytes differ')
+      assert((await probe('anonymous-public-child',childUrl)).hash===hashes.child,'Public child bytes differ')
+      const payload=await copyPayload(child.id)
+      const anonymousCopy=await probe('anonymous-copy-denied','/icon-local-copy',{body:payload,status:401})
+      assert(anonymousCopy.code===1001,'Anonymous copy was not an auth denial')
+      assert((await probe('anonymous-missing-copy','/icon-local-copy',{body:{...payload,object_id:missingId},status:401})).hash===anonymousCopy.hash,'Anonymous copy revealed object existence')
+      const grant=await api('/icon-access',undefined,'GET')
+      assert((await probe('signature-is-not-session','/icon-local-copy',{body:payload,authorization:grant.key,status:401})).code===1001,'Image signature authenticated a copy')
+      const missing=await probe('authenticated-missing-copy','/icon-local-copy',{body:{...payload,object_id:missingId},authorization:token,status:404})
+      assert(missing.reason==='not-found','Unknown copy leaked another result')
+      changed=true
+      await api('/categories/'+category.id,{title:category.title,icon:fixtures.category.base64Uri,is_private:true},'PUT')
+      const unknown=await probe('anonymous-missing-icon','/category-icon/'+missingId)
+      for(const [label,url] of [['private-root',rootUrl],['private-ancestor-child',childUrl]]) {
+        const denied=await probe(label,url)
+        assert(denied.fallback==='1'&&denied.hash===unknown.hash,label+' leaked private image identity')
+      }
+      assert((await probe('invalid-signature-child',childUrl+'?key=invalid-fixture-key')).hash===unknown.hash,'Invalid signature bypassed the private ancestor')
+      const signed=await probe('signed-private-child',childUrl+'?key='+encodeURIComponent(grant.key))
+      assert(signed.hash===hashes.child&&signed.cache.includes('private'),'Valid signature did not preserve private preview semantics')
+      const authorized=await probe('admin-private-descendant-copy','/icon-local-copy',{body:await copyPayload(child.id),authorization:token})
+      assert(authorized.protocol===1&&authorized.persistence==='session-scoped'&&authorized.imageHash===hashes.child,'Administrator lost authorized child copy')
+      await home(); await verifyImages();evidence.adminImages=true
+      await api('/categories/'+category.id,{title:category.title,icon:fixtures.category.base64Uri,is_private:false},'PUT');changed=false
+      assert((await probe('anonymous-restored-child',childUrl)).hash===hashes.child,'Public restoration retained a denied response')
+      await home();await verifyImages();evidence.restoredImages=true
+      return evidence
+    } finally {
+      if(changed)await api('/categories/'+category.id,{title:category.title,icon:fixtures.category.base64Uri,is_private:false},'PUT')
+    }
+  })
   await scenario('CSP-THEME-COLOR', async()=>{
     await b.setViewport({width:1366,height:900,scale:1});await home()
     const samples=[]
@@ -1229,7 +1302,8 @@ try {
     await wait(title => ![...document.querySelectorAll('.bookmark-card-shell')].some(e => e.getAttribute('aria-label') === title), [bookmarks[2].title])
     return { privateRemoved: true }
   })
-  report.limitations.push('Signed lease expiry boundaries, old-build upgrade and real mobile keyboard remain unexecuted; not implied by these results.')
+  report.limitations.push('Real elapsed-time expiry, mixed-build upgrade/rollback and physical mobile keyboard remain unexecuted; not implied by clock-controlled or desktop results.')
+  if(disableQuic)report.limitations.push('QUIC was disabled only for this diagnostic browser; passing does not establish default HTTP/3 acceptance.')
 } catch (error) { report.fatal = safe(error.message); console.log('FATAL ' + report.fatal) }
 finally {
   stage = 'cleanup'

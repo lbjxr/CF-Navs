@@ -51,6 +51,7 @@ export class CdpSession {
     })
     this.noSandbox = Boolean(options.noSandbox)
     this.headless = Boolean(options.headless)
+    this.disableQuic = Boolean(options.disableQuic)
     this.allowExisting = Boolean(options.allowExisting)
 
     this.ws = null
@@ -145,6 +146,7 @@ export class CdpSession {
       'about:blank',
     ]
     if (this.headless) args.unshift('--headless=new', '--disable-gpu')
+    if (this.disableQuic) args.unshift('--disable-quic')
     if (this.noSandbox) args.unshift('--no-sandbox')
 
     this.chromeProcess = spawn(this.chromeExe, args, { stdio: 'ignore', detached: false })
