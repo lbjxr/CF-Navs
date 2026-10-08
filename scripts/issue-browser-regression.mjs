@@ -966,24 +966,7 @@ try {
       }
     })
   })
-  await scenario('28-COPY-503', async () => {
-    const variants=[]
-    for(const targetIndex of [0,2]) {
-      await b.setViewport({width:1366,height:900,scale:1})
-      await setFixtureIcon(targetIndex,fixtures[bookmarks[targetIndex].imageKey].uri);await clearCopies()
-      let injected=0
-      try {variants.push(await intercept([{urlPattern:'*/api/icon-local-copy',requestStage:'Request'}],async event=>{
-        let payload;try{payload=JSON.parse(event.request.postData)}catch{return false}
-        if(payload.object_type!=='bookmark'||payload.object_id!==bookmarks[targetIndex].id)return false
-        injected++;report.cases.at(-1).injection={kind:'target-copy-503',targetIndex,count:injected};if(event.networkId)injectedRequests.add(event.networkId)
-        await b.send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:503,responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'private, no-store'}],body:Buffer.from(JSON.stringify({code:0,msg:'ok',data:{protocol:1,reason:'unavailable'}})).toString('base64')})
-        return true
-      },async()=>{await home();await verifyImages();assert(injected>0,'Copy fault not exercised');await shot('28-copy-fallback-'+targetIndex);return {private:targetIndex===2,injected,images:'correct'}}))}
-      finally {await setFixtureIcon(targetIndex,fixtures[bookmarks[targetIndex].imageKey].base64Uri)}
-    }
-    return {variants}
-  })
-  for(const failure of ['408','429','500','WRONG-IMAGE'])await scenario('28-COPY-FAILURE-'+failure, async()=>{
+  for(const failure of ['503','408','429','500','WRONG-IMAGE'])await scenario(failure==='503'?'28-COPY-503':'28-COPY-FAILURE-'+failure, async()=>{
     const targets=[0,2],evidence=report.cases.at(-1).copyFailure={failure,requests:[],cold:[],recovered:[]}
     try {
       for(const index of targets)await setFixtureIcon(index,fixtures[bookmarks[index].imageKey].uri)

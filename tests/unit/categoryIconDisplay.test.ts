@@ -8,6 +8,12 @@ import {
 } from '../../src/lib/categoryIconDisplay'
 
 describe('category icon display', () => {
+  it('versions refreshed remote content without changing its source or title', () => {
+    const previous={id:7,title:'Tools',icon:'https://example.com/icon.svg',icon_revision:'sha256-'+'a'.repeat(64),icon_write_epoch:1}
+    expect(getCategoryImageIconUrl({...previous,icon_revision:'sha256-'+'b'.repeat(64)})).not.toBe(getCategoryImageIconUrl(previous))
+    expect(getCategoryImageIconUrl({...previous,icon_write_epoch:2})).toBe(getCategoryImageIconUrl(previous))
+    expect(getCategoryImageIconUrl({...previous,icon_revision:null,icon_write_epoch:2})).not.toBe(getCategoryImageIconUrl({...previous,icon_revision:null}))
+  })
   it('routes remote category icons through the versioned category proxy', () => {
     const category = {
       id: 7,

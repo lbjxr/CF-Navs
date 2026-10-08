@@ -68,7 +68,7 @@ export function createBookmarkCardIconStateKey(
 ): string {
   // key 参与状态键：续签、过期或清除时必须重置 cachedIconFailed/fallbackFailed 并重新加载，
   // 否则第一次匿名失败态会一直挡住带 key 的真实图标。
-  return `${bookmark.id}:${bookmark.icon_source ?? ''}:${bookmark.icon ?? ''}:${bookmark.icon_blob ?? ''}:${Boolean(bookmark.icon_cached)}:${bookmark.icon_display ?? ''}:${bookmark.title}:${bookmark.url}:${iconInView}:${iconAccessKey}`
+  return `${bookmark.id}:${bookmark.icon_source ?? ''}:${bookmark.icon ?? ''}:${bookmark.icon_blob ?? ''}:${Boolean(bookmark.icon_cached)}:${bookmark.icon_display ?? ''}:${bookmark.title}:${bookmark.url}:${bookmark.icon_revision ?? bookmark.icon_write_epoch ?? 0}:${iconInView}:${iconAccessKey}`
 }
 
 export function deriveBookmarkCardIconBase(input: BookmarkCardIconBaseInput): BookmarkCardIconBaseState {
@@ -116,9 +116,11 @@ export function deriveBookmarkCardIconBase(input: BookmarkCardIconBaseInput): Bo
   // CORS dependency). On a direct-image failure the existing bounded recovery can
   // fetch through the object proxy, even before D1 has an icon_blob.
   const canRecoverHttpIcon = canUseRawHttpIconFallback && Number.isInteger(bookmark.id) && bookmark.id > 0
+  // Projected snapshots omit source bytes. Content-only edits must still change
+  // the edge-cache version; a known revision stays stable across write fences.
   const proxiedHttpIconUrl = shouldUseIconProxy || canRecoverHttpIcon
     ? withIconAccessKey(
-      `/api/icon/${encodeURIComponent(String(bookmark.id))}?v=${createIconVersion(`${bookmark.id}:${rawIcon}:${bookmark.title}:${bookmark.url}`)}&cv=${ICON_CACHE_URL_VERSION}`,
+      `/api/icon/${encodeURIComponent(String(bookmark.id))}?v=${createIconVersion(`${bookmark.id}:${rawIcon}:${bookmark.title}:${bookmark.url}:${bookmark.icon_revision ?? bookmark.icon_write_epoch ?? 0}`)}&cv=${ICON_CACHE_URL_VERSION}`,
       iconAccessKey,
     )
     : ''

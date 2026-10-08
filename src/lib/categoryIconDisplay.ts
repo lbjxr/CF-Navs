@@ -26,7 +26,7 @@ export function getCategoryImageIconUrl(value: CategoryIconValue): string {
   const remoteIcon = iconifyIcon(icon) || icon
   if (!/^https?:\/\//i.test(remoteIcon)) return ''
 
-  return `/api/category-icon/${encodeURIComponent(String(value.id))}?v=${createIconVersion(`${value.id}:${remoteIcon}:${value.title}`)}&cv=${ICON_CACHE_URL_VERSION}`
+  return `/api/category-icon/${encodeURIComponent(String(value.id))}?v=${createIconVersion(`${value.id}:${remoteIcon}:${value.title}:${value.icon_revision ?? value.icon_write_epoch ?? 0}`)}&cv=${ICON_CACHE_URL_VERSION}`
 }
 
 export function hasCategoryImageIcon(value: CategoryIconValue): boolean {

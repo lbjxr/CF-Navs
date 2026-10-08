@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { IconSource, PublicBookmark } from '../../shared/types'
+import { getBookmarkIconUrl } from '../../src/lib/bookmarkIconDisplay'
 import {
   deriveBookmarkCardIconBase,
   createBookmarkCardIconStateKey,
@@ -49,6 +50,23 @@ function state(overrides: Partial<PublicBookmark> = {}, input: {
 }
 
 describe('bookmark card icon state', () => {
+  it.each([{icon:null,icon_display:'image' as const},{icon:'https://example.com/icon.svg',icon_cached:true}])('changes ordinary proxy identity on content-only updates: %j', source => {
+    const previous=bookmark({...source,icon_revision:'sha256-'+'a'.repeat(64),icon_write_epoch:1})
+    const changed={...previous,icon_revision:'sha256-'+'b'.repeat(64)}
+    const proxy=(value:PublicBookmark)=>deriveBookmarkCardIconBase({bookmark:value,iconInView:true}).proxiedHttpIconUrl
+    expect(proxy(changed)).not.toBe(proxy(previous))
+    expect(getBookmarkIconUrl(changed)).not.toBe(getBookmarkIconUrl(previous))
+    expect(createBookmarkCardIconStateKey(changed,true)).not.toBe(createBookmarkCardIconStateKey(previous,true))
+    // A write fence alone is not a changed image when content identity is known.
+    expect(proxy({...previous,icon_write_epoch:2})).toBe(proxy(previous))
+    expect(getBookmarkIconUrl({...previous,icon_write_epoch:2})).toBe(getBookmarkIconUrl(previous))
+  })
+  it('versions an unknown projected image with its write epoch', () => {
+    const previous=bookmark({icon_display:'image',icon_revision:null,icon_write_epoch:1})
+    const changed={...previous,icon_write_epoch:2}
+    expect(state(changed).proxiedHttpIconUrl).not.toBe(state(previous).proxiedHttpIconUrl)
+    expect(getBookmarkIconUrl(changed)).not.toBe(getBookmarkIconUrl(previous))
+  })
   it('does not return an icon URL before the card is in view', () => {
     const result = state({ icon: 'https://example.com/icon.png', icon_source: 'custom' }, { iconInView: false })
 
