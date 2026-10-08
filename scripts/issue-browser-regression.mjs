@@ -1071,11 +1071,13 @@ try {
           const row = requests.get(held.requestId)
           evidence.abortElapsedMs = (row.failureTime-row.time)*1000
           assert(row.canceled && row.error === 'net::ERR_ABORTED' && row.status == null && evidence.abortElapsedMs >= 9000 && evidence.abortElapsedMs <= 15000, 'Held transport was not cancelled by the 10s deadline')
-          // The actual normal renderer fetches the proxy and creates a Blob.
-          // Require a newly created displayed URL, not a hot copy or diagnostic fetch.
+          // The normal renderer may use a native image or a fetched Blob.
+          // Each path must match its own real completed proxy request.
           evidence.displayed = await wait(selector => {
             const image = document.querySelector(selector)?.querySelector('img')
-            if (!image?.complete || !image.naturalWidth || !image.src.startsWith('blob:')) return null
+            if (!image?.complete || !image.naturalWidth) return null
+            if(image.currentSrc.startsWith(location.origin+'/api/icon/'))return {kind:'native',id:null,width:image.naturalWidth,height:image.naturalHeight,observedWallTime:performance.timeOrigin+performance.now()}
+            if(!image.src.startsWith('blob:'))return null
             const state = window.__issueUrls, id = state.ids.get(image.src)
             const created = state.events.find(event => event.kind === 'create' && event.id === id)
             return created ? {kind:'blob',id,createdWallTime:performance.timeOrigin+created.at,observedWallTime:performance.timeOrigin+performance.now(),bytes:created.size,mime:created.mime} : null
@@ -1083,8 +1085,12 @@ try {
           const observed = await b.call(collectIconFixtures, [target])
           evidence.pixels = evaluateIconFixtures([target], observed)
           evidence.afterTimeout = await readFixtureCopy(target.key)
-          const proxy = report.requests.slice(start).find(row => row.kind === 'icon-body' && row.object === target.key && row.type === 'Fetch' && row.time >= requests.get(held.requestId).failureTime-0.1 && row.status === 200)
+          const proxy = report.requests.slice(start).find(row => row.kind === 'icon-body' && row.object === target.key && row.type === (evidence.displayed.kind==='native'?'Image':'Fetch') && row.time >= requests.get(held.requestId).failureTime-0.1 && row.status === 200)
           if (proxy) await localWait(() => Number.isFinite(proxy.finishedTime), 'Ordinary proxy body completion', 1500)
+          if(evidence.displayed.kind==='native') {
+            evidence.displayed.sourceMatched=await b.call((selector,url)=>document.querySelector(selector)?.querySelector('img')?.currentSrc===url,target.selector,imageRequestUrls.get(proxy?.requestId))
+            evidence.displayed.documentLoaderId=(await b.send('Page.getFrameTree')).frameTree.frame.loaderId
+          }
           evidence.fallback = assessCopyTimeoutFallback(report.requests.slice(start), {
             object:target.key, requestId:held.requestId, proxyRequestId:proxy?.requestId, cold:evidence.cold, afterTimeout:evidence.afterTimeout,
             displayed:evidence.displayed, pixelsPassed:evidence.pixels.passed,
@@ -1126,7 +1132,7 @@ try {
       assert(!unexpected.length, 'Unrelated network failures: '+JSON.stringify(unexpected.map(row=>({requestId:row.requestId,error:row.error}))))
       await shot('28-copy-timeout-recovered')
       return {object:target.key, expectedCanceledRequests:evidence.fallback.expectedCanceledRequests, proxyRequestId:evidence.proxyRequestId,
-        abortElapsedMs:evidence.fallback.abortElapsedMs, imageElapsedMs:evidence.fallback.imageElapsedMs, freshCopyRequestId:recovered.requestId, nativeStorageVerified:true}
+        abortElapsedMs:evidence.fallback.abortElapsedMs, imageElapsedMs:evidence.fallback.imageElapsedMs, fallbackKind:evidence.displayed.kind, freshCopyRequestId:recovered.requestId, nativeStorageVerified:true}
     } finally {
       // Always attempt all three restorations; a cleanup error remains a failure.
       const restored = await Promise.allSettled([
@@ -1272,6 +1278,9 @@ try {
     try {await home();return await verifyImages()}finally{await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier});await b.navigate(base)}
   })
   await scenario('28-CATEGORY-PERMISSIONS', async()=>{
+    // The native-timeout case intentionally changes this SVG's nonvisual bytes.
+    // Establish this case's own byte oracle instead of inheriting that mutation.
+    await api('/categories/'+child.id,{parent_id:category.id,title:'Browser child '+run,icon:fixtures.bookmark.base64Uri},'PUT')
     await home(); await verifyImages()
     const evidence=report.cases.at(-1).categoryPermissions={responses:[]}
     const hashes={root:createHash('sha256').update(Buffer.from(fixtures.category.base64Uri.split(',')[1],'base64')).digest('hex'),

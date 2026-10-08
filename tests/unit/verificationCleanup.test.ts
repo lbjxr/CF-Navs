@@ -21,6 +21,9 @@ function setup(options: Record<string, any> = {}) {
       if (!live.has(token) && options.delayedRevoke && revokedProbes++ < 2) return respond(200, { username: 'synthetic' })
       return live.has(token) ? respond(200, { username: 'synthetic' }) : respond(401, null, 1001)
     }
+    if (route === '/admin/data' && (options.readRevokes && token !== 'recovery' || options.recoveryDenied)) {
+      live.delete(token); return respond(401, null, 1001)
+    }
     if (!live.has(token)) return respond(401, null, 1001)
     if (route === '/admin/data') return respond(200, data)
     if (route === '/logout') {
@@ -94,6 +97,21 @@ describe('test-owned host cleanup', () => {
   it('does not report no captured sessions as successful revocation', async () => {
     const f = setup(); const result = await f.owner.cleanup({ categories: [], bookmarks: [] })
     expect(result.sessionRevoked).toBe(false); expect(f.calls).toHaveLength(0)
+  })
+  it('reauthenticates once when revocation propagates between the probe and authoritative read', async () => {
+    const f = setup({ readRevokes: true }); f.owner.rememberSession('owned-A')
+    const result = await f.owner.cleanup(fixtures)
+    expect(result).toMatchObject({ serverFixturesRemoved: true, sessionRevoked: true, errors: [] })
+    expect(f.calls.filter(c => c.route === '/login')).toHaveLength(1)
+    expect(f.calls.filter(c => c.method === 'DELETE').every(c => c.token === 'recovery')).toBe(true)
+    expect(f.live.has('recovery')).toBe(false)
+  })
+  it('never loops login or deletes blind if the recovery session is also rejected', async () => {
+    const f = setup({ recoveryDenied: true }); f.owner.rememberSession('owned-A')
+    const result = await f.owner.cleanup(fixtures)
+    expect(result.serverFixturesRemoved).toBe(false)
+    expect(f.calls.filter(c => c.route === '/login')).toHaveLength(1)
+    expect(f.calls.some(c => c.method === 'DELETE')).toBe(false)
   })
   it('waits for actual rejection, not just logout HTTP 200', async () => {
     const f = setup({ revocationFails: true }); f.owner.rememberSession('owned-A')

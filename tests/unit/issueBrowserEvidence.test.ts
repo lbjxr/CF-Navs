@@ -131,6 +131,20 @@ describe('copy timeout requires cold, timed, request-owned network evidence', ()
     const {rows,evidence}=fixture()
     expect(assessCopyTimeoutFallback(rows,evidence)).toEqual({passed:true,errors:[],abortElapsedMs:10000,imageElapsedMs:10200,unexpectedFailures:[],expectedCanceledRequests:['held']})
   })
+  it('accepts a completed native proxy only with matching current source, document and pixels', () => {
+    const {rows,evidence}=fixture()
+    const copy={...rows[0],documentLoaderId:'document'}
+    const proxy={...rows[1],type:'Image',receivedDataLength:323,documentLoaderId:'document'}
+    const native={kind:'native',sourceMatched:true,documentLoaderId:'document',width:32,height:32,observedWallTime:1010200}
+    expect(assessCopyTimeoutFallback([copy,proxy],{...evidence,displayed:native})).toMatchObject({passed:true,expectedCanceledRequests:['held']})
+    for(const patch of [{sourceMatched:false},{sourceMatched:undefined},{documentLoaderId:'other'},{width:0},{height:0},{observedWallTime:1009800}]) {
+      expect(assessCopyTimeoutFallback([copy,proxy],{...evidence,displayed:{...native,...patch}}).passed).toBe(false)
+    }
+    for(const patch of [{type:'Fetch'},{receivedDataLength:0},{receivedDataLength:undefined},{finishedTime:undefined}]) {
+      expect(assessCopyTimeoutFallback([copy,{...proxy,...patch}],{...evidence,displayed:native}).passed).toBe(false)
+    }
+    expect(assessCopyTimeoutFallback([{...copy,documentLoaderId:'old'},proxy],{...evidence,displayed:native}).passed).toBe(false)
+  })
   it.each([
     {cold:{...absent,entryPresent:true}}, {cold:{...absent,bodyPresent:true}}, {cold:{...absent,available:false}}, {cold:{...absent,enabled:false}},
     {afterTimeout:{...absent,entryPresent:true}}, {afterTimeout:{...absent,bodyPresent:true}}, {afterTimeout:{...absent,available:false}},

@@ -49,6 +49,15 @@ export function createVerificationCleanup({ baseUrl, run, credentials, fetchImpl
   async function cleanup(fixtures) {
     const result = { transport: 'host-fetch', serverFixturesRemoved: false, sessionRevoked: false, sessions: [], deletions: [], errors: [] }
     let active = ''
+    let recoveryStarted = false
+    async function recoverSession() {
+      if (recoveryStarted) throw new Error('Cleanup recovery session rejected')
+      recoveryStarted = true
+      const response = await request('/login', 'POST', '', credentials)
+      if (!ok(response) || !response.data?.token) throw new Error('Cleanup login failed')
+      active = response.data.token
+      rememberSession(active)
+    }
     try {
       for (const token of [...sessions.keys()].reverse()) {
         const response = await request('/me', 'GET', token)
@@ -56,15 +65,19 @@ export function createVerificationCleanup({ baseUrl, run, credentials, fetchImpl
         if (response.status !== 401) throw new Error('Cleanup session probe failed')
       }
       if (!active && (fixtures.categories.length || fixtures.bookmarks.length)) {
-        const response = await request('/login', 'POST', '', credentials)
-        if (!ok(response) || !response.data?.token) throw new Error('Cleanup login failed')
-        active = response.data.token
-        rememberSession(active)
+        await recoverSession()
       }
       if (fixtures.categories.length || fixtures.bookmarks.length) {
         const read = async () => {
-          const response = await request('/admin/data', 'GET', active)
-          if (!ok(response)) throw new Error('Cleanup authoritative read failed')
+          let response = await request('/admin/data', 'GET', active)
+          // A just-revoked test session can pass /me on one isolate and fail
+          // here on another. Reauthenticate once, before any ownership decision.
+          if (response.status === 401) {
+            await recoverSession()
+            response = await request('/admin/data', 'GET', active)
+            result.reauthenticatedAfterReadRejection = true
+          }
+          if (!ok(response)) throw new Error(`Cleanup authoritative read failed: status=${response.status} code=${response.code}`)
           assertFixtureOwnership(response.data, fixtures, run)
           return response.data
         }

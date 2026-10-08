@@ -59,7 +59,7 @@ export function isExpectedOfflineFailure(errorText, offlineActive) {
 }
 
 // The timeout probe must prove cold storage, a still-held transport cancelled by
-// the app's 10s deadline, and pixels from a real, uncached ordinary proxy Fetch and its new Blob. Timing
+// the app's 10s deadline, and pixels from a real uncached proxy (new Blob or completed native image). Timing
 // uses CDP monotonic seconds; wall time only joins the DOM observation to it.
 export function assessCopyTimeoutFallback(rows, evidence) {
   const errors = []
@@ -76,12 +76,16 @@ export function assessCopyTimeoutFallback(rows, evidence) {
   if (!Number.isFinite(abortElapsedMs) || abortElapsedMs < 9000 || abortElapsedMs > 15000) errors.push('deadline-not-observed')
   if (!Number.isFinite(imageElapsedMs) || imageElapsedMs < abortElapsedMs - 100 || imageElapsedMs > 15000) errors.push('fallback-not-bounded')
   const headers = Object.fromEntries(Object.entries(proxy?.headers ?? {}).map(([key, value]) => [key.toLowerCase(), value]))
-  if (!proxy || proxy.stage !== '28-COPY-TIMEOUT' || proxy.kind !== 'icon-body' || proxy.object !== object || proxy.type !== 'Fetch' ||
+  if (!proxy || proxy.stage !== '28-COPY-TIMEOUT' || proxy.kind !== 'icon-body' || proxy.object !== object || proxy.type !== (displayed?.kind === 'native' ? 'Image' : 'Fetch') ||
       proxy.status !== 200 || proxy.error || proxy.canceled || proxy.disk || proxy.sw || !Number.isFinite(proxy.finishedTime) ||
       !(proxy.time >= copy?.failureTime - 0.1 && proxy.finishedTime >= copy?.failureTime) ||
       proxy.path !== '/api/icon/' + object.split(':')[1] || !/^image\//i.test(headers['content-type'] ?? '') || headers['x-icon-fallback'] === '1' || pixelsPassed !== true) errors.push('not-real-proxy-image')
   const bodyFinishedWallTime = proxy?.wallTime * 1000 + (proxy?.finishedTime - proxy?.time) * 1000
-  if (displayed?.kind !== 'blob' || !Number.isFinite(displayed.createdWallTime) || !(displayed.bytes > 0) ||
+  if (displayed?.kind === 'native') {
+    if (displayed.sourceMatched !== true || !displayed.documentLoaderId || displayed.documentLoaderId !== proxy?.documentLoaderId || displayed.documentLoaderId !== copy?.documentLoaderId ||
+        !(displayed.width > 0 && displayed.height > 0 && proxy?.receivedDataLength > 0) || !Number.isFinite(bodyFinishedWallTime) ||
+        displayed.observedWallTime < bodyFinishedWallTime - 100) errors.push('not-completed-native-proxy')
+  } else if (displayed?.kind !== 'blob' || !Number.isFinite(displayed.createdWallTime) || !(displayed.bytes > 0) ||
       displayed.mime?.split(';')[0].trim().toLowerCase() !== headers['content-type']?.split(';')[0].trim().toLowerCase() || !Number.isFinite(bodyFinishedWallTime) ||
       displayed.createdWallTime < bodyFinishedWallTime - 100 || displayed.createdWallTime > displayed.observedWallTime) errors.push('not-new-proxy-blob')
   // A second cancellation, even for the same object, has no timeout exemption.
