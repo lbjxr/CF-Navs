@@ -386,6 +386,34 @@ describe('device-scoped icon permission lifecycle', () => {
     expect(f.device.snapshot().leaseUntil).toBe(5000)
     f.setClock(5000); expect(f.device.capture()).toBeNull()
   })
+  it('recovers a corrected clock only after accepting fresh authenticated metadata', async () => {
+    const f = setup(); await f.ready()
+    const lease = f.device.capture()!.lease
+    f.setClock(9000); f.device.checkpoint()
+    f.setClock(3000); await f.device.resume()
+    expect(f.device.capture()).toBeNull()
+    f.device.storageChanged(ICON_DEVICE_KEY); await f.device.resume()
+    expect(f.device.capture()).toBeNull()
+    const fresh = { ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2900 } }
+    await f.device.acceptMetadata(fresh, 'fixture-one', () => false)
+    expect(f.device.capture()).toBeNull()
+    await f.device.acceptMetadata(fresh, 'fixture-two', () => true)
+    expect(f.device.capture()).toBeNull()
+    await f.device.acceptMetadata(fresh, 'fixture-one', () => true)
+    expect(f.device.snapshot().phase).toBe('ready')
+    expect(f.device.capture()?.lease).toEqual(lease)
+  })
+  it('recovers after reloading a future clock checkpoint without clearing valid copies', async () => {
+    const f = setup(); await f.ready()
+    const lease = f.device.capture()!.lease
+    f.setClock(9000); f.device.checkpoint()
+    f.setClock(3000)
+    const reloaded = f.make(); reloaded.setDataset(dataset); await reloaded.initialize()
+    expect(reloaded.capture()).toBeNull()
+    await reloaded.acceptMetadata({ ...f.metadata(), auth_receipt: { ...f.metadata().auth_receipt, checked_at: 2900 } }, 'fixture-one', () => true)
+    expect(reloaded.capture()?.lease).toEqual(lease)
+    expect(f.storage.clear).not.toHaveBeenCalled()
+  })
   it('leaves failed disk cleanup blocked and retryable across documents', async () => {
     const f = setup(); await f.ready(); f.denyClear(true)
     await f.device.clearCopies()

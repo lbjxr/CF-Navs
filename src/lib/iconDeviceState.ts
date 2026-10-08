@@ -295,6 +295,10 @@ export function createIconDeviceController(options: DeviceOptions) {
     if (record.dataset && record.dataset !== metadata.dataset_epoch) block('checking')
     record = { ...record, revokedScope: null, receipt: { ...receipt, expires_at: Math.min(receipt.expires_at, options.session()!.expires_at) }, dataset: metadata.dataset_epoch, protocol: metadata.icon_local_copy_protocol, inlineProtocol: metadata.icon_inline_copy_protocol, observedAt: now() }
     if (!persist()) return
+    // A current authenticated response establishes a new clock observation.
+    // Keeping the old high-water mark here would permanently block a device
+    // whose clock was corrected after a future checkpoint. Snapshots cannot reset it.
+    lastClock = record.observedAt
     update({ dataset: record.dataset, checkedAt: receipt.checked_at, leaseUntil: iconLeaseUntil(receipt) })
     await synchronize()
   }

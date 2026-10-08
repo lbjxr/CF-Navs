@@ -28,7 +28,7 @@ if(cacheMode==='off') assert(selectedCases.size>0&&[...selectedCases].every(id=>
 const requiredCases=new Set(['LOGIN-UI','28-BASELINE','28-ENABLE-DEFERRED'])
 const cleanupFault=process.env.ISSUE_CLEANUP_FAULT??''
 assert(['','detached-page'].includes(cleanupFault),'Invalid cleanup fault')
-const optionalCases = new Set(['28-SIGNATURE-RENEWAL','28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE','29-LOGOUT-NAVIGATION-RACE','28-NATIVE-CATEGORY-TIMEOUT'])
+const optionalCases = new Set(['28-LEASE-EXPIRED-OFFLINE','28-CLOCK-ROLLBACK-OFFLINE','28-SIGNATURE-RENEWAL','28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE','29-LOGOUT-NAVIGATION-RACE','28-NATIVE-CATEGORY-TIMEOUT'])
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
 const sessionCaptureErrors = []
@@ -609,6 +609,53 @@ try {
     assert(await b.call(manifest=>manifest.every(row=>document.querySelector(row.selector)?.querySelector('img')?.src.startsWith('blob:')),manifest()),'Warm fixture did not use object URLs')
     const rows=report.requests.slice(start),network=assessStableIcons(rows.filter(row=>['icon-body','icon-copy'].includes(row.kind)))
     assert(network.passed,JSON.stringify(network));return {persisted,network,otherImageRequests:rows.filter(row=>['external-image','iconify-body'].includes(row.kind)).length}
+  })
+  for (const mode of ['expired','rollback']) await scenario(mode==='expired'?'28-LEASE-EXPIRED-OFFLINE':'28-CLOCK-ROLLBACK-OFFLINE', async () => {
+    const evidence=report.cases.at(-1).leaseBoundary={mode,clockOnly:true}
+    let clockScript=null
+    try {
+      await home(); await verifyImages()
+      const before=await readRestartState()
+      assert(before.phase==='ready'&&before.blobImages&&before.copies.every(copy=>copy.record.entryPresent&&copy.record.bodyPresent),'Lease boundary requires real warm persistent copies')
+      await wait(()=>Boolean(navigator.serviceWorker?.controller))
+      evidence.before=await b.call(()=>{
+        const record=JSON.parse(localStorage.getItem('cf-navs.icon-device-v1'))
+        const session=JSON.parse(localStorage.getItem('cf-navs.auth'))
+        return {checkedAt:record.receipt.checked_at,expiresAt:record.receipt.expires_at,observedAt:record.observedAt,sessionExpiresAt:session.expires_at}
+      })
+      const target=mode==='expired'?evidence.before.checkedAt+86400000+1000:evidence.before.observedAt-60000
+      assert(target<evidence.before.sessionExpiresAt,'Lease test would also expire the login session')
+      const source=`(()=>{const realNow=Date.now.bind(Date),offset=${target}-realNow();Date.now=()=>realNow()+offset})()`
+      clockScript=(await b.send('Page.addScriptToEvaluateOnNewDocument',{source})).identifier
+      const start=report.requests.length
+      await b.send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});offlineActive=true
+      await home({waitForImages:false})
+      evidence.denied=await b.call(async items=>{
+        const script=[...document.scripts].find(e=>e.type==='module'&&e.src.includes('/assets/index-'))
+        const device=Object.values(await import(script.src)).find(v=>v&&typeof v.snapshot==='function'&&typeof v.acceptMetadata==='function')
+        const state=device.snapshot(),record=JSON.parse(localStorage.getItem('cf-navs.icon-device-v1'))
+        return {phase:state.phase,hasLease:!!state.lease,authenticated:!!localStorage.getItem('cf-navs.auth'),
+          checkedAt:record.receipt?.checked_at,expiresAt:record.receipt?.expires_at,
+          images:items.map(item=>{const e=document.querySelector(item.selector),img=e?.querySelector('img');return {key:item.key,present:!!e,blob:img?.src.startsWith('blob:')??false}})}
+      },manifest())
+      assert(evidence.denied.phase===(mode==='expired'?'expired':'checking')&&!evidence.denied.hasLease,'Unusable local lease remained enabled')
+      assert(evidence.denied.authenticated&&evidence.denied.images.every(image=>image.present&&!image.blob),'Boundary must stop local images without inventing logout or removing fixture data')
+      assert(evidence.denied.checkedAt===evidence.before.checkedAt&&evidence.denied.expiresAt===evidence.before.expiresAt,'Offline read renewed the receipt')
+      const during=report.requests.slice(start)
+      evidence.offlineMetadataFailures=during.filter(row=>row.kind==='api'&&row.error==='net::ERR_INTERNET_DISCONNECTED').length
+      assert(evidence.offlineMetadataFailures>0&&!during.some(row=>row.authSession&&row.kind==='api'&&row.status===200),'Offline boundary did not deny actual metadata requests')
+      await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier:clockScript});clockScript=null
+      await b.send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});offlineActive=false
+      await home(); const recovered=await readRestartState()
+      evidence.recovery={phase:recovered.phase,hasLease:recovered.hasLease,imagesPassed:recovered.imagesPassed,blobImages:recovered.blobImages}
+      assert(recovered.phase==='ready'&&recovered.hasLease&&recovered.imagesPassed&&recovered.blobImages,'Online revalidation did not restore the valid copies')
+      return evidence
+    } finally {
+      if(clockScript)await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier:clockScript})
+      if(offlineActive){await b.send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});offlineActive=false}
+      // Every injected clock belongs to a document; replace it even after failure.
+      await b.navigate(base)
+    }
   })
   for (const mode of ['online','offline']) await scenario('28-BROWSER-RESTART-'+mode.toUpperCase(), async () => {
     const entry=report.cases.at(-1), evidence=entry.restart={mode,fixtureKeys:manifest().map(item=>item.key)}
