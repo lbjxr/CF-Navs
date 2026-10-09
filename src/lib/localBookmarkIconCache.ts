@@ -108,12 +108,32 @@ async function responseToIconPayload(response: Response): Promise<IconPayload> {
 }
 
 const pendingObjectIcons = new Map<string, Promise<IconPayload>>()
+const OBJECT_ICON_TIMEOUT_MS = 10000
+
+async function fetchObjectIconPayload(url: string): Promise<IconPayload> {
+  const controller = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new DOMException('Object icon response timed out', 'TimeoutError')
+      reject(error)
+      controller.abort(error)
+    }, OBJECT_ICON_TIMEOUT_MS)
+  })
+  try {
+    // The deadline includes the response body. A headers-only success must not
+    // retain this URL's shared in-flight entry forever and prevent recovery.
+    return await Promise.race([
+      fetch(url, { credentials: 'same-origin', cache: 'force-cache', signal: controller.signal }).then(responseToIconPayload),
+      deadline,
+    ])
+  } finally { clearTimeout(timer) }
+}
 
 async function fetchObjectIcon(url: string): Promise<BookmarkIconFetchResult> {
   let pending = pendingObjectIcons.get(url)
   if (!pending) {
-    pending = fetch(url, { credentials: 'same-origin', cache: 'force-cache' })
-      .then(responseToIconPayload)
+    pending = fetchObjectIconPayload(url)
       .finally(() => pendingObjectIcons.delete(url))
     pendingObjectIcons.set(url, pending)
   }

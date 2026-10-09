@@ -157,6 +157,12 @@ node --experimental-sqlite node_modules/vitest/vitest.mjs run tests/unit/issueBr
 
 `protocol` / timing 是观测证据，不是连接异常根因结论。副本队列 10 秒期限与普通 `<img>` 持续挂起是两条链路：即使同路径 `fetch(cache:no-store)` 成功，原 Image 仍未响应/显示时也不能判通过，不能由副本修复推断匿名图片挂起根因已定位。不得延长既有等待或用额外请求掩盖失败；保留原图片 requestId 与独立诊断请求。纯判定单测通过不代表测试站案例通过。
 
+## 普通图像回退双重失败
+
+显式选择 `28-FALLBACK-RESET`、`28-FALLBACK-TIMEOUT`、`28-FALLBACK-KEEP-GOOD`。使用公开与私密合成书签，冷路径经 UI 清理后，让副本请求返回 503，同时令普通对象图像代理 ConnectionReset 或持续挂起；恢复只解除拦截并通过实际标签切换唤醒既有机制，不调用 Loader 或手工下载。暖路径先核验真实成功副本，故障规则不应被请求触发，正文与图像必须保留。
+
+等待窗口覆盖初始 10 秒期限及既有三次退避重试；分别统计原生图片（可能签名换源）与 fetch（初次或最多三次后续重试），静默观察期不得再增长。失败不落盘，恢复后独立像素和正文/描述符哈希一致；只有完整恢复通过的准确注入 requestId 才能归类为预期错误。
+
 ## 数据快照与新会话交错
 
 显式选择 `29-SNAPSHOT-LOCAL-BEFORE-LOGOUT`、`29-SNAPSHOT-LOCAL-AFTER-RELOGIN`、`29-SNAPSHOT-CACHE-BEFORE-LOGOUT`、`29-SNAPSHOT-CACHE-AFTER-RELOGIN`、`29-SNAPSHOT-CACHE-BEFORE-FROZEN-LOGOUT`、`29-SNAPSHOT-CACHE-AFTER-FROZEN-RELOGIN`。每项通过真实书签编辑表单保存触发快照，第二标签实际退出或重新登录，再释放原标签；冻结场景使用浏览器生命周期事件。

@@ -150,6 +150,7 @@
 
     if (!cachedIconFailed && (iconBaseState.hasEmbeddedIcon || iconBaseState.shouldUseIconProxy)) {
       cachedIconFailed = true
+      if (iconBaseState.shouldUseIconProxy) iconRetry.failed()
       return
     }
 

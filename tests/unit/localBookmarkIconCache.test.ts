@@ -400,6 +400,27 @@ describe('fetchCachedBookmarkIconUrl', () => {
 
 
 describe('remote icon response classification', () => {
+  it.each(['headers', 'body'])('bounds a stalled object proxy %s and releases its shared request for recovery', async boundary => {
+    setupCacheStorage(); vi.useFakeTimers()
+    let release!: (response: Response) => void
+    const stalled = new Promise<Response>(resolve => { release = resolve })
+    const response = new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('<svg>')) } }), { headers: { 'content-type': 'image/svg+xml' } })
+    const fetcher = vi.fn().mockImplementationOnce(() => boundary === 'headers' ? stalled : Promise.resolve(response))
+      .mockResolvedValue(new Response('<svg/>', { headers: { 'content-type': 'image/svg+xml' } }))
+    vi.stubGlobal('fetch', fetcher)
+    try {
+      let settled = false
+      const first = fetchBookmarkIcon('deadline', '/api/icon/456?cv=deadline').then(result => { settled = true; return result })
+      await vi.advanceTimersByTimeAsync(10001)
+      expect(settled).toBe(true)
+      expect(await first).toEqual({ url: null, status: 'retryable' })
+      expect(fetcher.mock.calls[0][1].signal.aborted).toBe(true)
+      const next = await fetchBookmarkIcon('deadline', '/api/icon/456?cv=deadline')
+      expect(next.status).toBe('ready'); expect(fetcher).toHaveBeenCalledTimes(2)
+      if (next.url) revokeLocalIconUrl(next.url)
+    } finally { release(new Response('<svg/>')); vi.useRealTimers(); vi.unstubAllGlobals() }
+  })
+
   it.each([
     [200, '1', 'retryable'],
     [200, null, 'ready'],

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createNativeImageWatchdog } from '../lib/nativeImageWatchdog'
   type AsyncVoid<T = void> = T | Promise<T>
 
   export let title = ''
@@ -19,6 +20,12 @@
   function handleLoad() {
     void onLoad?.()
   }
+  function watchObjectImage(node: HTMLImageElement, url: string) {
+    const watchdog = createNativeImageWatchdog(node, expired => { if (expired === iconUrl) handleError() })
+    const update = (next: string) => watchdog.update({ url: next, enabled: next.startsWith('/api/icon/') })
+    update(url)
+    return { update, destroy: () => watchdog.destroy() }
+  }
 </script>
 
 <div
@@ -37,6 +44,7 @@
       loading="lazy"
       decoding="async"
       fetchpriority="low"
+      use:watchObjectImage={iconUrl}
       on:error={handleError}
       on:load={handleLoad}
     />

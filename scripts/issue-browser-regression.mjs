@@ -21,6 +21,7 @@ import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.
 import { verifiedInjectedCopyResets, unexecutedRequestedCases, verifiedCategoryFilterCancellations } from './lib/issueBrowserEvidence.mjs'
 import { pageInstallIconInterruption } from './lib/iconInterruptionProbe.mjs'
 import { pageInstallSnapshotInterruption, pageReadSnapshotScopes } from './lib/snapshotInterruptionProbe.mjs'
+import { verifiedFallbackTransportFailures } from './lib/fallbackFailureEvidence.mjs'
 import { pageInstallIconPerformanceProbe, pageReadIconStorageAudit, assessIconStorageAudit, pageInstallCapacityCommitProbe, summarizeIconPerformanceRequests } from './lib/iconPerformanceProbe.mjs'
 import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from './lib/issueBrowserEvidence.mjs'
 if (process.env.ISSUE_BROWSER_WRITE_FIXTURES !== '1') throw new Error('Explicit ISSUE_BROWSER_WRITE_FIXTURES=1 required for temporary test-site records')
@@ -46,6 +47,7 @@ optionalCases.add('28-CATEGORY-FILTER-CANCEL')
 optionalCases.add('28-PERFORMANCE-FLOW')
 optionalCases.add('28-CAPACITY-EVICTION')
 optionalCases.add('28-NATIVE-UI-TEARDOWN')
+for(const kind of ['RESET','TIMEOUT','KEEP-GOOD'])optionalCases.add('28-FALLBACK-'+kind)
 const snapshotCases = [
   ['local','before',false,false], ['local','after',true,false],
   ['cache','before',false,false], ['cache','after',true,false],
@@ -446,7 +448,7 @@ async function signInPlace() {
   assert(token,'In-page login did not establish a session')
 }
 async function clearCopies() {
-  await home(); await settings()
+  await home(); await waitForDocumentFetches(); await settings()
   await click('.device-actions button:nth-child(2)')
   await wait(()=>document.querySelector('.device-status')?.textContent.startsWith('已启用'),[],30000)
   const deadline=Date.now()+30000
@@ -679,7 +681,8 @@ try {
   category = await api('/categories', { title: 'Browser regression ' + run, icon: fixtures.category.base64Uri, sort: 999999 }); ownedCategories.push(category.id)
   child = await api('/categories', { parent_id: category.id, title: 'Browser child ' + run, icon: fixtures.bookmark.base64Uri }); ownedCategories.push(child.id)
   for (let i = 0; i < 3; i++) {
-    const item = await api('/bookmarks', { category_id: category.id, title: `Browser ${run} ${i}`, url: `https://example.com/regression/${i}`, icon: fixtures.bookmark.base64Uri, icon_source: 'custom', is_private: i === 2 })
+    const ordinarySource=[...selectedCases].some(id=>id.startsWith('28-FALLBACK-'))
+    const item = await api('/bookmarks', { category_id: category.id, title: `Browser ${run} ${i}`, url: `https://example.com/regression/${i}`, icon: ordinarySource?fixtures.bookmark.uri:fixtures.bookmark.base64Uri, icon_source: 'custom', is_private: i === 2 })
     ownedBookmarks.push(item.id); bookmarks.push({ ...item, title: `Browser ${run} ${i}`, pixels: fixtures.bookmark.pixels, imageKey:'bookmark' })
   }
   report.fixtures = { categories: ownedCategories, bookmarks: ownedBookmarks }; await persist()
@@ -1193,6 +1196,84 @@ try {
       return {failure,publicAndPrivate:true,injected:evidence.requests.length,faultNotPersisted:true,naturalRecovery:true,imagesPassed:true}
     } finally {
       for(const index of targets)await setFixtureIcon(index,fixtures[bookmarks[index].imageKey].base64Uri)
+    }
+  })
+  for(const fault of ['RESET','TIMEOUT','KEEP-GOOD'])await scenario('28-FALLBACK-'+fault,async()=>{
+    const targets=[0,2],objects=targets.map(index=>'bookmark:'+bookmarks[index].id)
+    const evidence=report.cases.at(-1).fallbackFailure={fault,objects,injections:[],retained:[]}
+    const held=new Map();let failing=true
+    await home();await waitForDocumentFetches()
+    // These fixtures are created with the non-base64 URI before baseline, so
+    // adjacent faults do not mutate their version while images are in flight.
+    await home();await verifyImages();await waitForDocumentFetches()
+    const originals=await Promise.all(objects.map(readFixtureCopy))
+    if(fault!=='KEEP-GOOD')await clearCopies()
+    try {
+      await b.send('Network.setCacheDisabled',{cacheDisabled:true})
+      await b.send('Network.setBypassServiceWorker',{bypass:true})
+      await intercept([{urlPattern:'*/api/icon-local-copy',requestStage:'Request'},...targets.map(index=>({urlPattern:`*/api/icon/${bookmarks[index].id}*`,requestStage:'Request'}))],async event=>{
+        if(!failing)return false
+        let object,kind
+        if(new URL(event.request.url).pathname==='/api/icon-local-copy'){
+          let data;try{data=JSON.parse(event.request.postData)}catch{return false}
+          object=data.object_type+':'+data.object_id;kind='copy'
+        }else{object='bookmark:'+new URL(event.request.url).pathname.split('/').at(-1);kind='proxy'}
+        if(!objects.includes(object))return false
+        assert(event.networkId,'Fallback fault lacks an owned Network requestId')
+        const record={requestId:event.networkId,object,kind,at:Date.now()}
+        if(kind==='proxy'){
+          const url=new URL(event.request.url),family=new URL(url);family.searchParams.delete('key')
+          record.family=createHash('sha256').update(family.href).digest('hex')
+          record.source=createHash('sha256').update(url.href).digest('hex')
+        }
+        evidence.injections.push(record)
+        if(kind==='copy'){
+          injectedRequests.add(event.networkId)
+          await b.send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:503,responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'private, no-store'}],body:Buffer.from(JSON.stringify({code:0,msg:'Controlled copy failure',data:{protocol:1,reason:'unavailable'}})).toString('base64')})
+        }else if(fault==='TIMEOUT')held.set(event.networkId,event)
+        else await b.send('Fetch.failRequest',{requestId:event.requestId,errorReason:'ConnectionReset'})
+        return true
+      },async()=>{
+        await home({waitForImages:fault==='KEEP-GOOD'})
+        for(const index of targets)await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),card(index))
+        if(fault==='KEEP-GOOD'){
+          await verifyImages()
+          assert(evidence.injections.length===0,'Warm successful images unexpectedly used a failed remote path')
+          for(let i=0;i<objects.length;i++){const state=await readFixtureCopy(objects[i]);assert(state.entryPresent&&state.bodyPresent&&state.bodyRevision===originals[i].bodyRevision,'Warm successful image was replaced or removed');evidence.retained.push(objects[i])}
+          return
+        }
+        await localWait(()=>objects.every(object=>evidence.injections.some(row=>row.object===object&&row.kind==='copy')&&evidence.injections.some(row=>row.object===object&&row.kind==='proxy')),'Copy failure followed by ordinary proxy failure')
+        const firstProxy=evidence.injections.find(row=>row.kind==='proxy').at
+        await sleep(Math.max(0,firstProxy+(fault==='TIMEOUT'?57000:18000)-Date.now()))
+        evidence.failureState=await b.call(selectors=>selectors.map(selector=>{const root=document.querySelector(selector),img=root?.querySelector('img');return {exists:!!root,complete:img?.complete??false,width:img?.naturalWidth??0,text:root?.textContent?.trim().slice(0,40)}}),targets.map(card))
+        if(fault==='TIMEOUT'){
+          evidence.timedOut=objects.map(object=>({object,requests:evidence.injections.filter(row=>row.object===object&&row.kind==='proxy').map(row=>report.requests.find(request=>request.requestId===row.requestId))}))
+          assert(evidence.timedOut.every(item=>item.requests.some(row=>row?.error==='net::ERR_ABORTED'&&row.canceled&&row.durationMs>=9000&&row.durationMs<=15000)),'Ordinary proxy did not cancel within its own bounded timeout')
+        }
+        for(const object of objects){const state=await readFixtureCopy(object);assert(!state.entryPresent&&!state.bodyPresent,'Dual failure persisted an invalid image')}
+        const before=evidence.injections.length;await sleep(8000)
+        evidence.retryCounts=objects.map(object=>{
+          const proxies=evidence.injections.filter(row=>row.object===object&&row.kind==='proxy'),first=proxies[0].at
+          const initial=proxies.filter(row=>row.at<first+1000),retries=proxies.filter(row=>row.at>=first+1000)
+          return {object,copy:evidence.injections.filter(row=>row.object===object&&row.kind==='copy').length,initial:initial.length,retries:retries.length,
+            initialSignatureRefresh:initial.length===2&&initial[0].family===initial[1].family&&initial[0].source!==initial[1].source}
+        })
+        assert(evidence.injections.length===before&&evidence.retryCounts.every(row=>row.copy<=4&&row.retries<=3&&(row.initial===1||row.initialSignatureRefresh)),'Dual failure did not exhaust a finite automatic retry budget')
+        failing=false;evidence.releasedAt=Date.now()
+        // A canceled held request has no consumer; release only its CDP interception.
+        for(const event of held.values())await b.send('Fetch.continueRequest',{requestId:event.requestId}).catch(()=>{})
+        held.clear()
+        await sleep(31000);await focusCycle()
+        for(const index of targets){await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),card(index));await wait(sel=>{const img=document.querySelector(sel)?.querySelector('img');return img?.complete&&img.naturalWidth>0},[card(index)],30000)}
+        await verifyImages()
+        evidence.recovered=[]
+        for(const object of objects){const state=await readFixtureCopy(object);assert(state.entryPresent&&state.bodyPresent&&state.bodyRevision===state.descriptor?.content_revision,'Natural UI recovery did not persist the correct body');evidence.recovered.push({object,revision:state.bodyRevision})}
+        evidence.imagesPassed=true
+      })
+      return {fault,publicAndPrivate:true,retained:fault==='KEEP-GOOD',naturalRecovery:fault!=='KEEP-GOOD',injections:evidence.injections.length}
+    }finally{
+      for(const event of held.values())await b.send('Fetch.continueRequest',{requestId:event.requestId}).catch(()=>{})
+      await b.send('Network.setBypassServiceWorker',{bypass:false});await b.send('Network.setCacheDisabled',{cacheDisabled:false})
     }
   })
   for (const [index, timeoutId, proxyMinimumMs] of [[0,'28-COPY-TIMEOUT',0],[2,'28-PRIVATE-COPY-TIMEOUT',0],[2,'28-PRIVATE-COPY-TIMEOUT-SLOW-PROXY',3200]]) await scenario(timeoutId, async () => {
@@ -2191,7 +2272,8 @@ finally {
   const uiImageCancellations=new Set(report.verifiedUiImageCancellations.map(row=>row.requestId))
   report.verifiedLocalImageAdoptions=verifiedLocalImageAdoptions(report.requests,report.imageLifecycles)
   report.verifiedLogoutCopyCancellations=verifiedLogoutCopyCancellations(report.requests)
-  const completedLifecycle=new Set([...report.verifiedLocalImageAdoptions.map(row=>row.requestId),...report.verifiedLogoutCopyCancellations])
+  report.verifiedFallbackTransportFailures=verifiedFallbackTransportFailures(report.requests,report.cases)
+  const completedLifecycle=new Set([...report.verifiedLocalImageAdoptions.map(row=>row.requestId),...report.verifiedLogoutCopyCancellations,...report.verifiedFallbackTransportFailures])
   report.failedRequests = report.requests.filter(e => e.error)
   report.expectedOfflineRequests=[...expectedOfflineRequests]
   report.expectedTimeoutRequests=[...expectedTimeoutRequests]
