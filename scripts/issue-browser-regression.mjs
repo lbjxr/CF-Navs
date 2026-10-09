@@ -18,7 +18,7 @@ import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
 import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.mjs'
-import { verifiedInjectedCopyResets, unexecutedRequestedCases } from './lib/issueBrowserEvidence.mjs'
+import { verifiedInjectedCopyResets, unexecutedRequestedCases, verifiedCategoryFilterCancellations } from './lib/issueBrowserEvidence.mjs'
 import { pageInstallIconInterruption } from './lib/iconInterruptionProbe.mjs'
 import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from './lib/issueBrowserEvidence.mjs'
 if (process.env.ISSUE_BROWSER_WRITE_FIXTURES !== '1') throw new Error('Explicit ISSUE_BROWSER_WRITE_FIXTURES=1 required for temporary test-site records')
@@ -40,6 +40,7 @@ for(const id of ['29-DECODE-LOGOUT','29-DECODE-RELOGIN','29-DECODE-FROZEN-LOGOUT
 optionalCases.add('29-OLD-401-DURING-INITIALIZATION')
 optionalCases.add('29-PENDING-WRITE-LOGOUT')
 for(const id of ['28-CATEGORY-EDIT-REFRESH','28-CATEGORY-MOBILE-MOVE','28-CATEGORY-PRIVACY'])optionalCases.add(id)
+optionalCases.add('28-CATEGORY-FILTER-CANCEL')
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
 const sessionCaptureErrors = []
@@ -51,6 +52,8 @@ const port = probe.address().port; await new Promise(r => probe.close(r))
 const disableQuic=process.env.ISSUE_DISABLE_QUIC==='1'
 const b = new CdpSession({ chromeExe: resolveSetting('CHROME_EXE', 'chromeExe', 'C:/Program Files/Google/Chrome/Application/chrome.exe'), debugPort: port, userDataDir: profile, headless: false, disableQuic })
 const report = { run, cacheMode, browserLog: [], cases: [], requests: [], cleanup: {}, excluded: [], limitations: [] }
+report.categoryFilters=[]
+const authSessions = new Map() // Raw headers stay in memory, never in reports.
 let stage = 'setup', token = '', category, child, bookmarks = [], ownedCategories = [], ownedBookmarks = [], secondary = null
 const requests = new Map()
 const imageRequestUrls = new Map()
@@ -134,8 +137,13 @@ async function fill(selector, value) {
   await b.send('Input.dispatchKeyEvent',{type:'keyDown',key:'a',code:'KeyA',windowsVirtualKeyCode:65,modifiers:2})
   await b.send('Input.dispatchKeyEvent',{type:'keyUp',key:'a',code:'KeyA',windowsVirtualKeyCode:65,modifiers:2})
   await b.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Control',code:'ControlLeft',windowsVirtualKeyCode:17})
-  await b.send('Input.insertText',{text:value})
+  const inputAt=Date.now()
+  if(value==='') {
+    await b.send('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8})
+    await b.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8})
+  } else await b.send('Input.insertText',{text:value})
   assert(await b.call((sel,expected)=>document.querySelector(sel)?.value===expected,selector,value),'Field replacement verification failed: '+selector)
+  return {inputAt}
 }
 async function tap(selector) {
   const point=await wait(sel=>{const e=document.querySelector(sel);if(!e||e.disabled)return null;e.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2,hit=document.elementFromPoint(x,y);return r.width&&r.height&&x>=0&&x<innerWidth&&y>=0&&y<innerHeight&&(hit===e||e.contains(hit))?{x,y}:null},[selector])
@@ -146,11 +154,16 @@ async function tap(selector) {
 const categoryDialog='[aria-labelledby="category-modal-title"]'
 async function categoryPanel() {
   if(!await b.call(()=>Boolean(localStorage.getItem('cf-navs.auth'))))await login()
+  const enteredAt=Date.now(),authSession=authSessions.get('Bearer '+token)
   await homeAction('admin');await wait(()=>document.querySelector('[data-testid="admin-tab-categories"]'))
-  await click('[data-testid="admin-tab-categories"]');await fill('[data-testid="admin-category-search"]',run)
+  await click('[data-testid="admin-tab-categories"]')
+  const beforeIds=await b.call(()=>[...document.querySelectorAll('.admin-compact-card[data-category-id]')].map(e=>Number(e.dataset.categoryId)))
+  const {inputAt}=await fill('[data-testid="admin-category-search"]',run)
   await wait(id=>document.querySelector(`.admin-compact-card[data-category-id="${id}"]`),[category.id])
   const expand=await b.call(id=>{const e=document.querySelector(`[data-testid="admin-category-expand-${id}"]`);return e&&e.getAttribute('aria-expanded')!=='true'},category.id)
   if(expand)await click(`[data-testid="admin-category-expand-${category.id}"]`)
+  const after=await b.call((expected,ids)=>({ids:[...document.querySelectorAll('.admin-compact-card[data-category-id]')].map(e=>Number(e.dataset.categoryId)),value:document.querySelector('[data-testid="admin-category-search"]')?.value===expected,auth:JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token===ids}),run,token)
+  report.categoryFilters.push({stage,enteredAt,inputAt,settledAt:Date.now(),authSession,beforeIds,afterIds:after.ids,matched:after.value&&after.auth&&after.ids.length>0&&after.ids.every(id=>ownedCategories.includes(id))})
 }
 async function editCategoryUi(id) {
   await categoryPanel()
@@ -340,6 +353,10 @@ async function scenario(id, action) {
   if(entry.status==='failed'&&id.startsWith('28-CATEGORY-')&&await b.call(sel=>Boolean(document.querySelector(sel)),categoryDialog).catch(()=>false)) {
     try {await click(categoryDialog+' .modal-header .ghost-button');await wait(sel=>!document.querySelector(sel),[categoryDialog]);entry.uiCleanup={categoryDialogClosed:true}}
     catch(error){entry.uiCleanup={categoryDialogClosed:false,error:safe(error.message)}}
+  }
+  if(entry.status==='failed'&&['28-CATEGORY-EDIT-REFRESH','28-CATEGORY-MOBILE-MOVE','28-CATEGORY-PRIVACY'].includes(id)) {
+    try {await prepareCategoryScenario();entry.fixtureCleanup={restored:true}}
+    catch(error){entry.fixtureCleanup={restored:false,error:safe(error.message)}}
   }
   entry.requests = report.requests.slice(start).map(r => r.requestId)
   entry.console = b.consoleErrors.slice(consoles).map(e => safe(JSON.stringify(e)))
@@ -538,7 +555,6 @@ try {
       if (!handled) return b.send('Fetch.continueRequest', { requestId:event.requestId })
     }).catch(error => { report.interceptionError=safe(error.message) })
   })
-  const authSessions = new Map() // Raw headers stay in memory, never in reports.
   b.on('Network.requestWillBeSent', e => {
     const row = { requestId: e.requestId, stage, time: e.timestamp, wallTime: e.wallTime, method: e.request.method, type: e.type, initiator: e.initiator?.type, initiatorFrames:e.initiator?.stack?.callFrames?.slice(0,4).map(f=>({function:f.functionName,url:safe(f.url),line:f.lineNumber,column:f.columnNumber})), ...classifyIssueRequest(e.request.url, e.request.postData, base) }
     const authorization = Object.entries(e.request.headers ?? {}).find(([key]) => key.toLowerCase() === 'authorization')?.[1]
@@ -1549,6 +1565,31 @@ try {
     const {identifier}=await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{const now=Date.now.bind(Date);Date.now=()=>now()-600})()`})
     try {await home();return await verifyImages()}finally{await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier});await b.navigate(base)}
   })
+  await scenario('28-CATEGORY-FILTER-CANCEL',async()=>{
+    await prepareCategoryScenario();await clearCopies()
+    let held=null,objectId=null
+    return intercept([{urlPattern:'*/api/icon-local-copy',requestStage:'Request'}],async event=>{
+      let payload;try{payload=JSON.parse(event.request.postData)}catch{return false}
+      // Read-only delay in this disposable browser. Never modify or register
+      // this existing category as a server cleanup fixture.
+      if(!held&&payload.object_type==='category'&&!ownedCategories.includes(payload.object_id)){held=event;objectId=payload.object_id;return true}
+      return false
+    },async()=>{
+      await categoryPanel();await localWait(()=>held,'Visible category copy suspended before filtering')
+      const row=requests.get(held.networkId)
+      assert(row&&row.authSession===authSessions.get('Bearer '+token),'Filter cancellation lacks session ownership')
+      await localWait(()=>row.error,'Component-owned request cancellation',5000)
+      assert(row.canceled&&row.error==='net::ERR_ABORTED'&&(row.failureTime-row.time)*1000<9000,'Filtered copy was not cancelled by component disposal')
+      assert(verifiedCategoryFilterCancellations([row],report.categoryFilters).includes(row.requestId),'Filter cancellation evidence rejected')
+      const absent=await readFixtureCopy('category:'+objectId)
+      assert(absent.available&&!absent.entryPresent&&!absent.bodyPresent,'Cancelled filter copy reached persistent storage')
+      await fill('[data-testid="admin-category-search"]','')
+      await wait(id=>{const e=document.querySelector(`.admin-compact-card[data-category-id="${id}"]`),img=e?.querySelector('img');if(e)e.scrollIntoView({block:'center',behavior:'instant'});return img?.complete&&img.naturalWidth>0&&img.currentSrc.startsWith('blob:')},[objectId],30000)
+      const restored=await readFixtureCopy('category:'+objectId)
+      assert(restored.entryPresent&&restored.bodyPresent&&restored.bodyRevision===restored.descriptor?.content_revision&&restored.descriptor?.object_id===objectId,'Search restoration did not reacquire a valid category copy')
+      return {filteredRequestId:row.requestId,componentCancelled:true,failedCopyAbsent:true,searchRestored:true}
+    })
+  })
   await scenario('28-CATEGORY-EDIT-REFRESH',async()=>{
     await prepareCategoryScenario()
     await home();await verifyImages()
@@ -1636,8 +1677,14 @@ try {
     evidence.privateParentHidesSubtree=true
     await login();await privacy(category.id,false);await privacy(child.id,true);await home();await verifyImages()
     await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
+    const anonymousStart=report.requests.length
     await b.navigate(base);await wait(sel=>document.querySelector(sel),[scope()]);await click(scope()+' .scope-root-trigger')
     const publicItems=manifest().filter(row=>row.key!=='category:'+child.id&&row.key!=='bookmark:'+bookmarks[2].id)
+    // The native category path has four 10s attempts and 1.2/4/10s delays.
+    // Wait for that existing bounded path before invoking the pixel oracle.
+    const readinessStarted=Date.now(),readinessDeadline=readinessStarted+70000
+    for(const item of publicItems)await wait(sel=>{const e=document.querySelector(sel),img=e?.querySelector('img');if(e&&(!img?.complete||!img.naturalWidth))e.scrollIntoView({block:'center',behavior:'instant'});return img?.complete&&img.naturalWidth>0},[item.selector],Math.max(1,readinessDeadline-Date.now()))
+    evidence.anonymousReadiness={elapsedMs:Date.now()-readinessStarted,requests:report.requests.slice(anonymousStart).filter(row=>row.object==='category:'+category.id).map(row=>({requestId:row.requestId,time:row.time,end:row.terminalTime,status:row.status,error:row.error}))}
     await verifyImages(publicItems)
     assert(await b.call((child,privateId)=>!document.querySelector(`#home-category-tab-${child}`)&&!document.querySelector(`[data-navigation-id="category-${child}"]`)&&!document.querySelector(`[data-sort-id="${privateId}"]`),child.id,bookmarks[2].id),'Private child remains visible to a visitor')
     const stored=await readFixtureCopy('category:'+child.id)
@@ -1797,8 +1844,10 @@ finally {
   report.validatedInjectedCancellations=report.failedRequests.filter(row=>isExpectedInjectedCancellation(row,expectedInjectedCancellations)).map(row=>row.requestId)
   report.verifiedInjectedCopyResets=verifiedInjectedCopyResets(report.requests,report.cases)
   const copyResets=new Set(report.verifiedInjectedCopyResets)
-  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId)&&!navigationImageCancellations.has(e.requestId)&&!copyResets.has(e.requestId))
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||navigationImageCancellations.has(e.requestId)||revokedRequests.has(e.requestId)||copyResets.has(e.requestId))))
+  report.verifiedCategoryFilterCancellations=verifiedCategoryFilterCancellations(report.requests,report.categoryFilters)
+  const filteredCopies=new Set(report.verifiedCategoryFilterCancellations)
+  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId)&&!navigationImageCancellations.has(e.requestId)&&!copyResets.has(e.requestId)&&!filteredCopies.has(e.requestId))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||navigationImageCancellations.has(e.requestId)||revokedRequests.has(e.requestId)||copyResets.has(e.requestId)||filteredCopies.has(e.requestId))))
   report.injectedRequests=[...injectedRequests]
   report.unexecutedRequestedCases=unexecutedRequestedCases(selectedCases,report.cases)
   await persist()

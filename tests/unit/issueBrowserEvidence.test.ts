@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from '../../scripts/lib/issueBrowserEvidence.mjs'
-import { verifiedInjectedCopyResets, unexecutedRequestedCases } from '../../scripts/lib/issueBrowserEvidence.mjs'
+import { verifiedInjectedCopyResets, unexecutedRequestedCases, verifiedCategoryFilterCancellations } from '../../scripts/lib/issueBrowserEvidence.mjs'
 const origin = 'https://nav.example.test'
 describe('per-operation browser network evidence', () => {
   it.each([
@@ -230,6 +230,13 @@ describe('copy timeout recovery requires a new request and valid persisted bytes
 })
 
 describe('network diagnostics and exact injected cancellation exemptions', () => {
+  it('accepts filtering cancellation only for the removed owner in the same input window and session', () => {
+    const row={requestId:'filtered',kind:'icon-copy',object:'category:6',canceled:true,error:'net::ERR_ABORTED',stage:'filter',authSession:2,wallTime:100,time:10,failureTime:10.5}
+    const proof={matched:true,stage:'filter',authSession:2,beforeIds:[6,7],afterIds:[7],enteredAt:99000,inputAt:100400,settledAt:100600}
+    expect(verifiedCategoryFilterCancellations([row],[proof])).toEqual(['filtered'])
+    for(const patch of [{authSession:3},{stage:'other'},{object:'category:7'},{object:'bookmark:6'},{error:'net::ERR_CONNECTION_RESET'},{status:401},{failureTime:9},{failureTime:13},{wallTime:98}])expect(verifiedCategoryFilterCancellations([{...row,...patch}],[proof])).toEqual([])
+    for(const patch of [{matched:false},{afterIds:[6,7]},{beforeIds:[]},{afterIds:undefined},{authSession:1},{settledAt:100000},{inputAt:NaN}])expect(verifiedCategoryFilterCancellations([row],[{...proof,...patch}])).toEqual([])
+  })
   it('does not let passing prerequisites hide a misspelled or skipped requested case', () => {
     const cases=[{id:'LOGIN-UI',status:'passed'},{id:'requested',status:'not-run'},{id:'incomplete',status:'running'},{id:'failed',status:'failed'}]
     expect(unexecutedRequestedCases(new Set(['typo','requested','incomplete','LOGIN-UI','failed']),cases)).toEqual(['typo','requested','incomplete'])

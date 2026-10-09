@@ -142,6 +142,16 @@ export function unexecutedRequestedCases(requested, cases) {
   return [...requested].filter(id => !cases.some(row => row.id === id && ['passed', 'failed'].includes(row.status)))
 }
 
+export function verifiedCategoryFilterCancellations(rows, filters) {
+  return rows.filter(row=>row.kind==='icon-copy'&&row.object?.startsWith('category:')&&row.canceled===true&&row.error==='net::ERR_ABORTED'&&!(row.status>=400)&&
+    filters.some(filter=>filter.matched===true&&filter.stage===row.stage&&filter.authSession===row.authSession&&Number.isInteger(row.authSession)&&row.authSession>0&&Array.isArray(filter.beforeIds)&&Array.isArray(filter.afterIds)&&
+      Number.isFinite(filter.enteredAt)&&Number.isFinite(filter.inputAt)&&Number.isFinite(filter.settledAt)&&filter.enteredAt<=filter.inputAt&&filter.inputAt<=filter.settledAt&&
+      filter.beforeIds.includes(Number(row.object.split(':')[1]))&&!filter.afterIds.includes(Number(row.object.split(':')[1]))&&
+      Number.isFinite(row.wallTime)&&row.wallTime*1000>=filter.enteredAt&&row.wallTime*1000<=filter.inputAt&&
+      Number.isFinite(row.failureTime)&&Number.isFinite(row.time)&&row.wallTime*1000+(row.failureTime-row.time)*1000>=filter.inputAt-20&&
+      row.wallTime*1000+(row.failureTime-row.time)*1000<=filter.settledAt+1000)).map(row=>row.requestId)
+}
+
 // A deliberately reset copy request is expected only after the same case has
 // proved ordinary-image fallback, cold-store rejection and natural recovery.
 export function verifiedInjectedCopyResets(rows, cases) {
