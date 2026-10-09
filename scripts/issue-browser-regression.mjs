@@ -414,6 +414,18 @@ async function stableOperation(action, allowed = []) {
 async function localWait(fn, label, timeout = 20000) {
   const end=Date.now()+timeout; while(Date.now()<end) { if(fn()) return; await sleep(100) } throw new Error(label+' was not exercised')
 }
+async function waitForDocumentFetches(sessionId = b.sessionId) {
+  const loaderId=(sessionId===b.sessionId?await b.send('Page.getFrameTree'):await sessionSend(sessionId,'Page.getFrameTree')).frameTree.frame.loaderId
+  const deadline=Date.now()+45000;let quietSince=0
+  while(Date.now()<deadline){
+    const pending=report.requests.filter(row=>row.cdpSessionId===sessionId&&row.documentLoaderId===loaderId&&row.type==='Fetch'&&!row.terminalKind)
+    if(pending.length)quietSince=0
+    else if(!quietSince)quietSince=Date.now()
+    else if(Date.now()-quietSince>=1200)return
+    await sleep(120)
+  }
+  throw new Error('Document still has unfinished fetch bodies before lifecycle transition')
+}
 async function focusCycle() {
   secondary=(await b.send('Target.createTarget',{url:'about:blank'})).targetId
   await b.send('Target.activateTarget',{targetId:secondary}); await sleep(800)
@@ -763,6 +775,7 @@ try {
   await scenario('28-COLD-RELOAD', async () => { await home(); const images = await verifyImages(); await shot('28-cold'); return images })
   await scenario('28-WARM-RELOAD', async () => {
     await home();await verifyImages()
+    await waitForDocumentFetches()
     const keys=manifest().map(row=>row.key)
     const persisted=await b.call(async keys=>{
       const request=indexedDB.open('cf-navs-object-icons-v1'),db=await new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)})
@@ -1434,6 +1447,7 @@ try {
     }
     try {
       await home();await verifyImages()
+      await waitForDocumentFetches()
       secondary=(await b.send('Target.createTarget',{url:'about:blank'})).targetId
       peer=(await b.send('Target.attachToTarget',{targetId:secondary,flatten:true})).sessionId
       for(const method of ['Page.enable','Runtime.enable','Network.enable','Log.enable'])await sessionSend(peer,method)
@@ -1514,6 +1528,8 @@ try {
       assert(evidence.probe.samples>0&&evidence.probe.privateFrames===0,'Private content reappeared during snapshot completion')
       if(spec.frozen)assert(evidence.probe.freezes>0,'Real freeze event was not observed')
       await b.waitForNetworkIdle(1200,20000)
+      await waitForDocumentFetches(peer)
+      await waitForDocumentFetches()
       await b.send('Target.closeTarget',{targetId:secondary});secondary=null
       if(!spec.relogin)await login()
       if(spec.relogin){
