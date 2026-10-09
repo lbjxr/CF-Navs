@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from '../../scripts/lib/issueBrowserEvidence.mjs'
+import { verifiedInjectedCopyResets } from '../../scripts/lib/issueBrowserEvidence.mjs'
 const origin = 'https://nav.example.test'
 describe('per-operation browser network evidence', () => {
   it.each([
@@ -131,6 +132,16 @@ describe('copy timeout requires cold, timed, request-owned network evidence', ()
     const {rows,evidence}=fixture()
     expect(assessCopyTimeoutFallback(rows,evidence)).toEqual({passed:true,errors:[],abortElapsedMs:10000,imageElapsedMs:10200,unexpectedFailures:[],expectedCanceledRequests:['held']})
   })
+  it('requires private timeout evidence to belong to that exact scenario', () => {
+    const {rows,evidence}=fixture()
+    const scenario='28-PRIVATE-COPY-TIMEOUT'
+    const privateRows=rows.map(row=>({...row,stage:scenario}))
+    expect(assessCopyTimeoutFallback(privateRows,{...evidence,scenario}).passed).toBe(true)
+    expect(assessCopyTimeoutFallback(rows,{...evidence,scenario}).passed).toBe(false)
+    expect(assessCopyTimeoutFallback(privateRows,evidence).passed).toBe(false)
+    expect(assessCopyTimeoutFallback(rows.map(row=>({...row,stage:'unknown'})),{...evidence,scenario:'unknown'}).passed).toBe(false)
+    expect(assessCopyTimeoutFallback([{...privateRows[0],failureTime:101},privateRows[1]],{...evidence,scenario}).passed).toBe(false)
+  })
   it('accepts a completed native proxy only with matching current source, document and pixels', () => {
     const {rows,evidence}=fixture()
     const copy={...rows[0],documentLoaderId:'document'}
@@ -187,6 +198,12 @@ describe('copy timeout recovery requires a new request and valid persisted bytes
     const {row,evidence}=fixture()
     expect(assessCopyTimeoutRecovery([row],evidence)).toEqual({passed:true,errors:[],requestId:'fresh'})
   })
+  it('rejects recovery borrowed from the public timeout case', () => {
+    const {row,evidence}=fixture(),scenario='28-PRIVATE-COPY-TIMEOUT'
+    expect(assessCopyTimeoutRecovery([{...row,stage:scenario}],{...evidence,scenario}).passed).toBe(true)
+    expect(assessCopyTimeoutRecovery([row],{...evidence,scenario}).passed).toBe(false)
+    expect(assessCopyTimeoutRecovery([{...row,stage:'unknown'}],{...evidence,scenario:'unknown'}).passed).toBe(false)
+  })
   it.each([{wallTime:1010},{wallTime:undefined},{status:409},{error:'net::ERR_ABORTED'},{finishedTime:undefined},{object:'bookmark:13'},{copyResult:{protocol:1,reason:'unavailable'}}])('rejects released old requests and non-successes: %j', patch => {
     const {row,evidence}=fixture()
     expect(assessCopyTimeoutRecovery([{...row,...patch}],evidence).passed).toBe(false)
@@ -202,6 +219,17 @@ describe('copy timeout recovery requires a new request and valid persisted bytes
 })
 
 describe('network diagnostics and exact injected cancellation exemptions', () => {
+  it('does not waive reset failures without exact injection and user-visible recovery evidence', () => {
+    const row={requestId:'reset',stage:'28-COPY-CONNECTION-RESET',kind:'icon-copy',object:'bookmark:12',path:'/api/icon-local-copy',error:'net::ERR_CONNECTION_RESET'}
+    const state={available:true,enabled:true,entryPresent:true,bodyPresent:true,bodyBytes:512,bodyRevision:'sha256-'+'a'.repeat(64),descriptor:{content_revision:'sha256-'+'a'.repeat(64)}}
+    const proof={failure:'CONNECTION-RESET',imagesPassed:true,requests:[{requestId:'reset',object:'bookmark:12'}],cold:[{object:'bookmark:12',entryPresent:false,bodyPresent:false}],recovered:[{object:'bookmark:12',state}]}
+    const test={id:'28-COPY-CONNECTION-RESET',status:'passed',copyFailure:proof}
+    expect(verifiedInjectedCopyResets([row],[test])).toEqual(['reset'])
+    for(const patch of [{requestId:'other'},{object:'bookmark:13'},{kind:'icon-body'},{stage:'other'},{error:'net::ERR_ABORTED'},{status:503}])expect(verifiedInjectedCopyResets([{...row,...patch}],[test])).toEqual([])
+    for(const patch of [{imagesPassed:false},{cold:[]},{recovered:[]},{requests:[]}])expect(verifiedInjectedCopyResets([row],[{...test,copyFailure:{...proof,...patch}}])).toEqual([])
+    expect(verifiedInjectedCopyResets([row],[{...test,status:'failed'}])).toEqual([])
+    expect(verifiedInjectedCopyResets([row],[{...test,copyFailure:{...proof,recovered:[{object:'bookmark:12',state:{...state,bodyBytes:0}}]}}])).toEqual([])
+  })
   it('keeps finite timing values including unavailable -1, not other data', () => {
     expect(numericNetworkTiming({requestTime:4.2,sslStart:-1,receiveHeadersEnd:12.5,remoteIPAddress:'192.0.2.1',headers:{secret:'value'},body:'private',bad:NaN,infinite:Infinity,flag:true,nested:{time:2}}))
       .toEqual({requestTime:4.2,sslStart:-1,receiveHeadersEnd:12.5})

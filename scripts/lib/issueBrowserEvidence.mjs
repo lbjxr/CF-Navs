@@ -63,20 +63,22 @@ export function isExpectedOfflineFailure(errorText, offlineActive) {
 // uses CDP monotonic seconds; wall time only joins the DOM observation to it.
 export function assessCopyTimeoutFallback(rows, evidence) {
   const errors = []
+  const scenario = evidence.scenario ?? '28-COPY-TIMEOUT'
+  if (!['28-COPY-TIMEOUT', '28-PRIVATE-COPY-TIMEOUT'].includes(scenario)) errors.push('invalid-timeout-scenario')
   const { object, requestId, proxyRequestId, cold, afterTimeout, displayed, pixelsPassed } = evidence
   const copy = rows.find(row => row.requestId === requestId)
   const proxy = rows.find(row => row.requestId === proxyRequestId)
   const missing = state => state?.available === true && state.enabled === true && state.entryPresent === false && state.bodyPresent === false
   if (!missing(cold)) errors.push('not-cold')
   if (!missing(afterTimeout)) errors.push('timeout-persisted-data')
-  if (!copy || copy.stage !== '28-COPY-TIMEOUT' || copy.kind !== 'icon-copy' || copy.object !== object || copy.status != null ||
+  if (!copy || copy.stage !== scenario || copy.kind !== 'icon-copy' || copy.object !== object || copy.status != null ||
       copy.canceled !== true || copy.error !== 'net::ERR_ABORTED') errors.push('not-held-copy-cancellation')
   const abortElapsedMs = (copy?.failureTime - copy?.time) * 1000
   const imageElapsedMs = displayed?.observedWallTime - copy?.wallTime * 1000
   if (!Number.isFinite(abortElapsedMs) || abortElapsedMs < 9000 || abortElapsedMs > 15000) errors.push('deadline-not-observed')
   if (!Number.isFinite(imageElapsedMs) || imageElapsedMs < abortElapsedMs - 100 || imageElapsedMs > 15000) errors.push('fallback-not-bounded')
   const headers = Object.fromEntries(Object.entries(proxy?.headers ?? {}).map(([key, value]) => [key.toLowerCase(), value]))
-  if (!proxy || proxy.stage !== '28-COPY-TIMEOUT' || proxy.kind !== 'icon-body' || proxy.object !== object || proxy.type !== (displayed?.kind === 'native' ? 'Image' : 'Fetch') ||
+  if (!proxy || proxy.stage !== scenario || proxy.kind !== 'icon-body' || proxy.object !== object || proxy.type !== (displayed?.kind === 'native' ? 'Image' : 'Fetch') ||
       proxy.status !== 200 || proxy.error || proxy.canceled || proxy.disk || proxy.sw || !Number.isFinite(proxy.finishedTime) ||
       !(proxy.time >= copy?.failureTime - 0.1 && proxy.finishedTime >= copy?.failureTime) ||
       proxy.path !== '/api/icon/' + object.split(':')[1] || !/^image\//i.test(headers['content-type'] ?? '') || headers['x-icon-fallback'] === '1' || pixelsPassed !== true) errors.push('not-real-proxy-image')
@@ -101,7 +103,9 @@ export function assessCopyTimeoutRecovery(rows, evidence) {
   const row = rows.find(row => row.requestId === requestId), result = row?.copyResult, d = result?.descriptor
   const keys = ['object_type', 'object_id', 'dataset_epoch', 'write_epoch', 'content_revision', 'state']
   const errors = []
-  if (!row || row.stage !== '28-COPY-TIMEOUT' || row.kind !== 'icon-copy' || row.object !== object || row.status !== 200 || row.error || row.canceled ||
+  const scenario = evidence.scenario ?? '28-COPY-TIMEOUT'
+  if (!['28-COPY-TIMEOUT', '28-PRIVATE-COPY-TIMEOUT'].includes(scenario)) errors.push('invalid-timeout-scenario')
+  if (!row || row.stage !== scenario || row.kind !== 'icon-copy' || row.object !== object || row.status !== 200 || row.error || row.canceled ||
       !Number.isFinite(restoredWallTime) || !(row.wallTime * 1000 >= restoredWallTime) || !Number.isFinite(row.finishedTime) ||
       result?.protocol !== 1 || result.persistence !== 'session-scoped' || result.hasImage !== true || !(result.imageBytes > 0) ||
       d?.state !== 'ready' || !['bookmark','category'].includes(d?.object_type) || !Number.isSafeInteger(d?.object_id) || d.object_id <= 0 ||
@@ -123,4 +127,28 @@ export function numericNetworkTiming(timing) {
 
 export function isExpectedInjectedCancellation(row, expectedRequestIds) {
   return expectedRequestIds.has(row.requestId) && row.canceled === true && row.error === 'net::ERR_ABORTED'
+}
+
+// A deliberately reset copy request is expected only after the same case has
+// proved ordinary-image fallback, cold-store rejection and natural recovery.
+export function verifiedInjectedCopyResets(rows, cases) {
+  const ids = []
+  for (const test of cases) {
+    const proof = test.copyFailure
+    if (test.id !== '28-COPY-CONNECTION-RESET' || test.status !== 'passed' ||
+        proof?.failure !== 'CONNECTION-RESET' || proof.imagesPassed !== true) continue
+    for (const injected of proof.requests ?? []) {
+      const row = rows.find(item => item.requestId === injected.requestId)
+      const cold = proof.cold?.find(item => item.object === injected.object)
+      const restored = proof.recovered?.find(item => item.object === injected.object)?.state
+      if (row?.stage !== test.id || row.kind !== 'icon-copy' || row.object !== injected.object ||
+          row.path !== '/api/icon-local-copy' || row.error !== 'net::ERR_CONNECTION_RESET' || row.status != null ||
+          !cold || cold.entryPresent !== false || cold.bodyPresent !== false ||
+          restored?.available !== true || restored.enabled !== true || restored.entryPresent !== true || restored.bodyPresent !== true ||
+          !(restored.bodyBytes > 0) || !/^sha256-[a-f0-9]{64}$/.test(restored.bodyRevision ?? '') ||
+          restored.bodyRevision !== restored.descriptor?.content_revision) continue
+      ids.push(row.requestId)
+    }
+  }
+  return ids
 }

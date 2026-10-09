@@ -18,6 +18,7 @@ import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
 import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.mjs'
+import { verifiedInjectedCopyResets } from './lib/issueBrowserEvidence.mjs'
 import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from './lib/issueBrowserEvidence.mjs'
 if (process.env.ISSUE_BROWSER_WRITE_FIXTURES !== '1') throw new Error('Explicit ISSUE_BROWSER_WRITE_FIXTURES=1 required for temporary test-site records')
 const base = resolveBaseUrl(), credentials = requireAdminCredentials()
@@ -31,6 +32,8 @@ assert(['','detached-page'].includes(cleanupFault),'Invalid cleanup fault')
 const optionalCases = new Set(['28-CATEGORY-PERMISSIONS','28-LEASE-EXPIRED-OFFLINE','28-CLOCK-ROLLBACK-OFFLINE','28-SIGNATURE-RENEWAL','28-COPY-TIMEOUT','28-BROWSER-RESTART-ONLINE','28-BROWSER-RESTART-OFFLINE','29-LOGOUT-NAVIGATION-RACE','28-NATIVE-CATEGORY-TIMEOUT'])
 for(const failure of ['408','429','500','WRONG-IMAGE'])optionalCases.add('28-COPY-FAILURE-'+failure)
 optionalCases.add('29-FROZEN-TAB-LOGOUT')
+optionalCases.add('28-PRIVATE-COPY-TIMEOUT')
+optionalCases.add('28-COPY-CONNECTION-RESET')
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
 const sessionCaptureErrors = []
@@ -966,7 +969,7 @@ try {
       }
     })
   })
-  for(const failure of ['503','408','429','500','WRONG-IMAGE'])await scenario(failure==='503'?'28-COPY-503':'28-COPY-FAILURE-'+failure, async()=>{
+  for(const failure of ['503','408','429','500','WRONG-IMAGE','CONNECTION-RESET'])await scenario(failure==='503'?'28-COPY-503':failure==='CONNECTION-RESET'?'28-COPY-CONNECTION-RESET':'28-COPY-FAILURE-'+failure, async()=>{
     const targets=[0,2],evidence=report.cases.at(-1).copyFailure={failure,requests:[],cold:[],recovered:[]}
     try {
       for(const index of targets)await setFixtureIcon(index,fixtures[bookmarks[index].imageKey].uri)
@@ -986,7 +989,12 @@ try {
             write_epoch:request.expected_write_epoch,state:'ready',content_revision:revision},image:{mime:'image/svg+xml',byte_length:wrong.length,base64:wrong.toString('base64')}}
         }
         evidence.requests.push({requestId:event.networkId,object:'bookmark:'+request.object_id})
-        if(event.networkId)injectedRequests.add(event.networkId)
+        assert(event.networkId,'Injected copy failure has no Network requestId')
+        if(failure==='CONNECTION-RESET') {
+          await b.send('Fetch.failRequest',{requestId:event.requestId,errorReason:'ConnectionReset'})
+          return true
+        }
+        injectedRequests.add(event.networkId)
         await b.send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:failure==='WRONG-IMAGE'?200:Number(failure),
           responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'private, no-store'}],
           body:Buffer.from(JSON.stringify({code:0,msg:'controlled copy failure',data})).toString('base64')})
@@ -1016,10 +1024,11 @@ try {
       for(const index of targets)await setFixtureIcon(index,fixtures[bookmarks[index].imageKey].base64Uri)
     }
   })
-  await scenario('28-COPY-TIMEOUT', async () => {
-    // Use one public fixture: startup private-grant URL replacement is covered
-    // by CANCEL-REACQUIRE and must not masquerade as this transport deadline.
-    const target = manifest().find(row => row.key === 'bookmark:' + bookmarks[0].id)
+  for (const index of [0, 2]) await scenario(index === 0 ? '28-COPY-TIMEOUT' : '28-PRIVATE-COPY-TIMEOUT', async () => {
+    // Public and private objects use identical strict deadline evidence. An
+    // early grant/owner cancellation must fail, never count as a timeout.
+    const scenarioId = stage
+    const target = manifest().find(row => row.key === 'bookmark:' + bookmarks[index].id)
     const entry = report.cases.at(-1)
     const evidence = entry.timeout = { object:target.key, expectedDeadlineMs:10000, deadlineWindowMs:[9000,15000], held:[], recovery:{} }
     await clearCopies() // real settings UI, then the target view is unmounted
@@ -1036,7 +1045,7 @@ try {
       urlTraceScript=(await b.send('Page.addScriptToEvaluateOnNewDocument',{source:'if(window.__issueUrls)window.__issueUrls.active=true'})).identifier
       await intercept([{urlPattern:'*/api/icon-local-copy',requestStage:'Request'}], async event => {
         let payload; try { payload=JSON.parse(event.request.postData) } catch { return false }
-        if (new URL(event.request.url).origin !== base || payload.object_type !== 'bookmark' || payload.object_id !== bookmarks[0].id) return false
+        if (new URL(event.request.url).origin !== base || payload.object_type !== 'bookmark' || payload.object_id !== bookmarks[index].id) return false
         assert(event.networkId, 'Held copy has no Network requestId')
         evidence.held.push({requestId:event.networkId,fetchRequestId:event.requestId,heldAt:Date.now()})
         // No fulfill/fail/continue call: ONLY the actual frontend may time out.
@@ -1075,6 +1084,7 @@ try {
             evidence.displayed.documentLoaderId=(await b.send('Page.getFrameTree')).frameTree.frame.loaderId
           }
           evidence.fallback = assessCopyTimeoutFallback(report.requests.slice(start), {
+            scenario:scenarioId,
             object:target.key, requestId:held.requestId, proxyRequestId:proxy?.requestId, cold:evidence.cold, afterTimeout:evidence.afterTimeout,
             displayed:evidence.displayed, pixelsPassed:evidence.pixels.passed,
           })
@@ -1088,7 +1098,7 @@ try {
           // request and make the page look healed. scenario() preserves failure.
           evidence.failure = safe(error.message)
           evidence.failureStorage = await readFixtureCopy(target.key).catch(error => ({error:safe(error.message)}))
-          await shot('28-copy-timeout-before-restore').catch(error => { evidence.screenshotError=safe(error.message) })
+          await shot(scenarioId.toLowerCase()+'-before-restore').catch(error => { evidence.screenshotError=safe(error.message) })
           await persist()
           throw error
         }
@@ -1107,13 +1117,14 @@ try {
       evidence.recovery.pixels = await verifyImages([target])
       evidence.recovery.persisted = await readFixtureCopy(target.key)
       evidence.recovery.result = assessCopyTimeoutRecovery(report.requests.slice(start), {
+        scenario:scenarioId,
         object:target.key, requestId:recovered.requestId, restoredWallTime:evidence.recovery.restoredWallTime,
         persisted:evidence.recovery.persisted, blobDisplayed:true, pixelsPassed:evidence.recovery.pixels.passed,
       })
       assert(evidence.recovery.result.passed, 'Timeout recovery: '+JSON.stringify(evidence.recovery.result))
       const unexpected = report.requests.slice(start).filter(row => row.error && !expectedTimeoutRequests.has(row.requestId))
       assert(!unexpected.length, 'Unrelated network failures: '+JSON.stringify(unexpected.map(row=>({requestId:row.requestId,error:row.error}))))
-      await shot('28-copy-timeout-recovered')
+      await shot(scenarioId.toLowerCase()+'-recovered')
       return {object:target.key, expectedCanceledRequests:evidence.fallback.expectedCanceledRequests, proxyRequestId:evidence.proxyRequestId,
         abortElapsedMs:evidence.fallback.abortElapsedMs, imageElapsedMs:evidence.fallback.imageElapsedMs, fallbackKind:evidence.displayed.kind, freshCopyRequestId:recovered.requestId, nativeStorageVerified:true}
     } finally {
@@ -1409,8 +1420,10 @@ finally {
   report.expectedTimeoutRequests=[...expectedTimeoutRequests]
   report.expectedReacquireRequests=[...expectedReacquireRequests]
   report.validatedInjectedCancellations=report.failedRequests.filter(row=>isExpectedInjectedCancellation(row,expectedInjectedCancellations)).map(row=>row.requestId)
-  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId)&&!navigationImageCancellations.has(e.requestId))
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||navigationImageCancellations.has(e.requestId)||revokedRequests.has(e.requestId))))
+  report.verifiedInjectedCopyResets=verifiedInjectedCopyResets(report.requests,report.cases)
+  const copyResets=new Set(report.verifiedInjectedCopyResets)
+  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId)&&!navigationImageCancellations.has(e.requestId)&&!copyResets.has(e.requestId))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||navigationImageCancellations.has(e.requestId)||revokedRequests.has(e.requestId)||copyResets.has(e.requestId))))
   report.injectedRequests=[...injectedRequests]
   await persist()
   console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))
