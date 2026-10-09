@@ -521,13 +521,14 @@ async function confirmSecondaryLogout(sessionId,requestStart,evidence) {
   row.clientClearedAt=await sessionCall(sessionId,()=>(performance.timeOrigin+performance.now())/1000)
   evidence.logout={requestId:row.requestId,serverRevoked:true,clientClearedAt:row.clientClearedAt,source:'secondary-session'}
 }
-async function installPageInstrumentation() {
-  await b.send('Page.addScriptToEvaluateOnNewDocument', {source:`(${pageInstallImageLifecycleProbe.toString()})()`})
-  await b.send('Runtime.addBinding',{name:'__issueCopyObserved'})
+async function installPageInstrumentation(sessionId = null) {
+  const send=(method,params)=>sessionId?sessionSend(sessionId,method,params):b.send(method,params)
+  await send('Page.addScriptToEvaluateOnNewDocument', {source:`(${pageInstallImageLifecycleProbe.toString()})()`})
+  await send('Runtime.addBinding',{name:'__issueCopyObserved'})
   // Observe the same response without substituting bytes or changing the request.
   // Chrome may drop Network.getResponseBody after an owner aborts an already-read
   // response. Retain only protocol metadata, never image bytes or auth headers.
-  await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{
+  await send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{
     const original=window.fetch.bind(window);
     window.fetch=async function(...args){
       const start=performance.timeOrigin+performance.now();
@@ -547,13 +548,13 @@ async function installPageInstrumentation() {
       return response;
     };
   })()`})
-  await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(() => {
+  await send('Page.addScriptToEvaluateOnNewDocument',{source:`(() => {
     const create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL),ids=new Map();let sequence=0;
     const state=window.__issueUrls={active:false,events:[],ids};
     URL.createObjectURL=function(blob){const url=create(blob);ids.set(url,++sequence);if(state.active&&state.events.length<2000)state.events.push({kind:'create',id:sequence,size:blob.size,mime:blob.type,at:performance.now(),stack:new Error().stack});return url};
     URL.revokeObjectURL=function(url){if(state.active&&state.events.length<2000)state.events.push({kind:'revoke',id:ids.get(url),at:performance.now(),stack:new Error().stack});ids.delete(url);return revoke(url)};
   })()`})
-  await b.send('Log.enable')
+  await send('Log.enable')
 }
 async function recordBrowserOwnership(reason) {
   const ownership={profile,pid:b.chromeProcess.pid,port,targetId:b.targetId,headed:true,nativeWindowOcclusionDisabled:true,disableQuic,reason}
@@ -575,7 +576,7 @@ try {
   }
   await b.start(); await b.attach()
   await installPageInstrumentation()
-  b.on('Runtime.bindingCalled',event=>{if(event.name==='__issueCopyObserved'){try{observedCopyResponses.push(JSON.parse(event.payload))}catch{}}})
+  b.on('Runtime.bindingCalled',(event,sessionId)=>{if(event.name==='__issueCopyObserved'){try{observedCopyResponses.push({sessionId,...JSON.parse(event.payload)})}catch{}}})
   b.on('Log.entryAdded',({entry})=>{if(['warning','error'].includes(entry.level)) report.browserLog.push({stage,level:entry.level,source:entry.source,requestId:entry.networkRequestId,text:safe(entry.text)})})
   await recordBrowserOwnership('initial')
   b.on('Fetch.requestPaused', event => {
@@ -1423,6 +1424,7 @@ try {
       secondary=(await b.send('Target.createTarget',{url:'about:blank'})).targetId
       peer=(await b.send('Target.attachToTarget',{targetId:secondary,flatten:true})).sessionId
       for(const method of ['Page.enable','Runtime.enable','Network.enable','Log.enable'])await sessionSend(peer,method)
+      await installPageInstrumentation(peer)
       await sessionSend(peer,'Page.navigate',{url:base})
       await peerWait(id=>Boolean(document.querySelector(`[data-sort-id="${id}"]`)),privateId)
       await b.send('Target.activateTarget',{targetId:b.targetId})
@@ -1489,7 +1491,13 @@ try {
       await b.waitForNetworkIdle(1200,20000)
       await b.send('Target.closeTarget',{targetId:secondary});secondary=null
       if(!spec.relogin)await login()
-      await home();await verifyImages();bookmarks[0].title=title
+      if(spec.relogin){
+        await wait(sel=>Boolean(document.querySelector(sel)),[scope()])
+        await click(scope()+' .scope-root-trigger')
+        for(const item of manifest())await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),item.selector)
+        await verifyImages()
+      }else{await home();await verifyImages()}
+      bookmarks[0].title=title
       return {storage:spec.storage,boundary:spec.boundary,frozen:spec.frozen,relogin:spec.relogin,oldScopeAbsent:true,newSessionPreserved:spec.relogin,uiRecovery:true}
     } finally {
       if(frozen)await b.send('Page.setWebLifecycleState',{state:'active'})
@@ -2111,7 +2119,7 @@ finally {
   imageRequestUrls.clear()
   report.cleanup.browser = await b.cleanup()
   for(const packet of observedCopyResponses){
-    const candidates=report.requests.filter(row=>row.kind==='icon-copy'&&row.object===packet.object&&row.status===packet.status&&
+    const candidates=report.requests.filter(row=>row.cdpSessionId===packet.sessionId&&row.kind==='icon-copy'&&row.object===packet.object&&row.status===packet.status&&
       ['dataset_epoch','expected_write_epoch','expected_content_revision'].every(key=>row.copyRequest?.[key]===packet.request?.[key])&&Math.abs(row.wallTime*1000-packet.start)<1000)
     candidates.sort((a,b)=>Math.abs(a.wallTime*1000-packet.start)-Math.abs(b.wallTime*1000-packet.start))
     if(candidates[0]){candidates[0].copyResult=packet.result;candidates[0].responseEvidence='observed-clone'}
