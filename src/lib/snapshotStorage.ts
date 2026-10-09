@@ -46,13 +46,13 @@ function isCacheRequest(request: Request, cachePathPrefix: string): boolean {
   }
 }
 
-export async function pruneOtherSnapshots<T>(config: SnapshotStorageConfig<T>, key: string): Promise<void> {
+export async function pruneOtherSnapshots<T>(config: SnapshotStorageConfig<T>, key: string, isCurrent: () => boolean = () => true): Promise<void> {
   if (canUseLocalStorage()) {
     const currentKey = localStorageKey(config.storagePrefix, key)
     try {
       for (let index = localStorage.length - 1; index >= 0; index -= 1) {
         const candidate = localStorage.key(index)
-        if (candidate?.startsWith(config.storagePrefix) && candidate !== currentKey) localStorage.removeItem(candidate)
+        if (isCurrent() && candidate?.startsWith(config.storagePrefix) && candidate !== currentKey) localStorage.removeItem(candidate)
       }
     } catch {
       // Best-effort cleanup.
@@ -65,13 +65,26 @@ export async function pruneOtherSnapshots<T>(config: SnapshotStorageConfig<T>, k
       const currentUrl = cacheRequest(config.cachePathPrefix, key).url
       const requests = await cache.keys()
       await Promise.all(requests.map((request) => (
-        request.url !== currentUrl && isCacheRequest(request, config.cachePathPrefix)
+        isCurrent() && request.url !== currentUrl && isCacheRequest(request, config.cachePathPrefix)
           ? cache.delete(request)
           : Promise.resolve(false)
       )))
     } catch {
       // Best-effort cleanup.
     }
+  }
+}
+
+// A late write owns one scope, not every snapshot in this browser profile.
+export async function removeSnapshot<T>(config: SnapshotStorageConfig<T>, key: string): Promise<void> {
+  if (canUseLocalStorage()) {
+    try { localStorage.removeItem(localStorageKey(config.storagePrefix, key)) } catch { /* Best-effort cleanup. */ }
+  }
+  if (canUseCacheStorage()) {
+    try {
+      const cache = await caches.open(config.cacheName)
+      await cache.delete(cacheRequest(config.cachePathPrefix, key))
+    } catch { /* Best-effort cleanup. */ }
   }
 }
 
@@ -130,15 +143,15 @@ export async function writeSnapshot<T>(config: SnapshotStorageConfig<T>, key: st
   }
 }
 
-export async function clearSnapshots<T>(config: SnapshotStorageConfig<T>): Promise<void> {
-  if (canUseCacheStorage()) {
+export async function clearSnapshots<T>(config: SnapshotStorageConfig<T>, isCurrent: () => boolean = () => true): Promise<void> {
+  if (isCurrent() && canUseCacheStorage()) {
     try { await caches.delete(config.cacheName) } catch { /* Best-effort cleanup. */ }
   }
   if (canUseLocalStorage()) {
     try {
       for (let index = localStorage.length - 1; index >= 0; index -= 1) {
         const key = localStorage.key(index)
-        if (key?.startsWith(config.storagePrefix)) localStorage.removeItem(key)
+        if (isCurrent() && key?.startsWith(config.storagePrefix)) localStorage.removeItem(key)
       }
     } catch {
       // Best-effort cleanup.

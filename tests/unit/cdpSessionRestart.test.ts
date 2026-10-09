@@ -502,6 +502,14 @@ describe('CdpSession restart lifecycle', () => {
     expect(sockets[1].commands.find(command => command.method === 'Target.closeTarget')?.params).toEqual({ targetId: 'target-2' })
   })
 
+  it('passes the originating session to listeners for secondary-page response reads', async () => {
+    const value = await live(), handler = vi.fn()
+    value.on('Network.loadingFinished', handler)
+    sockets[0].emit('message', Buffer.from(JSON.stringify({ method: 'Network.loadingFinished', sessionId: 'second-page', params: { requestId: 'login-response' } })))
+    expect(handler).toHaveBeenCalledWith({ requestId: 'login-response' }, 'second-page')
+    await value.cleanup()
+  })
+
   it('preserves listener identity, evidence arrays and global IDs while rejecting old pending and stale messages', async () => {
     const value = await live()
     const old = sockets[0]

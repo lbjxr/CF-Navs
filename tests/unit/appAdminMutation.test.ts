@@ -4,6 +4,26 @@ import { runAdminMutation } from '../../src/lib/appAdminMutation'
 import { toastStore } from '../../src/lib/toast'
 
 describe('runAdminMutation', () => {
+  it.each(['request', 'completion', 'failure'])('does not update a new session after obsolete %s work', async boundary => {
+    let current = true
+    const onSuccess = vi.fn(async () => { if (boundary === 'completion') current = false })
+    const onError = vi.fn(), onSettled = vi.fn(), successMessage = vi.fn(() => 'Saved')
+    const result = await runAdminMutation({
+      isCurrent: () => current,
+      run: async () => {
+        if (boundary !== 'completion') current = false
+        if (boundary === 'failure') throw new Error('Old request failed')
+        return 'saved'
+      },
+      onSuccess, onError, onSettled, successMessage,
+    })
+    expect(result).toBeUndefined()
+    expect(onSuccess).toHaveBeenCalledTimes(boundary === 'completion' ? 1 : 0)
+    expect(onError).not.toHaveBeenCalled()
+    expect(onSettled).not.toHaveBeenCalled()
+    expect(successMessage).not.toHaveBeenCalled()
+  })
+
   it('runs onSuccess with the result then emits the success toast in order', async () => {
     const events: string[] = []
     const addToast = vi.spyOn(toastStore, 'addToast').mockImplementation((message, type) => {

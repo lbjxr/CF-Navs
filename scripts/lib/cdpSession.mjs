@@ -267,7 +267,7 @@ export class CdpSession {
 
     for (const handler of this.listeners.get(message.method) ?? []) {
       try {
-        handler(message.params ?? {})
+        handler(message.params ?? {}, message.sessionId)
       } catch {
         // 监听器自身的错误不能中断证据采集。
       }

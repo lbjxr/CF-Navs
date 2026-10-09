@@ -882,10 +882,13 @@
   async function handleSubmitBookmark(form: BookmarkFormValue): Promise<void> {
     // 同 handleSubmitCategory：意图只看表单，resetBookmarkState() 之后 mode 已经变回 'create'。
     const isEdit = form.id != null
+    const submitSession = get(authStore).session
+    const isCurrent = () => submitSession !== null && get(authStore).session === submitSession
     savingBookmark = true
     bookmarkError = ''
 
     await runAdminMutation({
+      isCurrent,
       run: () =>
         isEdit
           ? api.bookmarks.update(Number(form.id), toBookmarkPayload(form))
@@ -893,8 +896,9 @@
       onSuccess: async (bookmark) => {
         resetBookmarkState()
         await applyLocalBookmarkUpsert(bookmark)
+        if (!isCurrent()) return
         await refreshAdminDataAfterMutation()
-        refreshBookmarkIconCacheInBackground(bookmark.id)
+        if (isCurrent()) refreshBookmarkIconCacheInBackground(bookmark.id)
       },
       successMessage: (bookmark) =>
         isEdit ? `书签「${bookmark.title}」已更新` : `书签「${bookmark.title}」已创建`,

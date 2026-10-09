@@ -13,7 +13,7 @@ function deferred<T>() {
 
 const data = { categories: [], bookmarks: [], settings: DEFAULT_SETTINGS }
 let entries: Map<string, Response>
-let cache: { keys: ReturnType<typeof vi.fn>; match: ReturnType<typeof vi.fn>; put: ReturnType<typeof vi.fn> }
+let cache: { keys: ReturnType<typeof vi.fn>; match: ReturnType<typeof vi.fn>; put: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> }
 let storage: { open: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> }
 
 beforeEach(() => {
@@ -21,9 +21,10 @@ beforeEach(() => {
   auth.session = { username: 'test-admin', token: 'session-a', expires_at: 9999999999999 }
   entries = new Map()
   cache = {
-    keys: vi.fn(async () => []),
+    keys: vi.fn(async () => [...entries.keys()].map(url => new Request(url))),
     match: vi.fn(async (request: Request) => entries.get(request.url)?.clone()),
     put: vi.fn(async (request: Request, response: Response) => { entries.set(request.url, response) }),
+    delete: vi.fn(async (request: Request) => entries.delete(request.url)),
   }
   storage = {
     open: vi.fn(async () => cache),
@@ -37,6 +38,31 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('admin snapshot operation ownership', () => {
+  it('preserves another tab snapshot when old writing and queued logout finish after its login', async () => {
+    const oldTab = await import('../../src/lib/adminDataCache')
+    const pending = deferred<void>()
+    cache.put.mockImplementationOnce(async (request: Request, response: Response) => {
+      await pending.promise
+      entries.set(request.url, response)
+    })
+    const writing = oldTab.writeCachedAdminData(data, 'old')
+    await vi.waitFor(() => expect(cache.put).toHaveBeenCalledOnce())
+    auth.session = null
+    const clearing = oldTab.clearCachedAdminData()
+    // Separate module instances model independent per-tab promise queues.
+    vi.resetModules()
+    const newTab = await import('../../src/lib/adminDataCache')
+    auth.session = { username: 'test-admin', token: 'session-b', expires_at: 9999999999999 }
+    await newTab.writeCachedAdminData(data, 'new')
+    const newKey = [...entries.keys()][0]
+    cache.delete.mockClear(); storage.delete.mockClear()
+    pending.resolve(); await Promise.all([writing, clearing])
+    expect(storage.delete).not.toHaveBeenCalled()
+    expect(cache.delete.mock.calls.every(([request]) => request.url !== newKey)).toBe(true)
+    expect(await newTab.readCachedAdminDataEntry()).toEqual({ data, version: 'new' })
+    expect(entries.size).toBe(1)
+  })
+
   it('finishes a pending old write before logout cleanup and a new-session write', async () => {
     const { writeCachedAdminData, clearCachedAdminData, readCachedAdminDataEntry } = await import('../../src/lib/adminDataCache')
     const pending = deferred<void>()

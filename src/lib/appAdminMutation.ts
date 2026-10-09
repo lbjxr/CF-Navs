@@ -2,6 +2,8 @@ import { getErrorMessage } from './api'
 import { toastStore } from './toast'
 
 export interface AdminMutationOptions<T> {
+  // The initiating session owns completion effects, even after persistence waits.
+  isCurrent?: () => boolean
   // 实际写入操作：网络请求或抛错的本地应用。
   run: () => Promise<T>
   // 写入成功后的本地收尾（重置表单、乐观更新、后台刷新等）；抛错会走 onError。
@@ -19,19 +21,22 @@ export interface AdminMutationOptions<T> {
 // 收敛后台增删改的编排：run → onSuccess → 成功 toast，异常统一落到 onError，
 // busy 标记在 onSettled 里清理。把散落在各 handler 里的 try/catch/finally 归并成一处契约。
 export async function runAdminMutation<T>(options: AdminMutationOptions<T>): Promise<T | undefined> {
+  const isCurrent = options.isCurrent ?? (() => true)
   try {
     const result = await options.run()
+    if (!isCurrent()) return undefined
     await options.onSuccess?.(result)
+    if (!isCurrent()) return undefined
     const message = options.successMessage?.(result)
     if (message) {
       toastStore.addToast(message, 'success')
     }
     return result
   } catch (error) {
-    options.onError(getErrorMessage(error))
+    if (isCurrent()) options.onError(getErrorMessage(error))
     if (options.rethrow) throw error
     return undefined
   } finally {
-    options.onSettled?.()
+    if (isCurrent()) options.onSettled?.()
   }
 }

@@ -20,6 +20,7 @@ import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
 import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.mjs'
 import { verifiedInjectedCopyResets, unexecutedRequestedCases, verifiedCategoryFilterCancellations } from './lib/issueBrowserEvidence.mjs'
 import { pageInstallIconInterruption } from './lib/iconInterruptionProbe.mjs'
+import { pageInstallSnapshotInterruption, pageReadSnapshotScopes } from './lib/snapshotInterruptionProbe.mjs'
 import { pageInstallIconPerformanceProbe, pageReadIconStorageAudit, assessIconStorageAudit, pageInstallCapacityCommitProbe, summarizeIconPerformanceRequests } from './lib/iconPerformanceProbe.mjs'
 import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from './lib/issueBrowserEvidence.mjs'
 if (process.env.ISSUE_BROWSER_WRITE_FIXTURES !== '1') throw new Error('Explicit ISSUE_BROWSER_WRITE_FIXTURES=1 required for temporary test-site records')
@@ -45,6 +46,12 @@ optionalCases.add('28-CATEGORY-FILTER-CANCEL')
 optionalCases.add('28-PERFORMANCE-FLOW')
 optionalCases.add('28-CAPACITY-EVICTION')
 optionalCases.add('28-NATIVE-UI-TEARDOWN')
+const snapshotCases = [
+  ['local','before',false,false], ['local','after',true,false],
+  ['cache','before',false,false], ['cache','after',true,false],
+  ['cache','before',false,true], ['cache','after',true,true],
+].map(([storage,boundary,relogin,frozen])=>({storage,boundary,relogin,frozen,id:`29-SNAPSHOT-${storage.toUpperCase()}-${boundary.toUpperCase()}-${frozen?'FROZEN-':''}${relogin?'RELOGIN':'LOGOUT'}`}))
+for (const item of snapshotCases) optionalCases.add(item.id)
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
 const sessionCaptureErrors = []
@@ -576,7 +583,7 @@ try {
       if (!handled) return b.send('Fetch.continueRequest', { requestId:event.requestId })
     }).catch(error => { report.interceptionError=safe(error.message) })
   })
-  b.on('Network.requestWillBeSent', e => {
+  b.on('Network.requestWillBeSent', (e,sessionId) => {
     if(e.redirectResponse) {
       const previous=requests.get(e.requestId),response=e.redirectResponse
       if(previous) {
@@ -602,6 +609,7 @@ try {
     }
     if(row.kind==='icon-copy') {try{const body=JSON.parse(e.request.postData);row.copyRequest={dataset_epoch:body.dataset_epoch,expected_write_epoch:body.expected_write_epoch,expected_content_revision:body.expected_content_revision}}catch{}}
     row.documentLoaderId=e.loaderId
+    row.cdpSessionId=sessionId
     if(row.kind==='icon-body')row.signed=new URL(e.request.url).searchParams.has('key')
     if(row.kind==='icon-body'&&row.type==='Image'){imageRequestUrls.set(e.requestId,e.request.url);const retry=new URL(e.request.url).searchParams.get('retry'),parsed=retry?.match(/^([1-9]\d*)(?:-([a-z0-9]+))?$/);row.nativeRetryAttempt=retry==null?0:parsed?Number(parsed[1]):null;row.nativeRetryScope=parsed?.[2]??null}
     requests.set(e.requestId, row); report.requests.push(row)
@@ -613,9 +621,10 @@ try {
   b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,responseTime:e.timestamp,protocol:e.response.protocol,timing:numericNetworkTiming(e.response.timing),disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','cache-control','x-icon-fallback','content-security-policy'].includes(name.toLowerCase()))) }) })
   function inspectCopyResponse(requestId) {
     const row=requests.get(requestId)
+    const readBody=()=>row?.cdpSessionId&&row.cdpSessionId!==b.sessionId?sessionSend(row.cdpSessionId,'Network.getResponseBody',{requestId}):b.send('Network.getResponseBody',{requestId})
     if(row?.path==='/api/login' && row.status===200 && row.terminalKind==='finished' && !loginCaptures.has(requestId)) {
       loginCaptures.add(requestId)
-      const read=b.send('Network.getResponseBody',{requestId}).then(response=>{
+      const read=readBody().then(response=>{
         const body=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body)
         if(body.code===0) {
           row.issuedSession=serverCleanup.rememberSession(body.data?.token)
@@ -626,7 +635,7 @@ try {
       return
     }
     if(row?.path === '/api/logout' && row.status === 200) {
-      const read=b.send('Network.getResponseBody',{requestId}).then(response=>{
+      const read=readBody().then(response=>{
         const body=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body)
         row.logoutRevoked=body.code===0 && body.data?.revoked===true
       }).catch(()=>{if(row.logoutRevoked!==true)row.logoutRevoked=false})
@@ -634,7 +643,7 @@ try {
       return
     }
     if(row?.kind!=='icon-copy'||![200,409].includes(row.status)) return
-    const read=b.send('Network.getResponseBody',{requestId}).then(response=>{
+    const read=readBody().then(response=>{
       const envelope=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body),data=envelope.data
       row.copyResult={protocol:data?.protocol,reason:data?.reason,persistence:data?.persistence,descriptor:data?.descriptor,hasImage:Boolean(data?.image),imageBytes:data?.image?.byte_length??0}
     }).catch(()=>{row.copyResult={unreadable:true}})
@@ -1388,6 +1397,106 @@ try {
       if(frozen)await b.send('Page.setWebLifecycleState',{state:'active'})
       if(scriptId)await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier:scriptId})
       await b.call(()=>window.__iconInterruption?.restore())
+      if(secondary){await b.send('Target.closeTarget',{targetId:secondary});secondary=null;await b.send('Target.activateTarget',{targetId:b.targetId})}
+    }
+  })
+  for (const spec of snapshotCases) await scenario(spec.id,async()=>{
+    const title=spec.relogin?`Browser edited ${run}`:`Edited ${run} 0`,privateId=bookmarks[2].id
+    const evidence=report.cases.at(-1).snapshot={...spec}
+    let peer,paused=null,armed=false,frozen=false,oldScope=null
+    const pauseListener=event=>{if(armed&&event.callFrames?.some(frame=>frame.functionName==='snapshotSet'))paused=event}
+    const peerWait=async(fn,...args)=>{let result;for(let i=0;i<200;i++){result=await sessionCall(peer,fn,...args);if(result)return result;await sleep(100)}throw new Error('Snapshot peer UI did not settle')}
+    const peerFill=async(selector,value)=>{
+      await clickInSession(peer,selector)
+      await sessionSend(peer,'Input.dispatchKeyEvent',{type:'rawKeyDown',key:'a',code:'KeyA',windowsVirtualKeyCode:65,modifiers:2})
+      await sessionSend(peer,'Input.dispatchKeyEvent',{type:'keyUp',key:'a',code:'KeyA',windowsVirtualKeyCode:65,modifiers:2})
+      await sessionSend(peer,'Input.insertText',{text:value})
+    }
+    const peerAction=async(name)=>{
+      const selector=`[data-testid="home-${name}-button"]`
+      const visible=await sessionCall(peer,sel=>{const r=document.querySelector(sel)?.getBoundingClientRect();return r?.width>0&&r?.height>0},selector)
+      if(!visible)await clickInSession(peer,'[data-testid="home-actions-menu-trigger"]')
+      await clickInSession(peer,selector)
+    }
+    try {
+      await home();await verifyImages()
+      secondary=(await b.send('Target.createTarget',{url:'about:blank'})).targetId
+      peer=(await b.send('Target.attachToTarget',{targetId:secondary,flatten:true})).sessionId
+      for(const method of ['Page.enable','Runtime.enable','Network.enable','Log.enable'])await sessionSend(peer,method)
+      await sessionSend(peer,'Page.navigate',{url:base})
+      await peerWait(id=>Boolean(document.querySelector(`[data-sort-id="${id}"]`)),privateId)
+      await b.send('Target.activateTarget',{targetId:b.targetId})
+      await edit(0);await fill('[data-testid="bookmark-modal"] input[placeholder="例如：Svelte 官方网站"]',title)
+      await b.call(pageInstallSnapshotInterruption,{...spec,bookmarkId:bookmarks[0].id,title,privateId})
+      if(spec.storage==='local'){b.on('Debugger.paused',pauseListener);await b.send('Debugger.enable');armed=true}
+      await click('[data-testid="bookmark-modal"] button[type="submit"]')
+      if(spec.storage==='local'){
+        await localWait(()=>paused,'Actual localStorage snapshot commit breakpoint')
+        const frame=paused.callFrames.find(row=>row.functionName==='snapshotSet')
+        const result=await b.send('Debugger.evaluateOnCallFrame',{callFrameId:frame.callFrameId,expression:'({state:{...state},scope})',returnByValue:true})
+        evidence.boundary=result.result.value.state;oldScope=result.result.value.scope
+      } else {
+        await wait(()=>window.__snapshotInterruption.state.held)
+        evidence.boundary=await b.call(()=>({...window.__snapshotInterruption.state}));oldScope=await b.call(()=>window.__snapshotInterruption.scope())
+      }
+      assert(evidence.boundary.hits===1&&evidence.boundary.written===(spec.boundary==='after')&&oldScope,'Exact snapshot commit boundary not exercised')
+      if(spec.frozen){
+        // Freeze the snapshot continuation, not incidental IDB transactions
+        // caused by opening the editor or warming the second document.
+        await b.waitForNetworkIdle(1200,20000)
+        await readFixtureCopy('bookmark:'+privateId)
+      }
+      await b.send('Target.activateTarget',{targetId:secondary})
+      if(spec.frozen){await b.send('Page.setWebLifecycleState',{state:'frozen'});frozen=true}
+      const start=report.requests.length
+      await peerAction('logout')
+      await peerWait(id=>!localStorage.getItem('cf-navs.auth')&&!document.querySelector(`[data-sort-id="${id}"]`),privateId)
+      await confirmSecondaryLogout(peer,start,evidence)
+      evidence.logoutBeforeRelease=true
+      if(spec.relogin){
+        await peerAction('login')
+        await peerFill('input[autocomplete="username"]',credentials.username)
+        await peerFill('input[autocomplete="current-password"]',credentials.password)
+        await clickInSession(peer,'[aria-labelledby="login-modal-title"] form button[type="submit"]')
+        await peerWait(id=>!document.querySelector('input[autocomplete="current-password"]')&&Boolean(document.querySelector(`[data-sort-id="${id}"]`)),privateId)
+        const previous=token;token=await sessionCall(peer,()=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token||'')
+        assert(token&&token!==previous,'Second UI login did not create a new session');serverCleanup.rememberSession(token)
+        // Install a read-only observer, never write a new snapshot for the app.
+        await sessionSend(peer,'Runtime.evaluate',{expression:`window.__readSnapshotScopes=(${pageReadSnapshotScopes.toString()})`})
+        await peerWait(async(id,title,privateId,oldScope)=>{const rows=await window.__readSnapshotScopes(id,title,privateId);return rows.some(row=>row.scope!==oldScope&&row.titleMatches&&row.privatePresent)},bookmarks[0].id,title,privateId,oldScope)
+        evidence.newBefore=await sessionCall(peer,pageReadSnapshotScopes,bookmarks[0].id,title,privateId)
+      }
+      if(frozen){await b.send('Page.setWebLifecycleState',{state:'active'});frozen=false}
+      if(spec.relogin&&spec.storage==='cache')await b.call(scope=>window.__snapshotInterruption.protect(scope),evidence.newBefore[0].scope)
+      if(spec.relogin&&spec.storage==='local')await b.send('Debugger.evaluateOnCallFrame',{callFrameId:paused.callFrames.find(row=>row.functionName==='snapshotSet').callFrameId,expression:`window.__snapshotInterruption.protect(${JSON.stringify(evidence.newBefore[0].scope)})`})
+      if(spec.storage==='local'){await b.send('Debugger.resume');armed=false}else await b.call(()=>window.__snapshotInterruption.release())
+      await b.send('Target.activateTarget',{targetId:b.targetId})
+      await wait(()=>window.__snapshotInterruption.state.finished)
+      await sleep(1500)
+      evidence.after=await b.call(pageReadSnapshotScopes,bookmarks[0].id,title,privateId)
+      assert(!evidence.after.some(row=>row.scope===oldScope),'Obsolete session snapshot survived completion')
+      if(spec.relogin){
+        assert(evidence.newBefore.every(before=>evidence.after.some(after=>before.scope===after.scope&&after.titleMatches&&after.privatePresent)),'Old snapshot completion deleted the new session snapshot')
+        assert(await b.call(expected=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token===expected,token),'Old snapshot completion cleared new authentication')
+      }else{
+        assert(evidence.after.length===0,'Logout retained an administrator snapshot')
+        await wait(id=>!document.querySelector(`[data-sort-id="${id}"]`),[privateId])
+      }
+      evidence.probe=await b.call(()=>window.__snapshotInterruption.restore())
+      assert(evidence.probe.protectedRemovals===0,'Old snapshot completion removed a valid new-session snapshot before rebuilding it')
+      assert(evidence.probe.samples>0&&evidence.probe.privateFrames===0,'Private content reappeared during snapshot completion')
+      if(spec.frozen)assert(evidence.probe.freezes>0,'Real freeze event was not observed')
+      await b.waitForNetworkIdle(1200,20000)
+      await b.send('Target.closeTarget',{targetId:secondary});secondary=null
+      if(!spec.relogin)await login()
+      await home();await verifyImages();bookmarks[0].title=title
+      return {storage:spec.storage,boundary:spec.boundary,frozen:spec.frozen,relogin:spec.relogin,oldScopeAbsent:true,newSessionPreserved:spec.relogin,uiRecovery:true}
+    } finally {
+      if(frozen)await b.send('Page.setWebLifecycleState',{state:'active'})
+      if(armed)await b.send('Debugger.resume').catch(()=>{})
+      await b.send('Debugger.disable')
+      const listeners=b.listeners.get('Debugger.paused')??[];b.listeners.set('Debugger.paused',listeners.filter(fn=>fn!==pauseListener))
+      await b.call(()=>window.__snapshotInterruption?.restore())
       if(secondary){await b.send('Target.closeTarget',{targetId:secondary});secondary=null;await b.send('Target.activateTarget',{targetId:b.targetId})}
     }
   })
