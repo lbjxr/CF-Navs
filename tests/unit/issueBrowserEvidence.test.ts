@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from '../../scripts/lib/issueBrowserEvidence.mjs'
-import { verifiedInjectedCopyResets } from '../../scripts/lib/issueBrowserEvidence.mjs'
+import { verifiedInjectedCopyResets, unexecutedRequestedCases } from '../../scripts/lib/issueBrowserEvidence.mjs'
 const origin = 'https://nav.example.test'
 describe('per-operation browser network evidence', () => {
   it.each([
@@ -204,6 +204,17 @@ describe('copy timeout recovery requires a new request and valid persisted bytes
     expect(assessCopyTimeoutRecovery([row],{...evidence,scenario}).passed).toBe(false)
     expect(assessCopyTimeoutRecovery([{...row,stage:'unknown'}],{...evidence,scenario:'unknown'}).passed).toBe(false)
   })
+  it('accepts only the exact sequential retry released after fallback, never overlapping or old work', () => {
+    const {row,evidence}=fixture()
+    const failed={requestId:'held',stage:row.stage,kind:row.kind,object:row.object,time:100,failureTime:110,canceled:true,error:'net::ERR_ABORTED',authSession:1,copyRequest:row.copyRequest}
+    const retry={...row,time:112,wallTime:1012,finishedTime:114,authSession:1}
+    const proof={...evidence,restoredWallTime:1013500,failedRequestId:'held',releasedRetryRequestId:'fresh'}
+    expect(assessCopyTimeoutRecovery([failed,retry],proof).passed).toBe(true)
+    expect(assessCopyTimeoutRecovery([retry],proof).passed).toBe(false)
+    for(const patch of [{time:109},{authSession:2},{finishedTime:112.2},{error:'net::ERR_ABORTED'}])expect(assessCopyTimeoutRecovery([failed,{...retry,...patch}],proof).passed).toBe(false)
+    for(const patch of [{object:'bookmark:13'},{failureTime:101},{stage:'other'},{authSession:undefined},{copyRequest:{dataset_epoch:'wrong'}},{status:503}])expect(assessCopyTimeoutRecovery([{...failed,...patch},retry],proof).passed).toBe(false)
+    expect(assessCopyTimeoutRecovery([failed,retry],{...proof,releasedRetryRequestId:'held'}).passed).toBe(false)
+  })
   it.each([{wallTime:1010},{wallTime:undefined},{status:409},{error:'net::ERR_ABORTED'},{finishedTime:undefined},{object:'bookmark:13'},{copyResult:{protocol:1,reason:'unavailable'}}])('rejects released old requests and non-successes: %j', patch => {
     const {row,evidence}=fixture()
     expect(assessCopyTimeoutRecovery([{...row,...patch}],evidence).passed).toBe(false)
@@ -219,6 +230,11 @@ describe('copy timeout recovery requires a new request and valid persisted bytes
 })
 
 describe('network diagnostics and exact injected cancellation exemptions', () => {
+  it('does not let passing prerequisites hide a misspelled or skipped requested case', () => {
+    const cases=[{id:'LOGIN-UI',status:'passed'},{id:'requested',status:'not-run'},{id:'incomplete',status:'running'},{id:'failed',status:'failed'}]
+    expect(unexecutedRequestedCases(new Set(['typo','requested','incomplete','LOGIN-UI','failed']),cases)).toEqual(['typo','requested','incomplete'])
+    expect(unexecutedRequestedCases(new Set(),cases)).toEqual([])
+  })
   it('does not waive reset failures without exact injection and user-visible recovery evidence', () => {
     const row={requestId:'reset',stage:'28-COPY-CONNECTION-RESET',kind:'icon-copy',object:'bookmark:12',path:'/api/icon-local-copy',error:'net::ERR_CONNECTION_RESET'}
     const state={available:true,enabled:true,entryPresent:true,bodyPresent:true,bodyBytes:512,bodyRevision:'sha256-'+'a'.repeat(64),descriptor:{content_revision:'sha256-'+'a'.repeat(64)}}

@@ -18,7 +18,7 @@ import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
 import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.mjs'
-import { verifiedInjectedCopyResets } from './lib/issueBrowserEvidence.mjs'
+import { verifiedInjectedCopyResets, unexecutedRequestedCases } from './lib/issueBrowserEvidence.mjs'
 import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from './lib/issueBrowserEvidence.mjs'
 if (process.env.ISSUE_BROWSER_WRITE_FIXTURES !== '1') throw new Error('Explicit ISSUE_BROWSER_WRITE_FIXTURES=1 required for temporary test-site records')
 const base = resolveBaseUrl(), credentials = requireAdminCredentials()
@@ -33,6 +33,7 @@ const optionalCases = new Set(['28-CATEGORY-PERMISSIONS','28-LEASE-EXPIRED-OFFLI
 for(const failure of ['408','429','500','WRONG-IMAGE'])optionalCases.add('28-COPY-FAILURE-'+failure)
 optionalCases.add('29-FROZEN-TAB-LOGOUT')
 optionalCases.add('28-PRIVATE-COPY-TIMEOUT')
+optionalCases.add('28-PRIVATE-COPY-TIMEOUT-SLOW-PROXY')
 optionalCases.add('28-COPY-CONNECTION-RESET')
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
@@ -1024,7 +1025,7 @@ try {
       for(const index of targets)await setFixtureIcon(index,fixtures[bookmarks[index].imageKey].base64Uri)
     }
   })
-  for (const index of [0, 2]) await scenario(index === 0 ? '28-COPY-TIMEOUT' : '28-PRIVATE-COPY-TIMEOUT', async () => {
+  for (const [index, timeoutId, proxyMinimumMs] of [[0,'28-COPY-TIMEOUT',0],[2,'28-PRIVATE-COPY-TIMEOUT',0],[2,'28-PRIVATE-COPY-TIMEOUT-SLOW-PROXY',3200]]) await scenario(timeoutId, async () => {
     // Public and private objects use identical strict deadline evidence. An
     // early grant/owner cancellation must fail, never count as a timeout.
     const scenarioId = stage
@@ -1043,7 +1044,19 @@ try {
       await b.send('Network.setCacheDisabled', { cacheDisabled:true })
       await b.send('Network.setBypassServiceWorker', { bypass:true })
       urlTraceScript=(await b.send('Page.addScriptToEvaluateOnNewDocument',{source:'if(window.__issueUrls)window.__issueUrls.active=true'})).identifier
-      await intercept([{urlPattern:'*/api/icon-local-copy',requestStage:'Request'}], async event => {
+      const patterns=[{urlPattern:'*/api/icon-local-copy',requestStage:'Request'}]
+      if(proxyMinimumMs)patterns.push({urlPattern:'*/api/icon/'+bookmarks[index].id+'*',requestStage:'Response'})
+      await intercept(patterns, async event => {
+        if(proxyMinimumMs&&new URL(event.request.url).pathname==='/api/icon/'+bookmarks[index].id&&event.responseStatusCode===200) {
+          await localWait(()=>requests.get(evidence.held[0]?.requestId)?.failureTime,'Timed-out copy before slow proxy',1500)
+          const failed=requests.get(evidence.held[0].requestId)
+          const deadline=failed.wallTime*1000+(failed.failureTime-failed.time)*1000+proxyMinimumMs
+          evidence.slowProxy={requestId:event.networkId,minimumMs:proxyMinimumMs,heldAt:Date.now()}
+          await sleep(Math.max(0,deadline-Date.now()))
+          await b.send('Fetch.continueRequest',{requestId:event.requestId})
+          evidence.slowProxy.releasedAt=Date.now()
+          return true
+        }
         let payload; try { payload=JSON.parse(event.request.postData) } catch { return false }
         if (new URL(event.request.url).origin !== base || payload.object_type !== 'bookmark' || payload.object_id !== bookmarks[index].id) return false
         assert(event.networkId, 'Held copy has no Network requestId')
@@ -1089,9 +1102,18 @@ try {
             displayed:evidence.displayed, pixelsPassed:evidence.pixels.passed,
           })
           evidence.proxyRequestId = proxy?.requestId
-          assert(evidence.held.length === 1, 'Repeated copy attempts before fallback verification; inspect held request journal')
           assert(evidence.fallback.passed, 'Timeout fallback: '+JSON.stringify(evidence.fallback))
+          // The existing 1.2s retry may start while a slower native proxy is
+          // still loading. Keep it held until fallback pixels are proved, then
+          // release that exact sequential request; never accept overlapping work.
+          assert(evidence.held.length <= 2, 'Unbounded copy attempts before fallback verification')
+          const pendingRetry=evidence.held[1]&&requests.get(evidence.held[1].requestId)
+          if(proxyMinimumMs)assert(pendingRetry&&evidence.slowProxy?.releasedAt,'Slow proxy did not exercise the sequential retry')
+          if(pendingRetry)assert(pendingRetry.time>=row.failureTime&&pendingRetry.object===row.object&&pendingRetry.authSession===row.authSession&&pendingRetry.status==null&&!pendingRetry.error&&
+            ['dataset_epoch','expected_write_epoch','expected_content_revision'].every(key=>pendingRetry.copyRequest?.[key]===row.copyRequest?.[key]),'Retry did not follow the timed-out request in the same identity')
           for (const id of evidence.fallback.expectedCanceledRequests) expectedTimeoutRequests.add(id)
+          evidence.recovery.restoredWallTime=Date.now()
+          evidence.recovery.releasedRetryRequestId=pendingRetry?.requestId
           faultSucceeded = true
         } catch (error) {
           // Persist the failed state BEFORE disabling Fetch can release a held
@@ -1103,13 +1125,13 @@ try {
           throw error
         }
       }) // existing finally disables Fetch even when the timed assertions fail
-      evidence.recovery.restoredWallTime = Date.now()
       evidence.recovery.interceptionDisabled = true
       await persist()
       // Let the mounted icon's real bounded retry reacquire; do not call the
       // loader, fetch the copy manually, edit the icon, or clear IDB a second time.
-      await localWait(() => report.requests.slice(start).some(row => row.kind === 'icon-copy' && row.object === target.key && row.wallTime*1000 >= evidence.recovery.restoredWallTime && row.status === 200 && row.copyResult?.hasImage), 'Fresh real frontend copy after restoring interception', 20000)
-      const recovered = report.requests.slice(start).find(row => row.kind === 'icon-copy' && row.object === target.key && row.wallTime*1000 >= evidence.recovery.restoredWallTime && row.status === 200 && row.copyResult?.hasImage)
+      const recoveryCandidate=row=>row.kind==='icon-copy'&&row.object===target.key&&(row.wallTime*1000>=evidence.recovery.restoredWallTime||row.requestId===evidence.recovery.releasedRetryRequestId)&&row.status===200&&row.copyResult?.hasImage
+      await localWait(() => report.requests.slice(start).some(recoveryCandidate), 'Fresh real frontend copy after restoring interception', 20000)
+      const recovered = report.requests.slice(start).find(recoveryCandidate)
       await wait((selector, previousId) => {
         const image=document.querySelector(selector)?.querySelector('img')
         return image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:') && window.__issueUrls.ids.get(image.src) !== previousId
@@ -1118,6 +1140,7 @@ try {
       evidence.recovery.persisted = await readFixtureCopy(target.key)
       evidence.recovery.result = assessCopyTimeoutRecovery(report.requests.slice(start), {
         scenario:scenarioId,
+        failedRequestId:evidence.held[0].requestId,releasedRetryRequestId:evidence.recovery.releasedRetryRequestId,
         object:target.key, requestId:recovered.requestId, restoredWallTime:evidence.recovery.restoredWallTime,
         persisted:evidence.recovery.persisted, blobDisplayed:true, pixelsPassed:evidence.recovery.pixels.passed,
       })
@@ -1425,7 +1448,8 @@ finally {
   report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId)&&!navigationImageCancellations.has(e.requestId)&&!copyResets.has(e.requestId))
   report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||navigationImageCancellations.has(e.requestId)||revokedRequests.has(e.requestId)||copyResets.has(e.requestId))))
   report.injectedRequests=[...injectedRequests]
+  report.unexecutedRequestedCases=unexecutedRequestedCases(selectedCases,report.cases)
   await persist()
-  console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), cleanup: report.cleanup, fatal: report.fatal }))
-  if (report.fatal || report.interceptionError || report.imageLifecycleErrors.length || report.unexpectedHttp.length || report.unexpectedFailures.length || report.consoleFindings.length || report.cases.some(c => c.status === 'failed') || !report.cleanup.serverFixturesRemoved || !report.cleanup.sessionRevoked || report.cleanup.preparationError || report.cleanup.pagePreparationFailed || sessionCaptureErrors.length || report.cleanup.errors?.length || !report.cleanup.browser.profileRemoved || report.cleanup.browser.errors.length || report.cleanup.browser.warnings.length) process.exitCode = 1
+  console.log(JSON.stringify({ output, cases: report.cases.map(({id,status})=>({id,status})), unexecutedRequestedCases:report.unexecutedRequestedCases, cleanup: report.cleanup, fatal: report.fatal }))
+  if (report.fatal || report.interceptionError || report.unexecutedRequestedCases.length || report.imageLifecycleErrors.length || report.unexpectedHttp.length || report.unexpectedFailures.length || report.consoleFindings.length || report.cases.some(c => c.status === 'failed') || !report.cleanup.serverFixturesRemoved || !report.cleanup.sessionRevoked || report.cleanup.preparationError || report.cleanup.pagePreparationFailed || sessionCaptureErrors.length || report.cleanup.errors?.length || !report.cleanup.browser.profileRemoved || report.cleanup.browser.errors.length || report.cleanup.browser.warnings.length) process.exitCode = 1
 }

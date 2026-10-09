@@ -64,7 +64,7 @@ export function isExpectedOfflineFailure(errorText, offlineActive) {
 export function assessCopyTimeoutFallback(rows, evidence) {
   const errors = []
   const scenario = evidence.scenario ?? '28-COPY-TIMEOUT'
-  if (!['28-COPY-TIMEOUT', '28-PRIVATE-COPY-TIMEOUT'].includes(scenario)) errors.push('invalid-timeout-scenario')
+  if (!['28-COPY-TIMEOUT', '28-PRIVATE-COPY-TIMEOUT', '28-PRIVATE-COPY-TIMEOUT-SLOW-PROXY'].includes(scenario)) errors.push('invalid-timeout-scenario')
   const { object, requestId, proxyRequestId, cold, afterTimeout, displayed, pixelsPassed } = evidence
   const copy = rows.find(row => row.requestId === requestId)
   const proxy = rows.find(row => row.requestId === proxyRequestId)
@@ -104,9 +104,18 @@ export function assessCopyTimeoutRecovery(rows, evidence) {
   const keys = ['object_type', 'object_id', 'dataset_epoch', 'write_epoch', 'content_revision', 'state']
   const errors = []
   const scenario = evidence.scenario ?? '28-COPY-TIMEOUT'
-  if (!['28-COPY-TIMEOUT', '28-PRIVATE-COPY-TIMEOUT'].includes(scenario)) errors.push('invalid-timeout-scenario')
+  if (!['28-COPY-TIMEOUT', '28-PRIVATE-COPY-TIMEOUT', '28-PRIVATE-COPY-TIMEOUT-SLOW-PROXY'].includes(scenario)) errors.push('invalid-timeout-scenario')
+  const failed = rows.find(item => item.requestId === evidence.failedRequestId)
+  const finishedWallTime = row?.wallTime * 1000 + (row?.finishedTime - row?.time) * 1000
+  const releasedRetry = evidence.releasedRetryRequestId === requestId && failed?.stage === scenario && failed.kind === 'icon-copy' &&
+    failed.object === object && failed.error === 'net::ERR_ABORTED' && failed.canceled === true && failed.status == null &&
+    (failed.failureTime - failed.time) * 1000 >= 9000 && (failed.failureTime - failed.time) * 1000 <= 15000 &&
+    failed.requestId !== requestId && Number.isFinite(failed.failureTime) && row?.time >= failed.failureTime &&
+    row.authSession != null && row.authSession === failed.authSession &&
+    ['dataset_epoch', 'expected_write_epoch', 'expected_content_revision'].every(key => row.copyRequest?.[key] === failed.copyRequest?.[key]) &&
+    Number.isFinite(finishedWallTime) && finishedWallTime >= restoredWallTime - 100
   if (!row || row.stage !== scenario || row.kind !== 'icon-copy' || row.object !== object || row.status !== 200 || row.error || row.canceled ||
-      !Number.isFinite(restoredWallTime) || !(row.wallTime * 1000 >= restoredWallTime) || !Number.isFinite(row.finishedTime) ||
+      !Number.isFinite(restoredWallTime) || !(row.wallTime * 1000 >= restoredWallTime || releasedRetry) || !Number.isFinite(row.finishedTime) ||
       result?.protocol !== 1 || result.persistence !== 'session-scoped' || result.hasImage !== true || !(result.imageBytes > 0) ||
       d?.state !== 'ready' || !['bookmark','category'].includes(d?.object_type) || !Number.isSafeInteger(d?.object_id) || d.object_id <= 0 ||
       object !== d?.object_type + ':' + d?.object_id || !/^[a-f0-9]{32}$/.test(d?.dataset_epoch ?? '') ||
@@ -127,6 +136,10 @@ export function numericNetworkTiming(timing) {
 
 export function isExpectedInjectedCancellation(row, expectedRequestIds) {
   return expectedRequestIds.has(row.requestId) && row.canceled === true && row.error === 'net::ERR_ABORTED'
+}
+
+export function unexecutedRequestedCases(requested, cases) {
+  return [...requested].filter(id => !cases.some(row => row.id === id && ['passed', 'failed'].includes(row.status)))
 }
 
 // A deliberately reset copy request is expected only after the same case has

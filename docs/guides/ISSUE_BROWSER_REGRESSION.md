@@ -25,6 +25,7 @@
 - 热缓存前置条件包含子分类实际加载，不能以“主卡片就绪”推断其他对象也已预热。
 - Runtime console、页面异常与 Chrome Log 域分别记录。CSP 等基线问题单列；故障注入只按确切 requestId 标记，不整体忽略 401/503。
 - 单个用例失败后保留失败，不用后来成功覆盖；基线失败应停止依赖用例。
+- 显式 `ISSUE_CASES` 中不存在、未执行或仍在运行的名称必须进入 `unexecutedRequestedCases` 并使总结果失败；只有基础前置通过不能代替指定用例执行。
 
 ## 用例步骤与出口
 
@@ -50,6 +51,7 @@
 | 28-COPY-503 | 与 408/429/500 共用冷缺失流程，同时向公开/私密合成对象注入 503 | 两类对象均命中，普通图像正确、错误不落库；解除后由既有机制恢复正确副本 |
 | 28-COPY-TIMEOUT（显式可选） | UI 清理副本，原生 IDB 核验目标公开 fixture 的 entry/body 均不存在；完整重载清除内存句柄，暂扣该对象真实副本请求，HTTP 缓存/SW 暂时旁路 | 9–15 秒内由前端自行取消被扣请求；15 秒内真实普通代理显示正确像素，错误不落 IDB；解除拦截后自动发起新副本请求，正确 Blob 及内容哈希写入 IDB；只核准具体注入取消 requestId |
 | 28-PRIVATE-COPY-TIMEOUT（显式可选） | 同上，但选择真实登录态下的私密书签；正常签名和认证链路保持不变 | 独立核验该场景的取消、普通代理像素和新副本持久化；提前换源取消、公开场景的证据均不能冒充私密期限通过 |
+| 28-PRIVATE-COPY-TIMEOUT-SLOW-PROXY（显式可选） | 另将该私密对象真实普通代理的 200 响应暂扣至副本超时后至少 3.2 秒，不替换正文 | 必须实际出现一次顺序重试；先证明普通回退像素与冷库缺失，再释放准确重试并核验新副本。原 15 秒回退期限不变 |
 | 28-COPY-CONNECTION-RESET（显式可选） | UI 清理副本后，对公开和私密合成书签的准确副本请求注入 ConnectionReset | 普通图像均正确、故障不落盘；解除后通过实际标签切换触发既有恢复，新的正文与哈希落库。只在完整恢复通过后单列准确请求的连接错误 |
 | 29-OLD-ADMIN-RESPONSE / 29-OLD-ANONYMOUS-RESPONSE | 真正焦点刷新，暂扣对应聚合响应，身份切换后释放 | 旧成功响应不能污染新身份视图 |
 | 28-STORAGE-QUOTA / UNAVAILABLE | 清理本 profile 副本，注入 IDB 写配额或打开失败 | 注入命中且控制样本仍显示正确 |
@@ -105,8 +107,8 @@ node scripts/issue-browser-regression.mjs
 - `28-COPY-TIMEOUT` 选择公开书签，`28-PRIVATE-COPY-TIMEOUT` 选择私密书签，两者可分别显式运行。私密 grant 交错由 `28-CANCEL-REACQUIRE` 覆盖；提前 owner 取消仍判失败，不可冒充 10 秒期限。两种期限场景不声称覆盖全部队列槽位耗尽或任意连接故障；受控连接中断另由 `28-COPY-CONNECTION-RESET` 验证。
 - 通过真实设置 UI 清副本；原生 `indexedDB.databases/open` 只读核验库已存在且启用、目标 `entries` / `bodies` 均缺失，再验证新 document。不存在/不可用的库不算冷缺失。HTTP 缓存与 SW 仅在案例内旁路，不改许可、快照、Loader 或 IDB 实现。
 - 现有 CDP Fetch Request 阶段仅暂扣该 fixture 的真实副本，不 fulfill、不主动 fail、不用测试自己的 abort 定时器。报告关联 Fetch ID、Network requestId、暂扣时刻、单调请求/终止时间。早于 9 秒的 owner 取消、晚于 15 秒的结束、503 或连接关闭均不能冒充 10 秒期限通过。
-- 故障仍在时读取实际 DOM 图像，要求目标 `/api/icon/<id>` 的真实请求：200、image MIME、非兜底、非 HTTP 缓存/SW、正文完成且像素符合独立 fixture。普通渲染有两条合法路径：Fetch 必须对应响应结束后新创建并已显示的 Blob（创建时间、MIME、大小）；原生 Image 必须关联相同文档及被取消副本，正文正字节数已完成，实际已解码图像的 currentSrc 精确匹配该请求，观测不早于完成。原生路径源于完整串联中实际观察到的正常渲染，不凭元素存在猜测成功。既有 blob/data 热图、单纯 200、诊断 fetch、重载或解除暂扣后才显示仍不算回退证据。随后 IDB 仍须 entry/body 均缺失；同一故障窗口出现第二个目标副本请求仍失败，不合并多次取消。
-- 解除拦截后不改数据、不再次清库、不调用 Loader 或手工 fetch；等待挂载组件现有有界重试发出晚于恢复时刻的新请求。要求 protocol=1、session-scoped、正确描述符和正文字节数、正确 Blob 像素；IDB 原生 Blob 按协议前缀 + MIME + 正文计算的 SHA-256、大小及描述符必须与响应相符（不是裸正文 SHA-256）。被解除暂扣的旧请求不能当成新申请。
+- 故障仍在时读取实际 DOM 图像，要求目标 `/api/icon/<id>` 的真实请求：200、image MIME、非兜底、非 HTTP 缓存/SW、正文完成且像素符合独立 fixture。普通渲染有两条合法路径：Fetch 必须对应响应结束后新创建并已显示的 Blob（创建时间、MIME、大小）；原生 Image 必须关联相同文档及被取消副本，正文正字节数已完成，实际已解码图像的 currentSrc 精确匹配该请求，观测不早于完成。原生路径源于完整串联中实际观察到的正常渲染，不凭元素存在猜测成功。既有 blob/data 热图、单纯 200、诊断 fetch、重载或解除暂扣后才显示仍不算回退证据。随后 IDB 仍须 entry/body 均缺失。允许至多一个在首次取消后、同身份同描述符发起的顺序重试保持暂扣；重叠请求、第三次请求或另一次取消均失败，不合并多次取消。
+- 解除拦截后不改数据、不再次清库、不调用 Loader 或手工 fetch；等待挂载组件现有有界重试发出新请求，或释放已明确记录且在首次超时后发起的那个顺序重试。要求 protocol=1、session-scoped、正确描述符和正文字节数、正确 Blob 像素；IDB 原生 Blob 按协议前缀 + MIME + 正文计算的 SHA-256、大小及描述符必须与响应相符（不是裸正文 SHA-256）。已取消的第一次请求不能当成恢复；若复用暂扣的顺序重试，必须匹配准确 requestId、身份、描述符与前次终止时间，且正文完成时间晚于解除拦截。
 - `cases[].timeout` 保留冷前置、注入请求、失败前截图/存储元数据、取消耗时、代理 requestId、恢复新 requestId 及 IDB 校验。故障失败在 Fetch 恢复前持久化；后续恢复不改写失败。既有 intercept finally 及案例 finally 恢复 Fetch、HTTP 缓存/SW；全局 finally 删除本轮服务器 fixture 并清理专用浏览器。恢复失败使整轮失败。
 - `expectedTimeoutRequests` 仅在冷缺失、时限、真实代理和像素全部通过后加入暂扣的确切 requestId；`28-CANCEL-REACQUIRE` 同样只记录自己的被扣请求。最终 `validatedInjectedCancellations` 还须核对 `canceled=true + net::ERR_ABORTED`。**未注入取消不再默认成功**；只有下节规定的完整原生图片签名换源链可另行核准。另一个 requestId、其他网络错误、HTTP 错误和控制台异常仍进失败门，不能恢复整体豁免。
 
