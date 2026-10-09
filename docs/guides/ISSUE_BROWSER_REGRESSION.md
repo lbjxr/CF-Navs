@@ -157,6 +157,14 @@ node --experimental-sqlite node_modules/vitest/vitest.mjs run tests/unit/issueBr
 
 `protocol` / timing 是观测证据，不是连接异常根因结论。副本队列 10 秒期限与普通 `<img>` 持续挂起是两条链路：即使同路径 `fetch(cache:no-store)` 成功，原 Image 仍未响应/显示时也不能判通过，不能由副本修复推断匿名图片挂起根因已定位。不得延长既有等待或用额外请求掩盖失败；保留原图片 requestId 与独立诊断请求。纯判定单测通过不代表测试站案例通过。
 
+## 桌面键盘与真实缩放
+
+`28-DESKTOP-A11Y` 从首页菜单用 Tab/Enter 进入管理页和设备缓存设置，检查四个控件焦点、命中区和浏览器 AX 名称/角色；用 Space 关闭/启用、Enter 清理并核对 IDB 缺失，再只对本次文档的对象图标数据库事务注入故障，核验可访问状态提示与恢复，最后检查菜单 Escape 焦点返回。输入通过 CDP Input 发送，不调用 DOM click 或产品操作函数。
+
+`28-DESKTOP-ZOOM` 在同一独立 profile 的 Chrome 外观页，通过鼠标和原生 select 的 Home/ArrowDown/Enter 选择 100%/125%/200%。关闭视口模拟，确认 devicePixelRatio 随比例变化且 visualViewport.scale 为 1，逐个以键盘聚焦设备缓存控件并检查可见、未遮挡、轮廓；保存真实视口截图。finally 恢复 100% 并关闭专用设置 target，最终删除整个本轮临时 profile。浏览器设置中仅操作缩放。
+
+AX 与 live-region 证据不等于实际读屏软件验收；不覆盖其他导航布局、iOS/Safari、软键盘、安全区或真机。
+
 ## 普通图像回退双重失败
 
 显式选择 `28-FALLBACK-RESET`、`28-FALLBACK-TIMEOUT`、`28-FALLBACK-KEEP-GOOD`。使用公开与私密合成书签，冷路径经 UI 清理后，让副本请求返回 503，同时令普通对象图像代理 ConnectionReset 或持续挂起；恢复只解除拦截并通过实际标签切换唤醒既有机制，不调用 Loader 或手工下载。暖路径先核验真实成功副本，故障规则不应被请求触发，正文与图像必须保留。

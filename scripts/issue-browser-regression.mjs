@@ -48,6 +48,8 @@ optionalCases.add('28-PERFORMANCE-FLOW')
 optionalCases.add('28-CAPACITY-EVICTION')
 optionalCases.add('28-NATIVE-UI-TEARDOWN')
 for(const kind of ['RESET','TIMEOUT','KEEP-GOOD'])optionalCases.add('28-FALLBACK-'+kind)
+optionalCases.add('28-DESKTOP-A11Y')
+optionalCases.add('28-DESKTOP-ZOOM')
 const snapshotCases = [
   ['local','before',false,false], ['local','after',true,false],
   ['cache','before',false,false], ['cache','after',true,false],
@@ -2213,6 +2215,93 @@ try {
     assert(policy.includes("script-src 'self' blob:")&&!policy.match(/script-src[^;]*unsafe-inline/),'HTML did not retain the strict script policy')
     assert(cache.includes('no-transform'),'HTML can still be modified by the delivery proxy')
     return {samples,strictPolicy:true,noTransform:true}
+  })
+  async function keyboardFocus(selector) {
+    for(let i=0;i<1600;i++){
+      if(await b.call(sel=>document.activeElement?.matches(sel),selector))return
+      await key('Tab')
+    }
+    throw new Error('Keyboard cannot reach '+selector)
+  }
+  async function keyboardActivate(selector) {await keyboardFocus(selector);await key('Enter')}
+  async function focusEvidence(selector) {
+    const evidence=await b.call(sel=>{const el=document.querySelector(sel),r=el?.getBoundingClientRect(),style=el?getComputedStyle(el):null,hit=r?document.elementFromPoint(r.x+r.width/2,r.y+r.height/2):null;return {focused:document.activeElement===el,visible:!!r&&r.width>0&&r.height>0&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth,hit:hit===el||el?.contains(hit),outline:style?.outlineStyle,outlineWidth:style?.outlineWidth}},selector)
+    assert(evidence.focused&&evidence.visible&&evidence.hit&&evidence.outline!=='none'&&parseFloat(evidence.outlineWidth)>0,'Keyboard focus is hidden or obstructed: '+JSON.stringify(evidence))
+    return evidence
+  }
+  await scenario('28-DESKTOP-A11Y',async()=>{
+    await home();await waitForDocumentFetches()
+    await keyboardActivate('[data-testid="home-actions-menu-trigger"]')
+    await keyboardActivate('[data-testid="home-admin-button"]')
+    await wait(()=>document.querySelector('[data-testid="admin-tab-settings"]'))
+    await keyboardActivate('[data-testid="admin-tab-settings"]')
+    await wait(()=>[...document.querySelectorAll('.settings-submenu button')].some(el=>el.textContent.includes('设备缓存')))
+    const submenu=await b.call(()=>'.settings-submenu button:nth-child('+([...document.querySelectorAll('.settings-submenu button')].findIndex(el=>el.textContent.includes('设备缓存'))+1)+')')
+    await keyboardActivate(submenu);await wait(()=>document.querySelector('.device-cache input'))
+    const evidence=report.cases.at(-1).a11y={focus:[]}
+    for(const selector of ['.device-cache input','.device-actions button:nth-child(1)','.device-actions button:nth-child(2)','.device-actions button:nth-child(3)']){
+      await keyboardFocus(selector);evidence.focus.push(await focusEvidence(selector))
+    }
+    const accessibility=await b.send('Accessibility.getFullAXTree')
+    evidence.accessibility=accessibility.nodes.filter(node=>['checkbox','button','status'].includes(node.role?.value)&&['在此设备保留书签图标','联网校验','清理此设备图标副本','关闭并清理'].includes(node.name?.value)).map(node=>({role:node.role.value,name:node.name.value,ignored:node.ignored,properties:node.properties?.filter(property=>['checked','disabled'].includes(property.name))}))
+    assert(evidence.accessibility.length===4&&evidence.accessibility.every(node=>!node.ignored),'Device controls are missing accessible names or roles')
+    await keyboardActivate('.device-actions button:nth-child(2)')
+    await wait(()=>!document.querySelector('.device-actions button:nth-child(2)')?.disabled)
+    for(const item of manifest()){const state=await readFixtureCopy(item.key);assert(!state.entryPresent&&!state.bodyPresent,'Keyboard clear left image copies')}
+    await keyboardFocus('.device-cache input');await key(' ','Space')
+    await wait(()=>!document.querySelector('.device-cache input')?.checked&&!document.querySelector('.device-cache input')?.disabled)
+    await keyboardFocus('.device-cache input');await key(' ','Space');await wait(()=>document.querySelector('.device-cache input')?.checked&&!document.querySelector('.device-cache input')?.disabled)
+    assert(await b.call(()=>document.querySelector('.device-status')?.textContent.includes('下次刷新')),'Keyboard toggle did not defer enablement')
+    await b.call(()=>{window.__a11yIdbTransaction=IDBDatabase.prototype.transaction;IDBDatabase.prototype.transaction=function(...args){if(this.name==='cf-navs-object-icons-v1')throw new DOMException('Owned storage failure','SecurityError');return window.__a11yIdbTransaction.apply(this,args)}})
+    try {
+      await keyboardActivate('.device-actions button:nth-child(2)')
+      await wait(()=>/失败|不可用|未完成/.test(document.querySelector('.device-status')?.textContent??''))
+      evidence.failureStatus=await b.call(()=>{const e=document.querySelector('.device-status');return {role:e.getAttribute('role'),live:e.getAttribute('aria-live'),text:e.textContent}})
+      assert(evidence.failureStatus.role==='status'&&evidence.failureStatus.live==='polite','Failure is not exposed in an accessible live region')
+    } finally {await b.call(()=>{IDBDatabase.prototype.transaction=window.__a11yIdbTransaction;delete window.__a11yIdbTransaction})}
+    await keyboardActivate('.device-actions button:nth-child(2)');await wait(()=>!document.querySelector('.device-actions button:nth-child(2)')?.disabled)
+    await keyboardActivate('[data-testid="admin-home-button"]')
+    await home();await verifyImages()
+    const trigger=scope()+' .scope-root-trigger';await keyboardActivate(trigger)
+    await keyboardFocus('[data-testid="home-actions-menu-trigger"]')
+    await key('Enter');await key('Escape')
+    assert(await b.call(()=>document.activeElement?.matches('[data-testid="home-actions-menu-trigger"]')),'Home menu did not restore keyboard focus')
+    return {keyboardControls:true,clearAndToggle:true,failureAnnounced:true,menuFocusRestored:true}
+  })
+  await scenario('28-DESKTOP-ZOOM',async()=>{
+    await home();await settings()
+    await b.send('Emulation.clearDeviceMetricsOverride')
+    const evidence=report.cases.at(-1).zoom={method:'Chrome appearance setting through native select keyboard input',samples:[]}
+    const initial=await b.call(()=>({width:innerWidth,ratio:devicePixelRatio}))
+    secondary=(await b.send('Target.createTarget',{url:'chrome://settings/appearance'})).targetId
+    const peer=(await b.send('Target.attachToTarget',{targetId:secondary,flatten:true})).sessionId
+    const selectZoom=async(factor)=>{
+      await b.send('Target.activateTarget',{targetId:secondary})
+      let point
+      for(let i=0;i<100&&!point;i++){
+        point=await sessionCall(peer,()=>{const find=root=>root.querySelector('#zoomLevel')||[...root.querySelectorAll('*')].filter(e=>e.shadowRoot).map(e=>find(e.shadowRoot)).find(Boolean);const e=find(document);if(!e)return null;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})
+        if(!point)await sleep(100)
+      }
+      assert(point,'Chrome page zoom setting is unavailable')
+      await sessionSend(peer,'Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...point});await sessionSend(peer,'Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...point})
+      for(const event of [{key:'Home',code:'Home',windowsVirtualKeyCode:36},...Array.from({length:factor===1?7:factor===1.25?9:12},()=>({key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40})),{key:'Enter',code:'Enter',windowsVirtualKeyCode:13}]){
+        await sessionSend(peer,'Input.dispatchKeyEvent',{type:'rawKeyDown',...event});await sessionSend(peer,'Input.dispatchKeyEvent',{type:'keyUp',...event})
+      }
+      await b.send('Target.activateTarget',{targetId:b.targetId});await sleep(500)
+    }
+    try {
+      for(const factor of [1,1.25,2]){
+        await selectZoom(factor)
+        const viewport=await b.call(()=>({width:innerWidth,height:innerHeight,ratio:devicePixelRatio,scale:visualViewport.scale}))
+        assert(Math.abs(viewport.ratio/initial.ratio-factor)<0.03&&viewport.scale===1,'Zoom was not browser page zoom: '+JSON.stringify(viewport))
+        const controls=['.device-cache input','.device-actions button:nth-child(1)','.device-actions button:nth-child(2)','.device-actions button:nth-child(3)']
+        for(const selector of controls){await keyboardFocus(selector);await focusEvidence(selector)}
+        evidence.samples.push({factor,...viewport})
+        const screenshot=await b.send('Page.captureScreenshot',{format:'png'})
+        await fs.writeFile(path.join(output,'desktop-zoom-'+factor+'.png'),Buffer.from(screenshot.data,'base64'))
+      }
+      return {actualBrowserZoom:evidence.samples,keyboardVisible:true}
+    } finally {await selectZoom(1);await b.send('Target.closeTarget',{targetId:secondary});secondary=null;await b.send('Target.activateTarget',{targetId:b.targetId})}
   })
   await scenario('28-RELOGIN-ICONS',async()=>{
     await home({waitForImages:false});await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
