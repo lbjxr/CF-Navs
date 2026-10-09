@@ -42,6 +42,26 @@ function setup(prepareLegacyCopies?: (force?: boolean) => Promise<boolean>, enab
 }
 
 describe('device-scoped icon permission lifecycle', () => {
+  it('does not revoke a newer receipt delivered before a frozen tab refreshes its cached auth', async () => {
+    let oldSession = { token: 'fixture-one', expires_at: 100000 }
+    let sharedRecord: string | null = null
+    const f = setup(); await f.ready()
+    sharedRecord = JSON.stringify(f.record())
+    const old = createIconDeviceController({ storage: f.storage, session: () => oldSession,
+      load: () => sharedRecord, save: value => { sharedRecord = value }, now: () => 2000,
+      scope: async token => token === 'fixture-one' ? firstScope : secondScope })
+    controllers.push(old); old.setDataset(dataset); await old.initialize()
+    sharedRecord = JSON.stringify({ ...f.record(), receipt: f.metadata(secondScope).auth_receipt })
+    const newerRecord = sharedRecord
+    old.storageChanged(ICON_DEVICE_KEY)
+    await old.resume()
+    expect(old.capture()).toBeNull()
+    expect(sharedRecord).toBe(newerRecord)
+    oldSession = { token: 'fixture-two', expires_at: 100000 }
+    old.authChanged(); old.setDataset(dataset); await old.resume()
+    expect(old.capture()?.lease.scope).toBe(dataset + ':' + secondScope)
+  })
+
   it('does not overwrite a new tab receipt when an old tab processes the session change late', async () => {
     const f = setup(); await f.ready()
     const other = f.make(); other.setDataset(dataset); await other.initialize()

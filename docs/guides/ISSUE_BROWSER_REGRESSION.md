@@ -161,11 +161,15 @@ node --experimental-sqlite node_modules/vitest/vitest.mjs run tests/unit/issueBr
 
 显式选择 `29-SNAPSHOT-LOCAL-BEFORE-LOGOUT`、`29-SNAPSHOT-LOCAL-AFTER-RELOGIN`、`29-SNAPSHOT-CACHE-BEFORE-LOGOUT`、`29-SNAPSHOT-CACHE-AFTER-RELOGIN`、`29-SNAPSHOT-CACHE-BEFORE-FROZEN-LOGOUT`、`29-SNAPSHOT-CACHE-AFTER-FROZEN-RELOGIN`。每项通过真实书签编辑表单保存触发快照，第二标签实际退出或重新登录，再释放原标签；冻结场景使用浏览器生命周期事件。
 
+第二标签通过后台退出按钮及实际登录入口建立新会话，并进入管理页确认新快照，第一标签始终保留旧保存延续。路由可能先显示登录入口，不能假设访问 `/admin` 一定直接出现表单。进入后台前等待当前文档的 Fetch 响应完成；恢复图像逐个滚动可见并等待加载，与首页既有就绪规则一致。
+
 `snapshotInterruptionProbe` 只拦截包含本轮准确 ID 和编辑标题的管理员快照。localStorage 用 Debugger 停在同步调用前后；Cache Storage 仅令本页管理员 localStorage 写入报配额错误，触发既有回退，再暂扣原生调用前或成功完成后的延续。调用前暂扣不能描述为浏览器磁盘事务 pending；调用后必须已执行真正的 Cache.put。恢复时核对旧作用域消失、新会话快照未曾被删除、私密 DOM 不复活，并重新登录/刷新验证图像。辅助接口仅造数、读回和清理，不代替被测保存、登录和退出。
 
 测试先等待无关图片请求与 IDB 操作完成，再冻结快照延续，避免把两个独立故障混作同一断点。多标签响应按 CDP sessionId 读取，登录会话必须纳入逐一撤销清单；所有原生方法、Debugger 和冻结状态在 finally 恢复。它不替代真实跨账号迁移、签名到期、长时间冻结或跨版本验收。
 
 取消事件逐请求归类：旧会话副本必须在同一会话真实退出的请求/成功撤销窗口内取消；原生图片被本地副本接替，必须证明原来源的全部消费者已退出、同容器实际加载 Blob、Blob 正文哈希与原生 IDB 正文及描述符一致。仅 DOM 换源、接口 200、最终图片出现或取消错误码均不足以通过。缺少记录、跨对象/文档、其他状态码、未退出的消费者和不匹配哈希仍判失败。
+
+`28-WARM-RELOAD` 的零正文请求门针对前置已核验落盘的五个合成对象；其他对象请求单列 `otherObjectRequests`，不能据此宣称全站全部图标已经暖机或零下载。未识别对象仍失败，所有对象的异常 HTTP、网络、控制台错误仍走全局失败门。
 
 ## 快速退出导航与原生分类图片超时
 

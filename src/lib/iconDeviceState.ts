@@ -151,7 +151,13 @@ export function createIconDeviceController(options: DeviceOptions) {
       const denied = deniedByReceipt === 'expired' && record.receipt && currentNow < iconLeaseUntil(record.receipt)
         ? null
         : deniedByReceipt
-      if (denied === 'scope-mismatch' || denied === 'unauthenticated') { record = { ...record, revokedScope: record.receipt?.cache_scope }; await revoke('waiting-auth'); return }
+      if (denied === 'scope-mismatch' || denied === 'unauthenticated') {
+        // Storage events and auth events are separate tasks. A frozen tab may
+        // see the newer receipt before its cached session has been refreshed.
+        // Block this tab; it cannot revoke a receipt owned by another identity.
+        block('waiting-auth')
+        return
+      }
       if (denied === 'clock') {
         // A fresh server receipt can arrive slightly ahead of this device's clock.
         // Do not relax permission checks or rewrite its timestamp: wait once until

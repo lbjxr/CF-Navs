@@ -774,8 +774,12 @@ try {
     assert(persisted,'Warm test requires persisted fixture bodies')
     const start=report.requests.length;await home();await verifyImages()
     assert(await b.call(manifest=>manifest.every(row=>document.querySelector(row.selector)?.querySelector('img')?.src.startsWith('blob:')),manifest()),'Warm fixture did not use object URLs')
-    const rows=report.requests.slice(start),network=assessStableIcons(rows.filter(row=>['icon-body','icon-copy'].includes(row.kind)))
-    assert(network.passed,JSON.stringify(network));return {persisted,network,otherImageRequests:rows.filter(row=>['external-image','iconify-body'].includes(row.kind)).length}
+    const rows=report.requests.slice(start),objects=rows.filter(row=>['icon-body','icon-copy'].includes(row.kind))
+    // The precondition proves these fixtures warm, not every image in the site.
+    // Keep other traffic observable and subject to the global error gate.
+    const network=assessStableIcons(objects.filter(row=>keys.includes(row.object)||row.object==='unknown'))
+    const otherObjectRequests=objects.filter(row=>!keys.includes(row.object)).map(row=>({requestId:row.requestId,object:row.object,status:row.status}))
+    assert(network.passed,JSON.stringify(network));return {persisted,warmObjects:keys,network,otherObjectRequests,otherImageRequests:rows.filter(row=>['external-image','iconify-body'].includes(row.kind)).length}
   })
   for (const mode of ['expired','rollback']) await scenario(mode==='expired'?'28-LEASE-EXPIRED-OFFLINE':'28-CLOCK-ROLLBACK-OFFLINE', async () => {
     const evidence=report.cases.at(-1).leaseBoundary={mode,clockOnly:true}
@@ -1412,7 +1416,7 @@ try {
     const evidence=report.cases.at(-1).snapshot={...spec}
     let peer,paused=null,armed=false,frozen=false,oldScope=null
     const pauseListener=event=>{if(armed&&event.callFrames?.some(frame=>frame.functionName==='snapshotSet'))paused=event}
-    const peerWait=async(fn,...args)=>{let result;for(let i=0;i<200;i++){result=await sessionCall(peer,fn,...args);if(result)return result;await sleep(100)}throw new Error('Snapshot peer UI did not settle')}
+    const peerWait=async(fn,...args)=>{let result;for(let i=0;i<200;i++){result=await sessionCall(peer,fn,...args);if(result)return result;await sleep(100)}throw new Error('Snapshot peer UI did not settle: '+fn.toString().slice(0,180))}
     const peerFill=async(selector,value)=>{
       await clickInSession(peer,selector)
       await sessionSend(peer,'Input.dispatchKeyEvent',{type:'rawKeyDown',key:'a',code:'KeyA',windowsVirtualKeyCode:65,modifiers:2})
@@ -1420,6 +1424,9 @@ try {
       await sessionSend(peer,'Input.insertText',{text:value})
     }
     const peerAction=async(name)=>{
+      if(name==='logout'&&await sessionCall(peer,()=>Boolean(document.querySelector('[data-testid="admin-logout-button"]')))){
+        await clickInSession(peer,'[data-testid="admin-logout-button"]');return
+      }
       const selector=`[data-testid="home-${name}-button"]`
       const visible=await sessionCall(peer,sel=>{const r=document.querySelector(sel)?.getBoundingClientRect();return r?.width>0&&r?.height>0},selector)
       if(!visible)await clickInSession(peer,'[data-testid="home-actions-menu-trigger"]')
@@ -1431,8 +1438,9 @@ try {
       peer=(await b.send('Target.attachToTarget',{targetId:secondary,flatten:true})).sessionId
       for(const method of ['Page.enable','Runtime.enable','Network.enable','Log.enable'])await sessionSend(peer,method)
       await installPageInstrumentation(peer)
-      await sessionSend(peer,'Page.navigate',{url:base})
-      await peerWait(id=>Boolean(document.querySelector(`[data-sort-id="${id}"]`)),privateId)
+      await sessionSend(peer,'Page.navigate',{url:base+'/admin'})
+      await peerWait(()=>Boolean(document.querySelector('[data-testid="admin-tab-settings"]')))
+      evidence.peerEntry='admin'
       await b.send('Target.activateTarget',{targetId:b.targetId})
       await edit(0);await fill('[data-testid="bookmark-modal"] input[placeholder="例如：Svelte 官方网站"]',title)
       await b.call(pageInstallSnapshotInterruption,{...spec,bookmarkId:bookmarks[0].id,title,privateId})
@@ -1462,11 +1470,22 @@ try {
       await confirmSecondaryLogout(peer,start,evidence)
       evidence.logoutBeforeRelease=true
       if(spec.relogin){
-        await peerAction('login')
+        // Open the actual administrator login route in the second tab. The
+        // first document remains paused and retains the old save continuation.
+        await sessionSend(peer,'Page.navigate',{url:base+'/admin'})
+        await peerWait(()=>Boolean(document.querySelector('input[autocomplete="username"]')||document.querySelector('[data-testid="home-login-button"]')))
+        if(!await sessionCall(peer,()=>Boolean(document.querySelector('input[autocomplete="username"]'))))await peerAction('login')
         await peerFill('input[autocomplete="username"]',credentials.username)
         await peerFill('input[autocomplete="current-password"]',credentials.password)
         await clickInSession(peer,'[aria-labelledby="login-modal-title"] form button[type="submit"]')
-        await peerWait(id=>!document.querySelector('input[autocomplete="current-password"]')&&Boolean(document.querySelector(`[data-sort-id="${id}"]`)),privateId)
+        await peerWait(()=>!document.querySelector('input[autocomplete="current-password"]')&&Boolean(localStorage.getItem('cf-navs.auth')))
+        await peerWait(id=>Boolean(document.querySelector('[data-testid="admin-tab-settings"]')||document.querySelector(`[data-sort-id="${id}"]`)),privateId)
+        if(!await sessionCall(peer,()=>Boolean(document.querySelector('[data-testid="admin-tab-settings"]')))){
+          const loaderId=(await sessionSend(peer,'Page.getFrameTree')).frameTree.frame.loaderId
+          await localWait(()=>report.requests.filter(row=>row.cdpSessionId===peer&&row.documentLoaderId===loaderId&&row.type==='Fetch').every(row=>row.terminalKind),'New-login response bodies before administrator navigation',60000)
+          await sessionSend(peer,'Page.navigate',{url:base+'/admin'})
+        }
+        await peerWait(()=>Boolean(document.querySelector('[data-testid="admin-tab-settings"]')))
         const previous=token;token=await sessionCall(peer,()=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token||'')
         assert(token&&token!==previous,'Second UI login did not create a new session');serverCleanup.rememberSession(token)
         // Install a read-only observer, never write a new snapshot for the app.
@@ -1500,7 +1519,10 @@ try {
       if(spec.relogin){
         await wait(sel=>Boolean(document.querySelector(sel)),[scope()])
         await click(scope()+' .scope-root-trigger')
-        for(const item of manifest())await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),item.selector)
+        for(const item of manifest()){
+          await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),item.selector)
+          await wait(sel=>{const e=document.querySelector(sel),image=e?.matches('img')?e:e?.querySelector('img');return image?.complete&&image.naturalWidth>0},[item.selector],60000)
+        }
         await verifyImages()
       }else{await home();await verifyImages()}
       bookmarks[0].title=title
@@ -1690,7 +1712,10 @@ try {
       await wait(()=>!document.querySelector('input[autocomplete="current-password"]'))
       await wait(id=>Boolean(document.querySelector(`[data-sort-id="${id}"]`)),[bookmarks[2].id])
       await click(scope()+' .scope-root-trigger')
-      for(const item of manifest())await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center',behavior:'instant'}),item.selector)
+      for(const item of manifest()){
+        await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center',behavior:'instant'}),item.selector)
+        await wait(sel=>{const e=document.querySelector(sel),image=e?.matches('img')?e:e?.querySelector('img');return image?.complete&&image.naturalWidth>0},[item.selector],60000)
+      }
       await verifyImages()
       assert(await b.call(()=>performance.timeOrigin)===documentBefore,'Initialization scenario changed document')
       assert(await b.call(expected=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token===expected,token),'Image initialization lost the new session')
