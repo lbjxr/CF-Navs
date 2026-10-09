@@ -7,6 +7,12 @@ import { ensureSchema } from './schema'
 import { decodeVersionedIcon, iconContentRevision } from '../iconRevision'
 import { withSchemaRetry } from './schema'
 
+// Mutation consumers immediately replace their local entity. Return its current
+// icon identity with the write, without a second query or a duplicate image body.
+const CATEGORY_WRITE_RESULT_FIELDS = `id, parent_id, title, icon, is_private, sort, created_at,
+  icon_revision, icon_write_epoch,
+  CASE WHEN icon_blob IS NULL OR icon_blob = '' THEN 0 ELSE 1 END AS icon_cached`
+
 export class CategoryValidationError extends Error {}
 export class CategoryConflictError extends Error {}
 
@@ -109,7 +115,7 @@ export async function createCategory(db: D1Database, req: CategoryUpsertReq): Pr
       `INSERT INTO categories (parent_id, title, icon, icon_revision, is_private, sort, created_at)
        SELECT ?, ?, ?, ?, ?, COALESCE(MAX(sort), -1) + 1, ?
        FROM categories WHERE parent_id IS ?
-       RETURNING id, parent_id, title, icon, is_private, sort, created_at`,
+       RETURNING ${CATEGORY_WRITE_RESULT_FIELDS}`,
     )
     .bind(parentId, req.title, req.icon ?? null, revision, req.is_private === true ? 1 : 0, now, parentId)
     .first<Category>()
@@ -137,7 +143,7 @@ export async function updateCategory(
     if (req.is_private === undefined) {
       return await db
         .prepare(
-          'UPDATE categories SET title = ?, icon_blob = CASE WHEN icon IS ? THEN icon_blob ELSE NULL END, icon_revision = CASE WHEN icon IS ? THEN COALESCE(icon_revision, ?) ELSE ? END, icon_write_epoch = icon_write_epoch + CASE WHEN icon IS ? THEN 0 ELSE 1 END, icon = ? WHERE id = ? RETURNING id, parent_id, title, icon, is_private, sort, created_at',
+          `UPDATE categories SET title = ?, icon_blob = CASE WHEN icon IS ? THEN icon_blob ELSE NULL END, icon_revision = CASE WHEN icon IS ? THEN COALESCE(icon_revision, ?) ELSE ? END, icon_write_epoch = icon_write_epoch + CASE WHEN icon IS ? THEN 0 ELSE 1 END, icon = ? WHERE id = ? RETURNING ${CATEGORY_WRITE_RESULT_FIELDS}`,
         )
         .bind(req.title, nextIcon, nextIcon, revision, revision, nextIcon, nextIcon, id)
         .first<Category>()
@@ -145,7 +151,7 @@ export async function updateCategory(
 
     return await db
       .prepare(
-        'UPDATE categories SET title = ?, icon_blob = CASE WHEN icon IS ? THEN icon_blob ELSE NULL END, icon_revision = CASE WHEN icon IS ? THEN COALESCE(icon_revision, ?) ELSE ? END, icon_write_epoch = icon_write_epoch + CASE WHEN icon IS ? THEN 0 ELSE 1 END, icon = ?, is_private = COALESCE(?, is_private) WHERE id = ? RETURNING id, parent_id, title, icon, is_private, sort, created_at',
+        `UPDATE categories SET title = ?, icon_blob = CASE WHEN icon IS ? THEN icon_blob ELSE NULL END, icon_revision = CASE WHEN icon IS ? THEN COALESCE(icon_revision, ?) ELSE ? END, icon_write_epoch = icon_write_epoch + CASE WHEN icon IS ? THEN 0 ELSE 1 END, icon = ?, is_private = COALESCE(?, is_private) WHERE id = ? RETURNING ${CATEGORY_WRITE_RESULT_FIELDS}`,
       )
       .bind(req.title, nextIcon, nextIcon, revision, revision, nextIcon, nextIcon, req.is_private === undefined ? null : (req.is_private === true ? 1 : 0), id)
       .first<Category>()
@@ -160,7 +166,7 @@ export async function updateCategory(
            icon = ?, is_private = COALESCE(?, is_private),
            sort = (SELECT COALESCE(MAX(sort), -1) + 1 FROM categories WHERE parent_id IS ? AND id <> ?)
        WHERE id = ?
-       RETURNING id, parent_id, title, icon, is_private, sort, created_at`,
+       RETURNING ${CATEGORY_WRITE_RESULT_FIELDS}`,
     )
     .bind(parentId, req.title, nextIcon, nextIcon, revision, revision, nextIcon, nextIcon, req.is_private === undefined ? null : (req.is_private === true ? 1 : 0), parentId, id, id)
     .first<Category>()

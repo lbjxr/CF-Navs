@@ -175,8 +175,17 @@ async function saveCategoryUi(touch=false) {
   const box=await b.call(sel=>{const r=document.querySelector(sel).getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth+1}},categoryDialog)
   assert(box.left>=0&&box.right<=box.width+1&&box.top>=0&&box.bottom<=box.height+1&&!box.overflow,'Category dialog exceeds the viewport')
   ;(report.cases.at(-1).categoryLayouts??=[]).push(box)
+  const requestStart=report.requests.length
   await (touch?tap:click)(categoryDialog+' button[type="submit"]')
   await wait(sel=>!document.querySelector(sel),[categoryDialog],30000)
+  await localWait(()=>report.requests.slice(requestStart).some(row=>row.method==='PUT'&&/^\/api\/categories\/\d+$/.test(row.path)&&Number.isFinite(row.finishedTime)),'Category save response completion')
+  const writes=report.requests.slice(requestStart).filter(row=>row.method==='PUT'&&/^\/api\/categories\/\d+$/.test(row.path))
+  assert(writes.length===1&&writes[0].status===200,'Category save did not produce one successful write')
+  const response=await b.send('Network.getResponseBody',{requestId:writes[0].requestId})
+  const envelope=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body),value=envelope.data
+  const proof={requestId:writes[0].requestId,id:value?.id,revision:value?.icon_revision,writeEpoch:value?.icon_write_epoch,cached:value?.icon_cached}
+  ;(report.cases.at(-1).categoryMutationResponses??=[]).push(proof)
+  assert(envelope.code===0&&ownedCategories.includes(value?.id)&&Object.hasOwn(value,'icon_revision')&&Number.isSafeInteger(value.icon_write_epoch)&&value.icon_write_epoch>=0&&[0,1].includes(value.icon_cached),'Category save response omitted the committed icon identity')
 }
 async function readOwnedCategory(id) {
   const data=await api('/admin/data',undefined,'GET'),row=data.categories.find(item=>item.id===id)

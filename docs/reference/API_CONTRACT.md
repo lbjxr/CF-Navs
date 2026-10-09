@@ -102,6 +102,8 @@
 
 `Category`、公开分类和 `CategoryUpsertReq` 均包含 `parent_id: number | null`。`null` 表示一级分类，非空值必须指向现有一级分类；服务端拒绝自身父级、三级结构，以及把仍有子分类的一级分类移动到其他父级。旧客户端更新请求缺少 `parent_id` 时保留当前父级，新建请求缺少该字段时创建为一级分类。
 
+分类创建与更新响应同时返回本次写入后的 `icon_revision`、`icon_write_epoch` 和 `icon_cached`，由同一条 SQL 的 `RETURNING` 取得，不新增回读查询，也不重复返回 `icon_blob` 正文。前端应用本地分类更新时必须保留这些图标身份字段和 `is_private`；不能用缺少元数据的投影覆盖实体、暂时回退为未知版本/代次 0，再依赖后台刷新修补。首页投影仅移除 `created_at`，字段边界与 `PublicCategory` 类型一致。
+
 `CategorySortReq` 为 `{ parent_id: number | null, ids: number[] }`。`ids` 必须与该父级作用域下的完整兄弟集合完全一致，服务端拒绝重复、缺失、跨父级或额外 ID。分类存在子分类时，单个删除和包含该分类的批量删除均返回冲突错误且不写入任何删除；无子分类时仅删除该分类及其直属书签。
 
 ## 书签接口
