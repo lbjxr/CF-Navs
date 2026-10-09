@@ -7,14 +7,14 @@
 后续开发不要把所有文档当作同一种“任务清单”。按以下顺序读取和使用：
 
 1. **先看工程规则**：仓库内 [`CONTRIBUTING.md`](../CONTRIBUTING.md) 规定分支模型、提交粒度、验证分级、发版流程和敏感信息边界；安全问题看 [`SECURITY.md`](../SECURITY.md)。本机专属配置（SSH 别名、本地验证目标、浏览器路径等）留在工作区的 agent 指令文件里，不复制进 `docs/`。
-2. **再看当前要做什么**：内部工作项看 [`BACKLOG.md`](BACKLOG.md)，它是本地待办的**唯一状态源**；用户可见的缺陷与功能需求看 GitHub Issue 的开闭状态。`plans/` 下的文档**不维护状态**。
+2. **再看当前要做什么**：内部工作项看 [`BACKLOG.md`](BACKLOG.md)，它是本地待办的**唯一状态源**；云端已有编号的缺陷与功能需求看 GitHub Issue 的开闭状态。本地发起的功能需求仍记在 BACKLOG，不因用户可见而新开 Issue。`plans/` 下的文档**不维护状态**。
 3. **再看当前事实**：以当前 `develop` 分支源码、`package.json`、测试和运行验证为最终事实来源。文档与源码冲突时，先按源码修正文档，再继续开发。
 4. **需要背景时看决策记录**：`plans/` 说明当初为什么这么改、哪些约束必须继续遵守。
    - 缺陷 / 验收欠账 / 文档与源码不一致 / 风险的核对证据：`plans/PROBLEM_HANDLING_TASK_LIST.md`（`PROB-NN`）。
    - 尚未实现的功能需求及其来源：`plans/REQUIREMENT_DEVELOPMENT_TASK_LIST.md`（`REQ-NN`）。
    - 设置页 / 顶部导航 / 部分导出：`plans/DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md`，需求边界看 `SETTINGS_UI_UX_ADJUSTMENT_REQUIREMENTS.md` 与 `PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md`。
    - R-01～R-08 历史 Issue 需求：`plans/DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md`；发布追溯看 `reference/GITHUB_ISSUES_REQUIREMENTS.md`。新一轮开放 Issue / PR 的分析入口见下方「GitHub 任务分析快照」。
-   - 前端体验优化：`plans/FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md` 是需求评估，状态“尚未实现”，不能当作已批准的实现清单。
+   - 前端体验优化：`plans/FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md` 是历史需求评估，其中部分条款已有后续实现或裁定；当前剩余范围以 BACKLOG 为准，不能整份当作未实现或已批准的清单。
 5. **涉及公共契约时同步查参考文档**：API 看 `reference/API_CONTRACT.md`，性能看 `reference/PERFORMANCE_CONTRACT.md`，架构和当前功能看 `reference/PROJECT_OVERVIEW.md`，实现细节看 `reference/TECHNICAL_NOTES.md`。
 6. **开发完成后写发布记录**：`CHANGELOG.md` 按版本分节，只记录已交付的变更；未发版的内容放在 `[Unreleased]`。
 

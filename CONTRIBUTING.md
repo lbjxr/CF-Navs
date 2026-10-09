@@ -10,7 +10,7 @@
 | `main` | 已审阅归档快照 | **只接受来自 `develop` 的合并**，禁止直接提交、禁止在 main 上改文件；**只在维护者明确要求时才合并**，不作为部署来源 |
 
 - 开始任何改动前确认当前分支是 `develop`。
-- 部署来自 `develop`，因此 `main` 不代表线上代码；「线上是哪个版本」看 `develop` 上最新的版本 tag，不看 `main`。
+- 部署来自 `develop`，因此 `main` 不代表线上代码；线上状态以实际部署的构建、对应提交及行为验证为准，版本 tag 只标识正式发行版本。
 - 合并 `develop` → `main` 是一个独立的归档动作，需要维护者主动要求；不要为了发版而自动合并。
 - 因为 `main` 是默认分支而部署走 `develop`，**推送到 `develop` 的关闭关键字不会关闭 Issue**。Issue 需要在部署验证通过后手动关闭，并在评论里引用对应的版本 tag。
 - `main` 上出现过只存在于 main 的内容（如 Issue 模板），这类单向缺失会让 `develop` 不再是 `main` 的超集，后续合并必然冲突。**发现 main 独有内容时，先回流到 `develop`，再继续开发。**
@@ -105,12 +105,12 @@
 3. 同步 `package.json` 的 `version`。
 4. 提交 `chore(release): v0.x.y`。
 5. 在 `develop` 的该提交上打 tag：`git tag -a v0.x.y -m "v0.x.y"`，推送分支与 tag。
-6. 部署（`npm run deploy`），随后验证**生产自定义域**而不只是默认域名。
+6. 等待本仓库 `develop` 推送触发的 Cloudflare 自动构建和部署，核对目标构建后验证**生产自定义域**而不只是默认域名；不要再执行一次手动部署。未接入自动部署的独立实例才按部署指南使用 `npm run deploy`，并单独取得该操作授权。
 7. 执行该版本的 L3 清单，结果回写到 `CHANGELOG.md` 对应版本段或 `docs/BACKLOG.md`。
 8. L3 通过后，手动关闭该版本闭环的 Issue，并在评论里写明版本 tag。关闭前先 `gh auth status` 确认活动账号；**写 Issue 需要单独授权**。**这一步只针对云端已有编号的条目**；本地发起的条目没有 Issue，它们的闭环凭据是 `CHANGELOG.md` 对应版本段加该版本的 tag。
 9. （可选，需维护者主动要求）把该版本合并到 `main` 归档：`git checkout main && git merge --no-ff v0.x.y -m "merge: archive v0.x.y into main"`。
 
-这样「线上是哪个版本」= `develop` 上最新的版本 tag；「某个修复上线了吗」= `git tag --contains <sha>`。每一步都需要单独授权：打 tag、推送、部署、关闭 Issue、合并 `main` 都不由一次「发版」指令一并授权。
+版本 tag 与 `git tag --contains <sha>` 只能证明发行版本包含某提交，不能证明部署成功；修复是否上线仍须核对实际目标构建和可观察行为。打 tag、推送、手动部署、关闭 Issue、合并 `main` 分别按授权范围执行，不因一次「发版」指令自动扩大范围；本仓库推送到 `develop` 会触发自动部署，应在推送前明确这一效果。
 
 ## 7. 提交前的安全边界
 

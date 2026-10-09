@@ -534,13 +534,13 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 
 ## 7. 处理这些问题时必须继续遵守的硬约束
 
-来自既有计划与需求文档，改动时不得推翻。
+以下保留仍有效的设计边界；工程环境与验证方式以 [CONTRIBUTING.md](../../CONTRIBUTING.md) 和当前配置为准。旧核对记录中的框架版本、测试数量及缺少组件环境的描述不再构成实施约束。
 
 ### 7.1 技术栈与设计令牌
 
 | 编号 | 约束 | 依据 |
 | --- | --- | --- |
-| `C-1` | Svelte **4.2.19**，无 runes；只能用 `export let` / `$:` / `class:` / `use:` / `bind:` | `package.json:40` |
+| `C-1` | 按当前 `package.json` 使用 Svelte；PROB-34 已迁移到 Svelte 5，保留受支持的 legacy 语法，不为本任务做无关 runes 重写 | 本文 PROB-34；`package.json` |
 | `C-2` | 无 Tailwind / PostCSS 工具类管道，一律 scoped `<style>` + CSS 自定义属性 | `package.json` 无相关依赖 |
 | `C-3` | 引入 token 本身不得产生视觉变化；新 token 取现有最高频取值 | `src/app.css:5-9` |
 | `C-4` | 不得绕过设置契约；卡片几何、分类字号图标、搜索框显隐是用户可配项，只能改默认值与归一化 | `shared/types.ts:103-113,147-149,279-280` |
@@ -567,7 +567,7 @@ PROB-29、PROB-30 是 2026-09-03 轮实现 PROB-01 与 REQ-08 时新发现并登
 ### 7.4 验证与工程纪律
 
 - 常规本地检查：`npm run type-check`、`npm test`、`npm run build`、`git diff --check`。
-- API 端到端：`npm run smoke`（75 项，脚本自管隔离实例与临时 D1；CI 已覆盖）。真实浏览器回归：`node scripts/chrome-regression.mjs`（25 项）。性能：`npm run perf:audit`。
+- API 端到端：`npm run smoke`（脚本自管隔离实例与临时 D1；CI 已覆盖）。真实浏览器回归：`npm run regression:chrome`。性能：`npm run perf:audit`。具体用例数与通过范围以本轮报告为准，不沿用历史数量。
 - 浏览器验证默认用专用临时 Chrome profile；只开专用 target，结束只关该 target 并清理该 profile；**禁止**按进程名清理，也不得关闭用户自有 Chrome。
 - 云端 Issue 状态只能由 GitHub 实时查询确认，不得由本地源码或提交推断（`docs/README.md:31`）。
 - 本清单的任何 GitHub 写操作（回帖、关闭、Project 卡片）与部署操作都需单独授权。

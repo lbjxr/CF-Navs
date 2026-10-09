@@ -5,7 +5,7 @@
 > **当前待办与状态一律看 [本地待办清单](../BACKLOG.md)**；工程规则看 [CONTRIBUTING.md](../../CONTRIBUTING.md)。本文不再维护进度表或完成名单。
 >
 > - 核对日期：2026-09-03；核对基线：`develop` 分支当时的工作树。所有「未实现」结论都是 grep + 逐符号静态核对得出，该轮未运行任何构建、测试或浏览器套件。
-> - **重要前置**：`REQ-01`~`REQ-11` 全部源自 `plans/FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md`，该文档状态是「需求评估，尚未实现」，**不能直接当作已批准的实现清单**，逐项都需要明确批准才可开工。
+> - **历史来源**：`REQ-01`~`REQ-11` 源自前端体验需求评估，不能据此获得实施授权。后续已交付和已裁定条目不因本记录保留旧结论而重新成为待办；当前剩余需求与批准状态以 BACKLOG 为准。
 > - 本文里形如 `file.ts:123` 的行号引用来自当时的工作树，**可能已经腐烂**；以符号名和上下文为准。
 > - 配套文档：缺陷、验收欠账与风险见 [问题处理任务清单](PROBLEM_HANDLING_TASK_LIST.md)。
 
@@ -86,12 +86,14 @@
 
 #### REQ-01（P1）离屏搜索按钮 + 居中 Spotlight 命令面板
 
+> 以下“现状事实”和子项描述的是早期核对基线。后续 Spotlight 已交付，见 `CHANGELOG.md` v0.6.0；最终设计取舍见 [开发记录](SPOTLIGHT_SEARCH_DEVELOPMENT.md) 的 D-a～D-g。不得按本节旧结论重新实现或恢复已被替代的前置。
+
 | 项 | 内容 |
 | --- | --- |
 | 来源映射 | `FR-1.1`~`FR-1.6`；`docs/plans/FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md` §2.2（约 `:118-214`）；**需求文档：`docs/plans/SPOTLIGHT_SEARCH_REQUIREMENTS.md`（2026-09-19，含验收清单与风险）**；**开发文档：`docs/plans/SPOTLIGHT_SEARCH_DEVELOPMENT.md`（2026-09-19，实现契约/改动清单/阶段门/测试计划）** |
 | 现状事实 | **全部未实现**。`SearchBox.svelte` 是外部搜索引擎启动器而非书签过滤器（`src/components/SearchBox.svelte:61-71` 走 `window.open`）；本地过滤在 `Home.svelte`，经 `bind:query` 上传（`HomeHeroSearch.svelte:29` → `Home.svelte:429`）；唯一 `IntersectionObserver` 是图标懒加载单例（`src/lib/iconVisibility.ts:4-27`），可作写法先例 |
 | 子项 | `FR-1.1` 主搜索框离屏检测 action（目标 `src/lib/searchBoxVisibility.ts`，当前无该文件）<br>`FR-1.2` 离屏时右上角出现搜索按钮（接入 `src/components/HomeFloatingActions.svelte:67-124`，当前该行仅主题/后台/分类/登录登出）<br>`FR-1.3` 懒加载居中 Spotlight dialog（复用 `src/App.svelte:130-151` + `src/lib/appLazyComponent.ts:11-33` 的既有懒加载约定）<br>`FR-1.4` 唤起/关闭、快捷键、焦点陷阱、滚动锁与 Esc 层级（滚动锁当前内联在 `BookmarkEditModal.svelte:257-274,327-330`，需先抽出可共享实现）<br>`FR-1.5` 复用既有搜索索引，结果上限 50 条 + 键盘导航（索引在 `src/lib/homeData.ts:35-66,288-301`）<br>`FR-1.6` Spotlight 与页面过滤态相互独立（当前清空逻辑耦合于 `Home.svelte:251-258,329`） |
-| 强制前置 | 120ms 防抖常量当前是 `Home.svelte:38` 的私有值。**必须先抽成共享常量再接 Spotlight，禁止复制第二个数值** |
+| 早期前置（已被替代） | 原拟先抽共享 120ms 防抖常量；后续 D-a 裁定 Spotlight 即时过滤、不防抖，首页 120ms 保留本地，不再执行该抽取。保留此行仅用于追溯方案变化 |
 | 冲突协调 | `FR-1.2` 改 `HomeFloatingActions.svelte`，与 `PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md`（需求 C，顶部导航按钮对齐，实现在 `HomeFloatingActions.svelte:143-156`）改同一文件，**必须串行**，不可并行改 |
 | 约束 | `C-8` 遮罩层 z-index 落进首页阶梯且不盖 Toast(9999)/Tooltip(1000)；`C-9` 不新增未合并的 `window` 滚动监听；`C-10`/`C-11` token 与 transition 约束 |
 | 验证 | 匹配/排序/上限逻辑抽纯函数进 `tests/unit/`；焦点陷阱、快捷键、滚动锁、IME 输入只能靠隔离 Chrome 人工闸门（`C-12`：仓库 0 个 e2e） |
@@ -320,16 +322,16 @@
 
 完整清单见 [问题处理任务清单 §7](PROBLEM_HANDLING_TASK_LIST.md#7-处理这些问题时必须继续遵守的硬约束)。本清单的所有条目额外受以下约束：
 
-- `C-1` Svelte 4.2.19 无 runes；`C-2` 无 Tailwind 管道，一律 scoped `<style>` + CSS 自定义属性。
+- `C-1` 框架与工具版本按当前配置及 PROB-34 迁移记录，保留受支持的 legacy 组件语法；`C-2` 无 Tailwind 管道，一律 scoped `<style>` + CSS 自定义属性。
 - `C-4` 不得绕过设置契约：卡片几何、分类字号图标尺寸、搜索框显隐都是用户可配项，只能改**默认值与归一化逻辑**（`shared/types.ts:103-113,147-149,279-280`）。
-- `C-6`/`C-12` 仓库无组件挂载环境、0 个 e2e、100 个单测文件。**要测行为必须先把逻辑抽成纯函数**，否则不算可验证；真实交互单独登记为人工浏览器闸门。
+- `C-6`/`C-12` 旧核对时缺少组件环境的前提已由 PROB-18 消除。纯逻辑独立单测，DOM 行为使用 Testing Library + jsdom；布局、真实输入和浏览器生命周期由真实浏览器验证。以 [CONTRIBUTING.md](../../CONTRIBUTING.md) 的验证分级为准，不用源码文本存在代替行为验证。
 - `C-7` 所有编辑入口继续由 `isAuthenticated` 门禁，不得因「自用定位」放宽。
 
 ---
 
 ## 8. 未验证事项
 
-- 本轮未运行任何构建、测试、性能或浏览器套件。`REQ-01`~`REQ-11` 的「未实现」结论来自 grep 与逐符号静态核对；`FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md` §8 的新增文件清单是规划，已确认这些目标文件当前都不存在。
+- 2026-09-03 核对轮未运行构建、测试、性能或浏览器套件。当时的「未实现」与目标文件不存在结论只描述该基线；后续实现和验证不由本段维护，不能据此判断当前文件是否存在。
 - 未验证的对比度与预算：`REQ-08` 各 glass 预设 light/dark 对比度、`REQ-11` 字母头像 WCAG AA、`REQ-10` 改动后的实际图标请求数。
 - 未验证的真实交互：焦点陷阱、快捷键、IME、剪贴板权限与 Transient Activation、hover 与 `prefers-reduced-motion`、安全区与虚拟键盘。
 - `REQ-10` 的 `CachedBookmarkIcon` 是否属于「书签网络图标路径」是产品边界问题，源码无法判定。

@@ -125,11 +125,11 @@ npm run perf:audit
 
 PROB-14 还要求至少有一个带书签的二级分类，并有不属于该子分类的书签用于验证排除边界。找不到该样本时，`partial-export-real-download` 记为 `skip`，该项仍未验收；不要因脚本退出码为 0 而关闭验证欠账。追加/覆盖回导仍只在隔离本地实例中，通过实际文件导入流程验证。
 
-## 5. Tier 0 覆盖不到的，仍然要人工
+## 5. Tier 0 之外的验证边界
 
-这些不是「懒得自动化」，是自动化拿不到有效证据：
+下表说明通用 Tier 0 脚本未覆盖的范围，不是当前待办清单，也不表示这些项目全部无法自动化。真实设备限制、需要写入授权的专项和历史已完成验收须区分；当前欠账看 [BACKLOG.md](../BACKLOG.md)，已交付证据看变更记录。
 
-| 条目 | 为什么必须人工 |
+| 条目 | 环境或副作用边界 |
 | --- | --- |
 | PROB-13 `U1–U4` 的 iOS 输入放大 | iOS Safari 在计算后字号 < 16px 时自动放大页面。这是 iOS Safari 独有行为，桌面 Chrome 的移动仿真不复现 —— 必须真实 iPhone |
 | PROB-13 `L4` 的「已检测到新版本」提示 | 需要连续两次真实部署，第二次部署后旧页面才会收到 SW 更新事件 |
@@ -140,7 +140,7 @@ PROB-14 还要求至少有一个带书签的二级分类，并有不属于该子
 | PROB-19v 的 KV 写入故障注入 | 要让 KV 真的写失败才能走到 `store_unavailable` 分支，生产上没有安全的注入手段 |
 | REQ-08b 13 套预设视觉 | 要逐套写入 `background_preset_id`，属 Tier 1；且「好不好看」需要人眼 |
 | PROB-16 的数值断点 | `820px` 分行 2 行/98px、浮动按钮 `top=18` 这类一次性数值证据，已在台账里明确标为不构成持续回归 |
-| REQ-15 可信图标的部署与升级验收 | 当前 `accept:prod` / `perf:audit` 不会启用设备信任或取得可信副本；同 profile 离线、租期/权限撤回与两次部署兼容仍须在获授权的真实目标上单独验证。`test:icon-storage` 和 `regression:icons:local` 只证明隔离本地环境 |
+| REQ-15 可信图标的部署与升级验收 | `accept:prod` / `perf:audit` 不会启用设备信任或取得可信副本。授权测试站的真实 UI 专项见 [Issue 浏览器回归](ISSUE_BROWSER_REGRESSION.md)；同 profile 重开等已有证据不再视为未验收，剩余租期/权限组合及跨构建范围看 BACKLOG。`test:icon-storage` 和 `regression:icons:local` 只证明隔离本地环境 |
 
 ## 6. 安全边界
 
