@@ -19,6 +19,7 @@ import { requireAdminCredentials, redactCredentials } from './lib/verifyCredenti
 import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
 import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.mjs'
 import { verifiedInjectedCopyResets, unexecutedRequestedCases } from './lib/issueBrowserEvidence.mjs'
+import { pageInstallIconInterruption } from './lib/iconInterruptionProbe.mjs'
 import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from './lib/issueBrowserEvidence.mjs'
 if (process.env.ISSUE_BROWSER_WRITE_FIXTURES !== '1') throw new Error('Explicit ISSUE_BROWSER_WRITE_FIXTURES=1 required for temporary test-site records')
 const base = resolveBaseUrl(), credentials = requireAdminCredentials()
@@ -35,6 +36,9 @@ optionalCases.add('29-FROZEN-TAB-LOGOUT')
 optionalCases.add('28-PRIVATE-COPY-TIMEOUT')
 optionalCases.add('28-PRIVATE-COPY-TIMEOUT-SLOW-PROXY')
 optionalCases.add('28-COPY-CONNECTION-RESET')
+for(const id of ['29-DECODE-LOGOUT','29-DECODE-RELOGIN','29-DECODE-FROZEN-LOGOUT','28-IDB-TRANSACTION-ABORT'])optionalCases.add(id)
+optionalCases.add('29-OLD-401-DURING-INITIALIZATION')
+optionalCases.add('29-PENDING-WRITE-LOGOUT')
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
 const sessionCaptureErrors = []
@@ -214,11 +218,12 @@ async function home({ waitForImages = true, anonymous = false } = {}) {
   await b.waitForNetworkIdle(900, 15000)
 }
 async function verifyImages(items = manifest()) {
-  for (let attempt = 0; attempt < 60; attempt++) {
+  const deadline=Date.now()+15000
+  while(true) {
     const observed = await b.call(collectIconFixtures, items)
     const result = evaluateIconFixtures(items, observed)
     if (result.passed) return result
-    if (attempt === 59) { report.cases.at(-1).imageEvidence={result,observed}; throw new Error('Fixture images: ' + result.errors.join(',')) }
+    if (Date.now()>=deadline) { report.cases.at(-1).imageEvidence={result,observed}; throw new Error('Fixture images: ' + result.errors.join(',')) }
     await sleep(250)
   }
 }
@@ -405,6 +410,28 @@ async function sessionCall(sessionId,fn,...args) {
   if(response.exceptionDetails) throw new Error('Secondary page evaluation failed')
   return response.result?.value
 }
+async function clickInSession(sessionId,selector) {
+  let point=null
+  for(let i=0;i<100&&!point;i++) {
+    point=await sessionCall(sessionId,sel=>{const e=document.querySelector(sel);if(!e||e.disabled)return null;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2,hit=document.elementFromPoint(x,y);return r.width&&r.height&&(hit===e||e.contains(hit))?{x,y}:null},selector)
+    if(!point)await sleep(100)
+  }
+  assert(point,'Second-tab control is not clickable: '+selector)
+  await sessionSend(sessionId,'Input.dispatchMouseEvent',{type:'mouseMoved',button:'none',...point})
+  await sessionSend(sessionId,'Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...point})
+  await sessionSend(sessionId,'Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...point})
+}
+async function confirmSecondaryLogout(sessionId,requestStart,evidence) {
+  await localWait(()=>report.requests.slice(requestStart).some(row=>row.path==='/api/logout'&&row.method==='POST'&&Number.isFinite(row.finishedTime)),'Secondary logout response completion')
+  const rows=report.requests.slice(requestStart).filter(row=>row.path==='/api/logout'&&row.method==='POST')
+  assert(rows.length===1&&rows[0].status===200,'Secondary logout request ownership is ambiguous')
+  const row=rows[0],response=await sessionSend(sessionId,'Network.getResponseBody',{requestId:row.requestId})
+  const body=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body)
+  assert(body.code===0&&body.data?.revoked===true,'Secondary logout did not confirm server revocation')
+  row.logoutRevoked=true
+  row.clientClearedAt=await sessionCall(sessionId,()=>(performance.timeOrigin+performance.now())/1000)
+  evidence.logout={requestId:row.requestId,serverRevoked:true,clientClearedAt:row.clientClearedAt,source:'secondary-session'}
+}
 async function installPageInstrumentation() {
   await b.send('Page.addScriptToEvaluateOnNewDocument', {source:`(${pageInstallImageLifecycleProbe.toString()})()`})
   await b.send('Runtime.addBinding',{name:'__issueCopyObserved'})
@@ -514,7 +541,7 @@ try {
       const read=b.send('Network.getResponseBody',{requestId}).then(response=>{
         const body=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body)
         row.logoutRevoked=body.code===0 && body.data?.revoked===true
-      }).catch(()=>{row.logoutRevoked=false})
+      }).catch(()=>{if(row.logoutRevoked!==true)row.logoutRevoked=false})
       responseReads.add(read);void read.finally(()=>responseReads.delete(read))
       return
     }
@@ -1163,6 +1190,155 @@ try {
       assert(!evidence.restoration.errors.length, 'Timeout probe restoration failed: '+JSON.stringify(evidence.restoration))
     }
   })
+  for(const variant of ['logout','relogin','frozen-logout','abort-write'])await scenario(variant==='abort-write'?'28-IDB-TRANSACTION-ABORT':'29-DECODE-'+variant.toUpperCase(),async()=>{
+    const target=manifest().find(row=>row.key==='bookmark:'+bookmarks[2].id)
+    const original=fixtures[bookmarks[2].imageKey].base64Uri
+    const body=Buffer.from(original.split(',')[1],'base64').toString().replace('</svg>',`<!-- interruption-fixture-${run}-${variant} --></svg>`)
+    const evidence=report.cases.at(-1).interruption={variant,object:target.key}
+    let scriptId=null,frozen=false,secondarySession=null
+    try {
+      await setFixtureIcon(2,'data:image/svg+xml;base64,'+Buffer.from(body).toString('base64'))
+      await clearCopies()
+      evidence.cold=await readFixtureCopy(target.key)
+      assert(evidence.cold.available&&!evidence.cold.entryPresent&&!evidence.cold.bodyPresent,'Interruption requires cold fixture storage')
+      scriptId=(await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(${pageInstallIconInterruption.toString()})(${JSON.stringify({mode:variant==='abort-write'?'abort-write':'decode',key:target.key,body})})`})).identifier
+      await home({waitForImages:false})
+      await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier:scriptId});scriptId=null
+      await wait(abort=>abort?window.__iconInterruption?.state.aborted:window.__iconInterruption?.state.held,[variant==='abort-write'],30000)
+      const expectedRevision='sha256-'+createHash('sha256').update('cf-navs-icon-v1\nimage/svg+xml\n').update(body).digest('hex')
+      await localWait(()=>report.requests.some(row=>row.stage===stage&&row.kind==='icon-copy'&&row.object===target.key&&row.status===200&&row.copyResult?.descriptor?.content_revision===expectedRevision),'Real fixture copy before native interruption',10000)
+      evidence.copyRequestId=report.requests.findLast(row=>row.stage===stage&&row.kind==='icon-copy'&&row.object===target.key&&row.copyResult?.descriptor?.content_revision===expectedRevision)?.requestId
+      evidence.native=await b.call(()=>({...window.__iconInterruption.state}))
+      if(variant==='abort-write') {
+        assert(evidence.native.bodyWritten&&evidence.native.aborted&&!evidence.native.committed,'Native transaction interruption was not exercised')
+        evidence.rollback=await readFixtureCopy(target.key)
+        assert(evidence.rollback.available&&!evidence.rollback.entryPresent&&!evidence.rollback.bodyPresent,'Aborted transaction retained partial body/index')
+        await verifyImages()
+      } else {
+        assert(evidence.native.holds===1&&evidence.native.nativeWidth>0&&evidence.native.nativeHeight>0,'Held continuation did not follow one actual native decoding')
+        if(variant==='frozen-logout') {
+          secondary=(await b.send('Target.createTarget',{url:'about:blank'})).targetId
+          secondarySession=(await b.send('Target.attachToTarget',{targetId:secondary,flatten:true})).sessionId
+          for(const method of ['Page.enable','Runtime.enable','Network.enable','Log.enable'])await sessionSend(secondarySession,method)
+          await sessionSend(secondarySession,'Page.navigate',{url:base})
+          let ready=false
+          for(let i=0;i<100;i++){ready=await sessionCall(secondarySession,id=>Boolean(document.querySelector(`[data-sort-id="${id}"]`)),bookmarks[2].id);if(ready)break;await sleep(150)}
+          assert(ready,'Second tab lacks the private object before logout')
+          await b.send('Target.activateTarget',{targetId:secondary})
+          await b.send('Page.setWebLifecycleState',{state:'frozen'});frozen=true
+          const visible=await sessionCall(secondarySession,()=>{const r=document.querySelector('[data-testid="home-logout-button"]')?.getBoundingClientRect();return r?.width>0&&r?.height>0})
+          if(!visible)await clickInSession(secondarySession,'[data-testid="home-actions-menu-trigger"]')
+          const logoutStart=report.requests.length
+          await clickInSession(secondarySession,'[data-testid="home-logout-button"]')
+          let loggedOut=false
+          for(let i=0;i<100;i++){loggedOut=await sessionCall(secondarySession,()=>!localStorage.getItem('cf-navs.auth'));if(loggedOut)break;await sleep(100)}
+          assert(loggedOut,'Second-tab UI logout did not clear authentication')
+          await confirmSecondaryLogout(secondarySession,logoutStart,evidence)
+          await b.send('Page.setWebLifecycleState',{state:'active'});frozen=false
+          await b.send('Target.activateTarget',{targetId:b.targetId})
+          assert(await b.call(()=>window.__iconInterruption.state.freezes>0),'Native freeze event missing')
+        } else await homeAction('logout')
+        await wait(id=>!localStorage.getItem('cf-navs.auth')&&!document.querySelector(`[data-sort-id="${id}"]`),[bookmarks[2].id])
+        const clientClearedAt=await b.call(()=>(performance.timeOrigin+performance.now())/1000)
+        for(const row of report.requests)if(row.stage===stage&&row.path==='/api/logout')row.clientClearedAt=clientClearedAt
+        if(variant==='relogin') {
+          await signInPlace()
+          // Authentication changes the page height and scroll anchor. Exercise
+          // visibility normally instead of demanding lazy offscreen images load.
+          await wait(id=>Boolean(document.querySelector(`[data-sort-id="${id}"]`)),[bookmarks[2].id])
+          await click(scope()+' .scope-root-trigger')
+          for(const item of manifest())await wait(sel=>{const e=document.querySelector(sel),img=e?.querySelector('img');if(e&&(!img?.complete||!img.naturalWidth))e.scrollIntoView({block:'center',behavior:'instant'});return img?.complete&&img.naturalWidth>0},[item.selector],30000)
+          await verifyImages()
+          evidence.newSessionReady=await b.call(expected=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token===expected,token)
+          assert(evidence.newSessionReady,'New UI login not established before old completion')
+          await b.call(()=>window.__iconInterruption.requireNewSession())
+        }
+        await b.call(()=>window.__iconInterruption.release())
+        await wait(()=>window.__iconInterruption.state.finished)
+        await sleep(250)
+        if(variant==='relogin') {
+          assert(await b.call(expected=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token===expected,token),'Old decode completion cleared new session')
+          await verifyImages()
+        } else {
+          assert(await b.call(id=>!localStorage.getItem('cf-navs.auth')&&!document.querySelector(`[data-sort-id="${id}"]`),bookmarks[2].id),'Late decoded data restored private UI')
+          evidence.afterLogout=await readFixtureCopy(target.key)
+          assert(evidence.afterLogout.available&&!evidence.afterLogout.entryPresent&&!evidence.afterLogout.bodyPresent,'Late decode restored a private persistent copy')
+        }
+      }
+      evidence.restored=await b.call(()=>window.__iconInterruption.restore())
+      assert(evidence.restored.restored,'Native methods were not restored')
+      assert(evidence.restored.frames>0&&evidence.restored.privateFrames===0&&evidence.restored.lostNewSessionFrames===0,'Private UI or new authentication regressed during native interruption')
+      if(!await b.call(()=>Boolean(localStorage.getItem('cf-navs.auth'))))await signInPlace()
+      await home();await verifyImages()
+      evidence.recovered=await readFixtureCopy(target.key)
+      assert(evidence.recovered.entryPresent&&evidence.recovered.bodyPresent&&evidence.recovered.bodyRevision===evidence.recovered.descriptor?.content_revision,'Actual UI recovery did not rebuild a valid private copy')
+      await shot(stage.toLowerCase()+'-recovered')
+      return {variant,nativeBoundary:true,privateIsolation:true,transactionAborted:variant==='abort-write',frozen:variant==='frozen-logout',newSessionRecovery:true}
+    } finally {
+      if(frozen)await b.send('Page.setWebLifecycleState',{state:'active'})
+      if(scriptId)await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier:scriptId})
+      await b.call(()=>window.__iconInterruption?.restore())
+      if(secondary){await b.send('Target.closeTarget',{targetId:secondary});secondary=null;await b.send('Target.activateTarget',{targetId:b.targetId})}
+    }
+  })
+  await scenario('29-PENDING-WRITE-LOGOUT',async()=>{
+    const target=manifest().find(row=>row.key==='bookmark:'+bookmarks[2].id)
+    const body=Buffer.from(fixtures[bookmarks[2].imageKey].base64Uri.split(',')[1],'base64').toString().replace('</svg>',`<!-- interruption-fixture-${run}-pending-write --></svg>`)
+    const evidence=report.cases.at(-1).pendingWrite={object:target.key}
+    let paused=null,armed=false,secondarySession=null,secondaryFrozen=false
+    b.on('Debugger.paused',event=>{if(armed&&event.callFrames?.some(frame=>frame.functionName==='put'))paused=event})
+    try {
+      await setFixtureIcon(2,'data:image/svg+xml;base64,'+Buffer.from(body).toString('base64'))
+      await home();await verifyImages()
+      secondary=(await b.send('Target.createTarget',{url:'about:blank'})).targetId
+      secondarySession=(await b.send('Target.attachToTarget',{targetId:secondary,flatten:true})).sessionId
+      for(const method of ['Page.enable','Runtime.enable','Network.enable','Log.enable'])await sessionSend(secondarySession,method)
+      await sessionSend(secondarySession,'Page.navigate',{url:base})
+      let ready=false
+      for(let i=0;i<100;i++){ready=await sessionCall(secondarySession,id=>Boolean(document.querySelector(`[data-sort-id="${id}"]`)),bookmarks[2].id);if(ready)break;await sleep(150)}
+      assert(ready,'Second tab lacks private fixture before pending-write logout')
+      await sessionSend(secondarySession,'Page.setWebLifecycleState',{state:'frozen'});secondaryFrozen=true
+      await b.send('Target.activateTarget',{targetId:b.targetId});await clearCopies()
+      await b.call(pageInstallIconInterruption,{mode:'pause-write',key:target.key,body})
+      await b.send('Debugger.enable');armed=true
+      await click('[aria-label="返回首页"]')
+      await b.send('Input.dispatchMouseEvent',{type:'mouseWheel',x:650,y:500,deltaX:0,deltaY:100000})
+      await localWait(()=>paused,'Native pending body write breakpoint',20000)
+      const frame=paused.callFrames.find(frame=>frame.functionName==='put')
+      const native=await b.send('Debugger.evaluateOnCallFrame',{callFrameId:frame.callFrameId,expression:'({mode:state.mode,key:args[1],db:this.transaction.db.name,store:this.name,bodyRequested:state.bodyRequested,requestState:request.readyState})',returnByValue:true})
+      evidence.native=native.result?.value
+      assert(evidence.native?.mode==='pause-write'&&evidence.native.key===target.key&&evidence.native.db==='cf-navs-object-icons-v1'&&evidence.native.store==='bodies'&&evidence.native.bodyRequested&&evidence.native.requestState==='pending','Breakpoint is not the actual pending fixture body write')
+      await sessionSend(secondarySession,'Page.setWebLifecycleState',{state:'active'});secondaryFrozen=false
+      await b.send('Target.activateTarget',{targetId:secondary})
+      const visible=await sessionCall(secondarySession,()=>{const r=document.querySelector('[data-testid="home-logout-button"]')?.getBoundingClientRect();return r?.width>0&&r?.height>0})
+      if(!visible)await clickInSession(secondarySession,'[data-testid="home-actions-menu-trigger"]')
+      const logoutStart=report.requests.length
+      await clickInSession(secondarySession,'[data-testid="home-logout-button"]')
+      let removed=false
+      for(let i=0;i<100;i++){removed=await sessionCall(secondarySession,id=>!localStorage.getItem('cf-navs.auth')&&!document.querySelector(`[data-sort-id="${id}"]`),bookmarks[2].id);if(removed)break;await sleep(100)}
+      assert(removed,'UI logout waited for another tab\'s pending IDB write')
+      await confirmSecondaryLogout(secondarySession,logoutStart,evidence)
+      evidence.otherTabClearedBeforeResume=true
+      await b.send('Debugger.resume');armed=false
+      await b.send('Target.activateTarget',{targetId:b.targetId})
+      await wait(id=>!localStorage.getItem('cf-navs.auth')&&!document.querySelector(`[data-sort-id="${id}"]`),[bookmarks[2].id])
+      await wait(()=>window.__iconInterruption.state.aborted||window.__iconInterruption.state.committed)
+      evidence.afterLogout=await readFixtureCopy(target.key)
+      assert(evidence.afterLogout.available&&!evidence.afterLogout.entryPresent&&!evidence.afterLogout.bodyPresent,'Pending write survived logout cleanup')
+      evidence.restored=await b.call(()=>window.__iconInterruption.restore())
+      assert(evidence.restored.frames>0&&evidence.restored.privateFrames===0,'Private DOM reappeared while the pending transaction resumed')
+      await login();await home();await verifyImages()
+      const recovered=await readFixtureCopy(target.key)
+      assert(recovered.entryPresent&&recovered.bodyPresent&&recovered.bodyRevision===recovered.descriptor?.content_revision,'New UI session did not recover after a pending write')
+      return {nativePendingWrite:true,otherTabUiLogout:true,lateWriteAbsent:true,newSessionRecovered:true}
+    } finally {
+      if(armed){await b.send('Debugger.resume').catch(()=>{});armed=false}
+      await b.send('Debugger.disable')
+      if(secondaryFrozen)await sessionSend(secondarySession,'Page.setWebLifecycleState',{state:'active'})
+      await b.call(()=>window.__iconInterruption?.restore())
+      if(secondary){await b.send('Target.closeTarget',{targetId:secondary});secondary=null;await b.send('Target.activateTarget',{targetId:b.targetId})}
+    }
+  })
   await scenario('29-OLD-ADMIN-RESPONSE', async () => {
     await home({waitForImages:false}); let held=null, forced=false
     return intercept([{urlPattern:'*/api/data/version*',requestStage:'Response'},{urlPattern:'*/api/admin/data',requestStage:'Response'}],async event=>{
@@ -1251,6 +1427,41 @@ try {
       assert(retained,'Old 401 cleared new session')
       for(const item of manifest())await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center',behavior:'instant'}),item.selector)
       await verifyImages(); return {oldResponseDelivered:true,newSessionRetained:true,imagesReadyBeforeRelease:true}
+    })
+  })
+  await scenario('29-OLD-401-DURING-INITIALIZATION',async()=>{
+    await home();const previousToken=token,documentBefore=await b.call(()=>performance.timeOrigin)
+    let oldResponse=null,newData=null,newLogin=false
+    const evidence=report.cases.at(-1).initialization={}
+    return intercept([{urlPattern:'*/api/data/version*',requestStage:'Response'},{urlPattern:'*/api/admin/data',requestStage:'Response'}],async event=>{
+      const pathname=new URL(event.request.url).pathname
+      if(pathname==='/api/data/version'&&!oldResponse&&!newLogin){oldResponse=event;return true}
+      if(pathname==='/api/admin/data'&&newLogin&&!newData){newData=event;return true}
+      return false
+    },async()=>{
+      await focusCycle();await localWait(()=>oldResponse,'Old authenticated version response')
+      await homeAction('logout');await wait(id=>!localStorage.getItem('cf-navs.auth')&&!document.querySelector(`[data-sort-id="${id}"]`),[bookmarks[2].id])
+      newLogin=true
+      await homeAction('login');await fill('input[autocomplete="username"]',credentials.username);await fill('input[autocomplete="current-password"]',credentials.password)
+      await click('[aria-labelledby="login-modal-title"] form button[type="submit"]')
+      await localWait(()=>newData,'New login aggregate held before image initialization')
+      token=await b.call(()=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token||'')
+      assert(token&&token!==previousToken,'New session must exist while its aggregate is still pending');serverCleanup.rememberSession(token)
+      assert(oldResponse.networkId&&newData.networkId&&newData.responseStatusCode===200,'Initialization response ownership missing')
+      evidence.oldRequestId=oldResponse.networkId;evidence.pendingNewDataId=newData.networkId;evidence.newSessionBeforeData=true
+      injectedRequests.add(oldResponse.networkId)
+      await b.send('Fetch.fulfillRequest',{requestId:oldResponse.requestId,responseCode:401,responseHeaders:[{name:'content-type',value:'application/json'},{name:'cache-control',value:'no-store'}],body:Buffer.from(JSON.stringify({code:1001,msg:'Injected old session failure',data:null})).toString('base64')})
+      await sleep(1000)
+      assert(await b.call(expected=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token===expected,token),'Old error cleared the initializing new session')
+      await b.send('Fetch.continueRequest',{requestId:newData.requestId});evidence.newDataReleased=true
+      await wait(()=>!document.querySelector('input[autocomplete="current-password"]'))
+      await wait(id=>Boolean(document.querySelector(`[data-sort-id="${id}"]`)),[bookmarks[2].id])
+      await click(scope()+' .scope-root-trigger')
+      for(const item of manifest())await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center',behavior:'instant'}),item.selector)
+      await verifyImages()
+      assert(await b.call(()=>performance.timeOrigin)===documentBefore,'Initialization scenario changed document')
+      assert(await b.call(expected=>JSON.parse(localStorage.getItem('cf-navs.auth')||'null')?.token===expected,token),'Image initialization lost the new session')
+      return {oldErrorDuringInitialization:true,newSessionRetained:true,newPrivateImagesCorrect:true,sameDocument:true}
     })
   })
   for(const frozen of [false,true])await scenario(frozen?'29-FROZEN-TAB-LOGOUT':'29-CROSS-TAB-LOGOUT', async () => {
