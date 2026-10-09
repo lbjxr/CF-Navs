@@ -12,7 +12,7 @@ import { pageReadFixtureCopy } from './lib/iconCopyStorageProbe.mjs'
 import { assessBrowserRestartEvidence } from './lib/browserRestartEvidence.mjs'
 import { verifiedEditCopyCancellations } from './lib/editCopyCancellationEvidence.mjs'
 import { pageInstallImageLifecycleProbe } from './lib/imageRequestLifecycleProbe.mjs'
-import { verifiedSignedImageReplacements, verifiedNativeCategoryRetries, verifiedNavigationImageCancellations, verifiedUiImageCancellations } from './lib/imageRequestLifecycleEvidence.mjs'
+import { verifiedSignedImageReplacements, verifiedNativeCategoryRetries, verifiedNavigationImageCancellations, verifiedUiImageCancellations, verifiedLocalImageAdoptions, verifiedLogoutCopyCancellations } from './lib/imageRequestLifecycleEvidence.mjs'
 import { createVerificationCleanup } from './lib/verificationCleanup.mjs'
 import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
@@ -92,13 +92,18 @@ async function collectImageLifecycle(reason) {
     const loaderId = (await b.send('Page.getFrameTree')).frameTree.frame.loaderId
     const rows = report.requests.filter(row => row.documentLoaderId === loaderId && imageRequestUrls.has(row.requestId))
     if (!rows.length) return
-    const captured = await b.call(urls => {
+    const captured = await b.call(async urls => {
       const probe=window.__issueImageLifecycle
       if(!probe)return null
-      return {snapshot:probe.read(),sourceIds:urls.map(url=>probe.sourceId(url)),baseSourceIds:urls.map(url=>{const base=new URL(url);base.searchParams.delete('retry');return probe.sourceId(base.href)})}
+      const snapshot=probe.read(),adoptions=await probe.readAdoptions()
+      return {snapshot:{...snapshot,adoptions},sourceIds:urls.map(url=>probe.sourceId(url)),baseSourceIds:urls.map(url=>{const base=new URL(url);base.searchParams.delete('retry');return probe.sourceId(base.href)})}
     }, rows.map(row=>imageRequestUrls.get(row.requestId)))
     if (!captured) throw new Error('Image lifecycle probe missing in active document')
     rows.forEach((row,index)=>{row.imageLifecycle={timeOrigin:captured.snapshot.timeOrigin,sourceId:captured.sourceIds[index],baseSourceId:captured.baseSourceIds[index]}})
+    for(const adoption of captured.snapshot.adoptions){
+      const persisted=await b.call(pageReadFixtureCopy,adoption.object)
+      adoption.persisted=Boolean(persisted.entryPresent&&persisted.bodyPresent&&persisted.bodyRevision===adoption.revision&&persisted.descriptor?.content_revision===adoption.revision)
+    }
     report.imageLifecycles.push({stage,reason,loaderId,...captured.snapshot})
   } catch (error) { report.imageLifecycleErrors.push({stage,reason,error:safe(error.message)}) }
 }
@@ -297,6 +302,7 @@ async function home({ waitForImages = true, anonymous = false } = {}) {
   if (report.cases.at(-1)) (report.cases.at(-1).imageWaits ??= []).push({ anonymous, elapsedMs: Date.now() - imageWaitStart })
   await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),card(0))
   await b.waitForNetworkIdle(900, 15000)
+  await collectImageLifecycle('home-ready')
 }
 async function verifyImages(items = manifest()) {
   const deadline=Date.now()+15000
@@ -551,8 +557,8 @@ async function installPageInstrumentation(sessionId = null) {
   await send('Page.addScriptToEvaluateOnNewDocument',{source:`(() => {
     const create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL),ids=new Map();let sequence=0;
     const state=window.__issueUrls={active:false,events:[],ids};
-    URL.createObjectURL=function(blob){const url=create(blob);ids.set(url,++sequence);if(state.active&&state.events.length<2000)state.events.push({kind:'create',id:sequence,size:blob.size,mime:blob.type,at:performance.now(),stack:new Error().stack});return url};
-    URL.revokeObjectURL=function(url){if(state.active&&state.events.length<2000)state.events.push({kind:'revoke',id:ids.get(url),at:performance.now(),stack:new Error().stack});ids.delete(url);return revoke(url)};
+    URL.createObjectURL=function(blob){const url=create(blob);ids.set(url,++sequence);window.__issueImageLifecycle?.registerBlob(url,blob);if(state.active&&state.events.length<2000)state.events.push({kind:'create',id:sequence,size:blob.size,mime:blob.type,at:performance.now(),stack:new Error().stack});return url};
+    URL.revokeObjectURL=function(url){if(state.active&&state.events.length<2000)state.events.push({kind:'revoke',id:ids.get(url),at:performance.now(),stack:new Error().stack});window.__issueImageLifecycle?.unregisterBlob(url);ids.delete(url);return revoke(url)};
   })()`})
   await send('Log.enable')
 }
@@ -2142,6 +2148,9 @@ finally {
   const navigationImageCancellations=new Set(report.verifiedNavigationImageCancellations.map(row=>row.requestId))
   report.verifiedUiImageCancellations=verifiedUiImageCancellations(report.requests,report.imageLifecycles,report.uiTransitions)
   const uiImageCancellations=new Set(report.verifiedUiImageCancellations.map(row=>row.requestId))
+  report.verifiedLocalImageAdoptions=verifiedLocalImageAdoptions(report.requests,report.imageLifecycles)
+  report.verifiedLogoutCopyCancellations=verifiedLogoutCopyCancellations(report.requests)
+  const completedLifecycle=new Set([...report.verifiedLocalImageAdoptions.map(row=>row.requestId),...report.verifiedLogoutCopyCancellations])
   report.failedRequests = report.requests.filter(e => e.error)
   report.expectedOfflineRequests=[...expectedOfflineRequests]
   report.expectedTimeoutRequests=[...expectedTimeoutRequests]
@@ -2151,8 +2160,8 @@ finally {
   const copyResets=new Set(report.verifiedInjectedCopyResets)
   report.verifiedCategoryFilterCancellations=verifiedCategoryFilterCancellations(report.requests,report.categoryFilters)
   const filteredCopies=new Set(report.verifiedCategoryFilterCancellations)
-  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId)&&!navigationImageCancellations.has(e.requestId)&&!uiImageCancellations.has(e.requestId)&&!copyResets.has(e.requestId)&&!filteredCopies.has(e.requestId))
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||navigationImageCancellations.has(e.requestId)||uiImageCancellations.has(e.requestId)||revokedRequests.has(e.requestId)||copyResets.has(e.requestId)||filteredCopies.has(e.requestId))))
+  report.unexpectedFailures=report.failedRequests.filter(e=>!completedLifecycle.has(e.requestId)&&!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId)&&!navigationImageCancellations.has(e.requestId)&&!uiImageCancellations.has(e.requestId)&&!copyResets.has(e.requestId)&&!filteredCopies.has(e.requestId))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(completedLifecycle.has(e.requestId)||canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||navigationImageCancellations.has(e.requestId)||uiImageCancellations.has(e.requestId)||revokedRequests.has(e.requestId)||copyResets.has(e.requestId)||filteredCopies.has(e.requestId))))
   report.injectedRequests=[...injectedRequests]
   report.unexecutedRequestedCases=unexecutedRequestedCases(selectedCases,report.cases)
   await persist()

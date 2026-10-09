@@ -42,6 +42,38 @@ function setup(prepareLegacyCopies?: (force?: boolean) => Promise<boolean>, enab
 }
 
 describe('device-scoped icon permission lifecycle', () => {
+  it('does not overwrite a new tab receipt when an old tab processes the session change late', async () => {
+    const f = setup(); await f.ready()
+    const other = f.make(); other.setDataset(dataset); await other.initialize()
+    f.setSession({ token: 'fixture-two', expires_at: 100000 })
+    other.authChanged()
+    other.setDataset(dataset)
+    await other.acceptMetadata(f.metadata(secondScope), 'fixture-two', () => true)
+    await vi.waitFor(() => expect(other.capture()).not.toBeNull())
+    const saved = f.record()
+    f.device.authChanged()
+    expect(f.record()).toEqual(saved)
+    expect(f.device.capture()).toBeNull()
+    f.device.setDataset(dataset)
+    await f.device.resume()
+    expect(f.device.capture()?.lease.scope).toBe(dataset + ':' + secondScope)
+    expect(f.record().receipt.cache_scope).toBe(secondScope)
+  })
+
+  it.each(['expired', 'dataset'])('still rejects an adopted receipt when its %s boundary fails', async reason => {
+    const f = setup(); await f.ready()
+    const other = f.make(); other.setDataset(dataset); await other.initialize()
+    f.setSession({ token: 'fixture-two', expires_at: 100000 }); other.authChanged()
+    other.setDataset(dataset); await other.acceptMetadata(f.metadata(secondScope), 'fixture-two', () => true)
+    await vi.waitFor(() => expect(other.capture()).not.toBeNull())
+    if (reason === 'expired') f.setClock(100001)
+    f.device.authChanged()
+    f.device.setDataset(reason === 'dataset' ? 'd'.repeat(32) : dataset)
+    await f.device.resume()
+    expect(f.device.capture()).toBeNull()
+    expect(f.record().receipt.expires_at).toBe(100000)
+  })
+
   it('only persists enablement until the next document loads, even after refresh events', async () => {
     const f = setup(); await f.device.initialize(); f.device.setDataset(dataset)
     await f.device.acceptMetadata(f.metadata(), 'fixture-one', () => true)

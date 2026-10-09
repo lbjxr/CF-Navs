@@ -309,6 +309,48 @@ export function verifiedNavigationImageCancellations(rows, navigations) {
   return result
 }
 
+// A real same-container Blob load plus matching native storage bytes proves the
+// local copy took over. A source change alone or a successful API is insufficient.
+export function verifiedLocalImageAdoptions(rows, snapshots) {
+  const result=[]
+  for(const row of rows){
+    if(!nativeImage(row)||row.method!=='GET'||row.error!=='net::ERR_ABORTED'||row.canceled!==true||row.status!=null&&row.status!==200)continue
+    const range=wallRange(row,'failureTime'),snapshot=documentSnapshot(row,snapshots)
+    if(!range||!snapshot||!oldConsumersRetired(snapshot.events,row,range.end))continue
+    const adoptions=snapshots.filter(s=>s.loaderId===row.documentLoaderId&&s.timeOrigin===row.imageLifecycle.timeOrigin&&s.dropped===0).flatMap(s=>s.adoptions??[])
+    const adoption=adoptions.find(a=>{
+      if(a.object!==row.object||!a.persisted||a.error||!/^sha256-[a-f0-9]{64}$/.test(a.revision)||!(a.byteLength>0&&a.naturalWidth>0&&a.naturalHeight>0)||!positiveId(a.previousNodeId))return false
+      const at=snapshot.timeOrigin+a.loadedAt
+      if(!Number.isFinite(at)||at<range.start||at>range.end+20000)return false
+      const history=snapshot.events.filter(e=>e.nodeId===a.previousNodeId&&snapshot.timeOrigin+e.time<=at)
+      let source=row.imageLifecycle.sourceId,seen=false
+      for(const event of history){
+        if(!seen){if(event.sourceId===source&&event.object===row.object&&['observed','src-changed'].includes(event.kind))seen=true;continue}
+        if(event.kind==='error')return false
+        if(event.kind==='src-changed'&&event.previousSourceId===source){
+          if(event.object!==row.object||event.previousObject!==row.object||event.changedQueryKeys.some(key=>key!=='key'))return false
+          source=event.sourceId
+        }
+      }
+      return seen&&source===a.previousSourceId
+    })
+    if(adoption)result.push({requestId:row.requestId,object:row.object,revision:adoption.revision,reason:'rendered-persisted-local-copy'})
+  }
+  return result
+}
+
+export function verifiedLogoutCopyCancellations(rows) {
+  return rows.filter(row=>{
+    if(row.kind!=='icon-copy'||row.path!=='/api/icon-local-copy'||row.method!=='POST'||row.error!=='net::ERR_ABORTED'||row.canceled!==true||row.status!=null&&row.status!==200||!positiveId(row.authSession))return false
+    const range=wallRange(row,'failureTime');if(!range)return false
+    const matches=rows.filter(logout=>{
+      if(logout.path!=='/api/logout'||logout.method!=='POST'||logout.status!==200||logout.logoutRevoked!==true||logout.authSession!==row.authSession)return false
+      const end=wallRange(logout,'finishedTime');return end&&range.start<=end.start&&range.end>=end.start-100&&range.end<=end.end+200
+    })
+    return matches.length===1
+  }).map(row=>row.requestId)
+}
+
 export function verifiedUiImageCancellations(rows, snapshots, transitions) {
   const result=[]
   for(const row of rows) {

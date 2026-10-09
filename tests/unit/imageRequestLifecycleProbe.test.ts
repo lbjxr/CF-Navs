@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
+import { webcrypto, createHash } from 'node:crypto'
 import { pageInstallImageLifecycleProbe } from '../../scripts/lib/imageRequestLifecycleProbe.mjs'
 
 type LifecycleEvent = {
@@ -16,6 +17,9 @@ type LifecycleEvent = {
   naturalHeight?: number
 }
 type Probe = {
+  registerBlob(url: string, blob: Blob): void
+  unregisterBlob(url: string): void
+  readAdoptions(): Promise<Array<Record<string, unknown>>>
   read(): { events: LifecycleEvent[]; timeOrigin: number; dropped: number }
   sourceId(url: string | null): number | null
   stop(): void
@@ -58,6 +62,30 @@ afterEach(() => {
 })
 
 describe('pageInstallImageLifecycleProbe', () => {
+  it('records a loaded replacement only in the same native-image container and verifies actual Blob bytes', async () => {
+    Object.defineProperty(page.crypto, 'subtle', { value: webcrypto.subtle })
+    Object.defineProperty(page, 'TextEncoder', { value: TextEncoder })
+    const slot = document.createElement('span'); document.body.appendChild(slot)
+    const old = image('/api/category-icon/7?key=fake-secret', slot), probe = install()
+    const blob = new Blob(['fixture-image-bytes'], { type: 'image/svg+xml' })
+    const url = 'blob:' + origin + '/fake-blob'
+    probe.registerBlob(url, blob)
+    old.remove(); probe.read()
+    const loaded = image(url, slot)
+    Object.defineProperties(loaded, { complete: { value: true }, naturalWidth: { value: 16 }, naturalHeight: { value: 16 } })
+    loaded.dispatchEvent(new page.Event('load'))
+    const revision = 'sha256-' + createHash('sha256').update('cf-navs-icon-v1\nimage/svg+xml\nfixture-image-bytes').digest('hex')
+    expect(await probe.readAdoptions()).toEqual([expect.objectContaining({ object: 'category:7', byteLength: blob.size, revision, naturalWidth: 16 })])
+    const unrelated = image(url)
+    Object.defineProperties(unrelated, { complete: { value: true }, naturalWidth: { value: 16 }, naturalHeight: { value: 16 } })
+    unrelated.dispatchEvent(new page.Event('load'))
+    expect(await probe.readAdoptions()).toHaveLength(1)
+    const serialized = JSON.stringify(await probe.readAdoptions())
+    expect(serialized).not.toContain('fake-')
+    expect(serialized).not.toContain('fixture-image-bytes')
+    probe.unregisterBlob(url)
+  })
+
   it('serializes independently, installs before documentElement, and stays idempotent', async () => {
     document.documentElement.remove()
     const probe = install()
@@ -272,7 +300,7 @@ describe('pageInstallImageLifecycleProbe', () => {
     for (const forbidden of [origin, '/api/', 'fake-', 'https:', '?', 'key=', 'token=']) {
       expect(serialized).not.toContain(forbidden)
     }
-    expect(Object.keys(probe).sort()).toEqual(['read', 'sourceId', 'stop'])
+    expect(Object.keys(probe).sort()).toEqual(['read', 'readAdoptions', 'registerBlob', 'sourceId', 'stop', 'unregisterBlob'])
     expect(probe.sourceId(element.src)).toBeTypeOf('number')
   })
 

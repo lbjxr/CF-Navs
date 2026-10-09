@@ -337,10 +337,25 @@ export function createIconDeviceController(options: DeviceOptions) {
     const token = options.session()?.token ?? null
     if (token === activeToken) return
     const previousToken = activeToken
-    record = { ...record, revokedScope: currentScope ?? record.receipt?.cache_scope ?? record.revokedScope }
+    const previousScope = currentScope ?? record.receipt?.cache_scope ?? record.revokedScope
     activeToken = token
     currentScope = null
     dataDataset = null
+    // A frozen/paused tab can observe the auth event after another tab has
+    // already verified the new session. Never overwrite that newer receipt with
+    // this tab's stale logout record. It still must pass all normal scope,
+    // dataset, expiry and durable-fence checks before this tab may use it.
+    let latest: DeviceRecord | null = null
+    try { latest = readRecord(options.load()) } catch { /* Existing revoke path reports storage failure. */ }
+    if (token && latest?.receipt && latest.receipt.cache_scope !== previousScope &&
+      !latest.cleanupPending && latest.revokedScope !== latest.receipt.cache_scope) {
+      block('waiting-auth')
+      record = latest
+      update({ trusted: record.trusted, enabledForPage: state.enabledForPage && record.trusted })
+      void synchronize()
+      return
+    }
+    record = { ...record, revokedScope: previousScope }
     void revoke(record.trusted ? 'waiting-auth' : 'disabled', true, true, previousToken)
   }
   function storageChanged(key: string | null) {

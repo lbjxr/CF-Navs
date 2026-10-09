@@ -21,6 +21,21 @@ export function pageInstallImageLifecycleProbe() {
   let start = 0
   let dropped = 0
   let stopped = false
+  const containers = new WeakMap(), blobs = new Map(), observedBlobs = new WeakMap(), pendingBlobs = new Set(), adoptions = []
+
+  function observeBlob(image) {
+    const owner = containers.get(image.parentElement), raw = image.getAttribute('src'), blob = blobs.get(raw)
+    if (!owner || !blob || !image.complete || !image.naturalWidth || observedBlobs.get(image) === raw) return
+    observedBlobs.set(image, raw)
+    const evidence = { object: owner.object, previousSourceId: owner.sourceId, previousNodeId: owner.nodeId, nodeId: nodeId(image), loadedAt: performance.now(), naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight }
+    const work = (async () => {
+      const bytes = new Uint8Array(await blob.arrayBuffer()), prefix = new TextEncoder().encode('cf-navs-icon-v1\n' + blob.type + '\n')
+      const input = new Uint8Array(prefix.length + bytes.length); input.set(prefix); input.set(bytes, prefix.length)
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', input))
+      adoptions.push({ ...evidence, byteLength: bytes.length, revision: 'sha256-' + [...digest].map(value => value.toString(16).padStart(2, '0')).join('') })
+    })().catch(() => { adoptions.push({ ...evidence, error: 'blob-read-failed' }) })
+    pendingBlobs.add(work); void work.finally(() => pendingBlobs.delete(work))
+  }
 
   function parse(raw) {
     if (typeof raw !== 'string' || !raw.trim()) return null
@@ -75,7 +90,10 @@ export function pageInstallImageLifecycleProbe() {
   function observeImage(kind, image, raw) {
     const url = parse(raw)
     const owner = object(url)
-    if (owner) record(kind, image, url, owner)
+    if (owner) {
+      if (kind === 'observed' && image.parentElement) containers.set(image.parentElement, { object: owner, sourceId: sourceId(url.href), nodeId: nodeId(image) })
+      record(kind, image, url, owner)
+    } else if (kind === 'observed') observeBlob(image)
   }
 
   function mutations(records) {
@@ -129,6 +147,8 @@ export function pageInstallImageLifecycleProbe() {
         if (previous?.href === current?.href) continue
         const previousObject = object(previous)
         const currentObject = object(current)
+        if (currentObject && step.image.parentElement) containers.set(step.image.parentElement, { object: currentObject, sourceId: sourceId(current.href), nodeId: nodeId(step.image) })
+        else if (current?.protocol === 'blob:') observeBlob(step.image)
         if (!previousObject && !currentObject) continue
         // On removal/replacement with an out-of-scope source, object still identifies
         // the departing icon. sourceId is null for absent/empty/invalid src, otherwise
@@ -154,7 +174,7 @@ export function pageInstallImageLifecycleProbe() {
     // capture time, not proof that a particular request completed or was cancelled.
     const url = parse(image.getAttribute('src'))
     const owner = object(url)
-    if (!owner) return
+    if (!owner) { if (event.type === 'load') observeBlob(image); return }
     record(event.type === 'load' ? 'loaded' : 'error', image, url, owner,
       event.type === 'load' ? {
         complete: image.complete, naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight,
@@ -168,6 +188,9 @@ export function pageInstallImageLifecycleProbe() {
   for (const image of document.querySelectorAll('img')) observeImage('observed', image, image.getAttribute('src'))
 
   window.__issueImageLifecycle = {
+    registerBlob(url, blob) { blobs.set(url, blob) },
+    unregisterBlob(url) { blobs.delete(url) },
+    async readAdoptions() { await Promise.all([...pendingBlobs]); return adoptions.map(value => ({ ...value })) },
     sourceId,
     read() {
       flush()
