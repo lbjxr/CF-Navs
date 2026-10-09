@@ -3,12 +3,12 @@
 export function assertFixtureOwnership(data, fixtures, run) {
   if (!/^[a-f0-9]{8}$/.test(run)) throw new Error('Invalid cleanup run identity')
   for (const kind of ['categories', 'bookmarks']) {
-    if (!Array.isArray(data?.[kind]) || !Array.isArray(fixtures?.[kind]) || fixtures[kind].some(id => !Number.isSafeInteger(id) || id < 1)) throw new Error('Invalid cleanup manifest')
+    if (!Array.isArray(data?.[kind]) || !Array.isArray(fixtures?.[kind]) || fixtures[kind].some(id => !Number.isSafeInteger(id) || id < 1) || new Set(fixtures[kind]).size !== fixtures[kind].length) throw new Error('Invalid cleanup manifest')
     for (const id of fixtures[kind]) {
       const row = data[kind].find(item => item.id === id)
       if (!row) continue // Absence is confirmed from authoritative data, not a DELETE status.
       const titles = kind === 'categories' ? ['Browser regression ' + run, 'Browser child ' + run]
-        : [0, 1, 2].flatMap(i => ['Browser ' + run + ' ' + i, 'Edited ' + run + ' ' + i]).concat('Browser edited ' + run)
+        : Array.from({ length: Math.max(3, fixtures.bookmarks.length) }, (_, i) => i).flatMap(i => ['Browser ' + run + ' ' + i, 'Edited ' + run + ' ' + i]).concat('Browser edited ' + run)
       if (!titles.includes(row.title)) throw new Error('Cleanup ownership mismatch: ' + kind + ':' + id)
       if (kind === 'bookmarks' && !fixtures.categories.includes(row.category_id)) throw new Error('Cleanup bookmark left owned categories')
       if (kind === 'categories' && row.parent_id && !fixtures.categories.includes(row.parent_id)) throw new Error('Cleanup category left owned tree')
@@ -35,7 +35,7 @@ export function createVerificationCleanup({ baseUrl, run, credentials, fetchImpl
     return text
   }
   async function request(route, method, token, body) {
-    const allowed = route === '/admin/data' || route === '/me' || route === '/login' || route === '/logout' || new RegExp('^/(bookmarks|categories)/[1-9][0-9]*$').test(route)
+    const allowed = route === '/admin/data' || route === '/me' || route === '/login' || route === '/logout' || route === '/bookmarks/batch-delete' && method === 'POST' || new RegExp('^/(bookmarks|categories)/[1-9][0-9]*$').test(route)
     if (!allowed) throw new Error('Cleanup route not allowed')
     try {
       const response = await fetchImpl(new URL('/api' + route, origin), { method, redirect: 'error', signal: AbortSignal.timeout(requestTimeoutMs),
@@ -82,6 +82,21 @@ export function createVerificationCleanup({ baseUrl, run, credentials, fetchImpl
           return response.data
         }
         let data = await read()
+        const bulkIds = fixtures.bookmarks.filter(id => data.bookmarks.some(row => row.id === id)).reverse()
+        if (bulkIds.length > 3) {
+          for (let offset = 0; offset < bulkIds.length; offset += 500) {
+            const ids = bulkIds.slice(offset, offset + 500).filter(id => data.bookmarks.some(row => row.id === id))
+            if (!ids.length) continue
+            const batch = { ids, attempts: 1, absent: false }
+            ;(result.batches ??= []).push(batch)
+            try { batch.lastStatus = (await request('/bookmarks/batch-delete', 'POST', active, { ids })).status }
+            catch { batch.transportFailure = true }
+            data = await read() // Lost acknowledgement is resolved by absence, never a blind retry.
+            for (const id of ids) result.deletions.push({ kind: 'bookmarks', id, attempts: 1, batch: true, absent: !data.bookmarks.some(row => row.id === id), lastStatus: batch.lastStatus })
+            batch.absent = ids.every(id => !data.bookmarks.some(row => row.id === id))
+            if (!batch.absent) throw new Error('Bulk cleanup left registered bookmarks')
+          }
+        }
         for (const kind of ['bookmarks', 'categories']) {
           for (const id of [...fixtures[kind]].reverse()) {
             if (kind === 'categories') data = await read() // Recheck cascade ownership just before deletion.

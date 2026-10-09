@@ -12,7 +12,7 @@ import { pageReadFixtureCopy } from './lib/iconCopyStorageProbe.mjs'
 import { assessBrowserRestartEvidence } from './lib/browserRestartEvidence.mjs'
 import { verifiedEditCopyCancellations } from './lib/editCopyCancellationEvidence.mjs'
 import { pageInstallImageLifecycleProbe } from './lib/imageRequestLifecycleProbe.mjs'
-import { verifiedSignedImageReplacements, verifiedNativeCategoryRetries, verifiedNavigationImageCancellations } from './lib/imageRequestLifecycleEvidence.mjs'
+import { verifiedSignedImageReplacements, verifiedNativeCategoryRetries, verifiedNavigationImageCancellations, verifiedUiImageCancellations } from './lib/imageRequestLifecycleEvidence.mjs'
 import { createVerificationCleanup } from './lib/verificationCleanup.mjs'
 import { resolveBaseUrl, resolveSetting } from './lib/verifyTarget.mjs'
 import { requireAdminCredentials, redactCredentials } from './lib/verifyCredentials.mjs'
@@ -20,6 +20,7 @@ import { createIconAcceptanceFixtures } from './lib/iconAcceptanceFixtures.mjs'
 import { collectIconFixtures, evaluateIconFixtures } from './lib/iconAcceptance.mjs'
 import { verifiedInjectedCopyResets, unexecutedRequestedCases, verifiedCategoryFilterCancellations } from './lib/issueBrowserEvidence.mjs'
 import { pageInstallIconInterruption } from './lib/iconInterruptionProbe.mjs'
+import { pageInstallIconPerformanceProbe, pageReadIconStorageAudit, assessIconStorageAudit, pageInstallCapacityCommitProbe, summarizeIconPerformanceRequests } from './lib/iconPerformanceProbe.mjs'
 import { classifyIssueRequest, assessStableIcons, assessIconTrace, validatedIconConflicts, isCanceledNetworkResponse, isExpectedOfflineFailure, assessCopyTimeoutFallback, assessCopyTimeoutRecovery, numericNetworkTiming, isExpectedInjectedCancellation } from './lib/issueBrowserEvidence.mjs'
 if (process.env.ISSUE_BROWSER_WRITE_FIXTURES !== '1') throw new Error('Explicit ISSUE_BROWSER_WRITE_FIXTURES=1 required for temporary test-site records')
 const base = resolveBaseUrl(), credentials = requireAdminCredentials()
@@ -41,6 +42,9 @@ optionalCases.add('29-OLD-401-DURING-INITIALIZATION')
 optionalCases.add('29-PENDING-WRITE-LOGOUT')
 for(const id of ['28-CATEGORY-EDIT-REFRESH','28-CATEGORY-MOBILE-MOVE','28-CATEGORY-PRIVACY'])optionalCases.add(id)
 optionalCases.add('28-CATEGORY-FILTER-CANCEL')
+optionalCases.add('28-PERFORMANCE-FLOW')
+optionalCases.add('28-CAPACITY-EVICTION')
+optionalCases.add('28-NATIVE-UI-TEARDOWN')
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
 const sessionCaptureErrors = []
@@ -53,6 +57,7 @@ const disableQuic=process.env.ISSUE_DISABLE_QUIC==='1'
 const b = new CdpSession({ chromeExe: resolveSetting('CHROME_EXE', 'chromeExe', 'C:/Program Files/Google/Chrome/Application/chrome.exe'), debugPort: port, userDataDir: profile, headless: false, disableQuic })
 const report = { run, cacheMode, browserLog: [], cases: [], requests: [], cleanup: {}, excluded: [], limitations: [] }
 report.categoryFilters=[]
+report.uiTransitions=[]
 const authSessions = new Map() // Raw headers stay in memory, never in reports.
 let stage = 'setup', token = '', category, child, bookmarks = [], ownedCategories = [], ownedBookmarks = [], secondary = null
 const requests = new Map()
@@ -205,7 +210,13 @@ async function homeAction(name) {
     if(name==='login'&&await b.call(()=>Boolean(document.querySelector('[aria-labelledby="login-modal-title"]'))))return
     if(name==='admin'&&await b.call(()=>Boolean(document.querySelector('[data-testid="admin-tab-settings"]'))))return
     const state=await b.call(sel=>{const e=document.querySelector(sel),r=e?.getBoundingClientRect(),trigger=document.querySelector('[data-testid="home-actions-menu-trigger"]'),t=trigger?.getBoundingClientRect();return {exists:!!e,visible:!!r&&r.width>0&&r.height>0,trigger:!!t&&t.width>0&&t.height>0,expanded:trigger?.getAttribute('aria-expanded')==='true'}},selector)
-    if(state.visible){try{await click(selector);return}catch(error){if(!error.message.startsWith('Click failed '+selector)||++failedClicks>=2)throw error}}
+    if(state.visible){try{
+      let transition
+      if(name==='admin'){transition={id:report.uiTransitions.length+1,kind:'admin',stage,beforeLoaderId:(await b.send('Page.getFrameTree')).frameTree.frame.loaderId,startedAt:Date.now(),completed:false};report.uiTransitions.push(transition)}
+      await click(selector)
+      if(transition){await wait(()=>Boolean(document.querySelector('[data-testid="admin-tab-settings"]')));Object.assign(transition,{completedAt:Date.now(),afterLoaderId:(await b.send('Page.getFrameTree')).frameTree.frame.loaderId,completed:true})}
+      return
+    }catch(error){if(!error.message.startsWith('Click failed '+selector)||++failedClicks>=2)throw error}}
     else if(state.exists&&state.trigger&&!state.expanded)await click('[data-testid="home-actions-menu-trigger"]')
     await sleep(150)
   }
@@ -566,6 +577,13 @@ try {
     }).catch(error => { report.interceptionError=safe(error.message) })
   })
   b.on('Network.requestWillBeSent', e => {
+    if(e.redirectResponse) {
+      const previous=requests.get(e.requestId),response=e.redirectResponse
+      if(previous) {
+        Object.assign(previous,{status:response.status,redirected:true,terminalKind:'redirect',terminalTime:e.timestamp,durationMs:(e.timestamp-previous.time)*1000,disk:Boolean(response.fromDiskCache),sw:Boolean(response.fromServiceWorker)})
+        if(Number.isFinite(response.encodedDataLength))previous.encodedDataLength=response.encodedDataLength
+      }
+    }
     const row = { requestId: e.requestId, stage, time: e.timestamp, wallTime: e.wallTime, method: e.request.method, type: e.type, initiator: e.initiator?.type, initiatorFrames:e.initiator?.stack?.callFrames?.slice(0,4).map(f=>({function:f.functionName,url:safe(f.url),line:f.lineNumber,column:f.columnNumber})), ...classifyIssueRequest(e.request.url, e.request.postData, base) }
     const authorization = Object.entries(e.request.headers ?? {}).find(([key]) => key.toLowerCase() === 'authorization')?.[1]
     if (new URL(e.request.url).origin === new URL(base).origin && typeof authorization === 'string' && authorization.startsWith('Bearer ')) {
@@ -640,6 +658,28 @@ try {
   const baseline = await scenario('28-BASELINE', async () => { await home(); const images = await verifyImages(); await shot('28-baseline'); return images }); assert(baseline.status === 'passed', 'Baseline prerequisite failed; dependent cases not run')
   await scenario('28-IDLE-CONTROL',async()=>stableOperation(async()=>{await sleep(2500)}))
   await scenario('28-RIGHT-CLICK-OFF', async () => stableOperation(async () => { await click(card(0), 'right'); await key('Escape'); }))
+  await scenario('28-NATIVE-UI-TEARDOWN',async()=>{
+    let held=null
+    let cancelled=false
+    await intercept([{urlPattern:'*/api/category-icon/'+category.id+'*',requestStage:'Response'}],async event=>{
+      if(!held&&event.responseStatusCode===200){held=event;return true}return false
+    },async()=>{
+      await b.navigate(base);await wait(sel=>document.querySelector(sel),[scope()]);await click(scope()+' .scope-root-trigger')
+      await localWait(()=>held,'Owned native category request before UI navigation')
+      const row=requests.get(held.networkId)
+      assert(row?.type==='Image'&&row.object==='category:'+category.id,'Native UI cancellation has no exact request ownership')
+      await homeAction('admin')
+      assert(await b.call(sel=>!document.querySelector(sel),scope()),'Home consumer remained mounted after entering admin')
+      await b.send('Fetch.continueRequest',{requestId:held.requestId}).catch(()=>{})
+      await localWait(()=>row.error||Number.isFinite(row.finishedTime),'Released native response termination',15000)
+      await collectImageLifecycle('native-ui-teardown')
+      if(row.error){const proof=verifiedUiImageCancellations(report.requests,report.imageLifecycles,report.uiTransitions).find(item=>item.requestId===row.requestId);assert(proof,'Native cancellation has no proved UI retirement');report.cases.at(-1).nativeUiCancellation=proof;cancelled=true}
+      else assert(row.status===200,'Released native response did not complete successfully')
+      assert(await b.call(sel=>Boolean(document.querySelector('[data-testid="admin-tab-settings"]'))&&!document.querySelector(sel),scope()),'Late native completion changed the current view')
+    })
+    await home();await verifyImages()
+    return {nativeRequestCancelled:cancelled,homeViewRemoved:true,lateResponseIsolated:true,homeImagesRestored:true}
+  })
   await scenario('28-SIGNATURE-RENEWAL', async () => {
     // Before enabling local copies: exercise the real private proxy image path.
     // Advance only this document's clock; retain unmodified server signatures.
@@ -1777,6 +1817,136 @@ try {
       if(changed)await api('/categories/'+category.id,{title:category.title,icon:fixtures.category.base64Uri,is_private:false},'PUT')
     }
   })
+  await scenario('28-PERFORMANCE-FLOW',async()=>{
+    const prefixes=[fixtures.bookmark.base64Uri.slice(0,256),fixtures.category.base64Uri.slice(0,256)]
+    const initial=await api('/admin/data',undefined,'GET')
+    const evidence=report.cases.at(-1).performance={dataset:{bookmarks:initial.bookmarks.length,categories:initial.categories.length},rounds:[],spa:[]}
+    const {identifier}=await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(${pageInstallIconPerformanceProbe.toString()})()`})
+    const audit=async()=>{const value=await b.call(pageReadIconStorageAudit,prefixes),result=assessIconStorageAudit(value);if(!result.passed)evidence.failedAudit=value;assert(result.passed,'Native storage audit: '+JSON.stringify(result));return value}
+    async function settled() {
+      const loader=(await b.send('Page.getFrameTree')).frameTree.frame.loaderId
+      try {await wait(()=>[...document.images].filter(img=>{const r=img.getBoundingClientRect();return img.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})&&r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth}).every(img=>img.complete&&img.naturalWidth>0),[],70000)}
+      catch(error){evidence.unreadyVisibleImages=await b.call(()=>[...document.images].filter(img=>img.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})&&(!img.complete||!img.naturalWidth)).map(img=>({className:img.className,loading:img.loading,naturalWidth:img.naturalWidth,top:img.getBoundingClientRect().top})));throw error}
+      await localWait(()=>!report.requests.some(row=>row.documentLoaderId===loader&&row.kind==='icon-copy'&&!Number.isFinite(row.terminalTime)),'Current document copy completion',20000)
+    }
+    async function flow(reload) {
+      evidence.lastStep='navigate'
+      if(reload)await b.navigate(base)
+      await wait(()=>document.querySelectorAll('.bookmark-card-shell').length>0);await settled()
+      const positions=[]
+      evidence.lastStep='viewport-scroll'
+      for(const fraction of [0,.25,.5,.75,1]) {
+        const point=await b.call(f=>({delta:Math.max(0,document.documentElement.scrollHeight-innerHeight)*f-scrollY,x:innerWidth*.65,y:innerHeight*.55}),fraction)
+        if(Math.abs(point.delta)>1)await b.send('Input.dispatchMouseEvent',{type:'mouseWheel',x:point.x,y:point.y,deltaX:0,deltaY:point.delta})
+        await sleep(180);await settled();positions.push(await b.call(()=>scrollY))
+      }
+      assert(new Set(positions.map(Math.round)).size>1,'Performance flow did not actually scroll')
+      async function revealFixtures() {
+        for(const item of manifest())await wait(sel=>{const e=document.querySelector(sel),img=e?.querySelector('img');if(e&&(!img?.complete||!img.naturalWidth))e.scrollIntoView({block:'center',behavior:'instant'});return img?.complete&&img.naturalWidth>0},[item.selector],70000)
+        await verifyImages()
+      }
+      evidence.lastStep='home-fixtures'
+      await click(scope()+' .scope-root-trigger');await revealFixtures();await settled()
+      evidence.lastStep='spotlight'
+      await b.send('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'k',code:'KeyK',windowsVirtualKeyCode:75,modifiers:2})
+      await b.send('Input.dispatchKeyEvent',{type:'keyUp',key:'k',code:'KeyK',windowsVirtualKeyCode:75,modifiers:2})
+      await wait(()=>document.querySelector('.spotlight-input'));await fill('.spotlight-input',run)
+      await wait(()=>document.querySelectorAll('.spotlight-option').length===3)
+      const indexes=await b.call(titles=>titles.map(title=>[...document.querySelectorAll('.spotlight-option-title')].findIndex(e=>e.textContent===title)),bookmarks.map(item=>item.title))
+      assert(indexes.every(index=>index>=0),'Search results do not contain the owned fixtures')
+      await verifyImages(bookmarks.map((item,index)=>({key:'bookmark:'+item.id,selector:'#spotlight-opt-'+indexes[index],kind:'image',pixels:item.pixels})))
+      await key('Escape');await wait(()=>!document.querySelector('.spotlight-input'))
+      evidence.lastStep='admin'
+      await categoryPanel();await verifyImages([{key:'category:'+category.id,selector:`.admin-compact-card[data-category-id="${category.id}"] [data-category-icon]`,kind:'image',pixels:fixtures.category.pixels},{key:'category:'+child.id,selector:`.admin-compact-card[data-category-id="${child.id}"] [data-category-icon]`,kind:'image',pixels:fixtures.bookmark.pixels}])
+      evidence.lastStep='return-home'
+      await click('[aria-label="返回首页"]');await wait(sel=>document.querySelector(sel),[scope()]);await click(scope()+' .scope-root-trigger');await revealFixtures();await settled()
+      evidence.lastStep='complete'
+      return {positions,domCards:await b.call(()=>document.querySelectorAll('.bookmark-card-shell').length)}
+    }
+    try {
+      for(let round=1;round<=5;round++) {
+        await clearCopies()
+        for(const mode of ['cold','warm']) {
+          const start=report.requests.length,started=Date.now(),ui=await flow(true),finished=Date.now()
+          const rows=report.requests.slice(start).filter(row=>row.kind!=='local-image'),keys=new Set(manifest().map(row=>row.key))
+          const fixtureBodies=rows.filter(row=>keys.has(row.object)&&['icon-copy','icon-body'].includes(row.kind))
+          const measurement={round,mode,flowMs:finished-started,ui,requests:rows.length,fixtureBodyRequests:fixtureBodies.length,
+            networkByKind:summarizeIconPerformanceRequests(rows),
+            encodedBytes:rows.reduce((n,row)=>n+(Number.isFinite(row.encodedDataLength)?row.encodedDataLength:0),0),
+            decodedNetworkBytes:rows.reduce((n,row)=>n+(Number.isFinite(row.receivedDataLength)?row.receivedDataLength:0),0),
+            unknownTransferRequests:rows.filter(row=>!Number.isFinite(row.encodedDataLength)).length,
+            cancelledRequests:rows.filter(row=>row.canceled).length,metrics:await b.call(()=>window.__iconPerformanceProbe.read()),storage:await audit()}
+          evidence.rounds.push(measurement)
+          if(mode==='cold')assert(fixtureBodies.length>0,'Cold flow did not fetch any fixture image bytes')
+          else assert(fixtureBodies.length===0,'Warm unchanged fixture images were downloaded again')
+          console.log(JSON.stringify({performanceRound:round,mode,flowMs:measurement.flowMs,fixtureBodyRequests:fixtureBodies.length,storageBytes:measurement.storage.bodyBytes}));await persist()
+        }
+      }
+      await flow(false)
+      const baseline={metrics:await b.call(()=>window.__iconPerformanceProbe.read()),storage:await audit(),timeOrigin:await b.call(()=>performance.timeOrigin)}
+      evidence.spaBaseline=baseline
+      for(let round=1;round<=5;round++) {
+        await flow(false);assert(await b.call(()=>performance.timeOrigin)===baseline.timeOrigin,'SPA lifetime measurement changed document')
+        const sample={round,metrics:await b.call(()=>window.__iconPerformanceProbe.read()),storage:await audit()};evidence.spa.push(sample)
+        assert(sample.storage.entries===baseline.storage.entries&&sample.storage.bodyBytes===baseline.storage.bodyBytes,'Repeated warm UI flow grew persistent image storage')
+        assert(sample.metrics.unreferencedImageUrls<=baseline.metrics.unreferencedImageUrls,'Repeated SPA flow accumulated unreferenced image handles');await persist()
+      }
+      await clearCopies();evidence.cleared=await audit()
+      assert(evidence.cleared.entries===0&&evidence.cleared.bodies===0&&evidence.cleared.bodyBytes===0,'UI clear left persistent image data')
+      await home();await verifyImages();evidence.recovered=await audit()
+      assert(evidence.recovered.entries>0&&evidence.recovered.bodyBytes>0,'UI did not rebuild copies after clearing')
+      return {coldWarmPairs:5,spaRounds:5,dataset:evidence.dataset,warmFixtureBodyRequests:0,stableStorage:true,uiClearAndRecovery:true}
+    } finally {evidence.lastProbe=await b.call(()=>window.__iconPerformanceProbe?.read());await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier});await b.call(()=>window.__iconPerformanceProbe?.restore())}
+  })
+  await scenario('28-CAPACITY-EVICTION',async()=>{
+    await clearCopies()
+    const evidence=report.cases.at(-1).capacity={targetBytes:384*1024,items:[],materialized:[]}
+    const baseSvg=Buffer.from(fixtures.bookmark.base64Uri.split(',')[1],'base64').toString(),prefixes=[]
+    let scriptId=null
+    try {
+      for(let index=3;index<33;index++) {
+        const marker=`<!-- capacity-fixture-${run}-${index} `,suffix=' -->'
+        const body=baseSvg.replace('</svg>',marker+'x'.repeat(evidence.targetBytes-Buffer.byteLength(baseSvg)-Buffer.byteLength(marker+suffix))+suffix+'</svg>')
+        assert(Buffer.byteLength(body)===evidence.targetBytes,'Capacity fixture size mismatch')
+        const icon='data:image/svg+xml;base64,'+Buffer.from(body).toString('base64')
+        const item=await api('/bookmarks',{category_id:category.id,title:`Browser ${run} ${index}`,url:`https://example.com/capacity/${run}/${index}`,icon,icon_source:'custom',is_private:false})
+        assert(Number.isSafeInteger(item.id)&&item.title===`Browser ${run} ${index}`&&item.category_id===category.id,'Capacity fixture ownership mismatch')
+        ownedBookmarks.push(item.id)
+        evidence.items.push({id:item.id,index,revision:'sha256-'+createHash('sha256').update('cf-navs-icon-v1\nimage/svg+xml\n').update(body).digest('hex')})
+        prefixes.push(icon.split(',')[1].slice(0,600));await persist()
+      }
+      scriptId=(await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(${pageInstallCapacityCommitProbe.toString()})(${JSON.stringify(evidence.items.map(item=>'bookmark:'+item.id))})`})).identifier
+      await home()
+      for(const item of evidence.items) {
+        const target={key:'bookmark:'+item.id,selector:`[data-sort-category-id="${category.id}"] [data-sort-id="${item.id}"] .bookmark-card-shell`,kind:'image',pixels:fixtures.bookmark.pixels}
+        await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center',behavior:'instant'}),target.selector)
+        await wait(sel=>{const img=document.querySelector(sel)?.querySelector('img');return img?.complete&&img.naturalWidth>0&&img.currentSrc.startsWith('blob:')},[target.selector],70000)
+        await verifyImages([target])
+        await wait(key=>window.__capacityCommitProbe.read().some(row=>row.key===key),[target.key],10000)
+        const committed=await b.call(key=>window.__capacityCommitProbe.read().find(row=>row.key===key),target.key)
+        assert(committed.bytes===evidence.targetBytes&&committed.revision===item.revision,'Capacity body was not committed with its expected identity')
+        evidence.materialized.push(item.id)
+      }
+      evidence.audit=await b.call(pageReadIconStorageAudit,prefixes)
+      assert(assessIconStorageAudit(evidence.audit).passed,'Capacity storage totals or budget invalid')
+      evidence.retained=[]
+      for(const item of evidence.items){const value=await readFixtureCopy('bookmark:'+item.id);if(value.entryPresent&&value.bodyPresent){assert(value.bodyBytes===evidence.targetBytes&&value.bodyRevision===item.revision&&value.descriptor?.content_revision===item.revision&&value.descriptor?.object_id===item.id,'Retained capacity image bytes do not match their identity');evidence.retained.push(item.id)}}
+      assert(evidence.materialized.length*evidence.targetBytes>10*1024*1024&&evidence.retained.length<evidence.materialized.length,'Over-budget working set did not exercise eviction')
+      await settings();evidence.settingsAudit=await b.call(pageReadIconStorageAudit,prefixes)
+      assert(assessIconStorageAudit(evidence.settingsAudit).passed,'Settings entered with inconsistent native storage')
+      await wait(count=>Number(document.querySelector('.device-cache dd')?.textContent.split('/')[0].trim())===count,[evidence.settingsAudit.entries])
+      evidence.displayed=await b.call(()=>[...document.querySelectorAll('.device-cache dd')].map(e=>e.textContent.trim()))
+      await click('.device-actions button:nth-child(2)');await wait(()=>document.querySelector('.device-status')?.textContent.startsWith('已启用'))
+      evidence.cleared=await b.call(pageReadIconStorageAudit,prefixes)
+      assert(assessIconStorageAudit(evidence.cleared).passed&&evidence.cleared.entries===0&&evidence.cleared.bodyBytes===0,'Capacity UI clear left data or invalid accounting')
+      await home();await verifyImages();evidence.recovered=await b.call(pageReadIconStorageAudit,prefixes)
+      assert(assessIconStorageAudit(evidence.recovered).passed&&evidence.recovered.entries>0,'Capacity UI recovery failed')
+      return {images:evidence.items.length,bytesPerImage:evidence.targetBytes,retained:evidence.retained.length,bodyBytes:evidence.audit.bodyBytes,evictionObserved:true,uiAccounting:true,clearedAndRecovered:true}
+    } finally {
+      if(scriptId)await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier:scriptId})
+      await b.call(()=>window.__capacityCommitProbe?.restore())
+    }
+  })
   await scenario('CSP-THEME-COLOR', async()=>{
     await b.setViewport({width:1366,height:900,scale:1});await home()
     const samples=[]
@@ -1853,6 +2023,8 @@ finally {
   const nativeCategoryRetries=new Set(report.verifiedNativeCategoryRetries.map(row=>row.requestId))
   report.verifiedNavigationImageCancellations=verifiedNavigationImageCancellations(report.requests,report.navigations)
   const navigationImageCancellations=new Set(report.verifiedNavigationImageCancellations.map(row=>row.requestId))
+  report.verifiedUiImageCancellations=verifiedUiImageCancellations(report.requests,report.imageLifecycles,report.uiTransitions)
+  const uiImageCancellations=new Set(report.verifiedUiImageCancellations.map(row=>row.requestId))
   report.failedRequests = report.requests.filter(e => e.error)
   report.expectedOfflineRequests=[...expectedOfflineRequests]
   report.expectedTimeoutRequests=[...expectedTimeoutRequests]
@@ -1862,8 +2034,8 @@ finally {
   const copyResets=new Set(report.verifiedInjectedCopyResets)
   report.verifiedCategoryFilterCancellations=verifiedCategoryFilterCancellations(report.requests,report.categoryFilters)
   const filteredCopies=new Set(report.verifiedCategoryFilterCancellations)
-  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId)&&!navigationImageCancellations.has(e.requestId)&&!copyResets.has(e.requestId)&&!filteredCopies.has(e.requestId))
-  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||navigationImageCancellations.has(e.requestId)||revokedRequests.has(e.requestId)||copyResets.has(e.requestId)||filteredCopies.has(e.requestId))))
+  report.unexpectedFailures=report.failedRequests.filter(e=>!expectedOfflineRequests.has(e.requestId)&&!isExpectedInjectedCancellation(e,expectedInjectedCancellations)&&!signedImageCancellations.has(e.requestId)&&!editedCopyCancellations.has(e.requestId)&&!nativeCategoryRetries.has(e.requestId)&&!navigationImageCancellations.has(e.requestId)&&!uiImageCancellations.has(e.requestId)&&!copyResets.has(e.requestId)&&!filteredCopies.has(e.requestId))
+  report.consoleFindings=report.browserLog.filter(e=>e.level==='error'&&!injectedRequests.has(e.requestId)&&!protocolConflicts.has(e.requestId)&&!(e.source==='network'&&(canceledHttp.has(e.requestId)||expectedOfflineRequests.has(e.requestId)||report.validatedInjectedCancellations.includes(e.requestId)||signedImageCancellations.has(e.requestId)||editedCopyCancellations.has(e.requestId)||nativeCategoryRetries.has(e.requestId)||navigationImageCancellations.has(e.requestId)||uiImageCancellations.has(e.requestId)||revokedRequests.has(e.requestId)||copyResets.has(e.requestId)||filteredCopies.has(e.requestId))))
   report.injectedRequests=[...injectedRequests]
   report.unexecutedRequestedCases=unexecutedRequestedCases(selectedCases,report.cases)
   await persist()

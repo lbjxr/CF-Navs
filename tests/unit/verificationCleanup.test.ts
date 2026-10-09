@@ -31,6 +31,15 @@ function setup(options: Record<string, any> = {}) {
       if (options.lostLogout) throw Error('lost response')
       return respond(200, { revoked: !options.revocationFails })
     }
+    if (route === '/bookmarks/batch-delete' && init.method === 'POST') {
+      const ids=JSON.parse(String(init.body)).ids
+      calls.at(-1).ids=ids
+      if(options.batchDeleteFails)return respond(503,null,500)
+      data.bookmarks=data.bookmarks.filter(row=>!ids.includes(row.id))
+      if(options.foreignAfterBatch)data.categories.push({id:99,title:'Unrelated',parent_id:10})
+      if(options.lostBatchDelete)throw Error('lost batch acknowledgement')
+      return respond(200,null)
+    }
     const [kind, id] = route.slice(1).split('/') as ['categories' | 'bookmarks', string]
     if (init.method === 'DELETE') {
       if (options.deleteNeverSucceeds) return respond(503, null, 500)
@@ -48,6 +57,39 @@ function setup(options: Record<string, any> = {}) {
 }
 
 describe('test-owned host cleanup', () => {
+  it('batch deletes only registered large fixtures and still verifies absence after a lost acknowledgement', async () => {
+    const f=setup({lostBatchDelete:true})
+    f.data.bookmarks=Array.from({length:33},(_,i)=>({id:20+i,title:'Browser '+run+' '+i,category_id:10}))
+    const owned={categories:[10,11],bookmarks:f.data.bookmarks.map(row=>row.id)}
+    f.data.bookmarks.push({id:1000,title:'Unrelated',category_id:99})
+    f.owner.rememberSession('owned-A')
+    const result=await f.owner.cleanup(owned)
+    expect(result).toMatchObject({serverFixturesRemoved:true,sessionRevoked:true,errors:[]})
+    const calls=f.calls.filter(row=>row.route==='/bookmarks/batch-delete')
+    expect(calls).toHaveLength(1)
+    expect(new Set(calls[0].ids)).toEqual(new Set(owned.bookmarks))
+    expect(f.data.bookmarks).toEqual([{id:1000,title:'Unrelated',category_id:99}])
+    expect(f.calls.filter(row=>row.route==='/admin/data').length).toBeLessThanOrEqual(8)
+  })
+  it.each([{batchDeleteFails:true},{foreignAfterBatch:true}])('stops after unsafe or incomplete batch cleanup: %j', async options => {
+    const f=setup(options)
+    f.data.bookmarks=Array.from({length:5},(_,i)=>({id:20+i,title:'Browser '+run+' '+i,category_id:10}))
+    f.owner.rememberSession('owned-A')
+    const result=await f.owner.cleanup({categories:[10,11],bookmarks:f.data.bookmarks.map(row=>row.id)})
+    expect(result.serverFixturesRemoved).toBe(false)
+    expect(result.sessionRevoked).toBe(true)
+    expect(f.calls.some(row=>row.method==='DELETE')).toBe(false)
+  })
+  it('supports a larger registered capacity fixture without accepting unrelated rows or duplicate IDs', () => {
+    const f=setup()
+    f.data.bookmarks=Array.from({length:33},(_,i)=>({id:20+i,title:'Browser '+run+' '+i,category_id:10}))
+    const owned={categories:[10,11],bookmarks:f.data.bookmarks.map(row=>row.id)}
+    expect(()=>assertFixtureOwnership(f.data,owned,run)).not.toThrow()
+    expect(()=>assertFixtureOwnership(f.data,{...owned,bookmarks:[...owned.bookmarks,20]},run)).toThrow()
+    expect(()=>assertFixtureOwnership({...f.data,bookmarks:[...f.data.bookmarks,{id:1000,title:'Browser '+run+' 33',category_id:10}]},owned,run)).toThrow()
+    f.data.bookmarks[32].title='Unrelated category item'
+    expect(()=>assertFixtureOwnership(f.data,owned,run)).toThrow()
+  })
   it('deletes children first, verifies absence and invalidates every owned session without a page', async () => {
     const f = setup(); expect(f.owner.rememberSession('owned-A')).toBe(f.owner.rememberSession('owned-A')); f.owner.rememberSession('owned-B')
     const result = await f.owner.cleanup(fixtures)

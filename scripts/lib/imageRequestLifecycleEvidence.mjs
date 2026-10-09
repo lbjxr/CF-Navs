@@ -308,3 +308,21 @@ export function verifiedNavigationImageCancellations(rows, navigations) {
   }
   return result
 }
+
+export function verifiedUiImageCancellations(rows, snapshots, transitions) {
+  const result=[]
+  for(const row of rows) {
+    if(!nativeImage(row)||row.method!=='GET'||row.error!=='net::ERR_ABORTED'||row.canceled!==true||row.status!=null&&row.status!==200)continue
+    const range=wallRange(row,'failureTime'),snapshot=documentSnapshot(row,snapshots)
+    if(!range||!snapshot)continue
+    const matches=transitions.filter(item=>item.kind==='admin'&&item.completed===true&&item.beforeLoaderId===row.documentLoaderId&&item.afterLoaderId===row.documentLoaderId&&
+      Number.isFinite(item.startedAt)&&Number.isFinite(item.completedAt)&&item.completedAt>=item.startedAt&&range.end>=item.startedAt-20&&range.end<=item.completedAt+200)
+    if(matches.length!==1)continue
+    const owners=new Set(snapshot.events.filter(event=>event.sourceId===row.imageLifecycle.sourceId&&event.object===row.object&&snapshot.timeOrigin+event.time<=range.end).map(event=>event.nodeId))
+    const observed=snapshot.events.some(event=>event.kind==='observed'&&event.sourceId===row.imageLifecycle.sourceId&&event.object===row.object&&snapshot.timeOrigin+event.time<=range.end)
+    const retired=snapshot.events.some(event=>Math.abs(snapshot.timeOrigin+event.time-range.end)<=200&&
+      (event.kind==='removed'&&owners.has(event.nodeId)&&event.object===row.object||event.kind==='src-changed'&&event.previousSourceId===row.imageLifecycle.sourceId&&event.previousObject===row.object&&event.sourceId!==row.imageLifecycle.sourceId))
+    if(observed&&retired&&oldConsumersRetired(snapshot.events,row,range.end))result.push({requestId:row.requestId,transitionId:matches[0].id,reason:'verified-ui-consumer-removal'})
+  }
+  return result
+}
