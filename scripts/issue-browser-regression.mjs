@@ -39,6 +39,7 @@ optionalCases.add('28-COPY-CONNECTION-RESET')
 for(const id of ['29-DECODE-LOGOUT','29-DECODE-RELOGIN','29-DECODE-FROZEN-LOGOUT','28-IDB-TRANSACTION-ABORT'])optionalCases.add(id)
 optionalCases.add('29-OLD-401-DURING-INITIALIZATION')
 optionalCases.add('29-PENDING-WRITE-LOGOUT')
+for(const id of ['28-CATEGORY-EDIT-REFRESH','28-CATEGORY-MOBILE-MOVE','28-CATEGORY-PRIVACY'])optionalCases.add(id)
 const run = randomUUID().slice(0, 8), fixtures = createIconAcceptanceFixtures()
 const serverCleanup = createVerificationCleanup({baseUrl:base,run,credentials})
 const sessionCaptureErrors = []
@@ -122,8 +123,9 @@ async function click(selector, button = 'left') {
   await b.mouse(point.x, point.y, { button })
 }
 async function key(key, code = key, modifiers = 0) {
-  const windowsVirtualKeyCode=({Escape:27,Tab:9,Enter:13,ArrowDown:40,ArrowUp:38})[key]??0
-  await b.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, modifiers, windowsVirtualKeyCode })
+  const windowsVirtualKeyCode=({Escape:27,Tab:9,Enter:13,ArrowDown:40,ArrowUp:38,Home:36})[key]??0
+  const text=key==='Enter'&&modifiers===0?'\r':''
+  await b.send('Input.dispatchKeyEvent', { type: text?'keyDown':'rawKeyDown', key, code, modifiers, windowsVirtualKeyCode, ...(text?{text,unmodifiedText:text}:{}) })
   await b.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers, windowsVirtualKeyCode })
 }
 async function fill(selector, value) {
@@ -134,6 +136,44 @@ async function fill(selector, value) {
   await b.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Control',code:'ControlLeft',windowsVirtualKeyCode:17})
   await b.send('Input.insertText',{text:value})
   assert(await b.call((sel,expected)=>document.querySelector(sel)?.value===expected,selector,value),'Field replacement verification failed: '+selector)
+}
+async function tap(selector) {
+  const point=await wait(sel=>{const e=document.querySelector(sel);if(!e||e.disabled)return null;e.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2,hit=document.elementFromPoint(x,y);return r.width&&r.height&&x>=0&&x<innerWidth&&y>=0&&y<innerHeight&&(hit===e||e.contains(hit))?{x,y}:null},[selector])
+  await b.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...point,id:1,radiusX:3,radiusY:3,force:1}]})
+  await sleep(60)
+  await b.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})
+}
+const categoryDialog='[aria-labelledby="category-modal-title"]'
+async function categoryPanel() {
+  if(!await b.call(()=>Boolean(localStorage.getItem('cf-navs.auth'))))await login()
+  await homeAction('admin');await wait(()=>document.querySelector('[data-testid="admin-tab-categories"]'))
+  await click('[data-testid="admin-tab-categories"]');await fill('[data-testid="admin-category-search"]',run)
+  await wait(id=>document.querySelector(`.admin-compact-card[data-category-id="${id}"]`),[category.id])
+  const expand=await b.call(id=>{const e=document.querySelector(`[data-testid="admin-category-expand-${id}"]`);return e&&e.getAttribute('aria-expanded')!=='true'},category.id)
+  if(expand)await click(`[data-testid="admin-category-expand-${category.id}"]`)
+}
+async function editCategoryUi(id) {
+  await categoryPanel()
+  const selector=await b.call(id=>{const parent=`.admin-compact-card[data-category-id="${id}"] .admin-inline-actions`;const buttons=[...document.querySelectorAll(parent+' button')],index=buttons.findIndex(e=>e.textContent.trim()==='编辑');return index<0?null:parent+` button:nth-child(${index+1})`},id)
+  assert(selector,'Owned category edit button missing')
+  await click(selector);await wait(sel=>document.querySelector(sel),[categoryDialog])
+}
+async function saveCategoryUi(touch=false) {
+  const box=await b.call(sel=>{const r=document.querySelector(sel).getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth+1}},categoryDialog)
+  assert(box.left>=0&&box.right<=box.width+1&&box.top>=0&&box.bottom<=box.height+1&&!box.overflow,'Category dialog exceeds the viewport')
+  ;(report.cases.at(-1).categoryLayouts??=[]).push(box)
+  await (touch?tap:click)(categoryDialog+' button[type="submit"]')
+  await wait(sel=>!document.querySelector(sel),[categoryDialog],30000)
+}
+async function readOwnedCategory(id) {
+  const data=await api('/admin/data',undefined,'GET'),row=data.categories.find(item=>item.id===id)
+  assert(row,'Owned category disappeared')
+  return row
+}
+async function prepareCategoryScenario() {
+  if(!await b.call(()=>Boolean(localStorage.getItem('cf-navs.auth'))))await login()
+  await api('/categories/'+category.id,{title:'Browser regression '+run,parent_id:null,icon:fixtures.category.base64Uri,is_private:false},'PUT')
+  await api('/categories/'+child.id,{title:'Browser child '+run,parent_id:category.id,icon:fixtures.bookmark.base64Uri,is_private:false},'PUT')
 }
 async function homeAction(name) {
   const selector = name==='theme' ? '[data-testid="home-theme-toggle"]' : `[data-testid="home-${name}-button"]`
@@ -297,6 +337,10 @@ async function scenario(id, action) {
     },ownedCategories).catch(()=>null);
     if(category && !await b.call(()=>Boolean(document.querySelector('input[type="password"]'))).catch(()=>true)) await shot(id+'-failed').catch(()=>{}) }
   await collectImageLifecycle('scenario-end')
+  if(entry.status==='failed'&&id.startsWith('28-CATEGORY-')&&await b.call(sel=>Boolean(document.querySelector(sel)),categoryDialog).catch(()=>false)) {
+    try {await click(categoryDialog+' .modal-header .ghost-button');await wait(sel=>!document.querySelector(sel),[categoryDialog]);entry.uiCleanup={categoryDialogClosed:true}}
+    catch(error){entry.uiCleanup={categoryDialogClosed:false,error:safe(error.message)}}
+  }
   entry.requests = report.requests.slice(start).map(r => r.requestId)
   entry.console = b.consoleErrors.slice(consoles).map(e => safe(JSON.stringify(e)))
   entry.exceptions = b.pageExceptions.slice(exceptions).map(e => safe(JSON.stringify(e)))
@@ -1504,6 +1548,103 @@ try {
   await scenario('28-CLOCK-BEHIND-600MS', async () => {
     const {identifier}=await b.send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{const now=Date.now.bind(Date);Date.now=()=>now()-600})()`})
     try {await home();return await verifyImages()}finally{await b.send('Page.removeScriptToEvaluateOnNewDocument',{identifier});await b.navigate(base)}
+  })
+  await scenario('28-CATEGORY-EDIT-REFRESH',async()=>{
+    await prepareCategoryScenario()
+    await home();await verifyImages()
+    const original=await readOwnedCategory(child.id),evidence=report.cases.at(-1).categoryEdit={}
+    await editCategoryUi(child.id)
+    assert(await b.call((sel,icon)=>document.querySelector(sel+' .icon-row input')?.value===icon,categoryDialog,original.icon),'Category editor lost the original icon source')
+    const cancelStart=report.requests.length
+    await fill(categoryDialog+' .modal-form > label input[type="text"]','Draft '+run)
+    await click('[data-testid="category-parent-tree-select"]')
+    await key('ArrowDown')
+    await wait(()=>document.activeElement?.closest('.category-tree-menu'))
+    await key('Escape')
+    await wait(()=>!document.querySelector('.category-tree-menu')&&document.activeElement?.getAttribute('data-testid')==='category-parent-tree-select')
+    await key('Enter');await wait(()=>document.querySelector('.category-tree-menu'));await key('ArrowDown');await wait(()=>document.activeElement?.closest('.category-tree-menu'))
+    await key('ArrowDown')
+    assert(await b.call(()=>!document.activeElement?.classList.contains('root-choice')),'ArrowDown did not move beyond the first category option')
+    await key('Home')
+    assert(await b.call(()=>document.activeElement?.classList.contains('root-choice')),'Home did not return to the first category option')
+    await key('Enter')
+    await wait(()=>!document.querySelector('.category-tree-menu')&&document.querySelector('[data-testid="category-parent-tree-select"]')?.textContent.includes('无上级分类'))
+    let cancelFocused=false
+    for(let i=0;i<20;i++){cancelFocused=await b.call(sel=>document.activeElement===document.querySelector(sel+' .modal-actions .ghost-button'),categoryDialog);if(cancelFocused)break;await key('Tab')}
+    assert(cancelFocused,'Category cancel cannot be reached by keyboard');await key('Enter');await wait(sel=>!document.querySelector(sel),[categoryDialog])
+    assert(!report.requests.slice(cancelStart).some(row=>row.method==='PUT'&&row.path==='/api/categories/'+child.id),'Cancelled category draft was submitted')
+    const cancelled=await readOwnedCategory(child.id)
+    assert(cancelled.title===original.title&&cancelled.icon===original.icon&&cancelled.parent_id===original.parent_id,'Cancelled category draft changed persistence')
+    evidence.keyboardAndCancel=true
+    await editCategoryUi(child.id);await fill(categoryDialog+' .icon-row input',fixtures.category.base64Uri)
+    await verifyImages([{key:'category:'+child.id,selector:categoryDialog+' .icon-row [data-category-icon]',kind:'image',pixels:fixtures.category.pixels}])
+    await saveCategoryUi()
+    assert((await readOwnedCategory(child.id)).icon===fixtures.category.base64Uri,'UI icon save did not reach the server')
+    await verifyImages([{key:'category:'+child.id,selector:`.admin-compact-card[data-category-id="${child.id}"] [data-category-icon]`,kind:'image',pixels:fixtures.category.pixels}])
+    const changed=manifest().map(row=>row.key==='category:'+child.id?{...row,pixels:fixtures.category.pixels}:row)
+    await home();await verifyImages(changed)
+    const before=await readFixtureCopy('category:'+child.id)
+    assert(before.entryPresent&&before.bodyPresent&&before.bodyRevision===before.descriptor?.content_revision,'Saved category has no valid persistent image')
+    const start=report.requests.length,documentBefore=await b.call(()=>performance.timeOrigin)
+    await home();await verifyImages(changed)
+    assert(await b.call(()=>performance.timeOrigin)!==documentBefore,'Refresh did not create a new document')
+    const bodies=report.requests.slice(start).filter(row=>row.object==='category:'+child.id&&['icon-copy','icon-body'].includes(row.kind))
+    evidence.refreshBodyRequests=bodies.map(row=>({id:row.requestId,kind:row.kind,status:row.status}))
+    assert(!bodies.length,'Warm category refresh downloaded unchanged image bytes')
+    await editCategoryUi(child.id);await fill(categoryDialog+' .icon-row input',original.icon);await saveCategoryUi();await home();await verifyImages()
+    return {keyboardAndCancel:true,sourcePreserved:true,previewAndSavedPixels:true,newDocument:true,warmCategoryBodyRequests:0,restored:true}
+  })
+  await scenario('28-CATEGORY-MOBILE-MOVE',async()=>{
+    await prepareCategoryScenario()
+    try {
+      await b.setViewport({width:390,height:844,mobile:true,scale:1})
+      await b.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1})
+      await editCategoryUi(child.id);await tap('[data-testid="category-parent-tree-select"]')
+      await wait(()=>document.querySelector('.category-tree-menu .root-choice'))
+      const menu=await b.call(()=>{const r=document.querySelector('.category-tree-menu').getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:innerWidth,height:innerHeight}})
+      assert(menu.left>=0&&menu.right<=menu.width+1&&menu.top>=0&&menu.bottom<=menu.height+1,'Mobile parent menu exceeds the viewport')
+      await tap('.category-tree-menu .root-choice');await saveCategoryUi(true)
+      assert((await readOwnedCategory(child.id)).parent_id==null,'Touch move did not promote the category')
+      await categoryPanel();await wait(id=>document.querySelector(`.admin-root-category-card[data-category-id="${id}"]`),[child.id])
+      await editCategoryUi(child.id);await tap('[data-testid="category-parent-tree-select"]');await tap(`[data-tree-root-id="${category.id}"]`)
+      const clip=await b.call(sel=>{const r=document.querySelector(sel).getBoundingClientRect();return {x:r.x+scrollX,y:r.y+scrollY,width:r.width,height:r.height,scale:1}},categoryDialog)
+      const screenshot=await b.send('Page.captureScreenshot',{format:'png',clip,captureBeyondViewport:true})
+      await fs.writeFile(path.join(output,'category-mobile-parent.png'),Buffer.from(screenshot.data,'base64'))
+      await saveCategoryUi(true)
+      assert((await readOwnedCategory(child.id)).parent_id===category.id,'Touch move did not restore the original parent')
+      await categoryPanel();await wait(id=>document.querySelector(`.admin-child-category-card[data-category-id="${id}"]`),[child.id])
+      return {viewport:'390x844',touchInput:true,promotedAndRestored:true,uiHierarchyVerified:true,parentMenuInsideViewport:true}
+    } finally {
+      await b.send('Emulation.setTouchEmulationEnabled',{enabled:false})
+      await b.setViewport({width:1366,height:900,scale:1})
+    }
+  })
+  await scenario('28-CATEGORY-PRIVACY',async()=>{
+    await prepareCategoryScenario()
+    const evidence=report.cases.at(-1).categoryPrivacy={}
+    const privacy=async(id,hidden)=>{
+      await editCategoryUi(id)
+      if(await b.call(sel=>document.querySelector(sel+' .visibility-toggle input').checked,categoryDialog)!==hidden)await click(categoryDialog+' .visibility-toggle input')
+      await saveCategoryUi()
+      assert(Boolean((await readOwnedCategory(id)).is_private)===hidden,'Category privacy did not persist')
+    }
+    await privacy(category.id,true);await home();await verifyImages()
+    await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
+    await b.navigate(base)
+    await wait(()=>document.querySelectorAll('.bookmark-card-shell').length>0)
+    assert(await b.call((root,child,ids)=>!document.querySelector(`[data-home-category-scope="${root}"]`)&&!document.querySelector(`[data-navigation-id="category-${child}"]`)&&ids.every(id=>!document.querySelector(`[data-sort-id="${id}"]`)),category.id,child.id,bookmarks.map(row=>row.id)),'Private parent subtree remains in anonymous UI')
+    evidence.privateParentHidesSubtree=true
+    await login();await privacy(category.id,false);await privacy(child.id,true);await home();await verifyImages()
+    await homeAction('logout');await wait(()=>!localStorage.getItem('cf-navs.auth'))
+    await b.navigate(base);await wait(sel=>document.querySelector(sel),[scope()]);await click(scope()+' .scope-root-trigger')
+    const publicItems=manifest().filter(row=>row.key!=='category:'+child.id&&row.key!=='bookmark:'+bookmarks[2].id)
+    await verifyImages(publicItems)
+    assert(await b.call((child,privateId)=>!document.querySelector(`#home-category-tab-${child}`)&&!document.querySelector(`[data-navigation-id="category-${child}"]`)&&!document.querySelector(`[data-sort-id="${privateId}"]`),child.id,bookmarks[2].id),'Private child remains visible to a visitor')
+    const stored=await readFixtureCopy('category:'+child.id)
+    assert(!stored.available||(!stored.entryPresent&&!stored.bodyPresent),'Anonymous browser retained the private category copy')
+    evidence.publicParentStillVisible=true;evidence.privateChildHidden=true
+    await login();await privacy(child.id,false);await home();await verifyImages()
+    return {parentSubtreeHidden:true,publicParentPreserved:true,privateChildHidden:true,privateLocalCopyRemoved:true,restoredByUi:true}
   })
   await scenario('28-CATEGORY-PERMISSIONS', async()=>{
     // The native-timeout case intentionally changes this SVG's nonvisual bytes.
