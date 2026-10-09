@@ -178,12 +178,13 @@ async function saveCategoryUi(touch=false) {
   const requestStart=report.requests.length
   await (touch?tap:click)(categoryDialog+' button[type="submit"]')
   await wait(sel=>!document.querySelector(sel),[categoryDialog],30000)
+  const confirmedAt=Date.now()
   await localWait(()=>report.requests.slice(requestStart).some(row=>row.method==='PUT'&&/^\/api\/categories\/\d+$/.test(row.path)&&Number.isFinite(row.finishedTime)),'Category save response completion')
   const writes=report.requests.slice(requestStart).filter(row=>row.method==='PUT'&&/^\/api\/categories\/\d+$/.test(row.path))
   assert(writes.length===1&&writes[0].status===200,'Category save did not produce one successful write')
   const response=await b.send('Network.getResponseBody',{requestId:writes[0].requestId})
   const envelope=JSON.parse(response.base64Encoded?Buffer.from(response.body,'base64').toString():response.body),value=envelope.data
-  const proof={requestId:writes[0].requestId,id:value?.id,revision:value?.icon_revision,writeEpoch:value?.icon_write_epoch,cached:value?.icon_cached}
+  const proof={requestId:writes[0].requestId,id:value?.id,revision:value?.icon_revision,writeEpoch:value?.icon_write_epoch,cached:value?.icon_cached,confirmedAt}
   ;(report.cases.at(-1).categoryMutationResponses??=[]).push(proof)
   assert(envelope.code===0&&ownedCategories.includes(value?.id)&&Object.hasOwn(value,'icon_revision')&&Number.isSafeInteger(value.icon_write_epoch)&&value.icon_write_epoch>=0&&[0,1].includes(value.icon_cached),'Category save response omitted the committed icon identity')
 }
@@ -1642,6 +1643,12 @@ try {
     evidence.refreshBodyRequests=bodies.map(row=>({id:row.requestId,kind:row.kind,status:row.status}))
     assert(!bodies.length,'Warm category refresh downloaded unchanged image bytes')
     await editCategoryUi(child.id);await fill(categoryDialog+' .icon-row input',original.icon);await saveCategoryUi();await home();await verifyImages()
+    const mutations=report.cases.at(-1).categoryMutationResponses
+    for(const [index,mutation]of mutations.entries()) {
+      const end=mutations[index+1]?.confirmedAt??Date.now()
+      const stale=report.requests.filter(row=>row.kind==='icon-copy'&&row.object==='category:'+child.id&&row.wallTime*1000>=mutation.confirmedAt&&row.wallTime*1000<end&&(!Number.isSafeInteger(row.copyRequest?.expected_write_epoch)||row.copyRequest.expected_write_epoch<mutation.writeEpoch))
+      assert(stale.length===0,'Saved category regressed to an older/unknown write epoch: '+stale.map(row=>row.requestId).join(','))
+    }
     return {keyboardAndCancel:true,sourcePreserved:true,previewAndSavedPixels:true,newDocument:true,warmCategoryBodyRequests:0,restored:true}
   })
   await scenario('28-CATEGORY-MOBILE-MOVE',async()=>{
