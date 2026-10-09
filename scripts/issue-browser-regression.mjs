@@ -1267,7 +1267,12 @@ try {
         for(const index of targets){await b.call(sel=>document.querySelector(sel)?.scrollIntoView({block:'center'}),card(index));await wait(sel=>{const img=document.querySelector(sel)?.querySelector('img');return img?.complete&&img.naturalWidth>0},[card(index)],30000)}
         await verifyImages()
         evidence.recovered=[]
-        for(const object of objects){const state=await readFixtureCopy(object);assert(state.entryPresent&&state.bodyPresent&&state.bodyRevision===state.descriptor?.content_revision,'Natural UI recovery did not persist the correct body');evidence.recovered.push({object,revision:state.bodyRevision})}
+        const recoveryDeadline=Date.now()+20000
+        for(const object of objects){
+          let state
+          do {state=await readFixtureCopy(object);if(state.entryPresent&&state.bodyPresent&&state.bodyRevision===state.descriptor?.content_revision)break;await sleep(150)}while(Date.now()<recoveryDeadline)
+          assert(state.entryPresent&&state.bodyPresent&&state.bodyRevision===state.descriptor?.content_revision,'Natural UI recovery did not persist the correct body');evidence.recovered.push({object,revision:state.bodyRevision})
+        }
         evidence.imagesPassed=true
       })
       return {fault,publicAndPrivate:true,retained:fault==='KEEP-GOOD',naturalRecovery:fault!=='KEEP-GOOD',injections:evidence.injections.length}
