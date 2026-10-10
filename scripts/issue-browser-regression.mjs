@@ -597,6 +597,8 @@ try {
     await fetch(base+'/api/logout',{method:'POST',headers:{authorization:'Bearer '+bootstrap.data.token}})
   }
   await b.start(); await b.attach()
+  const browserVersion = await b.send('Browser.getVersion')
+  report.browserVersion = { product: browserVersion.product, protocolVersion: browserVersion.protocolVersion, jsVersion: browserVersion.jsVersion }
   await installPageInstrumentation()
   b.on('Runtime.bindingCalled',(event,sessionId)=>{if(event.name==='__issueCopyObserved'){try{observedCopyResponses.push({sessionId,...JSON.parse(event.payload)})}catch{}}})
   b.on('Log.entryAdded',({entry})=>{if(['warning','error'].includes(entry.level)) report.browserLog.push({stage,level:entry.level,source:entry.source,requestId:entry.networkRequestId,text:safe(entry.text)})})
@@ -641,7 +643,7 @@ try {
       void b.call(url=>[...document.querySelectorAll('[data-testid="bookmark-modal"] img')].some(img=>img.src===url||img.currentSrc===url),e.request.url).then(matches=>{if(matches){row.surface='editor-preview';row.previewFor=previewFor}}).catch(()=>{})
     }
   })
-  b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,responseTime:e.timestamp,protocol:e.response.protocol,timing:numericNetworkTiming(e.response.timing),disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','cache-control','x-icon-fallback','content-security-policy'].includes(name.toLowerCase()))) }) })
+  b.on('Network.responseReceived', e => { const row = requests.get(e.requestId); if (row) Object.assign(row, { status:e.response.status,responseTime:e.timestamp,protocol:e.response.protocol,timing:numericNetworkTiming(e.response.timing),disk:e.response.fromDiskCache,sw:e.response.fromServiceWorker,headers:Object.fromEntries(Object.entries(e.response.headers??{}).filter(([name])=>['content-type','content-length','content-encoding','cache-control','x-icon-fallback','content-security-policy'].includes(name.toLowerCase()))) }) })
   function inspectCopyResponse(requestId) {
     const row=requests.get(requestId)
     const readBody=()=>row?.cdpSessionId&&row.cdpSessionId!==b.sessionId?sessionSend(row.cdpSessionId,'Network.getResponseBody',{requestId}):b.send('Network.getResponseBody',{requestId})
