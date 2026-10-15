@@ -1,6 +1,6 @@
 <script lang="ts">
-  type AsyncVoid<T = void> = T | Promise<T>
 
+  import type { AsyncVoid } from '../../shared/types'
   export let selected = false
   export let title = ''
   export let imageUrl = ''

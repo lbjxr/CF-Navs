@@ -1,66 +1,46 @@
 import type { MiddlewareHandler } from 'hono'
 import { ErrCode } from '../../shared/types'
+import {
+  LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
+  clearLoginAttempts,
+  consumeLoginAttempt,
+  readLoginAttempts,
+} from '../lib/loginRateLimit'
 import { fail } from '../lib/response'
 import { hasSessionBinding } from '../lib/sessionStore'
 import type { Env, HonoEnv, LoginRateLimitState } from '../types'
-
-const LOGIN_RATE_LIMIT_PREFIX = 'rl:login:'
-const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5
-const LOGIN_RATE_LIMIT_WINDOW_SECONDS = 10 * 60
-const LOGIN_RATE_LIMIT_WINDOW_MS = LOGIN_RATE_LIMIT_WINDOW_SECONDS * 1000
 
 export function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string {
   const forwarded = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip')
   return forwarded?.split(',')[0]?.trim() || 'unknown'
 }
 
-function getRateLimitKey(ip: string): string {
-  return `${LOGIN_RATE_LIMIT_PREFIX}${ip}`
-}
-
-async function readRateLimitState(env: Env, ip: string): Promise<LoginRateLimitState | null> {
-  const raw = await env.SESSION.get(getRateLimitKey(ip))
-  if (!raw) return null
-
-  try {
-    return JSON.parse(raw) as LoginRateLimitState
-  } catch {
-    await env.SESSION.delete(getRateLimitKey(ip))
-    return null
-  }
-}
-
+// 记录一次登录失败。计数走 D1 原子 UPSERT（见 lib/loginRateLimit.ts），
+// 不再信任调用方传进来的 state——并发下它一定是旧的。
 export async function recordLoginFailure(
   env: Env,
   ip: string,
-  currentState?: LoginRateLimitState | null,
+  _currentState?: LoginRateLimitState | null,
 ): Promise<void> {
-  const now = Date.now()
-  const current = currentState === undefined ? await readRateLimitState(env, ip) : currentState
-
-  const nextState: LoginRateLimitState =
-    current && current.resetAt > now
-      ? { count: current.count + 1, resetAt: current.resetAt }
-      : { count: 1, resetAt: now + LOGIN_RATE_LIMIT_WINDOW_MS }
-
-  const ttlSeconds = Math.max(1, Math.ceil((nextState.resetAt - now) / 1000))
-  await env.SESSION.put(getRateLimitKey(ip), JSON.stringify(nextState), { expirationTtl: ttlSeconds })
+  await consumeLoginAttempt(env.DB, ip)
 }
 
 export async function clearLoginFailures(env: Env, ip: string): Promise<void> {
-  await env.SESSION.delete(getRateLimitKey(ip))
+  await clearLoginAttempts(env.DB, ip)
 }
 
 export const loginRateLimit: MiddlewareHandler<HonoEnv> = async (c, next) => {
-  // 缺 `SESSION` 绑定时给出可定位的错误，而不是让 `env.SESSION.get` 抛 TypeError 由
-  // 全局 onError 兜成 `code=1500 internal server error`（PROB-31）。登录限流的整个意义
-  // 就是那个 KV，没有它不能假装限流成功——口径与 `/install` 的 `bindings_missing` 一致。
+  // 缺 `SESSION` 绑定时给出可定位的错误，而不是让后续建会话时抛 TypeError 由
+  // 全局 onError 兜成 `code=1500 internal server error`（PROB-31）。登录流程本身
+  // 需要 SESSION 建会话，没有它不能假装登录成功——口径与 `/install` 的
+  // `bindings_missing` 一致。限流计数本身已迁到 D1（原子 UPSERT），见
+  // lib/loginRateLimit.ts。
   if (!hasSessionBinding(c.env)) {
     return c.json(fail(ErrCode.SERVER_ERROR, 'required SESSION binding is unavailable'))
   }
 
   const ip = getClientIp(c)
-  const state = await readRateLimitState(c.env, ip)
+  const state = await readLoginAttempts(c.env.DB, ip)
   c.set('loginRateLimitState', state)
 
   if (state && state.resetAt > Date.now() && state.count >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS) {

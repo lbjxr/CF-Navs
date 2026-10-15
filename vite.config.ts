@@ -48,6 +48,19 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // 第三方依赖单独成 chunk：vendor 内容稳定时 hash 不变，浏览器可长期缓存；
+        // 业务代码改动不再导致用户重新下载整个依赖包。
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('node_modules/svelte')) return 'vendor-svelte'
+            return 'vendor'
+          }
+          return undefined
+        },
+      },
+    },
   },
   server: {
     // 本地开发时把 /api 代理到 wrangler dev（默认 8787）

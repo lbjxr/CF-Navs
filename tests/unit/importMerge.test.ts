@@ -44,6 +44,9 @@ describe('merge import data', () => {
     expect(result.payload.categories.find((category) => category.title === 'New Root')).toMatchObject({ id: 8, parent_id: null })
     expect(result.payload.categories.find((category) => category.id === 9)).toMatchObject({ title: 'Frontend', parent_id: 8 })
     expect(result.payload.bookmarks.map((item) => item.category_id)).toEqual([6, 9])
-    expect(result.payload.settings).toBeUndefined()
+    // settings 透传（合并模式同样 patch，不再静默丢弃）
+    expect(result.payload.settings).toEqual({ site_title: 'Imported' })
+    expect(result.newCategories.map((c) => c.title).sort()).toEqual(['Frontend', 'New Root'])
+    expect(result.newBookmarks.map((b) => b.title).sort()).toEqual(['ExistingPath', 'NewPath'])
   })
 })

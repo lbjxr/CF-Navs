@@ -6,8 +6,8 @@
   } from '../lib/bookmarkFormIcons'
   import type { IconCandidate } from '../lib/icons'
   import BookmarkIconCandidateButton from './BookmarkIconCandidateButton.svelte'
+  import type { AsyncVoid } from '../../shared/types'
 
-  type AsyncVoid<T = void> = T | Promise<T>
 
   export let candidates: IconCandidate[] = []
   export let form: BookmarkFormValue
