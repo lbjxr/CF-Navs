@@ -1,8 +1,17 @@
 <script lang="ts">
-  export let mode: 'create' | 'edit' = 'create'
-  export let loading = false
-  export let deleting = false
-  export let onCancel: (() => void) | undefined = undefined
+  interface BookmarkModalHeaderProps {
+    mode?: 'create' | 'edit'
+    loading?: boolean
+    deleting?: boolean
+    onCancel?: () => void
+  }
+
+  let {
+    mode = 'create',
+    loading = false,
+    deleting = false,
+    onCancel = undefined,
+  }: BookmarkModalHeaderProps = $props()
 </script>
 
 <div class="modal-header">
@@ -10,7 +19,7 @@
     <p class="modal-eyebrow">书签管理</p>
     <h2 id="bookmark-modal-title">{mode === 'create' ? '新增书签' : '编辑书签'}</h2>
   </div>
-  <button type="button" class="ghost-button" on:click={onCancel} disabled={loading || deleting}>取消</button>
+  <button type="button" class="ghost-button" onclick={onCancel} disabled={loading || deleting}>取消</button>
 </div>
 
 <style>

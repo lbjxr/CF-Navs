@@ -1,5 +1,9 @@
 <script lang="ts">
-  export let hasSearchQuery = false
+  interface HomeEmptyPanelProps {
+    hasSearchQuery?: boolean
+  }
+
+  let { hasSearchQuery = false }: HomeEmptyPanelProps = $props()
 </script>
 
 <section class="empty-panel">
