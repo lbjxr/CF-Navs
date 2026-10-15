@@ -1,22 +1,39 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte'
+  // runes 试点：$props + $bindable(value) + $effect.pre，渐变变更经 onchange 回调通知。
   import ColorAlphaInput from './ColorAlphaInput.svelte'
   import { parseCssColor } from '../lib/color'
 
-  export let value = ''
-  export let defaultStart = '#1e3a8a'
-  export let defaultEnd = '#0f172a'
-  export let startLabel = '起始颜色'
-  export let endLabel = '结束颜色'
-
-  let startColor = defaultStart
-  let endColor = defaultEnd
-  let lastValue = ''
-  const dispatch = createEventDispatcher<{ change: string }>()
-
-  $: if (value !== lastValue) {
-    syncStopsFromValue(value)
+  interface GradientBackgroundInputProps {
+    value?: string
+    defaultStart?: string
+    defaultEnd?: string
+    startLabel?: string
+    endLabel?: string
+    /** 渐变变更回调，参数为新的渐变 CSS 值 */
+    onchange?: (value: string) => void
   }
+
+  let {
+    value = $bindable(''),
+    defaultStart = '#1e3a8a',
+    defaultEnd = '#0f172a',
+    startLabel = '起始颜色',
+    endLabel = '结束颜色',
+    onchange,
+  }: GradientBackgroundInputProps = $props()
+
+  // 有意快照：defaultStart/defaultEnd 只是"空值时"的兜底默认，之后由 value 同步覆盖。
+  // svelte-ignore state_referenced_locally
+  let startColor = $state(defaultStart)
+  // svelte-ignore state_referenced_locally
+  let endColor = $state(defaultEnd)
+  let lastValue = ''
+
+  $effect.pre(() => {
+    if (value !== lastValue) {
+      syncStopsFromValue(value)
+    }
+  })
 
   function syncStopsFromValue(nextValue: string) {
     const stops = parseGradientStops(nextValue)
@@ -27,13 +44,13 @@
     lastValue = nextValue
   }
 
-  function handleStartChange(event: CustomEvent<string>) {
-    startColor = event.detail
+  function handleStartChange(nextValue: string) {
+    startColor = nextValue
     updateGradientFromStops()
   }
 
-  function handleEndChange(event: CustomEvent<string>) {
-    endColor = event.detail
+  function handleEndChange(nextValue: string) {
+    endColor = nextValue
     updateGradientFromStops()
   }
 
@@ -41,7 +58,7 @@
     const nextValue = `linear-gradient(135deg, ${startColor.trim() || defaultStart}, ${endColor.trim() || defaultEnd})`
     value = nextValue
     lastValue = nextValue
-    dispatch('change', value)
+    onchange?.(value)
   }
 
   function parseGradientStops(input: string): [string, string] | null {
@@ -116,7 +133,7 @@
         inputLabel={startLabel}
         swatchTitle={`选择${startLabel}`}
         alphaText={`${startLabel}透明度`}
-        on:change={handleStartChange}
+        onchange={handleStartChange}
       />
       <span class="gradient-color-label">{startLabel}</span>
     </div>
@@ -128,7 +145,7 @@
         inputLabel={endLabel}
         swatchTitle={`选择${endLabel}`}
         alphaText={`${endLabel}透明度`}
-        on:change={handleEndChange}
+        onchange={handleEndChange}
       />
       <span class="gradient-color-label">{endLabel}</span>
     </div>

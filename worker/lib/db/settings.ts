@@ -136,6 +136,28 @@ export async function touchDataVersion(db: D1Database): Promise<string> {
   return version
 }
 
+/**
+ * Compare-and-swap the data version（PUT /api/settings 的乐观并发门）。
+ * 用一条原子语句把 data_version 从 `expected` 推进到新值：
+ * - 存储值匹配 → 更新并返回新版本；
+ * - 存储值已被其他写入者推进 → 影响 0 行，返回 null（调用方回 409）；
+ * - 行不存在（异常库）→ 直接插入新版本，视为成功。
+ * stored value 是 JSON 序列化的（setSettingValue 写入时 JSON.stringify），
+ * 因此比较时同样序列化 expected。
+ */
+export async function casDataVersion(db: D1Database, expected: string): Promise<string | null> {
+  const next = createDataVersion()
+  const result = await db
+    .prepare(
+      `INSERT INTO settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE settings.value = ?`,
+    )
+    .bind(DATA_VERSION_KEY, JSON.stringify(next), JSON.stringify(expected))
+    .run()
+  if ((result.meta?.changes ?? 0) === 0) return null
+  return next
+}
+
 export function settingsPatchStatement(db: D1Database, patch: Partial<Settings>): D1PreparedStatement | null {
   const built = buildSettingsPatchParams(patch)
   if (!built) return null

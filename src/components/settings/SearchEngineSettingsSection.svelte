@@ -60,8 +60,8 @@
   id="settings-section-search"
   class="group group-wide group-search"
   disabled={saving}
-  on:input={() => void syncForm()}
-  on:change={() => void syncForm()}
+  oninput={() => void syncForm()}
+  onchange={() => void syncForm()}
 >
   <legend>搜索引擎</legend>
   <p class="group-desc">维护首页搜索框可切换的外部搜索引擎，查询模板中用 {'{q}'} 代表关键词。</p>
@@ -73,7 +73,7 @@
         class="native-select"
         bind:value={form.search_engine.current}
         disabled={form.search_engine.engines.length === 0}
-        on:input={handleEngineSelection}
+        oninput={handleEngineSelection}
       >
         {#if form.search_engine.engines.length === 0}
           <option value="">无可用引擎</option>
@@ -103,13 +103,13 @@
               bind:value={engine.icon}
               placeholder="图标链接"
               ariaLabel="图标链接"
-              on:input={() => void syncForm()}
+              oninput={() => void syncForm()}
             >
+              {#snippet suffix()}
               <button
-                slot="suffix"
                 type="button"
                 class="favicon-suffix-button"
-                on:click={() => applyFaviconImIcon(index)}
+                onclick={() => applyFaviconImIcon(index)}
                 disabled={!faviconImIcon(engine.url_template)}
                 aria-label="根据查询模板域名生成图标"
                 title={faviconImIcon(engine.url_template)
@@ -121,6 +121,7 @@
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
               </button>
+              {/snippet}
             </InputGroup>
             {#if canPreviewIcon(engine.icon)}
               <span class="engine-icon-preview" title="搜索引擎图标预览">
@@ -140,7 +141,7 @@
         <button
           type="button"
           class="engine-delete-button"
-          on:click={() => removeEngine(index)}
+          onclick={() => removeEngine(index)}
           disabled={form.search_engine.engines.length <= 1}
           aria-label="删除"
           title="删除"
@@ -156,7 +157,7 @@
     {/each}
   </div>
 
-  <button type="button" class="ghost-button add-engine" on:click={addEngine}>+ 添加搜索引擎</button>
+  <button type="button" class="ghost-button add-engine" onclick={addEngine}>+ 添加搜索引擎</button>
 
   {#if !enginesValid}
     <small class="warn">每个引擎都需填写名称，且查询模板必须包含 {'{q}'} 占位符。</small>

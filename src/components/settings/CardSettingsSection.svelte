@@ -61,7 +61,7 @@
         <Switch
           checked={form.card_icon_show_title}
           ariaLabel="显示极简卡片标题"
-          on:change={(event) => { form.card_icon_show_title = event.detail; void syncForm() }}
+          onchange={(next) => { form.card_icon_show_title = next; void syncForm() }}
         />
       </div>
     </div>

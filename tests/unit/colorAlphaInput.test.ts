@@ -54,8 +54,7 @@ describe('ColorAlphaInput', () => {
   it('updates the color from keyboard and pointer controls', async () => {
     const onChange = vi.fn()
     render(ColorAlphaInput, {
-      props: { value: 'rgba(182, 164, 47, 0.65)', inputLabel: '颜色值' },
-      events: { change: (event) => onChange(event.detail) },
+      props: { value: 'rgba(182, 164, 47, 0.65)', inputLabel: '颜色值', onchange: onChange },
     })
     await fireEvent.click(screen.getByRole('button', { name: '打开颜色选择器' }))
 
@@ -83,8 +82,7 @@ describe('ColorAlphaInput', () => {
   it('keeps a separately bound alpha outside the color value', async () => {
     const onChange = vi.fn()
     render(ColorAlphaInput, {
-      props: { value: '#123456', alpha: 0.5, inputLabel: '颜色值' },
-      events: { change: (event) => onChange(event.detail) },
+      props: { value: '#123456', alpha: 0.5, inputLabel: '颜色值', onchange: onChange },
     })
     await fireEvent.click(screen.getByRole('button', { name: '打开颜色选择器' }))
 
@@ -102,8 +100,7 @@ describe('ColorAlphaInput', () => {
   ])('normalizes %s to separate color and alpha bindings', async (text, expectedValue, expectedAlpha) => {
     const onChange = vi.fn()
     render(ColorAlphaInput, {
-      props: { value: '#000000', alpha: 0.5, inputLabel: '颜色值' },
-      events: { change: (event) => onChange(event.detail) },
+      props: { value: '#000000', alpha: 0.5, inputLabel: '颜色值', onchange: onChange },
     })
     await fireEvent.click(screen.getByRole('button', { name: '打开颜色选择器' }))
     await fireEvent.input(screen.getByLabelText('颜色值'), { target: { value: text } })
@@ -189,8 +186,7 @@ describe('ColorAlphaInput', () => {
   it.each(['rgba(18, 52, 86, 0.25)', '#12345688'])('normalizes same-RGB input %s when value is unchanged', async (text) => {
     const onChange = vi.fn()
     render(ColorAlphaInput, {
-      props: { value: '#123456', alpha: 0.5, inputLabel: '颜色值' },
-      events: { change: (event) => onChange(event.detail) },
+      props: { value: '#123456', alpha: 0.5, inputLabel: '颜色值', onchange: onChange },
     })
 
     await fireEvent.input(screen.getByLabelText('颜色值'), { target: { value: text } })

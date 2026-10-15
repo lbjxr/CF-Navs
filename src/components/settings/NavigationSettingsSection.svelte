@@ -69,7 +69,7 @@
           checked={form.navigation.always_expanded}
           disabled={saving || !isLeft}
           ariaLabel="左侧导航始终展开"
-          on:change={(event) => setAlwaysExpanded(event.detail)}
+          onchange={(next) => setAlwaysExpanded(next)}
         />
       </div>
 
@@ -82,7 +82,7 @@
           checked={form.navigation.top_layout === 'wrap'}
           disabled={saving || !isTop}
           ariaLabel="顶部分类分行显示"
-          on:change={(event) => setTopLayout(event.detail)}
+          onchange={(next) => setTopLayout(next)}
         />
       </div>
     </div>
@@ -101,10 +101,10 @@
           step={10}
           bind:value={form.content_layout.max_width}
           ariaLabel="最大宽度"
-          on:input={() => void syncForm()}
+          oninput={() => void syncForm()}
         >
+          {#snippet suffix()}
           <select
-            slot="suffix"
             bind:value={form.content_layout.max_width_unit}
             class="unit-select native-select"
             aria-label="最大宽度单位"
@@ -113,6 +113,7 @@
             <option value="px">px</option>
             <option value="%">%</option>
           </select>
+          {/snippet}
         </InputGroup>
       </label>
 
@@ -124,7 +125,7 @@
           max={100}
           step={1}
           bind:value={form.content_layout.margin_x}
-          on:input={() => void syncForm()}
+          oninput={() => void syncForm()}
         />
       </div>
 
@@ -136,7 +137,7 @@
           max={50}
           step={1}
           bind:value={form.content_layout.margin_top}
-          on:input={() => void syncForm()}
+          oninput={() => void syncForm()}
         />
       </div>
 
@@ -148,7 +149,7 @@
           max={50}
           step={1}
           bind:value={form.content_layout.margin_bottom}
-          on:input={() => void syncForm()}
+          oninput={() => void syncForm()}
         />
       </div>
     </div>

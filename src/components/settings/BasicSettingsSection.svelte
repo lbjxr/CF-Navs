@@ -40,7 +40,7 @@
       <span>首页标题颜色</span>
       <ColorAlphaInput
         bind:value={form.site_title_color}
-        on:change={() => void syncForm()}
+        onchange={() => void syncForm()}
         placeholder="留空跟随主题文字色"
         inputLabel="首页标题颜色值"
         swatchTitle="选择首页标题颜色"
@@ -56,7 +56,7 @@
         max={72}
         step={1}
         bind:value={form.site_title_font_size}
-        on:input={() => void syncForm()}
+        oninput={() => void syncForm()}
       />
     </div>
 
@@ -65,7 +65,7 @@
       <Switch
         checked={form.public_mode}
         ariaLabel="公开模式"
-        on:change={(event) => { form.public_mode = event.detail; void syncForm() }}
+        onchange={(next) => { form.public_mode = next; void syncForm() }}
       />
     </div>
 
@@ -74,7 +74,7 @@
       <Switch
         checked={form.browser_sync_enabled}
         ariaLabel="浏览器书签同步"
-        on:change={(event) => { form.browser_sync_enabled = event.detail; void syncForm() }}
+        onchange={(next) => { form.browser_sync_enabled = next; void syncForm() }}
       />
     </div>
 
