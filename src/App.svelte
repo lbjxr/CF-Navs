@@ -27,7 +27,7 @@
   import type { AdminTab, BookmarkFormValue, CategoryFormValue } from './lib/adminTypes'
   import { toBookmarkForm, toBookmarkPayload, toCategoryForm, toCategoryPayload } from './lib/adminFormAdapters'
   import { runAdminMutation } from './lib/appAdminMutation'
-  import { createAuthViewIntent, logoutRevocationWarning } from './lib/appAuthController'
+  import { createAuthViewIntent, logoutRevocationWarning, targetAfterLoginClose, targetAfterLoginOpen, targetAfterLoginSuccess, targetAfterLogout, targetAfterPasswordChange } from './lib/appAuthController'
   import {
     createImportExportState,
     exportDataToFile,
@@ -49,6 +49,14 @@
     type SettingsFormValue,
   } from './lib/appData'
   import { createLazyComponentLoader } from './lib/appLazyComponent'
+  import {
+    anyBlockingModalOpen,
+    canOpenSpotlight,
+    classifySpotlightKey,
+    isShortcutSuppressedByTyping,
+    type SpotlightModalState,
+    type SpotlightOpenGate,
+  } from './lib/appSpotlight'
   import {
     createBrowserCustomScriptHost,
     createCustomScriptController,
@@ -95,6 +103,7 @@
     applyLocalSettings,
     applyLoggedInData,
     configureDataService,
+    getCurrentDataVersion,
     isLoggedIn,
     persistCurrentAdminData,
     refreshBookmarkIconCacheInBackground,
@@ -102,6 +111,7 @@
     refreshLoggedInData,
     refreshPublicData,
     refreshVisibleData,
+    setCurrentDataVersion,
   } from './lib/dataService'
 
   type SettingsSubset = SettingsFormValue
@@ -179,18 +189,31 @@
   let spotlightOpen = false
   let viewBookmark: PublicBookmark | null = null
 
-  function anyBlockingModalOpen(): boolean {
-    return loginModalOpen || categoryModalOpen || bookmarkModalOpen || Boolean(confirmDialog) || Boolean(viewBookmark)
+  function blockingModalState(): SpotlightModalState {
+    return {
+      loginModalOpen,
+      categoryModalOpen,
+      bookmarkModalOpen,
+      confirmDialogOpen: Boolean(confirmDialog),
+      bookmarkViewOpen: Boolean(viewBookmark),
+    }
+  }
+
+  function spotlightOpenGate(): SpotlightOpenGate {
+    return {
+      spotlightOpen,
+      blocked: anyBlockingModalOpen(blockingModalState()),
+      currentView,
+      canSeeHome,
+    }
   }
 
   async function openSpotlight(): Promise<void> {
-    if (spotlightOpen || anyBlockingModalOpen()) return
-    if (currentView !== 'home' || !canSeeHome) return
+    if (!canOpenSpotlight(spotlightOpenGate())) return
     await ensureSearchSpotlightComponent()
     // 懒加载是异步的：其间可能开了模态或切了视图/登出。加载完成后重新校验，
     // 否则会与刚打开的模态并发出现，破坏 D-e 模态互斥与单槽滚动锁。
-    if (spotlightOpen || anyBlockingModalOpen()) return
-    if (currentView !== 'home' || !canSeeHome) return
+    if (!canOpenSpotlight(spotlightOpenGate())) return
     spotlightOpen = true
   }
 
@@ -209,24 +232,23 @@
   // 全局快捷键集中在 App：Ctrl+K / Cmd+K / 「/」 唤起 Spotlight，Esc 关闭。
   // 排除输入态与 IME；仅首页可见时生效；模态互斥由 openSpotlight 内部把关。
   function handleGlobalKeyDown(event: KeyboardEvent): void {
-    const target = event.target as HTMLElement | null
-    const typing = Boolean(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable))
-    if (event.isComposing || event.key === 'Process' || typing) return
+    if (isShortcutSuppressedByTyping(event)) return
     if (currentView !== 'home' || !canSeeHome) return
 
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-      event.preventDefault()
+    const intent = classifySpotlightKey({
+      key: event.key,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      spotlightOpen,
+    })
+    if (!intent) return
+    event.preventDefault()
+    if (intent === 'toggle') {
       if (spotlightOpen) closeSpotlight()
       else void openSpotlight()
-      return
-    }
-    if (event.key === '/' && !spotlightOpen) {
-      event.preventDefault()
+    } else if (intent === 'open') {
       void openSpotlight()
-      return
-    }
-    if (event.key === 'Escape' && spotlightOpen) {
-      event.preventDefault()
+    } else {
       closeSpotlight()
     }
   }
@@ -608,8 +630,9 @@
     rootError = ''
     authStore.resetError()
     await ensureLoginModalComponent()
-    loginModalOpen = true
-    if (!canSeeHome) currentView = 'login'
+    const target = targetAfterLoginOpen(canSeeHome, currentView)
+    loginModalOpen = target.loginModalOpen
+    if (target.currentView) currentView = target.currentView
   }
   async function handleOpenLogin(): Promise<void> {
     await openLoginUseCase()
@@ -618,13 +641,9 @@
   async function handleCloseLogin(): Promise<void> {
     authViewIntent.invalidate()
     authStore.resetError()
-    if (!canSeeHome) {
-      loginModalOpen = true
-      currentView = 'login'
-      return
-    }
-
-    loginModalOpen = false
+    const target = targetAfterLoginClose(canSeeHome)
+    loginModalOpen = target.loginModalOpen
+    if (target.currentView) currentView = target.currentView
   }
 
   async function handleSwitchToAdmin(): Promise<void> {
@@ -634,7 +653,8 @@
   async function completeLoginUseCase(payload: { username: string; password: string }): Promise<void> {
     authViewIntent.invalidate()
     await authStore.login(payload.username, payload.password)
-    loginModalOpen = false
+    const target = targetAfterLoginSuccess()
+    loginModalOpen = target.loginModalOpen
     rootError = ''
     await refreshLoggedInData(true)
     if (isAdminPath()) {
@@ -642,7 +662,7 @@
       currentView = 'admin'
       return
     }
-    currentView = 'home'
+    if (target.currentView) currentView = target.currentView
   }
   async function handleLogin(payload: { username: string; password: string }): Promise<void> {
     try {
@@ -676,16 +696,13 @@
     try {
       const revocationWarning = await completeLogoutUseCase(previousSettings)
 
-      const homeGate = createHomeGateState({
-        publicMode: get(configStore).data?.public_mode,
-        authenticated: false,
-      })
+      const target = targetAfterLogout(get(configStore).data?.public_mode)
       if (viewIsCurrent() && !isLoggedIn()) {
-        if (homeGate.loginModalOpen) await ensureLoginModalComponent()
+        if (target.loginModalOpen) await ensureLoginModalComponent()
         // Lazy loading can yield to another login/recovery action as well.
         if (viewIsCurrent() && !isLoggedIn()) {
-          loginModalOpen = homeGate.loginModalOpen
-          currentView = homeGate.view
+          loginModalOpen = target.loginModalOpen
+          if (target.currentView) currentView = target.currentView
         }
       }
       // 视图先切换，确保全局 Toast 不被登出后的页面切换影响。
@@ -990,8 +1007,14 @@
     settingsError = ''
 
     await runAdminMutation({
-      run: () => api.settings.update(payload),
-      onSuccess: (settings) => applyLocalSettings(settings),
+      // 携带当前 data_version 做 CAS：其他会话并发修改则回 409 提示刷新重试。
+      run: () => api.settings.update(payload, getCurrentDataVersion()),
+      onSuccess: async (settings) => {
+        await applyLocalSettings(settings)
+        // 服务端已推进 data_version，同步回来避免下一次保存误报 409。
+        const remote = await api.data.version(true).catch(() => null)
+        if (remote) setCurrentDataVersion(remote.version)
+      },
       successMessage: () => '设置已保存',
       onError: (message) => {
         settingsError = message
@@ -1015,8 +1038,9 @@
     await clearCachedAdminData()
     rootError = '管理员密码已更新，请使用新密码重新登录。'
     await ensureLoginModalComponent()
-    loginModalOpen = true
-    currentView = 'login'
+    const target = targetAfterPasswordChange()
+    loginModalOpen = target.loginModalOpen
+    if (target.currentView) currentView = target.currentView
   }
 
   async function handleSortCategories(parentId: number | null, ids: Array<string | number>): Promise<void> {
