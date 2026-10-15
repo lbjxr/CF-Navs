@@ -1,6 +1,13 @@
 // Icon candidate helpers for bookmark URL + title.
 
 import type { IconSource } from '../../shared/types'
+import {
+  faviconImUrl,
+  iconifySvgUrlFromName,
+  isIconifyName,
+  isKnownIconifyHost,
+  normalizeIconifyPair,
+} from '../../shared/icons'
 
 export type IconCandidate = {
   source: IconSource
@@ -47,14 +54,7 @@ export function getHostname(url: string): string {
 
 export function faviconImIcon(url: string): string {
   const hostname = getHostname(url)
-  return hostname ? `https://favicon.im/${hostname}?larger=true` : ''
-}
-
-const ICONIFY_NAME_PATTERN = /^[a-z0-9-]+:[a-z0-9-]+$/
-
-function normalizeIconifyPair(prefix: string, name: string): string | null {
-  const normalized = `${prefix.trim().toLowerCase()}:${name.trim().toLowerCase().replace(/\.svg$/i, '')}`
-  return ICONIFY_NAME_PATTERN.test(normalized) ? normalized : null
+  return faviconImUrl(hostname)
 }
 
 function iconifyNameFromKnownHost(value: string): string | null {
@@ -63,7 +63,7 @@ function iconifyNameFromKnownHost(value: string): string | null {
   const parts = pathOnly.split('/').filter(Boolean)
   const host = parts[0]
 
-  if (host !== 'api.iconify.design' && host !== 'icon-sets.iconify.design') {
+  if (!isKnownIconifyHost(host)) {
     return null
   }
 
@@ -79,15 +79,13 @@ export function normalizeIconifyName(value: string): string {
     .replace(/^@iconify-json\//, '')
     .replace(/^@iconify-icons\//, '')
   const normalized = withoutPrefix.replace(/\s+/g, '').replace(/\/+$/g, '').replace(/\//g, ':')
-  return ICONIFY_NAME_PATTERN.test(normalized) ? normalized : ''
+  return isIconifyName(normalized) ? normalized : ''
 }
 
 export function iconifyIcon(value: string): string {
   const normalized = normalizeIconifyName(value)
   if (!normalized) return ''
-
-  const [prefix, name] = normalized.split(':')
-  return `https://api.iconify.design/${encodeURIComponent(prefix)}/${encodeURIComponent(name)}.svg`
+  return iconifySvgUrlFromName(normalized) ?? ''
 }
 
 export function iconifyProxyIcon(value: string): string {
@@ -104,7 +102,7 @@ export function iconifyNameFromUrl(value: string): string | null {
 
   try {
     const url = new URL(value)
-    if (url.hostname !== 'api.iconify.design' && url.hostname !== 'icon-sets.iconify.design') return null
+    if (!isKnownIconifyHost(url.hostname)) return null
 
     const parts = url.pathname.split('/').filter(Boolean)
     if (parts.length < 2) return null
@@ -311,9 +309,9 @@ export function logoSurfIcon(title: string, url: string, scheme: LogoSurfColorSc
 }
 
 // 名字是历史遗留：早期用 Google s2，现在实际走 favicon.im，所以 size 参数不再有作用。
+// @deprecated 与 faviconImIcon 同义，保留仅为兼容旧调用。
 export function googleIcon(url: string, _size = 64): string {
-  const hostname = getHostname(url)
-  return hostname ? `https://favicon.im/${encodeURIComponent(hostname)}?larger=true` : ''
+  return faviconImIcon(url)
 }
 
 export function getIconCandidates(url: string, title: string): IconCandidate[] {

@@ -151,17 +151,18 @@ function post(
 beforeEach(() => resetJwtSecretCache())
 
 describe('isValidRecoverPassword', () => {
-  it('accepts 8-12 chars with >=2 character classes', () => {
-    expect(isValidRecoverPassword('abcd1234')).toBe(true) // 8, lower+digit
+  it('accepts 12-256 chars with >=2 character classes (unified with /install)', () => {
+    expect(isValidRecoverPassword('abcd1234efgh')).toBe(true) // 12, lower+digit
     expect(isValidRecoverPassword('Abcdefghijk1')).toBe(true) // 12, upper+lower+digit
+    expect(isValidRecoverPassword('abcd12345678x')).toBe(true) // 13, lower+digit
   })
   it('rejects out-of-range length', () => {
-    expect(isValidRecoverPassword('abc1234')).toBe(false) // 7
-    expect(isValidRecoverPassword('abcd12345678x')).toBe(false) // 13
+    expect(isValidRecoverPassword('abc12345678')).toBe(false) // 11
+    expect(isValidRecoverPassword('a1' + 'a'.repeat(255))).toBe(false) // 257
   })
   it('rejects single character class', () => {
-    expect(isValidRecoverPassword('12345678')).toBe(false) // digits only
-    expect(isValidRecoverPassword('abcdefgh')).toBe(false) // lowercase only
+    expect(isValidRecoverPassword('123456789012')).toBe(false) // digits only
+    expect(isValidRecoverPassword('abcdefghijkl')).toBe(false) // lowercase only
   })
   it('rejects non-string and control chars', () => {
     expect(isValidRecoverPassword(undefined)).toBe(false)
@@ -173,7 +174,7 @@ describe('POST /api/recover', () => {
   it('resets password with correct token, keeps username, rotates jwt secret', async () => {
     const db = new FakeDb(installedSeed())
     const env = createEnv(db, createKv())
-    const res = await post(env, { password: 'abcd1234' })
+    const res = await post(env, { password: 'abcd1234efgh' })
     const json = await res.json<any>()
 
     expect(res.status).toBe(200)
@@ -195,7 +196,7 @@ describe('POST /api/recover', () => {
   it('ignores a username field in the body', async () => {
     const db = new FakeDb(installedSeed())
     const env = createEnv(db, createKv())
-    const res = await post(env, { password: 'abcd1234', username: 'evil' })
+    const res = await post(env, { password: 'abcd1234efgh', username: 'evil' })
     expect(res.status).toBe(200)
     expect(JSON.parse(db.settings.get('admin_username')!)).toBe('admin')
     expect(db.settings.has('evil')).toBe(false)
@@ -243,7 +244,7 @@ describe('POST /api/recover', () => {
   })
 
   it('rejects invalid password with BAD_REQUEST and no write', async () => {
-    for (const password of ['abc1234', 'abcd12345678x', '12345678', 'abcdefgh']) {
+    for (const password of ['abc12345678', 'a'.repeat(257), '123456789012', 'abcdefghijkl']) {
       const db = new FakeDb(installedSeed())
       const env = createEnv(db, createKv())
       const res = await post(env, { password })
@@ -266,7 +267,7 @@ describe('POST /api/recover', () => {
   it('fails closed when SESSION binding is missing', async () => {
     const db = new FakeDb(installedSeed())
     const env = createEnv(db, null)
-    const res = await post(env, { password: 'abcd1234' })
+    const res = await post(env, { password: 'abcd1234efgh' })
     expect(res.status).toBe(200)
     expect((await res.json<any>()).code).toBe(1500)
     expect(JSON.parse(db.settings.get('admin_password')!)).toBe('oldsalt:oldhash')

@@ -2,8 +2,8 @@
   import { afterUpdate, onDestroy, onMount, tick } from 'svelte'
   import CategoryTreeSelect from './CategoryTreeSelect.svelte'
   import type { CategoryTreeOption } from '../lib/categorySelect'
+  import type { AsyncVoid } from '../../shared/types'
 
-  type AsyncVoid<T = void> = T | Promise<T>
 
   export let categories: CategoryTreeOption[] = []
   export let currentCategoryId: string | number | null = null

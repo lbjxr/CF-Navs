@@ -16,6 +16,11 @@ const CACHE = 'cf-navs-v17'
 const RUNTIME_CACHE_PREFIX = 'cf-navs-v'
 const APP_SHELL = ['/index.html', '/manifest.webmanifest', '/icon.ico', '/icon.png']
 const MAX_ICON_CACHE_BYTES = 512 * 1024
+// Iconify 缓存条目上限 + LRU 淘汰：图标种类无界（用户可任意输入 prefix:name），
+// 不设上限会让 Cache Storage 无限增长。LRU 列表是 SW 作用域的尽力而为记录，
+// SW 重启后丢失不影响正确性（只影响淘汰精度）。
+const MAX_ICONIFY_CACHE_ENTRIES = 500
+const iconifyLru = [] // 按最近访问排序，队首最旧
 const SHELL_URL = '/index.html'
 
 function isBuildAsset(request) {
@@ -80,6 +85,23 @@ function cacheResponse(request, response) {
 
 
 
+function touchIconifyLru(url) {
+  const index = iconifyLru.indexOf(url)
+  if (index !== -1) iconifyLru.splice(index, 1)
+  iconifyLru.push(url)
+}
+
+async function evictIconifyLru(cache) {
+  while (iconifyLru.length > MAX_ICONIFY_CACHE_ENTRIES) {
+    const oldest = iconifyLru.shift()
+    try {
+      await cache.delete(oldest)
+    } catch {
+      // 忽略删除失败
+    }
+  }
+}
+
 function cacheIconResponse(request, response) {
   if (!response.ok) return
   if (response.type === 'opaque') return
@@ -93,7 +115,15 @@ function cacheIconResponse(request, response) {
   const contentLength = Number(contentLengthHeader)
   if (!Number.isSafeInteger(contentLength) || contentLength < 0 || contentLength > MAX_ICON_CACHE_BYTES) return
   const copy = response.clone()
-  caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => undefined)
+  const url = request.url
+  caches
+    .open(CACHE)
+    .then((cache) => cache.put(request, copy).then(() => cache))
+    .then((cache) => {
+      touchIconifyLru(url)
+      return evictIconifyLru(cache)
+    })
+    .catch(() => undefined)
 }
 
 self.addEventListener('install', (event) => {
@@ -180,12 +210,16 @@ self.addEventListener('fetch', (event) => {
   if (isIconifyAsset) {
     event.respondWith(
       matchCurrentCache(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((response) => {
+        (cached) => {
+          if (cached) {
+            touchIconifyLru(request.url)
+            return cached
+          }
+          return fetch(request).then((response) => {
             cacheIconResponse(request, response)
             return response
-          }),
+          })
+        },
       ),
     )
     return

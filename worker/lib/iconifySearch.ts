@@ -1,4 +1,5 @@
 import type { IconifyCandidate, IconifySearchResp } from '../../shared/types'
+import { iconifySvgUrl, iconifySvgUrlFromName, isKnownIconifyHost, normalizeIconifyPair } from '../../shared/icons'
 import { fetchIcon, iconBytesToResponse } from './iconData'
 import { ICON_SUCCESS_CACHE, iconCacheKey } from './iconResponses'
 import { extractSvgText, svgHasColor } from './svgColor'
@@ -48,24 +49,8 @@ function normalizeIconifyParam(value: string): string {
   return decodeURIComponent(value).replace(/\.svg$/i, '').trim().toLowerCase()
 }
 
-function normalizeIconifyPair(prefix: string, name: string): string | null {
-  const normalizedPrefix = prefix.trim().toLowerCase()
-  const normalizedName = name.trim().toLowerCase().replace(/\.svg$/i, '')
-  if (!/^[a-z0-9-]+$/.test(normalizedPrefix) || !/^[a-z0-9-]+$/.test(normalizedName)) {
-    return null
-  }
-
-  return `https://api.iconify.design/${encodeURIComponent(normalizedPrefix)}/${encodeURIComponent(normalizedName)}.svg`
-}
-
 export function normalizeIconifyNamePair(prefix: string, name: string): string | null {
-  const normalizedPrefix = prefix.trim().toLowerCase()
-  const normalizedName = name.trim().toLowerCase().replace(/\.svg$/i, '')
-  if (!/^[a-z0-9-]+$/.test(normalizedPrefix) || !/^[a-z0-9-]+$/.test(normalizedName)) {
-    return null
-  }
-
-  return `${normalizedPrefix}:${normalizedName}`
+  return normalizeIconifyPair(prefix, name)
 }
 
 export function normalizeIconifySearchQuery(value: string): string {
@@ -101,7 +86,7 @@ function iconifyNameFromKnownHost(value: string): string | null {
   const parts = pathOnly.split('/').filter(Boolean)
   const host = parts[0]
 
-  if (host !== 'api.iconify.design' && host !== 'icon-sets.iconify.design') {
+  if (!isKnownIconifyHost(host)) {
     return null
   }
 
@@ -110,15 +95,13 @@ function iconifyNameFromKnownHost(value: string): string | null {
 }
 
 function iconifyUrlFromName(name: string): string | null {
-  const parts = name.split(':')
-  if (parts.length !== 2) return null
-  return normalizeIconifyPair(parts[0], parts[1])
+  return iconifySvgUrlFromName(name)
 }
 
 export function iconifyUrlFromParams(prefixParam: string, nameParam: string): string | null {
   const prefix = normalizeIconifyParam(prefixParam)
   const name = normalizeIconifyParam(nameParam)
-  return normalizeIconifyPair(prefix, name)
+  return iconifySvgUrl(prefix, name)
 }
 
 export function iconifyProxyPath(prefix: string, icon: string): string {

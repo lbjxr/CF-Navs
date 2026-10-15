@@ -2,14 +2,12 @@
   import { api, getErrorMessage } from '../lib/api'
   import { ApiError } from '../lib/api'
   import { ErrCode, type LoginResp } from '../../shared/types'
+  import { ADMIN_PASSWORD_MAX_LENGTH, ADMIN_PASSWORD_MIN_LENGTH } from '../../shared/passwordPolicy'
   import { SETUP_TOKEN_ASCII_ERROR, isAsciiPrintableToken } from '../lib/setupTokenInput'
 
   export let onRecovered: (session: LoginResp) => Promise<void> | void
   export let onGoInstall: () => void
   export let onCancel: () => void
-
-  const MIN_PASSWORD_LENGTH = 8
-  const MAX_PASSWORD_LENGTH = 12
 
   let setupToken = ''
   let password = ''
@@ -43,8 +41,8 @@
       localError = SETUP_TOKEN_ASCII_ERROR
       return
     }
-    if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
-      localError = `新密码需为 ${MIN_PASSWORD_LENGTH}–${MAX_PASSWORD_LENGTH} 位。`
+    if (password.length < ADMIN_PASSWORD_MIN_LENGTH || password.length > ADMIN_PASSWORD_MAX_LENGTH) {
+      localError = `新密码需为 ${ADMIN_PASSWORD_MIN_LENGTH}–${ADMIN_PASSWORD_MAX_LENGTH} 位。`
       return
     }
     if (countCharClasses(password) < 2) {
@@ -134,13 +132,13 @@
             type="password"
             bind:value={password}
             autocomplete="new-password"
-            minlength={MIN_PASSWORD_LENGTH}
-            maxlength={MAX_PASSWORD_LENGTH}
+            minlength={ADMIN_PASSWORD_MIN_LENGTH}
+            maxlength={ADMIN_PASSWORD_MAX_LENGTH}
             required
             disabled={submitting}
             aria-describedby="recover-password-hint"
           />
-          <p id="recover-password-hint">8–12 位，至少包含两类字符。</p>
+          <p id="recover-password-hint">12–256 位，至少包含两类字符。</p>
         </div>
         <div class="field">
           <label for="recover-password-confirmation">再次输入新密码</label>
@@ -150,8 +148,8 @@
             type="password"
             bind:value={passwordConfirmation}
             autocomplete="new-password"
-            minlength={MIN_PASSWORD_LENGTH}
-            maxlength={MAX_PASSWORD_LENGTH}
+            minlength={ADMIN_PASSWORD_MIN_LENGTH}
+            maxlength={ADMIN_PASSWORD_MAX_LENGTH}
             required
             disabled={submitting}
           />
