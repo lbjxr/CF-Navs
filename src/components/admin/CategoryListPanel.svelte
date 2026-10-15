@@ -19,58 +19,88 @@
   import { sortableList } from '../../lib/sortableList'
   import './adminListPanels.css'
   import type { AsyncVoid } from '../../../shared/types'
+  import { untrack } from 'svelte'
 
   type AdminCategory = AdminCategorySummary
   type AdminBookmark = AdminBookmarkSummary
 
-  export let isAuthenticated = false
-  export let authLoading = false
-  export let categories: AdminCategory[] = []
-  export let bookmarks: AdminBookmark[] = []
-  export let categoriesLoading = false
-  export let deletingCategoryId: string | number | null = null
-  export let onOpenCreateCategory: (() => AsyncVoid) | undefined = undefined
-  export let onEditCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
-  export let onDeleteCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
-  export let onBatchDeleteCategories: ((ids: number[]) => AsyncVoid) | undefined = undefined
-  export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
-  export let onSortCategories: CategorySortHandler | undefined = undefined
-
-  let sortMode = false
-  let localCategories: AdminCategory[] = []
-  let sortParentId: number | null = null
-  let sortScopeTitle = '一级分类'
-  let savingSort = false
-  let page = 1
-  let selectedIds = new Set<number>()
-  let search = ''
-  let expandedRootIds = new Set<string>()
-  let collapsedSearchRootIds = new Set<string>()
-  let trackedCategorySearch = ''
-
-  $: categoryGroups = buildAdminCategoryGroups(categories)
-  $: hiddenCategoryIds = getHiddenCategoryIds(categories)
-  $: filteredGroups = filterAdminCategoryGroups(categoryGroups, search)
-  $: totalPages = getAdminListTotalPages(filteredGroups.length)
-  $: page = clampAdminListPage(page, totalPages)
-  $: categoryPage = createAdminListPage(filteredGroups, page)
-  $: pagedGroups = categoryPage.items
-  $: pagedCategories = flattenAdminCategoryGroups(pagedGroups)
-  $: rootCategories = categoryGroups.map((group) => group.root)
-  $: displayCategories = sortMode ? localCategories : []
-  $: selectedIds = new Set([...selectedIds].filter((id) => categories.some((category) => Number(category.id) === id)))
-  $: pageIds = pagedCategories.map((category) => Number(category.id))
-  $: pageSelectedCount = pageIds.filter((id) => selectedIds.has(id)).length
-  $: normalizedCategorySearch = search.trim().toLowerCase()
-  $: if (normalizedCategorySearch !== trackedCategorySearch) {
-    trackedCategorySearch = normalizedCategorySearch
-    collapsedSearchRootIds = new Set()
+  interface CategoryListPanelProps {
+    isAuthenticated?: boolean
+    authLoading?: boolean
+    categories?: AdminCategory[]
+    bookmarks?: AdminBookmark[]
+    categoriesLoading?: boolean
+    deletingCategoryId?: string | number | null
+    onOpenCreateCategory?: (() => AsyncVoid) | undefined
+    onEditCategory?: ((category: AdminCategory) => AsyncVoid) | undefined
+    onDeleteCategory?: ((category: AdminCategory) => AsyncVoid) | undefined
+    onBatchDeleteCategories?: ((ids: number[]) => AsyncVoid) | undefined
+    onOpenCreateBookmark?: ((categoryId?: string | number) => AsyncVoid) | undefined
+    onSortCategories?: CategorySortHandler | undefined
   }
-  $: displayedExpandedRootIds = normalizedCategorySearch
+
+  let {
+    isAuthenticated = false,
+    authLoading = false,
+    categories = [],
+    bookmarks = [],
+    categoriesLoading = false,
+    deletingCategoryId = null,
+    onOpenCreateCategory = undefined,
+    onEditCategory = undefined,
+    onDeleteCategory = undefined,
+    onBatchDeleteCategories = undefined,
+    onOpenCreateBookmark = undefined,
+    onSortCategories = undefined,
+  }: CategoryListPanelProps = $props()
+
+  let sortMode = $state(false)
+  let localCategories = $state<AdminCategory[]>([])
+  let sortParentId = $state<number | null>(null)
+  let sortScopeTitle = $state('一级分类')
+  let savingSort = $state(false)
+  let page = $state(1)
+  let selectedIds = $state(new Set<number>())
+  let search = $state('')
+  let expandedRootIds = $state(new Set<string>())
+  let collapsedSearchRootIds = $state(new Set<string>())
+  let trackedCategorySearch = $state('')
+
+  let categoryGroups = $derived(buildAdminCategoryGroups(categories))
+  let hiddenCategoryIds = $derived(getHiddenCategoryIds(categories))
+  let filteredGroups = $derived(filterAdminCategoryGroups(categoryGroups, search))
+  let totalPages = $derived(getAdminListTotalPages(filteredGroups.length))
+  $effect.pre(() => {
+    const clamped = clampAdminListPage(page, totalPages)
+    if (clamped !== page) page = clamped
+  })
+  let categoryPage = $derived(createAdminListPage(filteredGroups, page))
+  let pagedGroups = $derived(categoryPage.items)
+  let pagedCategories = $derived(flattenAdminCategoryGroups(pagedGroups))
+  let rootCategories = $derived(categoryGroups.map((group) => group.root))
+  let displayCategories = $derived(sortMode ? localCategories : [])
+  // 已选项随分类集合收敛：只订阅 categories，避免自写 new Set 触发无限循环
+  $effect.pre(() => {
+    const current = untrack(() => selectedIds)
+    const next = new Set([...current].filter((id) => categories.some((category) => Number(category.id) === id)))
+    if (next.size !== current.size || [...next].some((id) => !current.has(id))) {
+      selectedIds = next
+    }
+  })
+  let pageIds = $derived(pagedCategories.map((category) => Number(category.id)))
+  let pageSelectedCount = $derived(pageIds.filter((id) => selectedIds.has(id)).length)
+  let normalizedCategorySearch = $derived(search.trim().toLowerCase())
+  $effect.pre(() => {
+    if (normalizedCategorySearch !== untrack(() => trackedCategorySearch)) {
+      trackedCategorySearch = normalizedCategorySearch
+      collapsedSearchRootIds = new Set()
+    }
+  })
+  let displayedExpandedRootIds = $derived(normalizedCategorySearch
     ? new Set(filteredGroups
         .map((group) => String(group.root.id))
         .filter((id) => !collapsedSearchRootIds.has(id)))
-    : expandedRootIds
+    : expandedRootIds)
 
   function enterSort(parentId: number | null, scopeTitle: string) {
     const siblings = parentId == null
@@ -188,7 +218,7 @@
     <div class="admin-list-panel-header">
       <div>
         <p class="admin-panel-eyebrow">分类</p>
-        <div class="admin-title-row"><h2>分类列表</h2><div class="admin-bookmark-search-bar"><input type="text" data-testid="admin-category-search" aria-label="搜索分类" placeholder="搜索分类…" value={search} on:input={handleSearchInput} /></div></div>
+        <div class="admin-title-row"><h2>分类列表</h2><div class="admin-bookmark-search-bar"><input type="text" data-testid="admin-category-search" aria-label="搜索分类" placeholder="搜索分类…" value={search} oninput={handleSearchInput} /></div></div>
       </div>
       <div class="admin-header-actions-row">
         {#if !sortMode}
@@ -196,16 +226,16 @@
             type="button"
             class="admin-ghost-button"
             data-testid="admin-category-sort-button"
-            on:click={() => enterSort(null, '一级分类')}
+            onclick={() => enterSort(null, '一级分类')}
             disabled={!isAuthenticated || categoriesLoading || authLoading || rootCategories.length < 2 || selectedIds.size > 0}
           >
             排序
           </button>
-          <button type="button" class="admin-primary-button" data-testid="admin-create-category-button" on:click={() => onOpenCreateCategory?.()} disabled={!isAuthenticated}>
+          <button type="button" class="admin-primary-button" data-testid="admin-create-category-button" onclick={() => onOpenCreateCategory?.()} disabled={!isAuthenticated}>
             新增分类
           </button>
-          <button type="button" class="admin-danger-button" on:click={() => onBatchDeleteCategories?.([...selectedIds])} disabled={!isAuthenticated || selectedIds.size === 0}>删除已选 ({selectedIds.size})</button>
-          {#if selectedIds.size > 0}<button type="button" class="admin-ghost-button" on:click={() => selectedIds = new Set()}>清除选择</button>{/if}
+          <button type="button" class="admin-danger-button" onclick={() => onBatchDeleteCategories?.([...selectedIds])} disabled={!isAuthenticated || selectedIds.size === 0}>删除已选 ({selectedIds.size})</button>
+          {#if selectedIds.size > 0}<button type="button" class="admin-ghost-button" onclick={() => selectedIds = new Set()}>清除选择</button>{/if}
         {/if}
       </div>
     </div>
@@ -222,7 +252,7 @@
           <h3>暂无分类</h3>
           <p>点击右上角「新增分类」创建第一个分类，然后就可以往里添加书签了。</p>
           <div class="admin-empty-action">
-            <button type="button" class="admin-primary-button" on:click={() => onOpenCreateCategory?.()} disabled={!isAuthenticated}>
+            <button type="button" class="admin-primary-button" onclick={() => onOpenCreateCategory?.()} disabled={!isAuthenticated}>
               新增分类
             </button>
           </div>
@@ -234,7 +264,7 @@
           <p>请尝试其他搜索关键词。</p>
         </div>
       {:else}
-        <label class="batch-select-all"><input type="checkbox" checked={pageSelectedCount === pageIds.length && pageIds.length > 0} use:indeterminate={pageSelectedCount > 0 && pageSelectedCount < pageIds.length} on:change={togglePageSelection} />全选当前页</label>
+        <label class="batch-select-all"><input type="checkbox" checked={pageSelectedCount === pageIds.length && pageIds.length > 0} use:indeterminate={pageSelectedCount > 0 && pageSelectedCount < pageIds.length} onchange={togglePageSelection} />全选当前页</label>
         <div
           class="admin-list-stack"
           class:is-sorting={sortMode}
@@ -262,7 +292,7 @@
             {#each pagedGroups as group (group.root.id)}
               {@const rootId = String(group.root.id)}
               <article class="admin-compact-card admin-root-category-card" data-category-id={group.root.id}>
-                <input type="checkbox" aria-label={`选择分类 ${group.root.title}`} checked={selectedIds.has(Number(group.root.id))} on:change={(event) => toggleCategorySelection(event, Number(group.root.id))} />
+                <input type="checkbox" aria-label={`选择分类 ${group.root.title}`} checked={selectedIds.has(Number(group.root.id))} onchange={(event) => toggleCategorySelection(event, Number(group.root.id))} />
                 {#if group.children.length > 0}
                   <button
                     type="button"
@@ -272,7 +302,7 @@
                     aria-controls={`admin-category-children-${rootId}`}
                     title={`${displayedExpandedRootIds.has(rootId) ? '收起' : '展开'} ${group.root.title} 的子分类`}
                     data-testid={`admin-category-expand-${rootId}`}
-                    on:click={() => toggleCategoryGroup(rootId)}
+                    onclick={() => toggleCategoryGroup(rootId)}
                   >
                     <span class="admin-tree-chevron" class:open={displayedExpandedRootIds.has(rootId)} aria-hidden="true"></span>
                   </button>
@@ -292,13 +322,13 @@
                 </div>
                 <div class="admin-inline-actions">
                   {#if group.children.length > 1}
-                    <button type="button" class="admin-sm-button" on:click={() => enterSort(Number(group.root.id), group.root.title)} disabled={!isAuthenticated || selectedIds.size > 0}>
+                    <button type="button" class="admin-sm-button" onclick={() => enterSort(Number(group.root.id), group.root.title)} disabled={!isAuthenticated || selectedIds.size > 0}>
                       子分类排序
                     </button>
                   {/if}
-                  <button type="button" class="admin-sm-button" on:click={() => onEditCategory?.(group.root)} disabled={!isAuthenticated}>编辑</button>
-                  <button type="button" class="admin-sm-button" on:click={() => onOpenCreateBookmark?.(group.root.id)} disabled={!isAuthenticated}>加书签</button>
-                  <button type="button" class="admin-sm-button danger" on:click={() => onDeleteCategory?.(group.root)} disabled={!isAuthenticated || deletingCategoryId === group.root.id}>
+                  <button type="button" class="admin-sm-button" onclick={() => onEditCategory?.(group.root)} disabled={!isAuthenticated}>编辑</button>
+                  <button type="button" class="admin-sm-button" onclick={() => onOpenCreateBookmark?.(group.root.id)} disabled={!isAuthenticated}>加书签</button>
+                  <button type="button" class="admin-sm-button danger" onclick={() => onDeleteCategory?.(group.root)} disabled={!isAuthenticated || deletingCategoryId === group.root.id}>
                     {#if deletingCategoryId === group.root.id}删除中...{:else}删除{/if}
                   </button>
                 </div>
@@ -308,7 +338,7 @@
                 <div class="admin-child-category-list" id={`admin-category-children-${rootId}`}>
                   {#each group.children as category (category.id)}
                     <article class="admin-compact-card admin-child-category-card" data-category-id={category.id}>
-                      <input type="checkbox" aria-label={`选择分类 ${category.title}`} checked={selectedIds.has(Number(category.id))} on:change={(event) => toggleCategorySelection(event, Number(category.id))} />
+                      <input type="checkbox" aria-label={`选择分类 ${category.title}`} checked={selectedIds.has(Number(category.id))} onchange={(event) => toggleCategorySelection(event, Number(category.id))} />
                       <span class="admin-hierarchy-connector" aria-hidden="true">↳</span>
                       {#if hasCategoryIconVisual(category)}
                         <CategoryIcon category={toCategoryIconValue(category)} size={28} className="admin-icon-badge" iconAccessKey={hiddenCategoryIds.has(Number(category.id)) ? $iconAccessKey : ''} imageLoading="eager" />
@@ -322,9 +352,9 @@
                         {#if category.is_private}<span class="admin-private-badge">仅登录可见</span>{/if}
                       </div>
                       <div class="admin-inline-actions">
-                        <button type="button" class="admin-sm-button" on:click={() => onEditCategory?.(category)} disabled={!isAuthenticated}>编辑</button>
-                        <button type="button" class="admin-sm-button" on:click={() => onOpenCreateBookmark?.(category.id)} disabled={!isAuthenticated}>加书签</button>
-                        <button type="button" class="admin-sm-button danger" on:click={() => onDeleteCategory?.(category)} disabled={!isAuthenticated || deletingCategoryId === category.id}>
+                        <button type="button" class="admin-sm-button" onclick={() => onEditCategory?.(category)} disabled={!isAuthenticated}>编辑</button>
+                        <button type="button" class="admin-sm-button" onclick={() => onOpenCreateBookmark?.(category.id)} disabled={!isAuthenticated}>加书签</button>
+                        <button type="button" class="admin-sm-button danger" onclick={() => onDeleteCategory?.(category)} disabled={!isAuthenticated || deletingCategoryId === category.id}>
                           {#if deletingCategoryId === category.id}删除中...{:else}删除{/if}
                         </button>
                       </div>
@@ -346,9 +376,9 @@
           <div class="admin-pagination">
             <span>第 {categoryPage.start}-{categoryPage.end} 个 / 共 {categoryPage.total} 个一级分类</span>
             <div class="admin-pager-actions">
-              <button type="button" class="admin-ghost-button compact" on:click={() => changePage(-1)} disabled={page <= 1}>上一页</button>
+              <button type="button" class="admin-ghost-button compact" onclick={() => changePage(-1)} disabled={page <= 1}>上一页</button>
               <span>{page} / {totalPages}</span>
-              <button type="button" class="admin-ghost-button compact" on:click={() => changePage(1)} disabled={page >= totalPages}>下一页</button>
+              <button type="button" class="admin-ghost-button compact" onclick={() => changePage(1)} disabled={page >= totalPages}>下一页</button>
             </div>
           </div>
         {/if}
@@ -360,8 +390,8 @@
 {#if sortMode}
   <div class="admin-sort-bar" role="toolbar" aria-label="排序操作">
     <span class="admin-sort-hint-inline">正在排序「{sortScopeTitle}」中的同级分类，拖动调整顺序后保存。</span>
-    <button type="button" class="admin-ghost-button" on:click={cancelSort} disabled={savingSort}>取消</button>
-    <button type="button" class="admin-primary-button" on:click={saveSort} disabled={savingSort}>
+    <button type="button" class="admin-ghost-button" onclick={cancelSort} disabled={savingSort}>取消</button>
+    <button type="button" class="admin-primary-button" onclick={saveSort} disabled={savingSort}>
       {#if savingSort}保存中...{:else}保存排序{/if}
     </button>
   </div>
