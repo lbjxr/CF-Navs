@@ -2,6 +2,7 @@
   import { tick } from 'svelte'
   import { getAnchoredOverlayPosition } from '../lib/navigationLayout'
   import CategoryIcon from './CategoryIcon.svelte'
+  import type { AsyncVoid } from '../../shared/types'
 
   type HomeCategoryScopeItem = {
     id: number
@@ -13,7 +14,6 @@
     count: number
   }
 
-  type AsyncVoid<T = void> = T | Promise<T>
 
   export let rootId: number
   export let title = ''

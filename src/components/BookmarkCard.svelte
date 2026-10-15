@@ -3,7 +3,7 @@
   let trustedImage = emptyTrustedIcon
   const trustedView = createTrustedIconView(value => { trustedImage = value })
   import { onDestroy, onMount } from 'svelte'
-  import type { CardStyle, DescriptionDisplayMode, PublicBookmark } from '../../shared/types'
+  import type { AsyncVoid, CardStyle, DescriptionDisplayMode, PublicBookmark } from '../../shared/types'
   import type { CategoryTreeOption } from '../lib/categorySelect'
   import BookmarkCardCompact from './BookmarkCardCompact.svelte'
   import { recordBookmarkClick } from '../lib/dataService'
@@ -33,7 +33,6 @@
     revokeLocalIconUrl,
   } from '../lib/localBookmarkIconCache'
 
-  type AsyncVoid<T = void> = T | Promise<T>
 
   export let bookmark: PublicBookmark
   export let style: CardStyle = 'info'

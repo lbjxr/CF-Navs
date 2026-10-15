@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CardStyle, DescriptionDisplayMode, PublicBookmark, PublicCategory } from '../../shared/types'
+  import type { AsyncVoid, CardStyle, DescriptionDisplayMode, PublicBookmark, PublicCategory } from '../../shared/types'
   import type { CategoryTreeOption } from '../lib/categorySelect'
   import { resolveBookmarkDescriptionMode } from '../lib/descriptionMode'
   import { isBookmarkIconAccessRequired } from '../lib/adminListState'
@@ -8,7 +8,6 @@
   import { getInfoCardMobileTrackWidth, getInfoCardTrackWidth, getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
   import { sortableList, type SortTransfer } from '../lib/sortableList'
 
-  type AsyncVoid<T = void> = T | Promise<T>
 
   export let category: PublicCategory
   export let bookmarks: PublicBookmark[] = []
