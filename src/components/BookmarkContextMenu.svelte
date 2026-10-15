@@ -1,15 +1,27 @@
 <script lang="ts">
-  import { afterUpdate, onDestroy, onMount, tick } from 'svelte'
+  import { onDestroy, onMount, tick, untrack } from 'svelte'
   import CategoryTreeSelect from './CategoryTreeSelect.svelte'
   import type { CategoryTreeOption } from '../lib/categorySelect'
   import type { AsyncVoid } from '../../shared/types'
 
 
-  export let categories: CategoryTreeOption[] = []
-  export let currentCategoryId: string | number | null = null
-  export let onEdit: (() => AsyncVoid) | undefined = undefined
-  export let onMoveBookmark: ((categoryId: number) => AsyncVoid) | undefined = undefined
-  export let canMove = false
+  interface BookmarkContextMenuProps {
+    categories?: CategoryTreeOption[]
+    currentCategoryId?: string | number | null
+    /** 编辑回调 */
+    onEdit?: () => AsyncVoid
+    /** 移动书签回调，参数为目标分类 id */
+    onMoveBookmark?: (categoryId: number) => AsyncVoid
+    canMove?: boolean
+  }
+
+  let {
+    categories = [],
+    currentCategoryId = null,
+    onEdit = undefined,
+    onMoveBookmark = undefined,
+    canMove = false,
+  }: BookmarkContextMenuProps = $props()
 
   // 菜单默认从卡片下沿向下展开。页面末尾那一排卡片下方没有空间，菜单会越过视口底边，
   // 「编辑」按钮落在视口外且被裁掉（Issue #30）。这里在挂载后测量真实几何，必要时向上
@@ -17,13 +29,17 @@
   const VIEWPORT_MARGIN_PX = 8
   const ANCHOR_OVERLAP_PX = 6
 
-  let movePickerOpen = false
-  let moveCategoryId: string | number | null = currentCategoryId
-  let moveSubmitting = false
-  let menuElement: HTMLDivElement | null = null
-  let placement: 'down' | 'up' = 'down'
-  let maxHeight: number | null = null
-  let topOffset: number | null = null
+  let movePickerOpen = $state(false)
+  // 初始化语义与 legacy `let moveCategoryId = currentCategoryId` 一致：取 prop 初值；
+  // 写在 onMount 闭包里以避免 state_referenced_locally 警告（runes 要求 0 warnings）。
+  // 实际读取都发生在 movePickerOpen 为 true 时，而打开/关闭选择器都会用当前 prop 重置它。
+  let moveCategoryId = $state<string | number | null>(null)
+  let moveSubmitting = $state(false)
+  let menuElement = $state<HTMLDivElement | null>(null)
+  let placement = $state<'down' | 'up'>('down')
+  let maxHeight = $state<number | null>(null)
+  let topOffset = $state<number | null>(null)
+  // 纯防抖标记：不需要响应式，plain let 即可（$state 会让每次翻转都触发父组件更新）
   let remeasureQueued = false
 
   function handleEditClick() {
@@ -138,9 +154,25 @@
   }
 
   // 菜单高度会随「移动」选择器展开而变化，所以每次更新后都重新测量，而不是只在挂载时测一次。
-  afterUpdate(scheduleMeasure)
+  // runes 下 afterUpdate 不可用：用 $effect 显式订阅影响菜单几何的输入与输出状态，
+  // measurePlacement 只在值变化时写入，收敛语义与 legacy afterUpdate 一致。
+  // 注意：remeasureQueued 是纯防抖标记，故意用 plain let（非 $state）——若做成响应式，
+  // 每次翻转都会触发父组件更新，进而反复触发子组件 afterUpdate→onLayoutChange，形成无限循环。
+  // 嵌套分类树的展开/收起由子组件的 onLayoutChange 回调直接触发 scheduleMeasure，无需在此订阅。
+  $effect(() => {
+    void movePickerOpen
+    void categories
+    void canMove
+    void onEdit
+    void onMoveBookmark
+    void placement
+    void maxHeight
+    void topOffset
+    untrack(() => scheduleMeasure())
+  })
 
   onMount(() => {
+    moveCategoryId = currentCategoryId
     measurePlacement()
     window.addEventListener('resize', scheduleMeasure)
     window.addEventListener('scroll', handleViewportScroll, true)
@@ -155,20 +187,23 @@
     window.visualViewport?.removeEventListener('scroll', scheduleMeasure)
   })
 
-  $: if (
-    movePickerOpen &&
-    !moveSubmitting &&
-    onMoveBookmark &&
-    moveCategoryId != null &&
-    Number(moveCategoryId) !== Number(currentCategoryId)
-  ) {
-    const targetCategoryId = Number(moveCategoryId)
-    moveSubmitting = true
-    movePickerOpen = false
-    void Promise.resolve(onMoveBookmark(targetCategoryId)).finally(() => {
-      moveSubmitting = false
-    })
-  }
+  // 选择器变化后触发移动提交；副作用用 $effect.pre（时序最接近 legacy $:）。
+  $effect.pre(() => {
+    if (
+      movePickerOpen &&
+      !moveSubmitting &&
+      onMoveBookmark &&
+      moveCategoryId != null &&
+      Number(moveCategoryId) !== Number(currentCategoryId)
+    ) {
+      const targetCategoryId = Number(moveCategoryId)
+      moveSubmitting = true
+      movePickerOpen = false
+      void Promise.resolve(onMoveBookmark(targetCategoryId)).finally(() => {
+        moveSubmitting = false
+      })
+    }
+  })
 </script>
 
 <div
@@ -179,17 +214,17 @@
   style={`${maxHeight !== null ? `max-height: ${maxHeight}px;` : ''}${topOffset !== null ? `top: ${topOffset}px; bottom: auto;` : ''}`}
   role="menu"
   tabindex="-1"
-  on:click|stopPropagation
-  on:keydown={handleMenuKeydown}
-  on:pointerdown|stopPropagation
-  on:touchstart|stopPropagation
-  on:touchmove|stopPropagation
+  onclick={(event) => event.stopPropagation()}
+  onkeydown={handleMenuKeydown}
+  onpointerdown={(event) => event.stopPropagation()}
+  ontouchstart={(event) => event.stopPropagation()}
+  ontouchmove={(event) => event.stopPropagation()}
 >
   {#if onEdit && !movePickerOpen}
-    <button type="button" data-testid="bookmark-context-edit" on:click={handleEditClick}>编辑</button>
+    <button type="button" data-testid="bookmark-context-edit" onclick={handleEditClick}>编辑</button>
   {/if}
   {#if canMove && onMoveBookmark && categories.length > 0 && !movePickerOpen}
-    <button type="button" data-testid="bookmark-context-move" on:click={openMovePicker}>移动</button>
+    <button type="button" data-testid="bookmark-context-move" onclick={openMovePicker}>移动</button>
   {/if}
   {#if movePickerOpen}
     <div class="move-picker" data-testid="bookmark-context-move-picker">
@@ -202,7 +237,7 @@
         onLayoutChange={scheduleMeasure}
         testId="bookmark-context-move-select"
       />
-      <button type="button" class="move-cancel" on:click={closeMovePicker}>取消</button>
+      <button type="button" class="move-cancel" onclick={closeMovePicker}>取消</button>
     </div>
   {/if}
 </div>

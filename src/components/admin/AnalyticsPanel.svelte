@@ -16,26 +16,36 @@
   type AdminBookmark = AdminBookmarkSummary
   type AdminCategory = AdminCategorySummary
 
-  export let bookmarks: AdminBookmark[] = []
-  export let categories: AdminCategory[] = []
+  interface AnalyticsPanelProps {
+    bookmarks?: AdminBookmark[]
+    categories?: AdminCategory[]
+  }
 
-  let zeroVisitPage = 1
+  let { bookmarks = [], categories = [] }: AnalyticsPanelProps = $props()
 
-  $: sortedBookmarks = [...bookmarks]
-    .sort((a, b) => (b.click_count ?? 0) - (a.click_count ?? 0))
+  let zeroVisitPage = $state(1)
 
-  $: topBookmarks = sortedBookmarks.slice(0, 20).filter(b => (b.click_count ?? 0) > 0)
-  $: zeroVisitBookmarks = bookmarks.filter(b => (b.click_count ?? 0) === 0)
-  $: categoryTitleById = getAdminCategoryPathMap(categories)
-  $: hiddenCategoryIds = getHiddenCategoryIds(categories)
-  $: zeroVisitTotalPages = getAdminListTotalPages(zeroVisitBookmarks.length)
-  $: zeroVisitPage = clampAdminListPage(zeroVisitPage, zeroVisitTotalPages)
-  $: zeroVisitListPage = createAdminListPage(zeroVisitBookmarks, zeroVisitPage)
+  let sortedBookmarks = $derived(
+    [...bookmarks].sort((a, b) => (b.click_count ?? 0) - (a.click_count ?? 0)),
+  )
 
-  $: totalClicks = bookmarks.reduce((acc, curr) => acc + (curr.click_count ?? 0), 0)
-  $: clickedCount = bookmarks.filter(b => (b.click_count ?? 0) > 0).length
+  let topBookmarks = $derived(sortedBookmarks.slice(0, 20).filter((b) => (b.click_count ?? 0) > 0))
+  let zeroVisitBookmarks = $derived(bookmarks.filter((b) => (b.click_count ?? 0) === 0))
+  let categoryTitleById = $derived(getAdminCategoryPathMap(categories))
+  let hiddenCategoryIds = $derived(getHiddenCategoryIds(categories))
+  let zeroVisitTotalPages = $derived(getAdminListTotalPages(zeroVisitBookmarks.length))
+  let zeroVisitListPage = $derived(createAdminListPage(zeroVisitBookmarks, zeroVisitPage))
 
-  $: maxClicks = topBookmarks[0]?.click_count ?? 1
+  let totalClicks = $derived(bookmarks.reduce((acc, curr) => acc + (curr.click_count ?? 0), 0))
+  let clickedCount = $derived(bookmarks.filter((b) => (b.click_count ?? 0) > 0).length)
+
+  let maxClicks = $derived(topBookmarks[0]?.click_count ?? 1)
+
+  // zeroVisitPage 同时在翻页按钮里被赋值 → $state + $effect.pre 夹回有效范围；
+  // clamp 幂等（夹后值再夹不变），不会触发无限循环。
+  $effect.pre(() => {
+    zeroVisitPage = clampAdminListPage(zeroVisitPage, zeroVisitTotalPages)
+  })
 
 </script>
 
@@ -173,9 +183,9 @@
           <div class="admin-pagination">
             <span>第 {zeroVisitListPage.start}-{zeroVisitListPage.end} 条 / 共 {zeroVisitListPage.total} 条</span>
             <div class="admin-pager-actions">
-              <button type="button" class="admin-ghost-button compact" on:click={() => zeroVisitPage -= 1} disabled={zeroVisitPage <= 1}>上一页</button>
+              <button type="button" class="admin-ghost-button compact" onclick={() => { zeroVisitPage -= 1 }} disabled={zeroVisitPage <= 1}>上一页</button>
               <span>{zeroVisitPage} / {zeroVisitTotalPages}</span>
-              <button type="button" class="admin-ghost-button compact" on:click={() => zeroVisitPage += 1} disabled={zeroVisitPage >= zeroVisitTotalPages}>下一页</button>
+              <button type="button" class="admin-ghost-button compact" onclick={() => { zeroVisitPage += 1 }} disabled={zeroVisitPage >= zeroVisitTotalPages}>下一页</button>
             </div>
           </div>
         </div>
