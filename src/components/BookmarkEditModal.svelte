@@ -6,6 +6,7 @@
     getIconCandidates,
     iconifyNameFromUrl,
     logoSurfIcon,
+    openIconifyLibrary,
     type IconCandidate,
     type LogoSurfColorScheme,
   } from '../lib/icons'
@@ -255,10 +256,6 @@
     confirmedIconifyName = result.confirmedIconifyName
     candidateError = ''
     faviconError = ''
-  }
-
-  function openIconifyLibrary() {
-    window.open('https://icon-sets.iconify.design/', '_blank', 'noopener,noreferrer')
   }
 
   function selectCandidate(candidate: IconCandidate) {

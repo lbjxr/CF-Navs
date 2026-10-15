@@ -17,8 +17,10 @@ if (import.meta.hot) import.meta.hot.dispose(stopThemeColor)
 initErrorReporting()
 void migrateLegacyIconCopies()
 
+const appRoot = document.getElementById('app')
+if (!appRoot) throw new Error('[main] #app 挂载点不存在，无法启动应用')
 const app = mount(App, {
-  target: document.getElementById('app')!,
+  target: appRoot,
 })
 
 // PWA：仅在生产构建中注册 Service Worker（开发模式下避免缓存干扰热更新）

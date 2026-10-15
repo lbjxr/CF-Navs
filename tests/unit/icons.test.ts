@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import {
   defaultIconifyIcon,
@@ -31,5 +32,21 @@ describe('icon helpers', () => {
   it('derives simple-icons candidates from bookmark domains', () => {
     expect(defaultIconifyIcon('https://github.com/openai')).toBe('https://api.iconify.design/simple-icons/github.svg')
     expect(defaultIconifyIcon('invalid')).toBe('')
+  })
+
+  it('opens the Iconify library in a safe new tab', async () => {
+    const { openIconifyLibrary } = await import('../../src/lib/icons')
+    const calls: unknown[][] = []
+    const originalOpen = window.open
+    window.open = ((...args: unknown[]) => {
+      calls.push(args)
+      return null
+    }) as typeof window.open
+    try {
+      openIconifyLibrary()
+      expect(calls).toEqual([['https://icon-sets.iconify.design/', '_blank', 'noopener,noreferrer']])
+    } finally {
+      window.open = originalOpen
+    }
   })
 })

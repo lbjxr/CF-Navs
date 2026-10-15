@@ -16,7 +16,7 @@
     shouldResetBookmarkIconifyConfirmation,
     type BookmarkIconifySearchState,
   } from '../lib/bookmarkIconifyController'
-  import { iconifyIcon, iconifyNameFromUrl } from '../lib/icons'
+  import { iconifyIcon, iconifyNameFromUrl, openIconifyLibrary } from '../lib/icons'
   import { buildParentCategoryOptions } from '../lib/categorySelect'
   import CategoryTreeSelect from './CategoryTreeSelect.svelte'
   import IconifySelector from './IconifySelector.svelte'
@@ -137,10 +137,6 @@
     if (!imageHostUrl) return
     const base = imageHostUrl.endsWith('/') ? imageHostUrl.slice(0, -1) : imageHostUrl
     window.open(`${base}/upload`, '_blank', 'noopener,noreferrer')
-  }
-
-  function openIconifyLibrary() {
-    window.open('https://icon-sets.iconify.design/', '_blank', 'noopener,noreferrer')
   }
 
   function syncManualIconInput() {

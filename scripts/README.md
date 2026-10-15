@@ -2,6 +2,10 @@
 
 项目脚本统一保留在此目录，按用途如下：
 
+## 归档
+
+- `archive/`：一次性探针/实验脚本归档（Issue #31 图标性能系列的测量脚本，结论已沉淀，不再日常使用）。详见 `archive/README.md`。
+
 ## 开发与部署
 
 - `create-wrangler-local.mjs`：根据项目配置生成本地 `wrangler.local.toml`。

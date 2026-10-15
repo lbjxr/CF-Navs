@@ -347,3 +347,8 @@ export function getIconCandidates(url: string, title: string): IconCandidate[] {
 
   return candidates
 }
+
+/** 在新标签页打开 Iconify 图标库（原在 BookmarkEditModal/CategoryEditModal 逐字重复） */
+export function openIconifyLibrary(): void {
+  window.open('https://icon-sets.iconify.design/', '_blank', 'noopener,noreferrer')
+}
