@@ -216,7 +216,12 @@ bookmarksRoutes.post('/sort', async (c) => {
   invalidateRuntimeDataCache()
   invalidatePublicDataCache(c, c.req.url)
   return c.json(ok(null))
- } catch {
+ } catch (error) {
+  // 快照不一致（提交的 ids 与库中书签集合对不上）属于状态冲突，
+  // 与 /reorganize 同模式回 409，客户端刷新后重试。
+  if (error instanceof BookmarkReorganizeError) {
+   return c.json(fail(ErrCode.CONFLICT, '书签集合已变化，请刷新后重试'), 409)
+  }
   return c.json(fail(ErrCode.SERVER_ERROR, 'failed to sort bookmarks'))
  }
 })

@@ -10,10 +10,10 @@
 2. **再看当前要做什么**：内部工作项看 [`BACKLOG.md`](BACKLOG.md)，它是本地待办的**唯一状态源**；云端已有编号的缺陷与功能需求看 GitHub Issue 的开闭状态。本地发起的功能需求仍记在 BACKLOG，不因用户可见而新开 Issue。`plans/` 下的文档**不维护状态**。
 3. **再看当前事实**：以当前 `develop` 分支源码、`package.json`、测试和运行验证为最终事实来源。文档与源码冲突时，先按源码修正文档，再继续开发。
 4. **需要背景时看决策记录**：`plans/` 说明当初为什么这么改、哪些约束必须继续遵守。
-   - 缺陷 / 验收欠账 / 文档与源码不一致 / 风险的核对证据：`plans/PROBLEM_HANDLING_TASK_LIST.md`（`PROB-NN`）。
-   - 尚未实现的功能需求及其来源：`plans/REQUIREMENT_DEVELOPMENT_TASK_LIST.md`（`REQ-NN`）。
-   - 设置页 / 顶部导航 / 部分导出：`plans/DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md`，需求边界看 `SETTINGS_UI_UX_ADJUSTMENT_REQUIREMENTS.md` 与 `PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md`。
-   - R-01～R-08 历史 Issue 需求：`plans/DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md`；发布追溯看 `reference/GITHUB_ISSUES_REQUIREMENTS.md`。新一轮开放 Issue / PR 的分析入口见下方「GitHub 任务分析快照」。
+   - 缺陷 / 验收欠账 / 文档与源码不一致 / 风险的核对证据：`plans/archive/PROBLEM_HANDLING_TASK_LIST.md`（`PROB-NN`）。
+   - 尚未实现的功能需求及其来源：`plans/archive/REQUIREMENT_DEVELOPMENT_TASK_LIST.md`（`REQ-NN`）。
+   - 设置页 / 顶部导航 / 部分导出：`plans/archive/DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md`，需求边界看 `SETTINGS_UI_UX_ADJUSTMENT_REQUIREMENTS.md` 与 `PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md`。
+   - R-01～R-08 历史 Issue 需求：`plans/archive/DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md`；发布追溯看 `reference/GITHUB_ISSUES_REQUIREMENTS.md`。新一轮开放 Issue / PR 的分析入口见下方「GitHub 任务分析快照」。
    - 前端体验优化：`plans/FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md` 是历史需求评估，其中部分条款已有后续实现或裁定；当前剩余范围以 BACKLOG 为准，不能整份当作未实现或已批准的清单。
 5. **涉及公共契约时同步查参考文档**：API 看 `reference/API_CONTRACT.md`，性能看 `reference/PERFORMANCE_CONTRACT.md`，架构和当前功能看 `reference/PROJECT_OVERVIEW.md`，实现细节看 `reference/TECHNICAL_NOTES.md`。
 6. **开发完成后写发布记录**：`CHANGELOG.md` 按版本分节，只记录已交付的变更；未发版的内容放在 `[Unreleased]`。
@@ -66,13 +66,13 @@
 `plans/` 保存已完成轮次的计划文档，以及经过源码核对的需求评估记录。它们不是待办清单，而是决策记录——说明当初为什么这么改、哪些约束在后续修改中必须继续遵守，以及哪些验证还没补齐。
 每份文档文首都标注了状态和对应的实现提交。
 
-- [平台优化（加载 / 安全 / 冗余 / UI / 结构）](plans/PLATFORM_OPTIMIZATION_PLAN.md)
-- [后台管理移动端布局](plans/ADMIN_MOBILE_LAYOUT_PLAN.md)
-- [PR #7 合并检查（私密书签 / 跨分类排序 / 浏览器书签同步）](plans/PR7_MERGE_REVIEW_PLAN.md)
-- [部分导出备份 / 顶部导航分行显示 / 右上角按钮对齐（需求评估）](plans/PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md)
-- [后台设置页面 UI/UX 调整（需求评估）](plans/SETTINGS_UI_UX_ADJUSTMENT_REQUIREMENTS.md)
-- [开发任务规划（设置页 UI/UX + 顶部导航 + 部分导出）](plans/DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md)
-- [开发任务规划（R-01～R-08 Issue 需求）](plans/DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md)
+- [平台优化（加载 / 安全 / 冗余 / UI / 结构）](plans/archive/PLATFORM_OPTIMIZATION_PLAN.md)
+- [后台管理移动端布局](plans/archive/ADMIN_MOBILE_LAYOUT_PLAN.md)
+- [PR #7 合并检查（私密书签 / 跨分类排序 / 浏览器书签同步）](plans/archive/PR7_MERGE_REVIEW_PLAN.md)
+- [部分导出备份 / 顶部导航分行显示 / 右上角按钮对齐（需求评估）](plans/archive/PARTIAL_EXPORT_AND_TOP_NAV_WRAP_REQUIREMENTS.md)
+- [后台设置页面 UI/UX 调整（需求评估）](plans/archive/SETTINGS_UI_UX_ADJUSTMENT_REQUIREMENTS.md)
+- [开发任务规划（设置页 UI/UX + 顶部导航 + 部分导出）](plans/archive/DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md)
+- [开发任务规划（R-01～R-08 Issue 需求）](plans/archive/DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md)
 - [前端体验与自用效率优化（需求评估）](plans/FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md)
 - [书签图标本地优先与隐私分级缓存（已裁定需求基线）](plans/BOOKMARK_ICON_LOCAL_FIRST_REQUIREMENTS.md)：七项产品选择已确认，包含书签第一阶段与分类第二阶段规划、10 MiB 联合预算、离线/撤回、迁移/回滚及验收；不构成开发授权。
 - [书签图标本地优先开发计划](plans/BOOKMARK_ICON_LOCAL_FIRST_DEVELOPMENT.md)：依据已裁定需求，明确架构与状态所有权、内容版本与专用协议、一期书签/二期分类工作包、迁移回滚及验收映射；仅为计划，尚未实施。
@@ -83,8 +83,8 @@
 待办状态只有两个来源：内部工作项看 [本地待办清单](BACKLOG.md)，用户可见的缺陷与需求看 GitHub Issue。下面两份是**决策记录**，保留核对证据与判断，不维护状态，也不构成开工授权。
 
 - [本地待办清单](BACKLOG.md)：**先看这份。** 按「已批准 / 需裁定 / 需运行环境 / 需澄清 / 未获批准 / 发版验收入口」分组，只列未完成项；已交付成果见变更记录。
-- [问题处理任务清单](plans/PROBLEM_HANDLING_TASK_LIST.md)：`PROB-NN` 的完整证据与判断——缺陷、验收未达标、文档与源码不一致、遗留验证欠账、安全与稳定性风险、信息不足需澄清。
-- [需求开发任务清单](plans/REQUIREMENT_DEVELOPMENT_TASK_LIST.md)：`REQ-NN` 的需求来源与核对证据、待决策的 `OQ`、已明确不做的条目、实施顺序与冲突协调。
+- [问题处理任务清单](plans/archive/PROBLEM_HANDLING_TASK_LIST.md)：`PROB-NN` 的完整证据与判断——缺陷、验收未达标、文档与源码不一致、遗留验证欠账、安全与稳定性风险、信息不足需澄清。
+- [需求开发任务清单](plans/archive/REQUIREMENT_DEVELOPMENT_TASK_LIST.md)：`REQ-NN` 的需求来源与核对证据、待决策的 `OQ`、已明确不做的条目、实施顺序与冲突协调。
 
 ## 图片
 

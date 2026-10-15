@@ -79,8 +79,8 @@
             background={activeBackground}
             valid={activeBackgroundValid}
             {uploadHost}
-            on:change={(event) => updateThemeBackground(activeTheme, event.detail)}
-            on:upload={openUpload}
+            onchange={(next) => updateThemeBackground(activeTheme, next)}
+            onupload={openUpload}
           />
         {/key}
       </div>
@@ -102,7 +102,7 @@
             disabled={form.card_style !== 'info'}
             bind:value={form.card_size.width}
             ariaLabel="详情卡片列宽下限"
-            on:input={() => void syncForm()}
+            oninput={() => void syncForm()}
           />
           {#if form.card_style === 'info' && form.card_size.width >= CARD_SIZE_LIMITS.width.min && form.card_size.width <= 68}
             <small class="warn">当前宽度下详情卡只显示图标：标题与描述的可用宽度为 0。标题约需 120 px 才完整显示。移动端仍按 150 px 安全下限渲染。</small>
@@ -125,7 +125,7 @@
             disabled={form.card_style !== 'info'}
             bind:value={form.card_size.height}
             ariaLabel="详情卡片最小高度"
-            on:input={() => void syncForm()}
+            oninput={() => void syncForm()}
           />
         </label>
         <label class="field field-number" class:disabled={form.card_style !== 'icon'} for="settings-card-icon">
@@ -141,7 +141,7 @@
             disabled={form.card_style !== 'icon'}
             bind:value={form.card_icon_size}
             ariaLabel="极简卡片图标大小"
-            on:input={() => void syncForm()}
+            oninput={() => void syncForm()}
           />
         </label>
       </div>
@@ -155,7 +155,7 @@
           <ColorAlphaInput
             bind:value={form.card_background_color}
             bind:alpha={form.card_background_opacity}
-            on:change={() => void syncForm()}
+            onchange={() => void syncForm()}
             placeholder="#ffffff"
             inputLabel="卡片表面颜色值"
             swatchTitle="选择卡片表面颜色"
@@ -171,7 +171,7 @@
             max={1}
             step={0.05}
             bind:value={form.card_background_opacity}
-            on:input={() => void syncForm()}
+            oninput={() => void syncForm()}
           />
         </div>
 
@@ -179,7 +179,7 @@
           <span>卡片文字颜色</span>
           <ColorAlphaInput
             bind:value={form.card_text_color}
-            on:change={() => void syncForm()}
+            onchange={() => void syncForm()}
             placeholder="留空跟随系统高对比色"
             inputLabel="卡片文字颜色值"
             swatchTitle="选择卡片文字颜色"

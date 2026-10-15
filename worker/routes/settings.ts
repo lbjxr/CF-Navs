@@ -3,7 +3,7 @@ import { BUILTIN_BACKGROUND_PRESET_IDS, ErrCode, type Settings, type SettingsUpd
 import { SETTINGS_KEYS } from '../../shared/settings'
 import { normalizeCardIconSize, normalizeCardSizeSetting, normalizeCategoryDisplaySetting } from '../../shared/settings'
 import { invalidatePublicDataCache, invalidateSiteConfigCache } from '../lib/cache'
-import { ensureBrowserSyncCategory, getSettings, settingsFromPatchDefaults, touchDataVersion, updateSettings, writeSettingsPatch } from '../lib/db'
+import { ensureBrowserSyncCategory, getSettings, settingsFromPatchDefaults, casDataVersion, touchDataVersion, updateSettings, writeSettingsPatch } from '../lib/db'
 import { fail, ok } from '../lib/response'
 import { badRequest, readJson } from '../lib/routeHelpers'
 import { findSettingsLengthError } from '../lib/settingsLimits'
@@ -173,14 +173,30 @@ settingsRoutes.put('/', async (c) => {
     return badRequest(c, 'invalid footer_html')
   }
 
+  // data_version 是乐观并发令牌（非设置项）：必须是字符串，携带时做 CAS。
+  // buildSettingsPatchParams 只认 SETTINGS_KEYS，这里再显式剥离，双保险不写入 settings 表。
+  const expectedVersion = body.data_version
+  if (expectedVersion !== undefined && typeof expectedVersion !== 'string') {
+    return badRequest(c, 'invalid data_version')
+  }
+  const { data_version: _casToken, ...patchBody } = body
+
   // 类型校验全过之后再统一查长度，错误消息里带上字段名和上限。
-  const lengthError = findSettingsLengthError(body as Record<string, unknown>)
+  const lengthError = findSettingsLengthError(patchBody as Record<string, unknown>)
   if (lengthError) {
     return badRequest(c, `${lengthError.field} exceeds the ${lengthError.max} character limit`)
   }
 
   try {
-    const settingsPatch: SettingsUpdateReq = { ...body }
+    // CAS 先行：版本已推进则直接 409，不应用 patch，避免覆盖他人写入。
+    if (expectedVersion !== undefined) {
+      const casOk = await casDataVersion(c.env.DB, expectedVersion)
+      if (casOk === null) {
+        return c.json(fail(ErrCode.CONFLICT, '设置已被其他会话修改，请刷新后重试'), 409)
+      }
+    }
+
+    const settingsPatch: SettingsUpdateReq = { ...patchBody }
     if (body.card_size !== undefined) settingsPatch.card_size = normalizeCardSizeSetting(body.card_size)
     if (body.card_icon_size !== undefined) settingsPatch.card_icon_size = normalizeCardIconSize(body.card_icon_size)
     if (body.category_display !== undefined) settingsPatch.category_display = normalizeCategoryDisplaySetting(body.category_display)
@@ -200,7 +216,10 @@ settingsRoutes.put('/', async (c) => {
     } else {
       settings = await updateSettings(c.env.DB, settingsPatch)
     }
-    await touchDataVersion(c.env.DB)
+    // CAS 成功时版本已在 casDataVersion 里原子推进，不必再 touch；未携带令牌时走老路径。
+    if (expectedVersion === undefined) {
+      await touchDataVersion(c.env.DB)
+    }
     invalidateRuntimeDataCache()
     invalidatePublicDataCache(c, c.req.url)
     invalidateSiteConfigCache(c, c.req.url)
