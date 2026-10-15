@@ -10,7 +10,7 @@
   import HomeEmptyPanel from '../components/HomeEmptyPanel.svelte'
   import HomeFloatingActions from '../components/HomeFloatingActions.svelte'
   import HomeHeroSearch from '../components/HomeHeroSearch.svelte'
-  import type { BookmarkReorganizeReq, NavigationSetting, PublicBookmark, PublicCategory, PublicSettings, ThemeMode } from '../../shared/types'
+  import type { AsyncVoid, BookmarkReorganizeReq, NavigationSetting, PublicBookmark, PublicCategory, PublicSettings, ThemeMode } from '../../shared/types'
   import {
     bookmarkMatchesSearch,
     clampTitleFontSize,
@@ -40,7 +40,6 @@
   import { buildHomeSortCategoryOrders, moveBookmarkToCategory } from '../lib/homeSort'
   import type { SortTransfer } from '../lib/sortableList'
 
-  type AsyncVoid<T = void> = T | Promise<T>
   const SEARCH_FILTER_DEBOUNCE_MS = 120
   const LEFT_NAV_SCROLL_TOP_OFFSET = 80
   const TOP_NAV_SCROLL_TOP_OFFSET = 88
