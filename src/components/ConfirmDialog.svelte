@@ -1,17 +1,35 @@
 <script lang="ts">
-  export let open = false
-  export let title = ''
-  export let message = ''
-  export let itemTitle = ''
-  export let confirmLabel = '确认'
-  export let cancelLabel = '取消'
-  export let loading = false
-  export let variant: 'default' | 'danger' = 'default'
-  export let confirmDisabled = false
-  export let onConfirm: (() => void | Promise<void>) | undefined = undefined
-  export let onCancel: (() => void | Promise<void>) | undefined = undefined
+  interface ConfirmDialogProps {
+    open?: boolean
+    title?: string
+    message?: string
+    itemTitle?: string
+    confirmLabel?: string
+    cancelLabel?: string
+    loading?: boolean
+    variant?: 'default' | 'danger'
+    confirmDisabled?: boolean
+    /** 确认回调 */
+    onConfirm?: () => void | Promise<void>
+    /** 取消回调 */
+    onCancel?: () => void | Promise<void>
+  }
 
-  $: isDanger = variant === 'danger'
+  let {
+    open = false,
+    title = '',
+    message = '',
+    itemTitle = '',
+    confirmLabel = '确认',
+    cancelLabel = '取消',
+    loading = false,
+    variant = 'default',
+    confirmDisabled = false,
+    onConfirm = undefined,
+    onCancel = undefined,
+  }: ConfirmDialogProps = $props()
+
+  let isDanger = $derived(variant === 'danger')
 
   function handleCancel() {
     if (loading) return
@@ -39,7 +57,7 @@
   }
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} />
 
 {#if open}
   <div class="confirm-backdrop">
@@ -47,7 +65,7 @@
       type="button"
       class="confirm-scrim"
       aria-label="取消确认"
-      on:click={handleCancel}
+      onclick={handleCancel}
       disabled={loading}
     ></button>
 
@@ -77,10 +95,10 @@
       </div>
 
       <div class="confirm-actions">
-        <button type="button" class="ghost-button" on:click={handleCancel} disabled={loading}>
+        <button type="button" class="ghost-button" onclick={handleCancel} disabled={loading}>
           {cancelLabel}
         </button>
-        <button type="button" class="confirm-button" on:click={handleConfirm} disabled={loading || confirmDisabled}>
+        <button type="button" class="confirm-button" onclick={handleConfirm} disabled={loading || confirmDisabled}>
           {#if loading}处理中...{:else}{confirmLabel}{/if}
         </button>
       </div>
