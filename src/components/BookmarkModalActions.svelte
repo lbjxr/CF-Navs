@@ -1,21 +1,34 @@
 <script lang="ts">
-  export let mode: 'create' | 'edit' = 'create'
-  export let bookmarkId: string | number | undefined = undefined
-  export let canDelete = false
-  export let loading = false
-  export let deleting = false
-  export let saveDisabled = false
-  export let onCancel: (() => void) | undefined = undefined
-  export let onDelete: (() => void | Promise<void>) | undefined = undefined
+  interface BookmarkModalActionsProps {
+    mode?: 'create' | 'edit'
+    bookmarkId?: string | number
+    canDelete?: boolean
+    loading?: boolean
+    deleting?: boolean
+    saveDisabled?: boolean
+    onCancel?: () => void
+    onDelete?: () => void | Promise<void>
+  }
+
+  let {
+    mode = 'create',
+    bookmarkId = undefined,
+    canDelete = false,
+    loading = false,
+    deleting = false,
+    saveDisabled = false,
+    onCancel = undefined,
+    onDelete = undefined,
+  }: BookmarkModalActionsProps = $props()
 </script>
 
 <div class="modal-actions">
   {#if mode === 'edit' && bookmarkId && canDelete}
-    <button type="button" class="danger-button" on:click={onDelete} disabled={loading || deleting}>
+    <button type="button" class="danger-button" onclick={onDelete} disabled={loading || deleting}>
       {#if deleting}删除中...{:else}删除{/if}
     </button>
   {/if}
-  <button type="button" class="ghost-button" on:click={onCancel} disabled={loading}>取消</button>
+  <button type="button" class="ghost-button" onclick={onCancel} disabled={loading}>取消</button>
   <button type="submit" class="primary-button" disabled={saveDisabled}>
     {#if loading}保存中...{:else}保存{/if}
   </button>

@@ -1,9 +1,19 @@
 <script lang="ts">
-  export let hasSearchQuery = false
-  export let visibleCategoriesCount = 0
-  export let visibleBookmarkCount = 0
-  export let totalCategories = 0
-  export let totalBookmarks = 0
+  interface HomeContentSummaryProps {
+    hasSearchQuery?: boolean
+    visibleCategoriesCount?: number
+    visibleBookmarkCount?: number
+    totalCategories?: number
+    totalBookmarks?: number
+  }
+
+  let {
+    hasSearchQuery = false,
+    visibleCategoriesCount = 0,
+    visibleBookmarkCount = 0,
+    totalCategories = 0,
+    totalBookmarks = 0,
+  }: HomeContentSummaryProps = $props()
 </script>
 
 <div class="content-summary">

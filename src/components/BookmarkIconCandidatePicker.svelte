@@ -9,10 +9,19 @@
   import type { AsyncVoid } from '../../shared/types'
 
 
-  export let candidates: IconCandidate[] = []
-  export let form: BookmarkFormValue
-  export let urlFilled = false
-  export let onSelect: ((candidate: IconCandidate) => AsyncVoid) | undefined = undefined
+  interface BookmarkIconCandidatePickerProps {
+    candidates?: IconCandidate[]
+    form: BookmarkFormValue
+    urlFilled?: boolean
+    onSelect?: (candidate: IconCandidate) => AsyncVoid
+  }
+
+  let {
+    candidates = [],
+    form,
+    urlFilled = false,
+    onSelect = undefined,
+  }: BookmarkIconCandidatePickerProps = $props()
 
   function handleSelect(candidate: IconCandidate) {
     void onSelect?.(candidate)

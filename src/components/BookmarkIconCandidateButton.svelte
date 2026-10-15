@@ -1,19 +1,30 @@
 <script lang="ts">
-
   import type { AsyncVoid } from '../../shared/types'
-  export let selected = false
-  export let title = ''
-  export let imageUrl = ''
-  export let imageAlt = ''
-  export let label = ''
-  export let onSelect: (() => AsyncVoid) | undefined = undefined
+
+  interface BookmarkIconCandidateButtonProps {
+    selected?: boolean
+    title?: string
+    imageUrl?: string
+    imageAlt?: string
+    label?: string
+    onSelect?: () => AsyncVoid
+  }
+
+  let {
+    selected = false,
+    title = '',
+    imageUrl = '',
+    imageAlt = '',
+    label = '',
+    onSelect = undefined,
+  }: BookmarkIconCandidateButtonProps = $props()
 </script>
 
 <button
   type="button"
   class="candidate-card"
   class:selected
-  on:click={() => onSelect?.()}
+  onclick={() => onSelect?.()}
   {title}
 >
   <img src={imageUrl} alt={imageAlt || label} loading="lazy" />
