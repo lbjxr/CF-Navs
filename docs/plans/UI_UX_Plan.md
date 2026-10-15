@@ -1,3 +1,5 @@
+> **STATUS: 已作废**（判定于 2026-10-15）——原始改造草案，已被 SETTINGS_UI_UX_ADJUSTMENT_REQUIREMENTS.md 取代；已知偏差登记在 PROB-04。
+
 # 导航后台前端设置页面 UI/UX 改造规范
 
 > **文档状态：原始改造草案，已被取代。**

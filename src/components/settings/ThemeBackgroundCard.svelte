@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { createEventDispatcher, tick } from 'svelte'
+  // runes 试点：$props + $bindable(background) + $derived，
+  // 背景变更经 onchange 回调、上传请求经 onupload 回调通知。
+  import { tick } from 'svelte'
   import type { BackgroundSetting } from '../../../shared/types'
   import {
     backgroundTypeOptions,
@@ -15,38 +17,50 @@
   import Slider from '../ui/Slider.svelte'
   import Tooltip from '../ui/Tooltip.svelte'
 
-  export let theme: 'light' | 'dark'
-  export let background: BackgroundSetting
-  export let valid = true
-  export let uploadHost = ''
+  interface ThemeBackgroundCardProps {
+    theme: 'light' | 'dark'
+    background?: BackgroundSetting
+    valid?: boolean
+    uploadHost?: string
+    /** 背景变更回调，参数为更新后的完整背景设置 */
+    onchange?: (background: BackgroundSetting) => void
+    /** 请求打开图床上传 */
+    onupload?: () => void
+  }
 
-  const dispatch = createEventDispatcher<{
-    change: BackgroundSetting
-    upload: void
-  }>()
+  let {
+    theme,
+    background = $bindable({ type: 'color', value: '' } as BackgroundSetting),
+    valid = true,
+    uploadHost = '',
+    onchange,
+    onupload,
+  }: ThemeBackgroundCardProps = $props()
 
-  $: isLight = theme === 'light'
-  $: title = isLight ? '浅色模式背景' : '深色模式背景'
-  $: badge = isLight ? 'Light' : 'Dark'
-  $: imagePlaceholder = '请输入图片 URL 或点击右侧上传'
-  $: colorPlaceholder = isLight ? '#f8fafc' : '#0f172a'
-  $: imageInputLabel = isLight ? '浅色背景图片地址' : '深色背景图片地址'
-  $: gradientDefaults = isLight ? defaultLightGradient : defaultDarkGradient
-  $: defaults = isLight
-    ? {
-        color: defaultLightBackground.value,
-        gradientStart: defaultLightGradient.start,
-        gradientEnd: defaultLightGradient.end,
-      }
-    : {
-        color: defaultDarkBackground.value,
-        gradientStart: defaultDarkGradient.start,
-        gradientEnd: defaultDarkGradient.end,
-      }
+  let isLight = $derived(theme === 'light')
+  let title = $derived(isLight ? '浅色模式背景' : '深色模式背景')
+  let badge = $derived(isLight ? 'Light' : 'Dark')
+  let imagePlaceholder = $derived('请输入图片 URL 或点击右侧上传')
+  let colorPlaceholder = $derived(isLight ? '#f8fafc' : '#0f172a')
+  let imageInputLabel = $derived(isLight ? '浅色背景图片地址' : '深色背景图片地址')
+  let gradientDefaults = $derived(isLight ? defaultLightGradient : defaultDarkGradient)
+  let defaults = $derived(
+    isLight
+      ? {
+          color: defaultLightBackground.value,
+          gradientStart: defaultLightGradient.start,
+          gradientEnd: defaultLightGradient.end,
+        }
+      : {
+          color: defaultDarkBackground.value,
+          gradientStart: defaultDarkGradient.start,
+          gradientEnd: defaultDarkGradient.end,
+        },
+  )
 
   async function syncBackground(): Promise<void> {
     await tick()
-    dispatch('change', { ...background })
+    onchange?.({ ...background })
   }
 
   function updateBackgroundType(nextType: BackgroundSetting['type']): void {
@@ -55,7 +69,7 @@
       type: nextType,
       value: normalizeBackgroundValueForType(background.value, nextType, defaults),
     }
-    dispatch('change', { ...background })
+    onchange?.({ ...background })
   }
 </script>
 
@@ -77,7 +91,7 @@
                 name={`${theme}-background-type`}
                 value={option.value}
                 checked={background.type === option.value}
-                on:change={() => updateBackgroundType(option.value)}
+                onchange={() => updateBackgroundType(option.value)}
               />
               <span>{option.label}</span>
             </label>
@@ -90,7 +104,7 @@
         {#if background.type === 'color'}
           <ColorAlphaInput
             bind:value={background.value}
-            on:change={() => void syncBackground()}
+            onchange={() => void syncBackground()}
             placeholder={colorPlaceholder}
             inputLabel={`${title}颜色值`}
             swatchTitle={`选择${title}颜色`}
@@ -99,7 +113,7 @@
         {:else if background.type === 'gradient'}
           <GradientBackgroundInput
             bind:value={background.value}
-            on:change={() => void syncBackground()}
+            onchange={() => void syncBackground()}
             defaultStart={gradientDefaults.start}
             defaultEnd={gradientDefaults.end}
             startLabel="起始颜色"
@@ -111,15 +125,15 @@
             bind:value={background.value}
             placeholder={imagePlaceholder}
             ariaLabel={imageInputLabel}
-            on:input={() => void syncBackground()}
+            oninput={() => void syncBackground()}
           >
-            <svelte:fragment slot="suffix">
+            {#snippet suffix()}
               {#if uploadHost}
-                <button type="button" class="ghost-button" on:click={() => dispatch('upload')}>
+                <button type="button" class="ghost-button" onclick={() => onupload?.()}>
                   打开图床上传 ↗
                 </button>
               {/if}
-            </svelte:fragment>
+            {/snippet}
           </InputGroup>
         {/if}
         {#if !valid}
@@ -134,7 +148,7 @@
         <ColorAlphaInput
           bind:value={background.maskColor}
           bind:alpha={background.mask}
-          on:change={() => void syncBackground()}
+          onchange={() => void syncBackground()}
           placeholder={isLight ? '#ffffff' : '#000000'}
           inputLabel={`${title}遮罩颜色值`}
           swatchTitle={`选择${title}遮罩颜色`}
@@ -150,7 +164,7 @@
           max={40}
           step={1}
           bind:value={background.blur}
-          on:input={() => void syncBackground()}
+          oninput={() => void syncBackground()}
         />
       </div>
 
@@ -162,7 +176,7 @@
           max={1}
           step={0.05}
           bind:value={background.mask}
-          on:input={() => void syncBackground()}
+          oninput={() => void syncBackground()}
         />
       </div>
     </div>
