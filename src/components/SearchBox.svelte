@@ -2,38 +2,54 @@
   import { onDestroy } from 'svelte'
   import type { SearchEngineSetting } from '../../shared/types'
 
-  export let searchEngine: SearchEngineSetting | null = null
-  export let query = ''
-  export let showEngineSelector = true
-  export let preview = false
-  export let themeOverride: 'light' | 'dark' | null = null
+  interface SearchBoxProps {
+    searchEngine?: SearchEngineSetting | null
+    query?: string
+    showEngineSelector?: boolean
+    preview?: boolean
+    themeOverride?: 'light' | 'dark' | null
+  }
 
-  let selectedName = ''
-  let engineMenuOpen = false
+  let {
+    searchEngine = null,
+    query = $bindable(''),
+    showEngineSelector = true,
+    preview = false,
+    themeOverride = null,
+  }: SearchBoxProps = $props()
+
+  let selectedName = $state('')
+  let engineMenuOpen = $state(false)
   // 手动点选的引擎只在默认引擎不变时保持；默认引擎变更后让位于新默认值（Issue #25）。
-  let userSelected = false
-  let lastDefaultEngine = ''
+  let userSelected = $state(false)
+  let lastDefaultEngine = $state('')
 
-  $: engines = searchEngine?.engines ?? []
-  $: defaultEngineName = searchEngine?.current ?? ''
+  let engines = $derived(searchEngine?.engines ?? [])
+  let defaultEngineName = $derived(searchEngine?.current ?? '')
 
   // 默认引擎变化时清除手动选择标记，让新默认值立即生效。
-  $: if (defaultEngineName !== lastDefaultEngine) {
-    lastDefaultEngine = defaultEngineName
-    userSelected = false
-  }
+  $effect.pre(() => {
+    if (defaultEngineName !== lastDefaultEngine) {
+      lastDefaultEngine = defaultEngineName
+      userSelected = false
+    }
+  })
 
-  $: if (engines.length === 0) {
-    selectedName = ''
-  } else if (!userSelected || !engines.some((engine) => engine.name === selectedName)) {
-    selectedName = engines.find((engine) => engine.name === defaultEngineName)?.name ?? engines[0].name
-  }
+  $effect.pre(() => {
+    if (engines.length === 0) {
+      selectedName = ''
+    } else if (!userSelected || !engines.some((engine) => engine.name === selectedName)) {
+      selectedName = engines.find((engine) => engine.name === defaultEngineName)?.name ?? engines[0].name
+    }
+  })
 
-  $: currentEngine = engines.find((engine) => engine.name === selectedName) ?? null
+  let currentEngine = $derived(engines.find((engine) => engine.name === selectedName) ?? null)
 
-  $: if (!showEngineSelector || engines.length <= 1) {
-    engineMenuOpen = false
-  }
+  $effect.pre(() => {
+    if (!showEngineSelector || engines.length <= 1) {
+      engineMenuOpen = false
+    }
+  })
 
   function isIconImage(icon: string | null | undefined): boolean {
     return /^(https?:\/\/|data:image\/)/i.test(icon?.trim() ?? '')
@@ -69,7 +85,8 @@
     engineMenuOpen = false
   }
 
-  function handleSubmit() {
+  function handleSubmit(event: SubmitEvent) {
+    event.preventDefault()
     if (preview) return
     const keyword = query.trim()
 
@@ -91,10 +108,10 @@
   class:has-engine-selector={showEngineSelector}
   class:is-preview={preview}
   class:preview-light={preview && themeOverride === 'light'}
-  on:submit|preventDefault={handleSubmit}
+  onsubmit={handleSubmit}
 >
   {#if showEngineSelector}
-    <div class="engine-picker" on:focusout={handlePickerFocusOut}>
+    <div class="engine-picker" onfocusout={handlePickerFocusOut}>
       <button
         type="button"
         class="engine-icon-button"
@@ -103,8 +120,8 @@
         aria-expanded={engineMenuOpen}
         disabled={preview || engines.length === 0}
         title={currentEngine ? `搜索引擎：${currentEngine.name}` : '选择搜索引擎'}
-        on:click={toggleEngineMenu}
-        on:keydown={handleKeydown}
+        onclick={toggleEngineMenu}
+        onkeydown={handleKeydown}
       >
         <span class="engine-current-icon">
           {#if currentEngine && isIconImage(currentEngine.icon)}
@@ -126,8 +143,8 @@
               class:is-selected={engine.name === selectedName}
               role="option"
               aria-selected={engine.name === selectedName}
-              on:click={() => selectEngine(engine.name)}
-              on:keydown={handleKeydown}
+              onclick={() => selectEngine(engine.name)}
+              onkeydown={handleKeydown}
             >
               <span class="engine-menu-icon">
                 {#if isIconImage(engine.icon)}
