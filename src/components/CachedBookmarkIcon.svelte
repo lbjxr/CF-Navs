@@ -1,12 +1,7 @@
 <script lang="ts">
+  import { onDestroy, onMount } from 'svelte'
   import { observeIconVisibility } from '../lib/iconVisibility'
   import { createTrustedIconView, emptyTrustedIcon } from '../lib/trustedIconView'
-  let trustedImage = emptyTrustedIcon
-  const trustedView = createTrustedIconView(value => { trustedImage = value })
-  let anchor: HTMLSpanElement
-  let inView = false
-  let stopVisibility: (() => void) | undefined
-  import { onDestroy, onMount } from 'svelte'
   import {
     createBookmarkIconCacheKey,
     deleteCachedBookmarkIcon,
@@ -17,45 +12,77 @@
   } from '../lib/localBookmarkIconCache'
   import { resolveCachedBookmarkIconDisplaySrc } from '../lib/cachedBookmarkIconDisplay'
 
-  export let id: string | number
-  export let icon = ''
-  export let iconSource: string | null | undefined = null
-  export let iconCached: boolean | number | null | undefined = undefined
-  export let iconRevision: string | null | undefined = undefined
-  export let iconWriteEpoch: number | undefined = undefined
-  export let iconDisplay: 'image' | 'text' | 'empty' | undefined = undefined
-  export let iconBlob = ''
-  export let src = ''
-  export let alt = ''
-  export let fallback = ''
-  export let className = ''
-  export let style = ''
+  interface CachedBookmarkIconProps {
+    id: string | number
+    icon?: string
+    iconSource?: string | null | undefined
+    iconCached?: boolean | number | null | undefined
+    iconRevision?: string | null | undefined
+    iconWriteEpoch?: number | undefined
+    iconDisplay?: 'image' | 'text' | 'empty' | undefined
+    iconBlob?: string
+    src?: string
+    alt?: string
+    fallback?: string
+    className?: string
+    style?: string
+  }
 
-  let localUrl = ''
-  let syncLocalUrl = ''
-  let cachePending = false
-  let failed = false
-  let stateKey = ''
+  let {
+    id,
+    icon = '',
+    iconSource = null,
+    iconCached = undefined,
+    iconRevision = undefined,
+    iconWriteEpoch = undefined,
+    iconDisplay = undefined,
+    iconBlob = '',
+    src = '',
+    alt = '',
+    fallback = '',
+    className = '',
+    style = '',
+  }: CachedBookmarkIconProps = $props()
+
+  let trustedImage = $state(emptyTrustedIcon)
+  const trustedView = createTrustedIconView(value => { trustedImage = value })
+  let anchor = $state<HTMLSpanElement>()
+  let inView = $state(false)
+  let stopVisibility: (() => void) | undefined
+
+  let localUrl = $state('')
+  let cachePending = $state(false)
+  let failed = $state(false)
+  let stateKey = $state('')
   const requestSequence = { current: 0 }
 
-  $: trimmedIcon = icon.trim()
-  $: trimmedIconBlob = iconBlob.trim()
-  $: trustedView.set({ id: Number(id), icon: trimmedIcon, icon_blob: trimmedIconBlob, icon_revision: iconRevision, icon_cached: iconCached, icon_write_epoch: iconWriteEpoch, icon_display: iconDisplay, visible: inView, online_url: src })
-  $: cacheKey = createBookmarkIconCacheKey({
+  let trimmedIcon = $derived(icon.trim())
+  let trimmedIconBlob = $derived(iconBlob.trim())
+  let cacheKey = $derived(createBookmarkIconCacheKey({
     id,
     icon: trimmedIcon,
     iconSource,
+  }))
+  let syncLocalUrl = $derived(readCachedBookmarkIconDataUri(cacheKey) ?? '')
+  let shouldWaitForLocalCache = $derived(src.startsWith('/api/icon/') && !isDataImage(trimmedIconBlob))
+  let nextStateKey = $derived(`${cacheKey}:${trimmedIconBlob}:${src}:${trustedImage.active}`)
+
+  // 可信图标视图输入与可见性联动（副作用，pre-render 时序贴近 legacy $:）
+  $effect.pre(() => {
+    trustedView.set({ id: Number(id), icon: trimmedIcon, icon_blob: trimmedIconBlob, icon_revision: iconRevision, icon_cached: iconCached, icon_write_epoch: iconWriteEpoch, icon_display: iconDisplay, visible: inView, online_url: src })
   })
-  $: syncLocalUrl = readCachedBookmarkIconDataUri(cacheKey) ?? ''
-  $: shouldWaitForLocalCache = src.startsWith('/api/icon/') && !isDataImage(trimmedIconBlob)
-  $: nextStateKey = `${cacheKey}:${trimmedIconBlob}:${src}:${trustedImage.active}`
-  $: if (nextStateKey !== stateKey) {
-    stateKey = nextStateKey
-    failed = false
-    resetLocalUrl()
-    void loadCachedIcon(cacheKey, trimmedIconBlob, shouldWaitForLocalCache)
-  }
-  $: legacyDisplaySrc = resolveCachedBookmarkIconDisplaySrc({
+
+  // 状态键变化时重置本地 URL 并重新加载缓存图标
+  $effect.pre(() => {
+    if (nextStateKey !== stateKey) {
+      stateKey = nextStateKey
+      failed = false
+      resetLocalUrl()
+      void loadCachedIcon(cacheKey, trimmedIconBlob, shouldWaitForLocalCache)
+    }
+  })
+
+  let legacyDisplaySrc = $derived(resolveCachedBookmarkIconDisplaySrc({
     syncLocalUrl,
     localUrl,
     failed,
@@ -63,11 +90,12 @@
     shouldWaitForLocalCache,
     cachePending,
     src,
+  }))
+  let displaySrc = $derived(trustedImage.active ? trustedImage.url : legacyDisplaySrc)
+
+  onMount(() => {
+    if (anchor) stopVisibility = observeIconVisibility(anchor, () => { inView = true })
   })
-
-  $: displaySrc = trustedImage.active ? trustedImage.url : legacyDisplaySrc
-
-  onMount(() => { stopVisibility = observeIconVisibility(anchor, () => { inView = true }) })
 
   function resetLocalUrl() {
     if (localUrl) {
@@ -127,7 +155,7 @@
     alt={alt}
     loading="lazy"
     decoding="async"
-    on:error={handleError}
+    onerror={handleError}
   />
 {/if}
 {#if !displaySrc && fallback}

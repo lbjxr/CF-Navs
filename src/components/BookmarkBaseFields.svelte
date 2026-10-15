@@ -3,17 +3,41 @@
   import type { CategoryTreeOption } from '../lib/categorySelect'
   import CategoryTreeSelect from './CategoryTreeSelect.svelte'
 
-  export let categoryId: string | number | undefined = undefined
-  export let title = ''
-  export let url = ''
-  export let openMethod: BookmarkFormValue['open_method'] = 'new_tab'
-  export let isPrivate = false
-  export let description = ''
-  export let descriptionMode: BookmarkFormValue['description_mode'] = 'inherit'
-  export let categories: CategoryTreeOption[] = []
-  export let loading = false
-  export let titleLoading = false
-  export let onUrlBlur: (() => void) | undefined = undefined
+  interface BookmarkBaseFieldsProps {
+    /** 双向绑定：所属分类 */
+    categoryId?: string | number | undefined
+    /** 双向绑定：书签标题 */
+    title?: string
+    /** 双向绑定：链接地址 */
+    url?: string
+    /** 双向绑定：打开方式 */
+    openMethod?: BookmarkFormValue['open_method']
+    /** 双向绑定：是否私密 */
+    isPrivate?: boolean
+    /** 双向绑定：描述 */
+    description?: string
+    /** 双向绑定：描述显示策略 */
+    descriptionMode?: BookmarkFormValue['description_mode']
+    categories?: CategoryTreeOption[]
+    loading?: boolean
+    titleLoading?: boolean
+    /** URL 输入框失焦回调 */
+    onUrlBlur?: () => void
+  }
+
+  let {
+    categoryId = $bindable(),
+    title = $bindable(''),
+    url = $bindable(''),
+    openMethod = $bindable('new_tab'),
+    isPrivate = $bindable(false),
+    description = $bindable(''),
+    descriptionMode = $bindable('inherit'),
+    categories = [],
+    loading = false,
+    titleLoading = false,
+    onUrlBlur,
+  }: BookmarkBaseFieldsProps = $props()
 </script>
 
 <div class="field-compact field-label">
@@ -43,7 +67,7 @@
     type="url"
     placeholder="https://example.com"
     required
-    on:blur={() => onUrlBlur?.()}
+    onblur={() => onUrlBlur?.()}
   />
 </label>
 
