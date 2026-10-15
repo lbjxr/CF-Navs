@@ -1,6 +1,6 @@
 <script lang="ts">
   import { startIconDevice } from './lib/iconDeviceState'
-  let stopIconDevice: (() => void) | undefined
+  let stopIconDevice: (() => void) | undefined = $state()
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import { fade } from 'svelte/transition'
@@ -121,25 +121,25 @@
     '--home-background-mask-color',
   ]
 
-  let booting = true
-  let installState: InstallScreenState = { type: 'checking' }
-  let recoverActive = false
-  let rootError = ''
+  let booting = $state(true)
+  let installState: InstallScreenState = $state({ type: 'checking' })
+  let recoverActive = $state(false)
+  let rootError = $state('')
   // 数据加载失败时的原始异常，用来判断是否需要回头复核安装状态。
-  let lastDataError: unknown = null
-  let currentView: AppView = 'home'
+  let lastDataError: unknown = $state(null)
+  let currentView: AppView = $state('home')
 
   function isAdminPath(): boolean {
     if (typeof window === 'undefined') return false
     return window.location.pathname === '/admin' || window.location.pathname === '/admin/'
   }
-  let AdminComponent: typeof import('./views/Admin.svelte').default | null = null
-  let LoginModalComponent: typeof import('./components/LoginModal.svelte').default | null = null
-  let BookmarkEditModalComponent: typeof import('./components/BookmarkEditModal.svelte').default | null = null
-  let CategoryEditModalComponent: typeof import('./components/CategoryEditModal.svelte').default | null = null
-  let SearchSpotlightComponent: typeof import('./components/SearchSpotlight.svelte').default | null = null
-  let confirmDialog: ConfirmDialogState | null = null
-  let confirmDialogResolver: ((confirmed: boolean) => void) | null = null
+  let AdminComponent: typeof import('./views/Admin.svelte').default | null = $state(null)
+  let LoginModalComponent: typeof import('./components/LoginModal.svelte').default | null = $state(null)
+  let BookmarkEditModalComponent: typeof import('./components/BookmarkEditModal.svelte').default | null = $state(null)
+  let CategoryEditModalComponent: typeof import('./components/CategoryEditModal.svelte').default | null = $state(null)
+  let SearchSpotlightComponent: typeof import('./components/SearchSpotlight.svelte').default | null = $state(null)
+  let confirmDialog: ConfirmDialogState | null = $state(null)
+  let confirmDialogResolver: ((confirmed: boolean) => void) | null = $state(null)
 
   const ensureAdminComponent = createLazyComponentLoader({
     load: () => import('./views/Admin.svelte'),
@@ -181,13 +181,13 @@
   })
 
   const authViewIntent = createAuthViewIntent()
-  let loginModalOpen = false
-  let categoryModalOpen = false
-  let bookmarkModalOpen = false
-  let categoryCreateReturnToHome = false
-  let homeFocusCategoryId: number | null = null
-  let spotlightOpen = false
-  let viewBookmark: PublicBookmark | null = null
+  let loginModalOpen = $state(false)
+  let categoryModalOpen = $state(false)
+  let bookmarkModalOpen = $state(false)
+  let categoryCreateReturnToHome = $state(false)
+  let homeFocusCategoryId: number | null = $state(null)
+  let spotlightOpen = $state(false)
+  let viewBookmark: PublicBookmark | null = $state(null)
 
   function blockingModalState(): SpotlightModalState {
     return {
@@ -253,28 +253,28 @@
     }
   }
 
-  let categoryModalMode: 'create' | 'edit' = 'create'
-  let bookmarkModalMode: 'create' | 'edit' = 'create'
+  let categoryModalMode: 'create' | 'edit' = $state('create')
+  let bookmarkModalMode: 'create' | 'edit' = $state('create')
 
-  let activeCategory: Partial<CategoryFormValue> | null = null
-  let activeBookmark: Partial<BookmarkFormValue> | null = null
-  let editIntent = 0
+  let activeCategory: Partial<CategoryFormValue> | null = $state(null)
+  let activeBookmark: Partial<BookmarkFormValue> | null = $state(null)
+  let editIntent = $state(0)
 
-  let savingCategory = false
-  let savingBookmark = false
-  let savingSettings = false
-  let deletingCategoryId: number | null = null
-  let deletingBookmarkId: number | null = null
+  let savingCategory = $state(false)
+  let savingBookmark = $state(false)
+  let savingSettings = $state(false)
+  let deletingCategoryId: number | null = $state(null)
+  let deletingBookmarkId: number | null = $state(null)
 
-  let categoryError = ''
-  let bookmarkError = ''
-  let settingsError = ''
+  let categoryError = $state('')
+  let bookmarkError = $state('')
+  let settingsError = $state('')
 
-  let importExportState = createImportExportState()
-  let preferredThemeMode: ThemeMode | null = null
-  let prefersReducedMotion = false
+  let importExportState = $state(createImportExportState())
+  let preferredThemeMode: ThemeMode | null = $state(null)
+  let prefersReducedMotion = $state(false)
   // 只在浏览器里创建：SSR/测试环境没有 document 和 URL.createObjectURL。
-  let customScriptController: CustomScriptController | null = null
+  let customScriptController: CustomScriptController | null = $state(null)
   const categorySortState = createOptimisticSortState()
   const bookmarkSortState = createOptimisticSortState()
 
@@ -291,39 +291,43 @@
     },
   })
 
-  $: installView = getInstallViewState(installState)
-  $: config = $configStore.data
-  $: publicData = $publicStore.data
-  $: adminData = $adminStore.data
-  $: canSeeHome = canSeeHomeView({ publicMode: config?.public_mode, authenticated: $isAuthenticated })
-  $: homeTitle = publicData?.settings.site_title ?? config?.site_title ?? 'CF-Navs'
+  let installView = $derived(getInstallViewState(installState))
+  let config = $derived($configStore.data)
+  let publicData = $derived($publicStore.data)
+  let adminData = $derived($adminStore.data)
+  let canSeeHome = $derived(canSeeHomeView({ publicMode: config?.public_mode, authenticated: $isAuthenticated }))
+  let homeTitle = $derived(publicData?.settings.site_title ?? config?.site_title ?? 'CF-Navs')
 
-  $: adminCategories = toAdminCategories(adminData.categories, adminData.bookmarks)
-  $: adminBookmarks = toAdminBookmarks(adminData.bookmarks)
-  $: settingsValue = toSettingsForm(adminData.settings)
+  let adminCategories = $derived(toAdminCategories(adminData.categories, adminData.bookmarks))
+  let adminBookmarks = $derived(toAdminBookmarks(adminData.bookmarks))
+  let settingsValue = $derived(toSettingsForm(adminData.settings))
 
-  $: if (shouldOpenLoginGate({ booting, currentView, canSeeHome })) {
-    void ensureLoginModalComponent()
-    loginModalOpen = true
-    currentView = 'login'
-  }
-
-  let systemPrefersDark = false
-  let mediaQuery: MediaQueryList | null = null
-  let handleSystemThemeChange: ((event: MediaQueryListEvent) => void) | null = null
-  let stopPublicDataFocusRefresh: (() => void) | null = null
-
-  $: resolvedThemeState = resolveAppThemeState({
-    preferredThemeMode,
-    configuredThemeMode: publicData?.settings.theme,
-    systemPrefersDark,
+  $effect.pre(() => {
+    if (shouldOpenLoginGate({ booting, currentView, canSeeHome })) {
+      void ensureLoginModalComponent()
+      loginModalOpen = true
+      currentView = 'login'
+    }
   })
-  $: themeMode = resolvedThemeState.themeMode
-  $: activeTheme = resolvedThemeState.activeTheme
 
-  $: homeBackgroundStyle = buildHomeBackground(publicData?.settings ?? null, activeTheme)
+  let systemPrefersDark = $state(false)
+  let mediaQuery: MediaQueryList | null = $state(null)
+  let handleSystemThemeChange: ((event: MediaQueryListEvent) => void) | null = $state(null)
+  let stopPublicDataFocusRefresh: (() => void) | null = $state(null)
 
-  $: if (typeof document !== 'undefined') {
+  let resolvedThemeState = $derived(
+    resolveAppThemeState({
+      preferredThemeMode,
+      configuredThemeMode: publicData?.settings.theme,
+      systemPrefersDark,
+    }),
+  )
+  let themeMode = $derived(resolvedThemeState.themeMode)
+  let activeTheme = $derived(resolvedThemeState.activeTheme)
+
+  let homeBackgroundStyle = $derived(buildHomeBackground(publicData?.settings ?? null, activeTheme))
+
+  $effect.pre(() => {
     document.documentElement.dataset.theme = activeTheme
     document.documentElement.dataset.backgroundPreset = publicData?.settings.background_preset_id ?? 'custom'
 
@@ -342,12 +346,14 @@
       document.head.appendChild(styleTag);
     }
     styleTag.textContent = publicData?.settings?.custom_css ?? '';
-  }
+  })
 
-  // 自定义 JS 单独走一条响应式语句：上面那个块还依赖 activeTheme 和
+  // 自定义 JS 单独走一条 effect：上面那个块还依赖 activeTheme 和
   // homeBackgroundStyle，写在里面的话切个主题就会把用户脚本重跑一遍。
   // controller 内部还做了幂等，即使这条语句被多余触发也不会重复执行。
-  $: customScriptController?.apply(publicData?.settings?.custom_js)
+  $effect.pre(() => {
+    customScriptController?.apply(publicData?.settings?.custom_js)
+  })
 
   function setPreferredThemeMode(mode: ThemeMode): void {
     preferredThemeMode = mode
@@ -1168,7 +1174,7 @@
   })
 </script>
 
-<svelte:window on:keydown={handleGlobalKeyDown} />
+<svelte:window onkeydown={handleGlobalKeyDown} />
 
 {#if recoverActive}
   <Recover
@@ -1269,8 +1275,7 @@
         </div>
       </div>
     {:else if AdminComponent}
-      <svelte:component
-        this={AdminComponent}
+      <AdminComponent
         isAuthenticated={$isAuthenticated}
         authLoading={$authStore.loading}
         categories={adminCategories}
@@ -1349,8 +1354,7 @@
     {/if}
 
     {#if LoginModalComponent}
-      <svelte:component
-        this={LoginModalComponent}
+      <LoginModalComponent
         open={loginModalOpen}
         loading={$authStore.loading}
         error={$authStore.error ?? ''}
@@ -1361,8 +1365,7 @@
     {/if}
 
     {#if BookmarkEditModalComponent}
-      <svelte:component
-        this={BookmarkEditModalComponent}
+      <BookmarkEditModalComponent
         open={bookmarkModalOpen}
         loading={savingBookmark}
         error={bookmarkError}
@@ -1377,8 +1380,7 @@
       />
     {/if}
     {#if CategoryEditModalComponent && categoryCreateReturnToHome}
-      <svelte:component
-        this={CategoryEditModalComponent}
+      <CategoryEditModalComponent
         open={categoryModalOpen}
         loading={savingCategory}
         error={categoryError}
@@ -1391,8 +1393,7 @@
       />
     {/if}
     {#if SearchSpotlightComponent}
-      <svelte:component
-        this={SearchSpotlightComponent}
+      <SearchSpotlightComponent
         open={spotlightOpen}
         bookmarks={publicData?.bookmarks ?? []}
         categories={publicData?.categories ?? []}
