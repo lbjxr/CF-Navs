@@ -28,69 +28,97 @@
   import CachedBookmarkIcon from '../CachedBookmarkIcon.svelte'
   import './adminListPanels.css'
   import { DEFAULT_PAGE_SIZE } from '../../lib/pagination'
+  import { untrack } from 'svelte'
 
   type AdminCategory = AdminCategorySummary
   type AdminBookmark = AdminBookmarkSummary
 
-  export let isAuthenticated = false
-  export let authLoading = false
-  export let categories: AdminCategory[] = []
-  export let bookmarks: AdminBookmark[] = []
-  export let bookmarksLoading = false
-  export let deletingBookmarkId: string | number | null = null
-  export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
-  export let onEditBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
-  export let onDeleteBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
-  export let onBatchDeleteBookmarks: ((ids: number[]) => AsyncVoid) | undefined = undefined
-  export let onBatchMoveBookmarks: ((payload: BookmarkBatchMoveReq) => AsyncVoid) | undefined = undefined
-  export let onSortBookmarks: SortHandler | undefined = undefined
+  interface BookmarkListPanelProps {
+    isAuthenticated?: boolean
+    authLoading?: boolean
+    categories?: AdminCategory[]
+    bookmarks?: AdminBookmark[]
+    bookmarksLoading?: boolean
+    deletingBookmarkId?: string | number | null
+    onOpenCreateBookmark?: ((categoryId?: string | number) => AsyncVoid) | undefined
+    onEditBookmark?: ((bookmark: AdminBookmark) => AsyncVoid) | undefined
+    onDeleteBookmark?: ((bookmark: AdminBookmark) => AsyncVoid) | undefined
+    onBatchDeleteBookmarks?: ((ids: number[]) => AsyncVoid) | undefined
+    onBatchMoveBookmarks?: ((payload: BookmarkBatchMoveReq) => AsyncVoid) | undefined
+    onSortBookmarks?: SortHandler | undefined
+  }
 
-  let sortMode = false
-  let localBookmarks: AdminBookmark[] = []
-  let savingSort = false
-  let page = 1
-  let search = ''
-  let selectedIds = new Set<number>()
-  let sortField: AdminBookmarkSortField | null = null
-  let sortDirection: AdminBookmarkSortState['direction'] = null
+  let {
+    isAuthenticated = false,
+    authLoading = false,
+    categories = [],
+    bookmarks = [],
+    bookmarksLoading = false,
+    deletingBookmarkId = null,
+    onOpenCreateBookmark = undefined,
+    onEditBookmark = undefined,
+    onDeleteBookmark = undefined,
+    onBatchDeleteBookmarks = undefined,
+    onBatchMoveBookmarks = undefined,
+    onSortBookmarks = undefined,
+  }: BookmarkListPanelProps = $props()
+
+  let sortMode = $state(false)
+  let localBookmarks = $state<AdminBookmark[]>([])
+  let savingSort = $state(false)
+  let page = $state(1)
+  let search = $state('')
+  let selectedIds = $state(new Set<number>())
+  let sortField = $state<AdminBookmarkSortField | null>(null)
+  let sortDirection = $state<AdminBookmarkSortState['direction']>(null)
+  // 批量移动弹窗状态必须在派生值之前声明：派生值在初始化时就会读取它们
+  let moveModalOpen = $state(false)
+  let moveTargetId = $state<number | null>(null)
+  let movePosition = $state<BookmarkBatchMovePosition>('end')
+  let moveError = $state('')
+  let moving = $state(false)
   const sortColumns: Array<{ field: AdminBookmarkSortField; label: string }> = [
     { field: 'title', label: '标题' }, { field: 'url', label: '链接' }, { field: 'category', label: '分类' }, { field: 'open_method', label: '打开方式' },
   ]
 
-  $: filteredBookmarks = sortAdminBookmarks(filterAdminBookmarks(bookmarks, categories, search), { field: sortField, direction: sortDirection }, categories)
-  $: hiddenCategoryIds = getHiddenCategoryIds(categories)
-  $: totalPages = getAdminListTotalPages(filteredBookmarks.length)
-  $: page = clampAdminListPage(page, totalPages)
-  $: bookmarkPage = createAdminListPage(filteredBookmarks, page)
-  $: pagedBookmarks = bookmarkPage.items
-  $: displayBookmarks = sortMode ? localBookmarks : pagedBookmarks
-  $: selectedIds = new Set([...selectedIds].filter((id) => bookmarks.some((bookmark) => Number(bookmark.id) === id)))
-  $: pageIds = pagedBookmarks.map((bookmark) => Number(bookmark.id))
-  $: pageSelectedCount = pageIds.filter((id) => selectedIds.has(id)).length
-  $: moveCategoryOptions = getAdminBookmarkCategoryOptions(categories, selectedBookmarks)
-  $: selectedBookmarks = bookmarks.filter((bookmark) => selectedIds.has(Number(bookmark.id)))
-  $: moveTargetTitle = moveTargetId == null ? '未选择分类' : getCategoryTitle(moveTargetId)
-  $: moveTargetNotice = moveTargetId == null
+  const getCategoryTitle = (categoryId: string | number) =>
+    getAdminCategoryTitle(categories, categoryId)
+
+  let filteredBookmarks = $derived(sortAdminBookmarks(filterAdminBookmarks(bookmarks, categories, search), { field: sortField, direction: sortDirection }, categories))
+  let hiddenCategoryIds = $derived(getHiddenCategoryIds(categories))
+  let totalPages = $derived(getAdminListTotalPages(filteredBookmarks.length))
+  $effect.pre(() => {
+    const clamped = clampAdminListPage(page, totalPages)
+    if (clamped !== page) page = clamped
+  })
+  let bookmarkPage = $derived(createAdminListPage(filteredBookmarks, page))
+  let pagedBookmarks = $derived(bookmarkPage.items)
+  let displayBookmarks = $derived(sortMode ? localBookmarks : pagedBookmarks)
+  // 已选项随书签集合收敛：只订阅 bookmarks，避免自写 new Set 触发无限循环
+  $effect.pre(() => {
+    const current = untrack(() => selectedIds)
+    const next = new Set([...current].filter((id) => bookmarks.some((bookmark) => Number(bookmark.id) === id)))
+    if (next.size !== current.size || [...next].some((id) => !current.has(id))) {
+      selectedIds = next
+    }
+  })
+  let pageIds = $derived(pagedBookmarks.map((bookmark) => Number(bookmark.id)))
+  let pageSelectedCount = $derived(pageIds.filter((id) => selectedIds.has(id)).length)
+  let selectedBookmarks = $derived(bookmarks.filter((bookmark) => selectedIds.has(Number(bookmark.id))))
+  let moveCategoryOptions = $derived(getAdminBookmarkCategoryOptions(categories, selectedBookmarks))
+  let moveTargetTitle = $derived(moveTargetId == null ? '未选择分类' : getCategoryTitle(moveTargetId))
+  let moveTargetNotice = $derived(moveTargetId == null
     ? ''
-    : findCategoryTreeOption(moveCategoryOptions, moveTargetId)?.notice ?? ''
-  $: selectedPageCount = new Set(
+    : findCategoryTreeOption(moveCategoryOptions, moveTargetId)?.notice ?? '')
+  let selectedPageCount = $derived(new Set(
     selectedBookmarks
       .map((bookmark) => {
         const index = filteredBookmarks.findIndex((item) => Number(item.id) === Number(bookmark.id))
         return index >= 0 ? Math.floor(index / DEFAULT_PAGE_SIZE) + 1 : null
       })
       .filter((pageNumber): pageNumber is number => pageNumber !== null),
-  ).size
-  $: selectionPageSummary = selectedPageCount > 0 ? `（跨 ${selectedPageCount} 页）` : '（当前筛选外仍保留）'
-
-  let moveModalOpen = false
-  let moveTargetId: number | null = null
-  let movePosition: BookmarkBatchMovePosition = 'end'
-  let moveError = ''
-  let moving = false
-
-  const getCategoryTitle = (categoryId: string | number) =>
-    getAdminCategoryTitle(categories, categoryId)
+  ).size)
+  let selectionPageSummary = $derived(selectedPageCount > 0 ? `（跨 ${selectedPageCount} 页）` : '（当前筛选外仍保留）')
 
   function enterSort() {
     sortField = null
@@ -194,10 +222,10 @@
 
   import { api, getErrorMessage } from '../../lib/api'
 
-  let checkingHealth = false
-  let healthProgress = 0
-  let healthTotal = 0
-  let healthResults = new Map<number, { status: number | string; ok: boolean }>()
+  let checkingHealth = $state(false)
+  let healthProgress = $state(0)
+  let healthTotal = $state(0)
+  let healthResults = $state(new Map<number, { status: number | string; ok: boolean }>())
 
   async function checkBookmarksHealth() {
     if (checkingHealth || bookmarks.length === 0) return
@@ -234,13 +262,13 @@
     <div class="admin-list-panel-header">
       <div>
         <p class="admin-panel-eyebrow">书签</p>
-        <div class="admin-title-row"><h2>书签列表</h2><div class="admin-bookmark-search-bar"><input type="text" data-testid="admin-bookmark-search" aria-label="搜索书签" placeholder="搜索标题、链接或分类…" value={search} on:input={handleSearchInput} /></div></div>
+        <div class="admin-title-row"><h2>书签列表</h2><div class="admin-bookmark-search-bar"><input type="text" data-testid="admin-bookmark-search" aria-label="搜索书签" placeholder="搜索标题、链接或分类…" value={search} oninput={handleSearchInput} /></div></div>
       </div>
       <div class="admin-header-actions-row">
         <button
           type="button"
           class="admin-ghost-button"
-          on:click={enterSort}
+          onclick={enterSort}
           disabled={sortMode || !isAuthenticated || bookmarksLoading || authLoading || bookmarks.length < 2 || selectedIds.size > 0}
         >
           排序
@@ -253,7 +281,7 @@
           <button
             type="button"
             class="admin-ghost-button"
-            on:click={checkBookmarksHealth}
+            onclick={checkBookmarksHealth}
             disabled={sortMode || !isAuthenticated || bookmarksLoading || authLoading || bookmarks.length === 0}
           >
             检测链接健康
@@ -262,7 +290,7 @@
         <button
           type="button"
           class="admin-primary-button"
-          on:click={() => onOpenCreateBookmark?.()}
+          onclick={() => onOpenCreateBookmark?.()}
           disabled={sortMode || !isAuthenticated || categories.length === 0}
         >
           新增书签
@@ -286,7 +314,7 @@
           {:else}
             <p>点击右上角「新增书签」开始添加第一个书签。</p>
             <div class="admin-empty-action">
-              <button type="button" class="admin-primary-button" on:click={() => onOpenCreateBookmark?.()} disabled={!isAuthenticated}>
+              <button type="button" class="admin-primary-button" onclick={() => onOpenCreateBookmark?.()} disabled={!isAuthenticated}>
                 新增书签
               </button>
             </div>
@@ -305,10 +333,10 @@
             </colgroup>
             <thead>
               <tr>
-                {#if !sortMode}<th style="width: 44px;"><input type="checkbox" aria-label="全选当前页" checked={pageSelectedCount === pageIds.length && pageIds.length > 0} use:indeterminate={pageSelectedCount > 0 && pageSelectedCount < pageIds.length} on:change={togglePageSelection} /></th>{/if}
+                {#if !sortMode}<th style="width: 44px;"><input type="checkbox" aria-label="全选当前页" checked={pageSelectedCount === pageIds.length && pageIds.length > 0} use:indeterminate={pageSelectedCount > 0 && pageSelectedCount < pageIds.length} onchange={togglePageSelection} /></th>{/if}
                 {#if sortMode}<th style="width: 44px;">排序</th>{/if}
                 {#each sortColumns as column}
-                  <th class="col-{column.field}" aria-sort={sortField === column.field ? (sortDirection === 'asc' ? 'ascending' : sortDirection === 'desc' ? 'descending' : 'none') : 'none'}><button type="button" class="sort-header-button" aria-label={sortButtonLabel(column.field, column.label)} on:click={() => toggleField(column.field)} disabled={sortMode}>{column.label}<svg viewBox="0 0 16 16" aria-hidden="true"><path d={sortField === column.field && sortDirection === 'asc' ? 'M8 3 4 7h3v6h2V7h3L8 3Z' : sortField === column.field && sortDirection === 'desc' ? 'm8 13 4-4H9V3H7v6H4l4 4Z' : 'm5 2-3 3h2v6h2V5h2L5 2Zm6 12 3-3h-2V5h-2v6H8l3 3Z'} /></svg></button></th>
+                  <th class="col-{column.field}" aria-sort={sortField === column.field ? (sortDirection === 'asc' ? 'ascending' : sortDirection === 'desc' ? 'descending' : 'none') : 'none'}><button type="button" class="sort-header-button" aria-label={sortButtonLabel(column.field, column.label)} onclick={() => toggleField(column.field)} disabled={sortMode}>{column.label}<svg viewBox="0 0 16 16" aria-hidden="true"><path d={sortField === column.field && sortDirection === 'asc' ? 'M8 3 4 7h3v6h2V7h3L8 3Z' : sortField === column.field && sortDirection === 'desc' ? 'm8 13 4-4H9V3H7v6H4l4 4Z' : 'm5 2-3 3h2v6h2V5h2L5 2Zm6 12 3-3h-2V5h-2v6H8l3 3Z'} /></svg></button></th>
                 {/each}
                 {#if !sortMode}<th style="width: 122px;">操作</th>{/if}
               </tr>
@@ -322,7 +350,7 @@
             >
               {#each displayBookmarks as bookmark (bookmark.id)}
                 <tr data-sortable-item data-sort-id={bookmark.id} class:is-sorting={sortMode}>
-                  {#if !sortMode}<td><input type="checkbox" aria-label={`选择书签 ${bookmark.title}`} checked={selectedIds.has(Number(bookmark.id))} on:change={(event) => toggleBookmarkSelection(event, Number(bookmark.id))} /></td>{/if}
+                  {#if !sortMode}<td><input type="checkbox" aria-label={`选择书签 ${bookmark.title}`} checked={selectedIds.has(Number(bookmark.id))} onchange={(event) => toggleBookmarkSelection(event, Number(bookmark.id))} /></td>{/if}
                   {#if sortMode}
                     <td>
                       <button
@@ -408,13 +436,13 @@
                   {#if !sortMode}
                     <td>
                       <div class="admin-inline-actions compact">
-                        <button type="button" class="admin-ghost-button compact" on:click={() => onEditBookmark?.(bookmark)} disabled={!isAuthenticated}>
+                        <button type="button" class="admin-ghost-button compact" onclick={() => onEditBookmark?.(bookmark)} disabled={!isAuthenticated}>
                           编辑
                         </button>
                         <button
                           type="button"
                           class="admin-danger-button compact"
-                          on:click={() => onDeleteBookmark?.(bookmark)}
+                          onclick={() => onDeleteBookmark?.(bookmark)}
                           disabled={!isAuthenticated || deletingBookmarkId === bookmark.id}
                         >
                           {#if deletingBookmarkId === bookmark.id}删除中...{:else}删除{/if}
@@ -446,9 +474,9 @@
           <div class="admin-pagination">
             <span>第 {bookmarkPage.start}-{bookmarkPage.end} 条 / 共 {bookmarkPage.total} 条</span>
             <div class="admin-pager-actions">
-              <button type="button" class="admin-ghost-button compact" on:click={() => page -= 1} disabled={page <= 1}>上一页</button>
+              <button type="button" class="admin-ghost-button compact" onclick={() => page -= 1} disabled={page <= 1}>上一页</button>
               <span>{page} / {totalPages}</span>
-              <button type="button" class="admin-ghost-button compact" on:click={() => page += 1} disabled={page >= totalPages}>下一页</button>
+              <button type="button" class="admin-ghost-button compact" onclick={() => page += 1} disabled={page >= totalPages}>下一页</button>
             </div>
           </div>
         {/if}
@@ -461,16 +489,16 @@
 {#if selectedIds.size > 0 && !sortMode}
   <div class="batch-selection-toolbar" role="toolbar" aria-label="批量书签操作">
     <span>已选 {selectedIds.size} 项{selectionPageSummary}</span>
-    <button type="button" class="admin-primary-button" on:click={openMoveModal} disabled={!isAuthenticated || moveCategoryOptions.length === 0}>移动到分类</button>
-    <button type="button" class="admin-danger-button" on:click={() => onBatchDeleteBookmarks?.([...selectedIds])} disabled={!isAuthenticated}>删除已选 ({selectedIds.size})</button>
-    <button type="button" class="admin-ghost-button" on:click={() => selectedIds = new Set()}>清除选择</button>
+    <button type="button" class="admin-primary-button" onclick={openMoveModal} disabled={!isAuthenticated || moveCategoryOptions.length === 0}>移动到分类</button>
+    <button type="button" class="admin-danger-button" onclick={() => onBatchDeleteBookmarks?.([...selectedIds])} disabled={!isAuthenticated}>删除已选 ({selectedIds.size})</button>
+    <button type="button" class="admin-ghost-button" onclick={() => selectedIds = new Set()}>清除选择</button>
   </div>
 {/if}
 {#if sortMode}
   <div class="admin-sort-bar" role="toolbar" aria-label="排序操作">
     <span class="admin-sort-hint-inline">正在排序书签，拖动调整顺序后保存。</span>
-    <button type="button" class="admin-ghost-button" on:click={cancelSort} disabled={savingSort}>取消</button>
-    <button type="button" class="admin-primary-button" on:click={saveSort} disabled={savingSort}>
+    <button type="button" class="admin-ghost-button" onclick={cancelSort} disabled={savingSort}>取消</button>
+    <button type="button" class="admin-primary-button" onclick={saveSort} disabled={savingSort}>
       {#if savingSort}保存中...{:else}保存排序{/if}
     </button>
   </div>
@@ -484,7 +512,7 @@
           <p class="admin-panel-eyebrow">批量操作</p>
           <h2 id="batch-move-title">移动到分类</h2>
         </div>
-        <button type="button" class="admin-icon-button" aria-label="关闭批量移动" on:click={closeMoveModal} disabled={moving}>×</button>
+        <button type="button" class="admin-icon-button" aria-label="关闭批量移动" onclick={closeMoveModal} disabled={moving}>×</button>
       </div>
       {#if moveError}
         <p class="batch-move-error" role="alert">{moveError}</p>
@@ -508,8 +536,8 @@
         <label><input type="radio" bind:group={movePosition} value="start" disabled={moving} /> 插入到顶部</label>
       </fieldset>
       <div class="batch-move-actions">
-        <button type="button" class="admin-ghost-button" on:click={closeMoveModal} disabled={moving}>取消</button>
-        <button type="button" class="admin-primary-button" on:click={submitBatchMove} disabled={moving || moveTargetId == null}>
+        <button type="button" class="admin-ghost-button" onclick={closeMoveModal} disabled={moving}>取消</button>
+        <button type="button" class="admin-primary-button" onclick={submitBatchMove} disabled={moving || moveTargetId == null}>
           {moving ? '移动中…' : '确认移动'}
         </button>
       </div>
