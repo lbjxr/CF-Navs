@@ -4,25 +4,53 @@
   import './bookmarkCardTooltip.css'
 
 
-  export let bookmark: PublicBookmark
-  export let openInNewTab = true
-  export let sortMode = false
-  export let cardLinkStyle = ''
-  export let showDescription = true
-  export let descriptionMode: DescriptionDisplayMode = showDescription ? 'always' : 'hidden'
-  export let tooltipText = ''
-  export let iconUrl = ''
-  export let iconText = ''
-  export let infoIconSize = 60
-  export let infoIconStyle = ''
-  export let hasCustomIconBackground = false
-  export let preview = false
-  export let themeOverride: 'light' | 'dark' | null = null
-  export let onLinkClick: ((event: MouseEvent) => AsyncVoid) | undefined = undefined
-  export let onContextMenu: ((event: MouseEvent) => AsyncVoid) | undefined = undefined
-  export let onIconError: (() => AsyncVoid) | undefined = undefined
-  export let onIconLoad: (() => AsyncVoid) | undefined = undefined
-  export let sourceCategoryTitle = ''
+  interface BookmarkCardInfoProps {
+    bookmark: PublicBookmark
+    openInNewTab?: boolean
+    sortMode?: boolean
+    cardLinkStyle?: string
+    showDescription?: boolean
+    descriptionMode?: DescriptionDisplayMode
+    tooltipText?: string
+    iconUrl?: string
+    iconText?: string
+    infoIconSize?: number
+    infoIconStyle?: string
+    hasCustomIconBackground?: boolean
+    preview?: boolean
+    themeOverride?: 'light' | 'dark' | null
+    /** 链接点击回调 */
+    onLinkClick?: (event: MouseEvent) => AsyncVoid
+    /** 右键菜单回调 */
+    onContextMenu?: (event: MouseEvent) => AsyncVoid
+    /** 图标加载失败回调 */
+    onIconError?: () => AsyncVoid
+    /** 图标加载成功回调 */
+    onIconLoad?: () => AsyncVoid
+    sourceCategoryTitle?: string
+  }
+
+  let {
+    bookmark,
+    openInNewTab = true,
+    sortMode = false,
+    cardLinkStyle = '',
+    showDescription = true,
+    descriptionMode = showDescription ? 'always' : 'hidden',
+    tooltipText = '',
+    iconUrl = '',
+    iconText = '',
+    infoIconSize = 60,
+    infoIconStyle = '',
+    hasCustomIconBackground = false,
+    preview = false,
+    themeOverride = null,
+    onLinkClick = undefined,
+    onContextMenu = undefined,
+    onIconError = undefined,
+    onIconLoad = undefined,
+    sourceCategoryTitle = '',
+  }: BookmarkCardInfoProps = $props()
 
   function handleLinkClick(event: MouseEvent) {
     void onLinkClick?.(event)
@@ -47,8 +75,8 @@
   title={showDescription && descriptionMode === 'hover' ? tooltipText : undefined}
   aria-label={showDescription && descriptionMode === 'hover' ? tooltipText : undefined}
   data-tooltip={showDescription && descriptionMode === 'hover' ? tooltipText : ''}
-  on:click={handleLinkClick}
-  on:contextmenu={handleContextMenu}
+  onclick={handleLinkClick}
+  oncontextmenu={handleContextMenu}
 >
   <BookmarkIcon
     title={bookmark.title}

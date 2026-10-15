@@ -4,9 +4,14 @@
   import { cloneSettingsForm, type SettingsFormModel } from '../../lib/settingsForm'
   import InputGroup from '../ui/InputGroup.svelte'
 
-  export let form: SettingsFormModel
-  export let saving = false
-  export let enginesValid = true
+  interface SearchEngineSettingsSectionProps {
+    /** 双向绑定：设置表单模型 */
+    form: SettingsFormModel
+    saving?: boolean
+    enginesValid?: boolean
+  }
+
+  let { form = $bindable(), saving = false, enginesValid = true }: SearchEngineSettingsSectionProps = $props()
 
   async function syncForm(): Promise<void> {
     await tick()

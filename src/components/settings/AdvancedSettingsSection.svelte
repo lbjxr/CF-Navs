@@ -18,17 +18,22 @@
   import Slider from '../ui/Slider.svelte'
   import Tooltip from '../ui/Tooltip.svelte'
 
-  export let form: SettingsFormModel
-  export let saving = false
+  interface AdvancedSettingsSectionProps {
+    /** 双向绑定：设置表单模型 */
+    form: SettingsFormModel
+    saving?: boolean
+  }
 
-  $: normalizedForm = normalizeSettingsForm(form)
-  $: lightBackgroundValid = normalizedForm.backgrounds.light.value.length > 0
-  $: darkBackgroundValid = normalizedForm.backgrounds.dark.value.length > 0
-  $: uploadHost = form.image_host_url.trim()
+  let { form = $bindable(), saving = false }: AdvancedSettingsSectionProps = $props()
 
-  let activeTheme: 'light' | 'dark' = 'light'
-  $: activeBackground = activeTheme === 'light' ? form.backgrounds.light : form.backgrounds.dark
-  $: activeBackgroundValid = activeTheme === 'light' ? lightBackgroundValid : darkBackgroundValid
+  let normalizedForm = $derived(normalizeSettingsForm(form))
+  let lightBackgroundValid = $derived(normalizedForm.backgrounds.light.value.length > 0)
+  let darkBackgroundValid = $derived(normalizedForm.backgrounds.dark.value.length > 0)
+  let uploadHost = $derived(form.image_host_url.trim())
+
+  let activeTheme = $state<'light' | 'dark'>('light')
+  let activeBackground = $derived(activeTheme === 'light' ? form.backgrounds.light : form.backgrounds.dark)
+  let activeBackgroundValid = $derived(activeTheme === 'light' ? lightBackgroundValid : darkBackgroundValid)
 
   async function syncForm(): Promise<void> {
     await tick()
@@ -51,8 +56,8 @@
   class="advanced-settings-section"
   aria-label="高级设置"
   disabled={saving}
-  on:input={() => void syncForm()}
-  on:change={() => void syncForm()}
+  oninput={() => void syncForm()}
+  onchange={() => void syncForm()}
 >
   <div id="settings-appearance-advanced" class="advanced-content" data-testid="appearance-advanced">
     <div class="settings-subsection">
