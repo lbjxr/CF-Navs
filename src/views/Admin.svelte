@@ -21,6 +21,7 @@
   import type { SettingsFormValue } from '../lib/appData'
   import type { AdminTab, CategorySortHandler } from '../lib/adminTypes'
   import type { SortHandler } from '../lib/sortableList'
+  import { createLazyComponentLoader } from '../lib/appLazyComponent'
 
 
   export let isAuthenticated = false
@@ -47,31 +48,25 @@
   $: imageHostUrl = settingsValue?.image_host_url ?? ''
   let CategoryEditModalComponent: typeof import('../components/CategoryEditModal.svelte').default | null = null
   let SettingsPanelComponent: typeof import('../components/SettingsPanel.svelte').default | null = null
-  let categoryEditModalPromise: Promise<void> | null = null
-  let settingsPanelPromise: Promise<void> | null = null
+  const ensureCategoryEditModal = createLazyComponentLoader({
+    load: () => import('../components/CategoryEditModal.svelte'),
+    getCurrent: () => CategoryEditModalComponent,
+    setCurrent: (component) => {
+      CategoryEditModalComponent = component
+    },
+  })
+  const ensureSettingsPanel = createLazyComponentLoader({
+    load: () => import('../components/SettingsPanel.svelte'),
+    getCurrent: () => SettingsPanelComponent,
+    setCurrent: (component) => {
+      SettingsPanelComponent = component
+    },
+  })
   $: if (categoryModalOpen) {
     void ensureCategoryEditModal()
   }
   $: if (activeTab === 'settings') {
     void ensureSettingsPanel()
-  }
-
-  function ensureCategoryEditModal(): Promise<void> {
-    if (!categoryEditModalPromise) {
-      categoryEditModalPromise = import('../components/CategoryEditModal.svelte').then((module) => {
-        CategoryEditModalComponent = module.default
-      })
-    }
-    return categoryEditModalPromise
-  }
-
-  function ensureSettingsPanel(): Promise<void> {
-    if (!settingsPanelPromise) {
-      settingsPanelPromise = import('../components/SettingsPanel.svelte').then((module) => {
-        SettingsPanelComponent = module.default
-      })
-    }
-    return settingsPanelPromise
   }
 
   export let onOpenLogin: (() => AsyncVoid) | undefined = undefined
