@@ -10,8 +10,13 @@
   import Tooltip from '../ui/Tooltip.svelte'
   import Slider from '../ui/Slider.svelte'
 
-  export let form: SettingsFormModel
-  export let saving = false
+  interface BasicSettingsSectionProps {
+    /** 双向绑定：设置表单模型，父组件经 bind:form 回写 */
+    form: SettingsFormModel
+    saving?: boolean
+  }
+
+  let { form = $bindable(), saving = false }: BasicSettingsSectionProps = $props()
 
   async function syncForm(): Promise<void> {
     await tick()
@@ -32,7 +37,7 @@
         placeholder="请输入站点标题"
         maxlength="80"
         required
-        on:input={() => void syncForm()}
+        oninput={() => void syncForm()}
       />
     </label>
 
@@ -87,7 +92,7 @@
               type="radio"
               bind:group={form.theme}
               value={option.value}
-              on:change={() => void syncForm()}
+              onchange={() => void syncForm()}
             />
             <span>{option.label}</span>
           </label>
@@ -105,7 +110,7 @@
         bind:value={form.image_host_url}
         type="url"
         placeholder="https://your-domain.com"
-        on:input={() => void syncForm()}
+        oninput={() => void syncForm()}
       />
     </label>
   </div>
