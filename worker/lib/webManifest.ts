@@ -1,4 +1,4 @@
-import { extractAttribute, resolveHttpUrl } from './pageMetadata'
+import { extractAttribute, fetchWithRedirectLimit, resolveHttpUrl } from './pageMetadata'
 
 export type ManifestIconCandidate = {
   url: string
@@ -31,9 +31,9 @@ export async function fetchManifestJson(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await fetch(url, {
+    // 重定向手动跟随：每一跳都做 SSRF 主机名校验，不用 redirect:'follow'。
+    const response = await fetchWithRedirectLimit(url, {
       method: 'GET',
-      redirect: 'follow',
       headers: { Accept: MANIFEST_ACCEPT },
       signal: controller.signal,
     })

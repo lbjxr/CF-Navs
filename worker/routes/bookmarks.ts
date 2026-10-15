@@ -26,6 +26,7 @@ import { invalidatePublicDataCache } from '../lib/cache'
 import { cacheBookmarkIconBlob } from '../lib/bookmarkIconCache'
 import { parseBookmarkUpsertPayload } from '../lib/bookmarkPayload'
 import { fail, ok } from '../lib/response'
+import { fetchWithRedirectLimit } from '../lib/pageMetadata'
 import { badRequest, parseBatchIds, parseId, parseSortIds, readJson } from '../lib/routeHelpers'
 import { invalidateRuntimeDataCache } from '../lib/runtimeCache'
 import type { HonoEnv } from '../types'
@@ -278,9 +279,9 @@ bookmarksRoutes.post('/check-health', async (c) => {
   const checkResult = await Promise.all(
    results.map(async (bm) => {
     try {
-     let res = await fetch(bm.url, {
+     // 重定向手动跟随：每一跳都做 SSRF 主机名校验，不用 redirect:'follow'。
+     let res = await fetchWithRedirectLimit(bm.url, {
       method: 'HEAD',
-      redirect: 'follow',
       headers: {
        'User-Agent': 'Mozilla/5.0 (compatible; CF-Navs-HealthCheck/1.0)',
       },
@@ -288,9 +289,8 @@ bookmarksRoutes.post('/check-health', async (c) => {
      })
 
      if (!res.ok && (res.status === 405 || res.status === 403 || res.status === 400)) {
-      res = await fetch(bm.url, {
+      res = await fetchWithRedirectLimit(bm.url, {
        method: 'GET',
-       redirect: 'follow',
        headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; CF-Navs-HealthCheck/1.0)',
        },

@@ -1,10 +1,18 @@
 import { getSettingValues, setSettingValue } from './db/settings'
 
 const JWT_SECRET_KEY = 'jwt_secret'
+// JWT 密钥的模块级缓存带 60 秒 TTL。
+// 背景：改密码 / 凭据重置 / 登出全部会话都依赖 rotateJwtSecret 让旧 token
+// "全局失效"，但 Workers 有多个 isolate，rotate 只刷新当前 isolate 的缓存。
+// 没有 TTL 时其它 isolate 永远拿旧密钥验签，旧 token 有效直到 exp（30 天）。
+// TTL 让其它 isolate 最多 60 秒就能从 D1 读到新密钥，旧 token 随之失效。
+const JWT_SECRET_CACHE_TTL_MS = 60_000
 let cachedJwtSecret: string | null = null
+let cachedJwtSecretAt = 0
 
 export function resetJwtSecretCache(): void {
   cachedJwtSecret = null
+  cachedJwtSecretAt = 0
 }
 
 // Helper to encode Uint8Array to Base64URL
@@ -32,7 +40,9 @@ function decodeBase64url(str: string): Uint8Array {
 
 // Retrieve or dynamically generate the JWT signing secret from D1 settings
 export async function getJwtSecret(db: D1Database): Promise<string> {
-  if (cachedJwtSecret) return cachedJwtSecret
+  if (cachedJwtSecret !== null && Date.now() - cachedJwtSecretAt < JWT_SECRET_CACHE_TTL_MS) {
+    return cachedJwtSecret
+  }
 
   const values = await getSettingValues<string>(db, [JWT_SECRET_KEY])
   let secret = values.get(JWT_SECRET_KEY)
@@ -47,6 +57,7 @@ export async function getJwtSecret(db: D1Database): Promise<string> {
   }
 
   cachedJwtSecret = secret
+  cachedJwtSecretAt = Date.now()
   return secret
 }
 
@@ -60,6 +71,7 @@ export async function rotateJwtSecret(db: D1Database): Promise<string> {
 
   await setSettingValue(db, JWT_SECRET_KEY, secret)
   cachedJwtSecret = secret
+  cachedJwtSecretAt = Date.now()
   return secret
 }
 

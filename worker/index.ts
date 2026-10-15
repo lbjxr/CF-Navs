@@ -57,7 +57,7 @@ app.use('/api/browser-sync/*', authRequired)
 app.route('/api/browser-sync', browserSyncRoutes)
 
 app.use('/api/fetch-favicon', authRequired)
-// 精确路径中间件，没有通配符：新增同文件路由时必须补一行，否则接口是公开的。
+// faviconRoutes 内部已对整个子路由 use(authRequired)，这里的精确路径注册保留为双保险。
 app.use('/api/fetch-site-meta', authRequired)
 app.route('/api', faviconRoutes)
 

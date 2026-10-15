@@ -3,7 +3,8 @@ import type { FaviconResp, SiteMetaResp } from '../../shared/types'
 import {
   extractIconCandidates,
   fetchPageHtml,
-  fetchWithTimeout,
+  fetchWithRedirectLimit,
+  FETCH_TIMEOUT_MS,
   hostnameFallbackTitle,
   parseTargetUrl,
   pickBookmarkTitle,
@@ -12,6 +13,7 @@ import { extractManifestIcons, extractManifestUrl, fetchManifestJson } from '../
 import { cacheResponse, getCachedResponse } from '../lib/iconResponses'
 import { ok } from '../lib/response'
 import { badRequest } from '../lib/routeHelpers'
+import { authRequired } from '../middleware/auth'
 import type { HonoEnv } from '../types'
 
 const ICON_ACCEPT = 'image/avif,image/webp,image/apng,image/*,*/*;q=0.1'
@@ -21,33 +23,40 @@ const SITE_META_DEADLINE_MS = 4000
 const SITE_META_CACHE_SECONDS = 6 * 60 * 60
 
 async function canFetchIcon(url: string): Promise<boolean> {
+  // 重定向手动跟随：每一跳都做 SSRF 主机名校验，不用 redirect:'follow'。
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
-    const headResponse = await fetchWithTimeout(url, {
-      method: 'HEAD',
-      redirect: 'follow',
-      headers: {
-        Accept: ICON_ACCEPT,
-      },
-    })
+    try {
+      const headResponse = await fetchWithRedirectLimit(url, {
+        method: 'HEAD',
+        headers: {
+          Accept: ICON_ACCEPT,
+        },
+        signal: controller.signal,
+      })
 
-    if (headResponse.ok) return true
-  } catch {
-    // Some hosts reject or mishandle HEAD; always fall through to a tiny GET probe.
-  }
+      if (headResponse.ok) return true
+    } catch {
+      // Some hosts reject or mishandle HEAD; always fall through to a tiny GET probe.
+    }
 
-  try {
-    const getResponse = await fetchWithTimeout(url, {
-      method: 'GET',
-      redirect: 'follow',
-      headers: {
-        Accept: ICON_ACCEPT,
-        Range: 'bytes=0-0',
-      },
-    })
+    try {
+      const getResponse = await fetchWithRedirectLimit(url, {
+        method: 'GET',
+        headers: {
+          Accept: ICON_ACCEPT,
+          Range: 'bytes=0-0',
+        },
+        signal: controller.signal,
+      })
 
-    return getResponse.ok
-  } catch {
-    return false
+      return getResponse.ok
+    } catch {
+      return false
+    }
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -56,6 +65,10 @@ function buildFaviconImFallback(hostname: string): string {
 }
 
 export const faviconRoutes = new Hono<HonoEnv>()
+
+// 整个子路由统一鉴权：新增路由自动被保护，不再依赖 worker/index.ts 逐行注册
+// （漏一行即公开）。index.ts 的精确路径 app.use 保留，作为双保险。
+faviconRoutes.use(authRequired)
 
 faviconRoutes.get('/fetch-favicon', async (c) => {
   const targetUrl = parseTargetUrl(new URL(c.req.url).searchParams.get('url'))

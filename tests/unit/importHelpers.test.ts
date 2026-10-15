@@ -62,14 +62,38 @@ describe('normalizeImportCategory', () => {
 
     expect(output.sort).toBe(-5)
   })
+
+  it('passes through local icon cache fields so backups restore them', () => {
+    const input: Category = {
+      id: 7,
+      title: 'Cached',
+      icon: '/icon.svg',
+      icon_blob: 'data:image/png;base64,AAA',
+      icon_revision: 'rev-1',
+      sort: 0,
+      created_at: 50,
+    }
+    const output = normalizeImportCategory(input, now)
+
+    expect(output.icon_blob).toBe('data:image/png;base64,AAA')
+    expect(output.icon_revision).toBe('rev-1')
+  })
+
+  it('defaults missing icon cache fields to null', () => {
+    const input: Category = { id: 8, title: 'NoCache', icon: null, sort: 0, created_at: 50 }
+    const output = normalizeImportCategory(input, now)
+
+    expect(output.icon_blob).toBeNull()
+    expect(output.icon_revision).toBeNull()
+  })
 })
 
 describe('category import batching', () => {
   it('keeps 15 categories within the 100-parameter D1 statement limit', () => {
     const chunks = chunkImportRows(Array.from({ length: 15 }, (_, id) => ({ id })), CATEGORY_IMPORT_CHUNK_SIZE)
 
-    expect(CATEGORY_IMPORT_CHUNK_SIZE * 7).toBeLessThanOrEqual(100)
-    expect(chunks.map((chunk) => chunk.length)).toEqual([14, 1])
+    expect(CATEGORY_IMPORT_CHUNK_SIZE * 9).toBeLessThanOrEqual(100)
+    expect(chunks.map((chunk) => chunk.length)).toEqual([11, 4])
   })
 })
 describe('normalizeImportBookmark', () => {
@@ -88,12 +112,21 @@ describe('normalizeImportBookmark', () => {
     description_mode: null,
     open_method: 1,
     sort: 5,
+    click_count: 0,
     created_at: 100,
   }
 
   it('passes through well-formed bookmarks', () => {
     const output = normalizeImportBookmark(base, now)
     expect(output).toEqual(base)
+  })
+
+  it('passes through click_count and sanitizes bad values', () => {
+    expect(normalizeImportBookmark({ ...base, click_count: 42 }, now).click_count).toBe(42)
+    expect(normalizeImportBookmark({ ...base, click_count: undefined }, now).click_count).toBe(0)
+    expect(normalizeImportBookmark({ ...base, click_count: NaN }, now).click_count).toBe(0)
+    expect(normalizeImportBookmark({ ...base, click_count: -3 }, now).click_count).toBe(0)
+    expect(normalizeImportBookmark({ ...base, click_count: 7.9 }, now).click_count).toBe(7)
   })
 
   it('clamps open_method 1/2/3 correctly', () => {

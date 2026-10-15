@@ -89,6 +89,57 @@ export async function fetchWithTimeout(
   }
 }
 
+// ========== 带重定向校验的抓取 ==========
+// fetch 的 redirect:'follow' 会自动跟随 30x，但不会对重定向目标做任何检查：
+// 一个指向公网的合法 URL，302 到内网地址即可让 Worker 发起内网 GET（SSRF）。
+// 这里手动跟随，每一跳都用 isBlockedFetchHostname 重检 hostname，并拒绝
+// 非 http(s) scheme；命中即停止跟随、把当前响应原样返回（调用方按非 ok
+// 处理），做到 fail-closed。
+export const MAX_FETCH_REDIRECTS = 5
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
+
+export async function fetchWithRedirectLimit(
+  url: string,
+  init: RequestInit = {},
+  maxRedirects = MAX_FETCH_REDIRECTS,
+): Promise<Response> {
+  let current = url
+  for (let remaining = maxRedirects; ; remaining--) {
+    const response = await fetch(current, { ...init, redirect: 'manual' })
+
+    const location = response.headers.get('location')
+    if (!REDIRECT_STATUSES.has(response.status) || !location || remaining === 0) {
+      return response
+    }
+
+    // 不再跟随这个中间响应：断开它的 body，避免连接泄漏。
+    try {
+      await response.body?.cancel()
+    } catch {
+      // body 可能已经结束或不可取消，忽略。
+    }
+
+    let next: URL
+    try {
+      next = new URL(location, current)
+    } catch {
+      return response
+    }
+    if (next.protocol !== 'http:' && next.protocol !== 'https:') {
+      return response
+    }
+    // 不要把 URL 里内嵌的账号密码转发给重定向目标。
+    next.username = ''
+    next.password = ''
+    if (isBlockedFetchHostname(next.hostname)) {
+      return response
+    }
+
+    current = next.toString()
+  }
+}
+
 // ========== 出网目标过滤 ==========
 // Worker 会去访问调用方给出的地址，所以要挡住内网和云元数据端点（SSRF）。
 // 注意这道防线有天花板：它只看地址字面量，挡不住 DNS 重绑定
@@ -303,15 +354,19 @@ export function decodeHtmlBytes(input: ArrayBuffer | Uint8Array, contentType: st
 }
 
 export async function fetchPageHtml(url: string): Promise<PageFetchResult | null> {
+  // fetchWithTimeout 只做单次请求；重定向跟随走 fetchWithRedirectLimit，
+  // 每一跳都做 SSRF 主机名校验。这里的超时覆盖整个重定向链。
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
-    const response = await fetchWithTimeout(url, {
-      redirect: 'follow',
+    const response = await fetchWithRedirectLimit(url, {
       headers: {
         Accept: HTML_ACCEPT,
         // Workers 默认不带 UA，部分站点直接 403，会同时拖低图标和标题命中率。
         'User-Agent': 'Mozilla/5.0 (compatible; CF-Navs/1.0)',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       },
+      signal: controller.signal,
     })
 
     const finalUrl = response.url || url
@@ -336,6 +391,8 @@ export async function fetchPageHtml(url: string): Promise<PageFetchResult | null
     return { html: decodeHtmlBytes(bytes, contentType), finalUrl }
   } catch {
     return null
+  } finally {
+    clearTimeout(timer)
   }
 }
 

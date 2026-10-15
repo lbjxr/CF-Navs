@@ -11,6 +11,9 @@ export function normalizeImportCategory(c: Category, now: number): Category {
     parent_id: normalizeCategoryParentId(c.parent_id),
     title: c.title,
     icon: c.icon ?? null,
+    // 本地图标缓存：恢复备份后不再回退到远程抓取。
+    icon_blob: c.icon_blob ?? null,
+    icon_revision: c.icon_revision ?? null,
     ...(hasPrivateFlag ? { is_private: c.is_private === true || c.is_private === 1 } : {}),
     sort: Number.isFinite(c.sort) ? c.sort : 0,
     created_at: c.created_at || now,
@@ -34,6 +37,8 @@ export function normalizeImportBookmark(b: Bookmark, now: number): Bookmark {
     open_method: openMethod,
     ...(hasPrivateFlag ? { is_private: b.is_private === true || b.is_private === 1 } : {}),
     sort: Number.isFinite(b.sort) ? b.sort : 0,
+    // "最常访问"排序依据：恢复备份后不再清零。
+    click_count: Number.isFinite(b.click_count) ? Math.max(0, Math.trunc(b.click_count as number)) : 0,
     created_at: b.created_at || now,
   }
 }

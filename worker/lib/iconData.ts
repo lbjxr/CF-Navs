@@ -1,5 +1,6 @@
 import { decodeIconDataUri } from '../../shared/iconDataUri'
 import { readBoundedBody } from './boundedBody'
+import { fetchWithRedirectLimit } from './pageMetadata'
 import type { IconSource } from '../../shared/types'
 
 export interface FetchedIcon {
@@ -140,9 +141,10 @@ export async function fetchIcon(iconUrl: string, timeoutMs = CACHE_TIMEOUT_MS, m
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const response = await fetch(iconUrl, {
+    // 重定向手动跟随：每一跳都做 SSRF 主机名校验（fetchWithRedirectLimit），
+    // 不用 fetch 的 redirect:'follow'。
+    const response = await fetchWithRedirectLimit(iconUrl, {
       signal: controller.signal,
-      redirect: 'follow',
       headers: {
         Accept: ICON_ACCEPT,
         'User-Agent': 'Mozilla/5.0 (compatible; CF-Navs/1.0)',

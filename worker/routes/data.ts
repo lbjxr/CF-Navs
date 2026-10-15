@@ -1,21 +1,46 @@
 import { Hono } from 'hono'
-import { ErrCode, type ImportReq, type ImportResp } from '../../shared/types'
+import { ErrCode, type ImportResp } from '../../shared/types'
+import { readBoundedBody } from '../../shared/boundedBody'
 import { invalidatePublicDataCache, invalidateSiteConfigCache } from '../lib/cache'
 import { getAdminData, getSettings, importData, listBookmarks, listCategories } from '../lib/db'
 import { mergeImportData } from '../lib/db/importMerge'
 import { validateImportPayload } from '../lib/importValidation'
 import { fail, ok } from '../lib/response'
-import { badRequest, readJson } from '../lib/routeHelpers'
+import { badRequest } from '../lib/routeHelpers'
 import { invalidateRuntimeDataCache } from '../lib/runtimeCache'
+import { findSettingsLengthError } from '../lib/settingsLimits'
 import type { HonoEnv } from '../types'
 
 export const dataRoutes = new Hono<HonoEnv>()
 
+// 备份 JSON 可能很大（20000 书签 × 图标 data URI）：无界 c.req.json() 一次
+// JSON.parse 就能冲破 Worker 128MB 内存。先流式限长再解析，超限直接 413。
+const MAX_IMPORT_BODY_BYTES = 32 * 1024 * 1024
+
 dataRoutes.post('/import', async (c) => {
-  const body = await readJson<ImportReq>(c)
-  const validation = validateImportPayload(body)
+  const bodyBytes = await readBoundedBody(c.req.raw.body, MAX_IMPORT_BODY_BYTES)
+  if (!bodyBytes) {
+    return c.json(fail(ErrCode.BAD_REQUEST, 'import payload too large (max 32MB, split the backup and import in parts)'), 413)
+  }
+  let rawBody: unknown
+  try {
+    rawBody = JSON.parse(new TextDecoder().decode(bodyBytes))
+  } catch {
+    return badRequest(c, 'invalid json body')
+  }
+  const validation = validateImportPayload(rawBody)
   if (!validation.ok) return badRequest(c, validation.message)
   const payload = validation.payload
+
+  // 导入的 settings 走 PUT /api/settings 同一套长度校验：
+  // 否则一份被篡改的备份能写入超大 background.value / custom_js，
+  // 之后每个访客拉 /api/public/data 都被拖死（存储型 DoS）。
+  if (payload.settings) {
+    const settingsLengthError = findSettingsLengthError(payload.settings as Record<string, unknown>)
+    if (settingsLengthError) {
+      return badRequest(c, `${settingsLengthError.field} exceeds the ${settingsLengthError.max} character limit`)
+    }
+  }
 
   try {
     const current = payload.mode === 'merge'
