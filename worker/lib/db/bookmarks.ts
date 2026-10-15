@@ -194,6 +194,18 @@ export async function batchDeleteBookmarks(db: D1Database, ids: number[]): Promi
 }
 
 export async function sortBookmarks(db: D1Database, ids: number[]): Promise<void> {
+ if (new Set(ids).size !== ids.length) {
+  throw new BookmarkReorganizeError('bookmark sort ids must be unique')
+ }
+ // expected 快照校验（与 sortCategories / reorganizeBookmarks 同模式）：
+ // 提交的 ids 必须恰好覆盖全量书签集合，否则说明客户端基于过期快照排序，
+ // 直接应用会丢弃并发写入，回 409 让客户端刷新重试。
+ const { results } = await db.prepare('SELECT id FROM bookmarks').all<{ id: number }>()
+ const existingIds = (results ?? []).map((row) => row.id)
+ const requestedIds = new Set(ids)
+ if (existingIds.length !== ids.length || existingIds.some((id) => !requestedIds.has(id))) {
+  throw new BookmarkReorganizeError('bookmark sort ids must include the complete bookmark set')
+ }
  await sortRowsByIds(db, 'bookmarks', ids)
 }
 export class BookmarkReorganizeError extends Error { }
