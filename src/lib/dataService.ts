@@ -96,6 +96,12 @@ export function getCurrentDataVersion(): string | null {
   return currentDataVersion
 }
 
+// 设置保存成功后，把服务端刚推进的 data_version 同步回来，
+// 否则下一次保存会拿着旧版本触发 409 误报。
+export function setCurrentDataVersion(version: string): void {
+  currentDataVersion = version
+}
+
 export function isLoggedIn(): boolean {
   return Boolean(get(authStore).session)
 }
