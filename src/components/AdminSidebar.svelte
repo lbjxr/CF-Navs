@@ -1,10 +1,19 @@
 <script lang="ts">
   import type { AdminTab } from '../lib/adminTypes'
 
-  export let activeTab: AdminTab = 'categories'
-  export let categoriesCount = 0
-  export let bookmarksCount = 0
-  export let onSelect: ((tab: AdminTab) => void) | undefined = undefined
+  interface AdminSidebarProps {
+    activeTab?: AdminTab
+    categoriesCount?: number
+    bookmarksCount?: number
+    onSelect?: ((tab: AdminTab) => void) | undefined
+  }
+
+  let {
+    activeTab = 'categories',
+    categoriesCount = 0,
+    bookmarksCount = 0,
+    onSelect = undefined,
+  }: AdminSidebarProps = $props()
 
   const items: Array<{ tab: AdminTab; icon: string; label: string }> = [
     { tab: 'categories', icon: '📁', label: '分类管理' },
@@ -22,7 +31,7 @@
       class="nav-item"
       class:active={activeTab === item.tab}
       data-testid={`admin-tab-${item.tab}`}
-      on:click={() => onSelect?.(item.tab)}
+      onclick={() => onSelect?.(item.tab)}
     >
       <span class="nav-icon">
         {#if item.tab === 'categories'}

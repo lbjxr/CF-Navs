@@ -3,23 +3,43 @@
   import BookmarkIcon from './BookmarkIcon.svelte'
   import './bookmarkCardTooltip.css'
 
+  interface BookmarkCardCompactProps {
+    bookmark: PublicBookmark
+    openInNewTab?: boolean
+    sortMode?: boolean
+    tooltipText?: string
+    compactIconSize?: number
+    compactIconStyle?: string
+    showIconTitle?: boolean
+    iconUrl?: string
+    iconText?: string
+    hasCustomIconBackground?: boolean
+    preview?: boolean
+    themeOverride?: 'light' | 'dark' | null
+    onLinkClick?: ((event: MouseEvent) => AsyncVoid) | undefined
+    onContextMenu?: ((event: MouseEvent) => AsyncVoid) | undefined
+    onIconError?: (() => AsyncVoid) | undefined
+    onIconLoad?: (() => AsyncVoid) | undefined
+  }
 
-  export let bookmark: PublicBookmark
-  export let openInNewTab = true
-  export let sortMode = false
-  export let tooltipText = ''
-  export let compactIconSize = 80
-  export let compactIconStyle = ''
-  export let showIconTitle = true
-  export let iconUrl = ''
-  export let iconText = ''
-  export let hasCustomIconBackground = false
-  export let preview = false
-  export let themeOverride: 'light' | 'dark' | null = null
-  export let onLinkClick: ((event: MouseEvent) => AsyncVoid) | undefined = undefined
-  export let onContextMenu: ((event: MouseEvent) => AsyncVoid) | undefined = undefined
-  export let onIconError: (() => AsyncVoid) | undefined = undefined
-  export let onIconLoad: (() => AsyncVoid) | undefined = undefined
+  let {
+    bookmark,
+    openInNewTab = true,
+    sortMode = false,
+    tooltipText = '',
+    compactIconSize = 80,
+    compactIconStyle = '',
+    showIconTitle = true,
+    iconUrl = '',
+    iconText = '',
+    hasCustomIconBackground = false,
+    preview = false,
+    themeOverride = null,
+    onLinkClick = undefined,
+    onContextMenu = undefined,
+    onIconError = undefined,
+    onIconLoad = undefined,
+  }: BookmarkCardCompactProps = $props()
 
   function handleLinkClick(event: MouseEvent) {
     void onLinkClick?.(event)
@@ -43,8 +63,8 @@
   title={tooltipText}
   aria-label={tooltipText}
   data-tooltip={tooltipText}
-  on:click={handleLinkClick}
-  on:contextmenu={handleContextMenu}
+  onclick={handleLinkClick}
+  oncontextmenu={handleContextMenu}
 >
   <BookmarkIcon
     title={bookmark.title}
@@ -68,8 +88,8 @@
     rel={!preview && openInNewTab ? 'noopener noreferrer' : undefined}
     tabindex={preview ? -1 : undefined}
     aria-disabled={preview ? 'true' : undefined}
-    on:click={handleLinkClick}
-    on:contextmenu={handleContextMenu}
+    onclick={handleLinkClick}
+    oncontextmenu={handleContextMenu}
   >
     {bookmark.title}
   </a>
