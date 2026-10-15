@@ -2,8 +2,12 @@
   import { tick } from 'svelte'
   import { cloneSettingsForm, type SettingsFormModel } from '../../lib/settingsForm'
 
-  export let form: SettingsFormModel
-  export let saving = false
+  interface FooterSettingsSectionProps {
+    form: SettingsFormModel
+    saving?: boolean
+  }
+
+  let { form = $bindable(), saving = false }: FooterSettingsSectionProps = $props()
 
   async function syncForm(): Promise<void> {
     await tick()
@@ -11,7 +15,7 @@
   }
 </script>
 
-<fieldset id="settings-section-footer" class="group group-wide" disabled={saving} on:input={() => void syncForm()}>
+<fieldset id="settings-section-footer" class="group group-wide" disabled={saving} oninput={() => void syncForm()}>
   <legend>自定义样式与脚本</legend>
   <p class="group-desc">管理首页页脚内容以及自定义 CSS、JavaScript。预览会隔离展示页脚和 CSS，不会执行 JavaScript。</p>
 

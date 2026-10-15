@@ -10,10 +10,14 @@
   import ColorAlphaInput from '../ColorAlphaInput.svelte'
   import GradientPresetSelector from './GradientPresetSelector.svelte'
 
-  export let form: SettingsFormModel
-  export let saving = false
+  interface BackgroundSettingsSectionProps {
+    form: SettingsFormModel
+    saving?: boolean
+  }
 
-  $: activeGradientPresetId = getActiveGradientPresetId(form)
+  let { form = $bindable(), saving = false }: BackgroundSettingsSectionProps = $props()
+
+  let activeGradientPresetId = $derived(getActiveGradientPresetId(form))
 
   function selectCustomPreset(): void {
     form = markBackgroundPresetCustom(form)
@@ -24,7 +28,7 @@
   }
 </script>
 
-<fieldset id="settings-section-appearance" class="group group-wide group-background" disabled={saving} on:change={() => form = cloneSettingsForm(form)}>
+<fieldset id="settings-section-appearance" class="group group-wide group-background" disabled={saving} onchange={() => form = cloneSettingsForm(form)}>
   <legend>配色方案</legend>
   <GradientPresetSelector
     {activeGradientPresetId}
