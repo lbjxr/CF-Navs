@@ -2,26 +2,44 @@
   import type { AsyncVoid, IconifyCandidate } from '../../shared/types'
   import BookmarkIconCandidateButton from './BookmarkIconCandidateButton.svelte'
 
+  interface IconifySelectorProps {
+    /** 双向绑定：Iconify 图标名，父组件经 bind:iconifyName 回写 */
+    iconifyName?: string
+    iconifyPreviewUrl?: string
+    iconifySelected?: boolean
+    iconifyUseConfirmed?: boolean
+    confirmedIconifyName?: string
+    iconifySearchCandidates?: IconifyCandidate[]
+    iconifySearchLoading?: boolean
+    iconifySearchError?: string
+    candidateError?: string
+    loading?: boolean
+    onOpenLibrary?: (() => AsyncVoid) | undefined
+    onSelectIcon?: (() => AsyncVoid) | undefined
+    onSelectCandidate?: ((candidate: IconifyCandidate) => AsyncVoid) | undefined
+  }
 
-  export let iconifyName = ''
-  export let iconifyPreviewUrl = ''
-  export let iconifySelected = false
-  export let iconifyUseConfirmed = false
-  export let confirmedIconifyName = ''
-  export let iconifySearchCandidates: IconifyCandidate[] = []
-  export let iconifySearchLoading = false
-  export let iconifySearchError = ''
-  export let candidateError = ''
-  export let loading = false
-  export let onOpenLibrary: (() => AsyncVoid) | undefined = undefined
-  export let onSelectIcon: (() => AsyncVoid) | undefined = undefined
-  export let onSelectCandidate: ((candidate: IconifyCandidate) => AsyncVoid) | undefined = undefined
+  let {
+    iconifyName = $bindable(''),
+    iconifyPreviewUrl = '',
+    iconifySelected = false,
+    iconifyUseConfirmed = false,
+    confirmedIconifyName = '',
+    iconifySearchCandidates = [],
+    iconifySearchLoading = false,
+    iconifySearchError = '',
+    candidateError = '',
+    loading = false,
+    onOpenLibrary = undefined,
+    onSelectIcon = undefined,
+    onSelectCandidate = undefined,
+  }: IconifySelectorProps = $props()
 </script>
 
 <div class="iconify-section field-wide">
   <div class="scheme-header">
     <span class="field-label">Iconify 图标</span>
-    <button type="button" class="text-link-button" on:click={() => onOpenLibrary?.()}>
+    <button type="button" class="text-link-button" onclick={() => onOpenLibrary?.()}>
       打开 Iconify 图标库
     </button>
   </div>
@@ -43,7 +61,7 @@
       type="button"
       class="ghost-button iconify-use-button"
       class:selected={iconifySelected}
-      on:click={() => onSelectIcon?.()}
+      onclick={() => onSelectIcon?.()}
       aria-pressed={iconifySelected}
       disabled={loading || !iconifyPreviewUrl}
     >
