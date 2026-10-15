@@ -5,8 +5,12 @@
   import Tooltip from '../ui/Tooltip.svelte'
   import Slider from '../ui/Slider.svelte'
 
-  export let form: SettingsFormModel
-  export let saving = false
+  interface HeroSettingsSectionProps {
+    form: SettingsFormModel
+    saving?: boolean
+  }
+
+  let { form = $bindable(), saving = false }: HeroSettingsSectionProps = $props()
 
   async function syncForm(): Promise<void> {
     await tick()

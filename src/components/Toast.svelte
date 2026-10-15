@@ -2,7 +2,7 @@
   import { fly } from 'svelte/transition'
   import { toastStore } from '../lib/toast'
 
-  $: toasts = $toastStore
+  let toasts = $derived($toastStore)
 
   function dismiss(id: string) {
     toastStore.dismissToast(id)
@@ -24,7 +24,7 @@
         <span class="toast-message">{toast.message}</span>
         <button
           class="toast-dismiss"
-          on:click={() => dismiss(toast.id)}
+          onclick={() => dismiss(toast.id)}
           aria-label="关闭通知"
         >×</button>
       </div>
