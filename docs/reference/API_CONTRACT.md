@@ -4,11 +4,19 @@
 
 ## 通用约定
 
-- 所有接口前缀为 `/api`。
+- 所有接口同时挂在 `/api`（历史兼容前缀）与 `/api/v1`（版本化前缀）下，两者是同一批 handler 的别名，行为完全一致。详见「版本策略」。
 - 常规响应使用统一包络：`{ code, msg, data }`。
 - 业务错误通常仍返回 HTTP 200，用 `code` 区分；认证中间件拦截返回 HTTP 401 且 `code=1001`。
 - 受保护的写操作使用 `Authorization: Bearer <token>` 鉴权；安装接口使用一次性的 `X-Setup-Token`，公开点击计数接口不要求登录。
 - 时间戳使用毫秒数，即 `Date.now()`。
+
+## 版本策略
+
+- 当前版本：`v1`。版本化前缀为 `/api/v1`，历史前缀 `/api` 保留兼容，两者由 `worker/index.ts` 的 `registerApiRoutes` 同一批 handler 别名挂载，不复制代码。
+- 破坏性变更（改路径、改请求/响应结构、改鉴权要求）必须先在新版本前缀下落地（如 `/api/v2`），旧前缀保持行为不变；废弃节奏在本节声明，至少提前一个版本通知。
+- `v1` 的兼容性承诺：路径、请求/响应结构、鉴权要求不做破坏性变更；新增字段只做加法。
+- 外部客户端（浏览器扩展 `browser-extension/background.js` 等）必须固定走 `/api/v1`，不得依赖 `/api` 历史前缀；前端（`src/`）可继续走 `/api`。
+- 本文档中的路径表以 `/api` 书写，`/api/v1` 下的对应路径行为一致，不再逐条重复列出。
 
 ## 鉴权规则
 
@@ -231,6 +239,10 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 | PUT | `/api/settings` | `SettingsUpdateReq` | 更新后的 `Settings` |
 
 设置存储在 D1 `settings` 表中，`value` 为 JSON 字符串。后端读取时聚合为完整 `Settings` 对象，并对缺失字段使用默认值。后台设置面板提交完整 `Settings` 字段时，`PUT /api/settings` 写入 D1 后直接用本次提交的 payload 和默认值合成响应，避免额外回读 settings 全表；只提交部分字段的兼容请求仍会写入后读取完整 `Settings` 返回。
+
+**乐观并发（`data_version` CAS）**：`PUT /api/settings` 可携带 `data_version`（调用方上次从 `/api/data/version` 读到的版本）。携带时服务端用一条原子语句做 compare-and-swap：存储版本仍等于传入版本才应用 patch 并推进版本；已被其他会话推进则**不应用 patch**，直接回 HTTP 409 + `code=1006`（`ErrCode.CONFLICT`），前端提示「设置已被其他会话修改，请刷新后重试」。`data_version` 不是设置项，不会写入 `settings` 表。不携带时保持原行为（直接覆盖），兼容旧客户端。保存成功后前端应以 `/api/data/version` 刷新本地版本，否则下一次保存会误报 409。
+
+**排序的快照一致性**：`POST /api/bookmarks/sort` 复用 `expected` 快照模式——提交的 `ids` 必须恰好覆盖库中全量书签集合（去重后数量一致且无多余 id），否则回 HTTP 409 + `code=1006`，前端刷新后重试。`POST /api/categories/sort`（按父分类兄弟集合校验）与 `POST /api/bookmarks/reorganize`（全量覆盖校验）已有同等保护。
 
 `browser_sync_enabled` 默认值为 `false`，仅属于管理员设置，不会下发到公开设置。开启该设置时服务端会幂等创建根分类“浏览器新增收藏”；关闭时不会删除该分类或其中已有书签。
 
