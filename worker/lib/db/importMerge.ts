@@ -5,6 +5,9 @@ export interface MergeResult {
   createdCategories: number
   reusedCategories: number
   skippedBookmarks: number
+  // 增量写入用：本次合并新产生的行（id 已是最终值），其余行原样保留。
+  newCategories: Category[]
+  newBookmarks: Bookmark[]
 }
 
 function normalizedTitle(value: string): string {
@@ -29,6 +32,8 @@ export function mergeImportData(
   let createdCategories = 0
   let reusedCategories = 0
   let skippedBookmarks = 0
+  const newCategories: Category[] = []
+  const newBookmarks: Bookmark[] = []
   const now = Date.now()
 
   for (const category of categories) {
@@ -62,6 +67,7 @@ export function mergeImportData(
       created_at: incomingCategory.created_at || now,
     }
     categories.push(category)
+    newCategories.push(category)
     byPath.set(key, category)
     categoryMap.set(incomingCategory.id, category)
     createdCategories += 1
@@ -89,17 +95,22 @@ export function mergeImportData(
       created_at: incomingCategory.created_at || now,
     }
     categories.push(category)
+    newCategories.push(category)
     byPath.set(key, category)
     categoryMap.set(incomingCategory.id, category)
     createdCategories += 1
   }
 
   const nextSortByCategory = new Map<number, number>()
+  const maxSortByCategory = new Map<number, number>()
+  for (const bookmark of bookmarks) {
+    const current = maxSortByCategory.get(bookmark.category_id)
+    if (current === undefined || bookmark.sort > current) {
+      maxSortByCategory.set(bookmark.category_id, bookmark.sort)
+    }
+  }
   for (const category of categories) {
-    nextSortByCategory.set(
-      category.id,
-      Math.max(-1, ...bookmarks.filter((bookmark) => bookmark.category_id === category.id).map((bookmark) => bookmark.sort)),
-    )
+    nextSortByCategory.set(category.id, maxSortByCategory.get(category.id) ?? -1)
   }
 
   for (const incomingBookmark of incoming.bookmarks) {
@@ -118,12 +129,16 @@ export function mergeImportData(
       created_at: incomingBookmark.created_at || now,
     }
     bookmarks.push(bookmark)
+    newBookmarks.push(bookmark)
   }
 
   return {
-    payload: { categories, bookmarks },
+    // settings 透传：合并模式同样 patch 设置（此前静默丢弃）。
+    payload: { categories, bookmarks, settings: incoming.settings },
     createdCategories,
     reusedCategories,
     skippedBookmarks,
+    newCategories,
+    newBookmarks,
   }
 }

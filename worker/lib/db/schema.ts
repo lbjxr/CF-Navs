@@ -74,7 +74,7 @@ async function migrateSchema(db: D1Database): Promise<void> {
     stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"))
   }
   if (!bookmarkColNames.has("click_count")) {
-    stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN click_count INTEGER DEFAULT 0"))
+    stmts.push(db.prepare("ALTER TABLE bookmarks ADD COLUMN click_count INTEGER NOT NULL DEFAULT 0"))
   }
   if (!categoryColNames.has("parent_id")) {
     stmts.push(db.prepare("ALTER TABLE categories ADD COLUMN parent_id INTEGER"))
@@ -86,6 +86,7 @@ async function migrateSchema(db: D1Database): Promise<void> {
   if (!categoryColNames.has("icon_revision")) stmts.push(db.prepare("ALTER TABLE categories ADD COLUMN icon_revision TEXT"))
   if (!categoryColNames.has("icon_write_epoch")) stmts.push(db.prepare("ALTER TABLE categories ADD COLUMN icon_write_epoch INTEGER NOT NULL DEFAULT 0"))
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_bookmarks_sort_global ON bookmarks(sort, id)"))
+  stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_bookmarks_public_click ON bookmarks(is_private, click_count DESC, sort ASC, id ASC)"))
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_categories_sort_id ON categories(sort, id)"))
   stmts.push(db.prepare("CREATE INDEX IF NOT EXISTS idx_categories_parent_sort_id ON categories(parent_id, sort, id)"))
 

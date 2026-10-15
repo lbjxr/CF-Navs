@@ -47,11 +47,22 @@ dataRoutes.post('/import', async (c) => {
       ? await Promise.all([listCategories(c.env.DB), listBookmarks(c.env.DB), getSettings(c.env.DB)]).then(([categories, bookmarks, settings]) => ({ categories, bookmarks, settings }))
       : null
     const merged = current ? mergeImportData(current, payload) : null
-    const result = await importData(c.env.DB, merged?.payload ?? {
-      categories: payload.categories,
-      bookmarks: payload.bookmarks,
-      settings: payload.settings,
-    })
+    // 合并模式走增量写入：只 INSERT 新行，不全量 DELETE 重插。
+    const result = merged
+      ? await importData(
+          c.env.DB,
+          {
+            categories: merged.newCategories,
+            bookmarks: merged.newBookmarks,
+            settings: merged.payload.settings,
+          },
+          { incremental: true },
+        )
+      : await importData(c.env.DB, {
+          categories: payload.categories,
+          bookmarks: payload.bookmarks,
+          settings: payload.settings,
+        })
     // Import reconstructs IDs (including current merge mode); return its new dataset and versions.
     const data = await getAdminData(c.env.DB)
     invalidateRuntimeDataCache()

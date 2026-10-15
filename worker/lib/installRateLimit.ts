@@ -8,13 +8,30 @@ const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 const CREATE_RATE_LIMIT_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS install_rate_limits (
     client_key TEXT PRIMARY KEY,
-    count INTEGER NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
     reset_at INTEGER NOT NULL
   )
 `
 
+const initializedRateLimitTables = new WeakSet<D1Database>()
+const pendingRateLimitTableInits = new WeakMap<D1Database, Promise<void>>()
+
 export async function ensureInstallRateLimitTable(db: D1Database): Promise<void> {
-  await db.prepare(CREATE_RATE_LIMIT_TABLE_SQL).run()
+  // isolate 级懒初始化：每个 D1Database 实例只建一次表，避免每次请求都多一次 DDL 往返。
+  // 与 db/schema.ts 的 checkedSchemas 同模式；CREATE TABLE IF NOT EXISTS 本身幂等，
+  // 这里只是省掉重复的 round-trip。
+  if (initializedRateLimitTables.has(db)) return
+  const pending = pendingRateLimitTableInits.get(db)
+  if (pending) return pending
+  const operation = db.prepare(CREATE_RATE_LIMIT_TABLE_SQL).run().then(() => {
+    initializedRateLimitTables.add(db)
+  })
+  pendingRateLimitTableInits.set(db, operation)
+  try {
+    await operation
+  } finally {
+    pendingRateLimitTableInits.delete(db)
+  }
 }
 
 export async function readInstallFailures(db: D1Database, clientKey: string): Promise<LoginRateLimitState | null> {

@@ -12,6 +12,7 @@ import {
 import { extractManifestIcons, extractManifestUrl, fetchManifestJson } from '../lib/webManifest'
 import { cacheResponse, getCachedResponse } from '../lib/iconResponses'
 import { ok } from '../lib/response'
+import { faviconImUrl } from '../../shared/icons'
 import { badRequest } from '../lib/routeHelpers'
 import { authRequired } from '../middleware/auth'
 import type { HonoEnv } from '../types'
@@ -58,10 +59,6 @@ async function canFetchIcon(url: string): Promise<boolean> {
   } finally {
     clearTimeout(timer)
   }
-}
-
-function buildFaviconImFallback(hostname: string): string {
-  return `https://favicon.im/${encodeURIComponent(hostname)}?larger=true`
 }
 
 export const faviconRoutes = new Hono<HonoEnv>()
@@ -114,20 +111,20 @@ faviconRoutes.get('/fetch-favicon', async (c) => {
       return originFavicon
     }
 
-    return buildFaviconImFallback(fallbackHostname)
+    return faviconImUrl(fallbackHostname)
   }
 
   try {
     // 整体兜底：无论解析链多慢，最多 OVERALL_DEADLINE_MS 后返回 favicon.im 兜底，
     // 避免前端「一键获取」按钮长时间转圈。
     const deadline = new Promise<string>((resolve) =>
-      setTimeout(() => resolve(buildFaviconImFallback(targetUrl!.hostname)), OVERALL_DEADLINE_MS),
+      setTimeout(() => resolve(faviconImUrl(targetUrl!.hostname)), OVERALL_DEADLINE_MS),
     )
     const icon = await Promise.race([resolveIcon(), deadline])
     return c.json(ok<FaviconResp>({ icon }))
   } catch {
     // 任何异常也回退到 favicon.im 兜底，保证总能给出一个可用图标
-    return c.json(ok<FaviconResp>({ icon: buildFaviconImFallback(targetUrl.hostname) }))
+    return c.json(ok<FaviconResp>({ icon: faviconImUrl(targetUrl.hostname) }))
   }
 })
 

@@ -4,7 +4,7 @@ import { type Bookmark, type Category, type Settings } from '../../../shared/typ
 import { ensureSchema } from './schema'
 import { REPLACE_ICON_DATASET_SQL } from './iconSchema'
 import { settingsPatchStatement } from './settings'
-import { chunkImportRows, remapImportRecords } from './importHelpers'
+import { chunkImportRows, normalizeImportBookmark, normalizeImportCategory, remapImportRecords } from './importHelpers'
 
 // D1 单条预处理语句最多绑定 100 个参数；分类导入每行绑定 9 个参数，
 // 因此最多 11 行（99 参数），为新增列保留上限内余量。
@@ -22,23 +22,41 @@ async function runImportBatches(db: D1Database, stmts: D1PreparedStatement[]): P
   }
 }
 
+export interface ImportOptions {
+  // 增量模式：只 INSERT 传入的行（调用方保证 id 为最终值且不与现存行冲突），
+  // 跳过 DELETE 全清和图标 epoch 重置。用于 merge 模式。
+  incremental?: boolean
+}
+
 export async function importData(
   db: D1Database,
   data: { categories: Category[]; bookmarks: Bookmark[]; settings?: Partial<Settings> },
+  options?: ImportOptions,
 ): Promise<{ categories: number; bookmarks: number; importedCategories: Category[]; importedBookmarks: Bookmark[] }> {
   await ensureSchema(db)
   const now = Date.now()
-  const stmts: D1PreparedStatement[] = [
-    db.prepare(REPLACE_ICON_DATASET_SQL),
-    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('data_version', json_quote(lower(hex(randomblob(16)))))"),
-  ]
-  const remapped = remapImportRecords(data.categories, data.bookmarks, now)
-  const importedCategories = remapped.categories
-  const importedBookmarks = remapped.bookmarks
+  const incremental = options?.incremental === true
+  const stmts: D1PreparedStatement[] = incremental
+    ? []
+    : [
+        db.prepare(REPLACE_ICON_DATASET_SQL),
+        db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('data_version', json_quote(lower(hex(randomblob(16)))))"),
+      ]
 
-  // 先清空（顺序：先书签后分类）
-  stmts.push(db.prepare('DELETE FROM bookmarks'))
-  stmts.push(db.prepare('DELETE FROM categories'))
+  let importedCategories: Category[]
+  let importedBookmarks: Bookmark[]
+  if (incremental) {
+    // id 已是最终值：只做规范化，不重排 id。
+    importedCategories = data.categories.map((category) => normalizeImportCategory(category, now))
+    importedBookmarks = data.bookmarks.map((bookmark) => normalizeImportBookmark(bookmark, now))
+  } else {
+    const remapped = remapImportRecords(data.categories, data.bookmarks, now)
+    importedCategories = remapped.categories
+    importedBookmarks = remapped.bookmarks
+    // 先清空（顺序：先书签后分类）
+    stmts.push(db.prepare('DELETE FROM bookmarks'))
+    stmts.push(db.prepare('DELETE FROM categories'))
+  }
 
   for (const chunk of chunkImportRows(importedCategories, CATEGORY_IMPORT_CHUNK_SIZE)) {
     stmts.push(db.prepare(`INSERT INTO categories (id, parent_id, title, icon, icon_blob, icon_revision, is_private, sort, created_at) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`)
@@ -55,6 +73,11 @@ export async function importData(
   if (data.settings) {
     const settingsStmt = settingsPatchStatement(db, data.settings)
     if (settingsStmt) stmts.push(settingsStmt)
+  }
+
+  if (incremental) {
+    // 增量模式也 touch data_version，保证缓存失效语义与全量一致。
+    stmts.push(db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('data_version', json_quote(lower(hex(randomblob(16)))))"))
   }
 
   await runImportBatches(db, stmts)

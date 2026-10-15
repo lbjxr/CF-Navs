@@ -1,7 +1,7 @@
 <script lang="ts">
   import { LOGO_SURF_COLOR_SCHEMES, type LogoSurfColorScheme } from '../lib/icons'
+  import type { AsyncVoid } from '../../shared/types'
 
-  type AsyncVoid<T = void> = T | Promise<T>
 
   export let selectedLogoSchemeName = ''
   export let iconSource = ''

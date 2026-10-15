@@ -40,7 +40,7 @@ async function submit() {
 describe('Recover.svelte', () => {
   it('rejects out-of-policy password client-side without calling the API', async () => {
     renderRecover()
-    await fill('token-abc', '12345678') // single char class
+    await fill('token-abc', '123456789012') // single char class, 12 chars
     await submit()
     expect(recover).not.toHaveBeenCalled()
     expect(screen.getByRole('alert').textContent).toContain('至少两类字符')
@@ -59,12 +59,12 @@ describe('Recover.svelte', () => {
     await fill('token-abc', 'ab1') // too short
     await submit()
     expect(recover).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert').textContent).toContain('8–12 位')
+    expect(screen.getByRole('alert').textContent).toContain('12–256 位')
   })
 
   it('rejects mismatched confirmation', async () => {
     renderRecover()
-    await fill('token-abc', 'abcd1234', 'abcd9999')
+    await fill('token-abc', 'abcd1234efgh', 'abcd1234efg9')
     await submit()
     expect(recover).not.toHaveBeenCalled()
     expect(screen.getByRole('alert').textContent).toContain('不一致')
@@ -74,16 +74,16 @@ describe('Recover.svelte', () => {
     const session = { token: 't', expires_at: 1, username: 'admin' }
     recover.mockResolvedValue(session)
     const { onRecovered } = renderRecover()
-    await fill('token-abc', 'abcd1234')
+    await fill('token-abc', 'abcd1234efgh')
     await submit()
-    expect(recover).toHaveBeenCalledWith({ password: 'abcd1234' }, 'token-abc')
+    expect(recover).toHaveBeenCalledWith({ password: 'abcd1234efgh' }, 'token-abc')
     expect(onRecovered).toHaveBeenCalledWith(session)
   })
 
   it('shows token guidance on 401 and does not call onRecovered', async () => {
     recover.mockRejectedValue(new ApiError('unauthorized', { status: 401, code: 1001 }))
     const { onRecovered } = renderRecover()
-    await fill('wrong-token', 'abcd1234')
+    await fill('wrong-token', 'abcd1234efgh')
     await submit()
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('令牌无效或未配置')
@@ -94,7 +94,7 @@ describe('Recover.svelte', () => {
   it('maps rate-limit error to its message', async () => {
     recover.mockRejectedValue(new ApiError('too many', { status: 200, code: 1004 }))
     renderRecover()
-    await fill('token-abc', 'abcd1234')
+    await fill('token-abc', 'abcd1234efgh')
     await submit()
     expect((await screen.findByRole('alert')).textContent).toContain('尝试过于频繁')
   })

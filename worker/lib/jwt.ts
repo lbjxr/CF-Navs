@@ -15,6 +15,13 @@ export function resetJwtSecretCache(): void {
   cachedJwtSecretAt = 0
 }
 
+// TextEncoder.encode() 实际总是返回全新 ArrayBuffer backing 的 Uint8Array，
+// 但 lib 类型声明为 Uint8Array<ArrayBufferLike>，直接传给 crypto.subtle 会报
+// BufferSource 不兼容。这里做一次安全的收窄断言，替代原来的 `as any`。
+function utf8Bytes(value: string): Uint8Array<ArrayBuffer> {
+  return new TextEncoder().encode(value) as Uint8Array<ArrayBuffer>
+}
+
 // Helper to encode Uint8Array to Base64URL
 function base64url(bytes: Uint8Array): string {
   let binary = ''
@@ -28,14 +35,15 @@ function base64url(bytes: Uint8Array): string {
 }
 
 // Helper to decode Base64URL string to Uint8Array
-function decodeBase64url(str: string): Uint8Array {
+// new Uint8Array(n) 总是全新 ArrayBuffer backing，收窄后满足 BufferSource。
+function decodeBase64url(str: string): Uint8Array<ArrayBuffer> {
   const base64 = str.replace(/-/g, '+').replace(/_/g, '/')
   const binary = atob(base64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i)
   }
-  return bytes
+  return bytes as Uint8Array<ArrayBuffer>
 }
 
 // Retrieve or dynamically generate the JWT signing secret from D1 settings
@@ -86,7 +94,7 @@ export async function signJwt(payload: Record<string, unknown>, secret: string):
 
   const key = await crypto.subtle.importKey(
     'raw',
-    encoder.encode(secret) as any,
+    utf8Bytes(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
@@ -95,7 +103,7 @@ export async function signJwt(payload: Record<string, unknown>, secret: string):
   const signature = await crypto.subtle.sign(
     'HMAC',
     key,
-    encoder.encode(message) as any
+    utf8Bytes(message)
   )
 
   return `${message}.${base64url(new Uint8Array(signature))}`
@@ -108,12 +116,11 @@ export async function verifyJwt(token: string, secret: string): Promise<Record<s
 
   const [headerPart, payloadPart, signaturePart] = parts
   const message = `${headerPart}.${payloadPart}`
-  const encoder = new TextEncoder()
 
   try {
     const key = await crypto.subtle.importKey(
       'raw',
-      encoder.encode(secret) as any,
+      utf8Bytes(secret),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['verify']
@@ -123,8 +130,8 @@ export async function verifyJwt(token: string, secret: string): Promise<Record<s
     const isValid = await crypto.subtle.verify(
       'HMAC',
       key,
-      signature as any,
-      encoder.encode(message) as any
+      signature,
+      utf8Bytes(message)
     )
 
     if (!isValid) return null

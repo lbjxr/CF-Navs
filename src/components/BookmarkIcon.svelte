@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createNativeImageWatchdog } from '../lib/nativeImageWatchdog'
-  type AsyncVoid<T = void> = T | Promise<T>
+  import type { AsyncVoid } from '../../shared/types'
 
   export let title = ''
   export let iconUrl = ''

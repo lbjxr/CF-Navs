@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { BookmarkFormValue } from '../lib/adminTypes'
+  import type { AsyncVoid } from '../../shared/types'
   import {
     canPreviewIcon,
     canPreviewIconAsImage,
@@ -7,7 +8,6 @@
     getTextIconPreview,
   } from '../lib/bookmarkFormIcons'
 
-  type AsyncVoid<T = void> = T | Promise<T>
 
   export let form: BookmarkFormValue
   export let iconifyName = ''

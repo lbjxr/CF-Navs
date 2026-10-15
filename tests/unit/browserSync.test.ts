@@ -62,8 +62,14 @@ function createBrowserSyncDb() {
 
   const db = {
     prepare,
-    async batch() {
-      return []
+    async batch(statements: Statement[]) {
+      // 模拟 D1 batch：依次执行，INSERT 语句走 first() 记录 inserts
+      for (const statement of statements) {
+        if (statement.sql.startsWith('INSERT INTO bookmarks')) {
+          await statement.first()
+        }
+      }
+      return statements.map(() => ({ success: true }))
     },
   }
 
