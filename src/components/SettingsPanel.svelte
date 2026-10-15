@@ -1,6 +1,6 @@
 <script lang="ts">
   import DeviceIconCachePanel from './DeviceIconCachePanel.svelte'
-  import type { ChangePasswordReq } from '../../shared/types'
+  import type { AsyncVoid, ChangePasswordReq } from '../../shared/types'
   import { CARD_SIZE_LIMITS } from '../../shared/settings'
   import {
     cloneSettingsForm,
@@ -22,7 +22,6 @@
   import PasswordChangePanel from './PasswordChangePanel.svelte'
 
   type SettingsPanelValue = SettingsFormModel
-  type AsyncVoid<T = void> = T | Promise<T>
 
   export let value: Partial<SettingsPanelValue> | null = null
   export let loading = false
@@ -58,7 +57,10 @@
 
   $: normalizedForm = normalizeSettingsForm(form)
   $: normalizedInitialForm = normalizeSettingsForm(initialForm)
-  $: isDirty = JSON.stringify(normalizedForm) !== JSON.stringify(normalizedInitialForm)
+  // initial 侧只在外部 value/loading 变化时重算，缓存其序列化结果，
+  // 脏检查每次只序列化当前表单（原来两次）。
+  $: initialFormKey = JSON.stringify(normalizedInitialForm)
+  $: isDirty = JSON.stringify(normalizedForm) !== initialFormKey
   $: hasTitle = normalizedForm.site_title.length > 0
   $: enginesValid =
     normalizedForm.search_engine.engines.length > 0 &&

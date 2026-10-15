@@ -1,8 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { ThemeMode } from '../../shared/types'
-
-  type AsyncVoid<T = void> = T | Promise<T>
+  import type { AsyncVoid, ThemeMode } from '../../shared/types'
   const BACK_TO_TOP_VISIBILITY_OFFSET = 320
 
   export let isAuthenticated = false

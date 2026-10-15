@@ -1,6 +1,7 @@
 import type { BackgroundPresetId, BackgroundSetting, SearchEngine, SearchEngineSetting, ThemeMode } from '../../shared/types'
 import {
   CARD_SIZE_DEFAULTS,
+  defaultSearchEngineSetting,
   normalizeCardIconSize,
   normalizeCardSizeSetting,
   CATEGORY_DISPLAY_DEFAULTS,
@@ -47,13 +48,7 @@ export const defaultDarkBackground: BackgroundSetting = {
 export const defaultLightGradient = { start: '#e0f2fe', end: '#f8fafc' }
 export const defaultDarkGradient = { start: '#1e3a8a', end: '#0f172a' }
 
-export const defaultSearchEngine: SearchEngineSetting = {
-  current: 'Google',
-  engines: [
-    { name: 'Google', icon: '', url_template: 'https://www.google.com/search?q={q}' },
-    { name: 'Bing', icon: '', url_template: 'https://www.bing.com/search?q={q}' },
-  ],
-}
+export const defaultSearchEngine: SearchEngineSetting = defaultSearchEngineSetting()
 
 export const emptySettingsForm: SettingsFormModel = {
   site_title: '',
