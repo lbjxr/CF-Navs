@@ -5,19 +5,23 @@
   import { onDestroy, onMount, tick } from 'svelte'
   import { nextTooltipId, openTooltipId } from '../../lib/tooltipStore'
 
-  export let text = ''
-  export let label = '查看说明'
+  interface TooltipProps {
+    text?: string
+    label?: string
+  }
+
+  let { text = '', label = '查看说明' }: TooltipProps = $props()
 
   const id = nextTooltipId()
   const bubbleId = `${id}-bubble`
-  let anchorEl: HTMLElement | null = null
-  let triggerEl: HTMLButtonElement | null = null
-  let bubbleEl: HTMLElement | null = null
-  let bubbleStyle = 'visibility: hidden;'
-  let open = false
-  let pinned = false
-  let hovering = false
-  let positionFrame: number | null = null
+  let anchorEl = $state<HTMLElement | null>(null)
+  let triggerEl = $state<HTMLButtonElement | null>(null)
+  let bubbleEl = $state<HTMLElement | null>(null)
+  let bubbleStyle = $state('visibility: hidden;')
+  let open = $state(false)
+  let pinned = $state(false)
+  let hovering = $state(false)
+  let positionFrame: number | null = $state(null)
 
   function mountToBody(node: HTMLElement) {
     document.body.appendChild(node)
@@ -108,13 +112,13 @@
   }
 </script>
 
-<svelte:window on:pointerdown={handleWindowPointerDown} on:keydown={handleKeydown} />
+<svelte:window onpointerdown={handleWindowPointerDown} onkeydown={handleKeydown} />
 
 <span
   class="ui-tooltip"
   bind:this={anchorEl}
-  on:mouseenter={show}
-  on:mouseleave={hide}
+  onmouseenter={show}
+  onmouseleave={hide}
   role="presentation"
 >
   <button
@@ -124,9 +128,9 @@
     aria-label={label}
     aria-expanded={open}
     aria-describedby={open && text ? bubbleId : undefined}
-    on:click={togglePinned}
-    on:focus={show}
-    on:blur={hide}
+    onclick={togglePinned}
+    onfocus={show}
+    onblur={hide}
   >?</button>
   {#if open && text}
     <span
