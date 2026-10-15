@@ -6,16 +6,21 @@
   import InputGroup from '../ui/InputGroup.svelte'
   import Slider from '../ui/Slider.svelte'
 
-  export let form: SettingsFormModel
-  export let saving = false
+  interface NavigationSettingsSectionProps {
+    /** 双向绑定：设置表单模型，父组件经 bind:form 回写 */
+    form: SettingsFormModel
+    saving?: boolean
+  }
+
+  let { form = $bindable(), saving = false }: NavigationSettingsSectionProps = $props()
 
   async function syncForm(): Promise<void> {
     await tick()
     form = cloneSettingsForm(form)
   }
 
-  $: isLeft = form.navigation.position === 'left'
-  $: isTop = form.navigation.position === 'top'
+  let isLeft = $derived(form.navigation.position === 'left')
+  let isTop = $derived(form.navigation.position === 'top')
 
   function setAlwaysExpanded(value: boolean): void {
     form.navigation.always_expanded = value
@@ -44,7 +49,7 @@
               type="radio"
               bind:group={form.navigation.position}
               value="left"
-              on:change={() => void syncForm()}
+              onchange={() => void syncForm()}
             />
             <span>左侧悬浮</span>
           </label>
@@ -53,7 +58,7 @@
               type="radio"
               bind:group={form.navigation.position}
               value="top"
-              on:change={() => void syncForm()}
+              onchange={() => void syncForm()}
             />
             <span>顶部固定</span>
           </label>
@@ -108,7 +113,7 @@
             bind:value={form.content_layout.max_width_unit}
             class="unit-select native-select"
             aria-label="最大宽度单位"
-            on:change={() => void syncForm()}
+            onchange={() => void syncForm()}
           >
             <option value="px">px</option>
             <option value="%">%</option>

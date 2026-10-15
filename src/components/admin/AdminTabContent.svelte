@@ -14,42 +14,82 @@
   type AdminBookmark = AdminBookmarkSummary
   type SettingsPanelComponent = typeof import('../SettingsPanel.svelte').default
 
-  export let activeTab: AdminTab = 'categories'
-  export let isAuthenticated = false
-  export let authLoading = false
-  export let categories: AdminCategory[] = []
-  export let bookmarks: AdminBookmark[] = []
-  export let categoriesLoading = false
-  export let bookmarksLoading = false
-  export let deletingCategoryId: string | number | null = null
-  export let deletingBookmarkId: string | number | null = null
-  export let settingsPanelComponent: SettingsPanelComponent | null = null
-  export let settingsLoading = false
-  export let settingsSaving = false
-  export let settingsError = ''
-  export let settingsValue: Partial<SettingsFormValue> | null = null
-  export let importing = false
-  export let exporting = false
-  export let backupError = ''
-  export let backupMessage = ''
-  export let importSource: ImportSource = 'cf-navs'
+  interface AdminTabContentProps {
+    activeTab?: AdminTab
+    isAuthenticated?: boolean
+    authLoading?: boolean
+    categories?: AdminCategory[]
+    bookmarks?: AdminBookmark[]
+    categoriesLoading?: boolean
+    bookmarksLoading?: boolean
+    deletingCategoryId?: string | number | null
+    deletingBookmarkId?: string | number | null
+    settingsPanelComponent?: SettingsPanelComponent | null
+    settingsLoading?: boolean
+    settingsSaving?: boolean
+    settingsError?: string
+    settingsValue?: Partial<SettingsFormValue> | null
+    importing?: boolean
+    exporting?: boolean
+    backupError?: string
+    backupMessage?: string
+    /** 双向绑定：导入来源，由 BackupPanel 经 bind:importSource 回写 */
+    importSource?: ImportSource
+    onOpenCreateCategory?: (() => AsyncVoid) | undefined
+    onEditCategory?: ((category: AdminCategory) => AsyncVoid) | undefined
+    onDeleteCategory?: ((category: AdminCategory) => AsyncVoid) | undefined
+    onBatchDeleteCategories?: ((ids: number[]) => AsyncVoid) | undefined
+    onOpenCreateBookmark?: ((categoryId?: string | number) => AsyncVoid) | undefined
+    onEditBookmark?: ((bookmark: AdminBookmark) => AsyncVoid) | undefined
+    onDeleteBookmark?: ((bookmark: AdminBookmark) => AsyncVoid) | undefined
+    onBatchDeleteBookmarks?: ((ids: number[]) => AsyncVoid) | undefined
+    onBatchMoveBookmarks?: ((payload: BookmarkBatchMoveReq) => AsyncVoid) | undefined
+    onSubmitSettings?: ((payload: SettingsFormValue) => AsyncVoid) | undefined
+    onVerifyDevice?: (() => Promise<void>) | undefined
+    onChangePassword?: ((payload: ChangePasswordReq) => AsyncVoid) | undefined
+    onSortCategories?: CategorySortHandler | undefined
+    onSortBookmarks?: SortHandler | undefined
+    onExportData?: ((selection: BackupSelection) => AsyncVoid) | undefined
+    onImportData?: ((file: File, source: ImportSource, mode: 'replace' | 'merge') => AsyncVoid) | undefined
+  }
 
-  export let onOpenCreateCategory: (() => AsyncVoid) | undefined = undefined
-  export let onEditCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
-  export let onDeleteCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
-  export let onBatchDeleteCategories: ((ids: number[]) => AsyncVoid) | undefined = undefined
-  export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
-  export let onEditBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
-  export let onDeleteBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
-  export let onBatchDeleteBookmarks: ((ids: number[]) => AsyncVoid) | undefined = undefined
-  export let onBatchMoveBookmarks: ((payload: BookmarkBatchMoveReq) => AsyncVoid) | undefined = undefined
-  export let onSubmitSettings: ((payload: SettingsFormValue) => AsyncVoid) | undefined = undefined
-  export let onVerifyDevice: (() => Promise<void>) | undefined = undefined
-  export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
-  export let onSortCategories: CategorySortHandler | undefined = undefined
-  export let onSortBookmarks: SortHandler | undefined = undefined
-  export let onExportData: ((selection: BackupSelection) => AsyncVoid) | undefined = undefined
-  export let onImportData: ((file: File, source: ImportSource, mode: 'replace' | 'merge') => AsyncVoid) | undefined = undefined
+  let {
+    activeTab = 'categories',
+    isAuthenticated = false,
+    authLoading = false,
+    categories = [],
+    bookmarks = [],
+    categoriesLoading = false,
+    bookmarksLoading = false,
+    deletingCategoryId = null,
+    deletingBookmarkId = null,
+    settingsPanelComponent = null,
+    settingsLoading = false,
+    settingsSaving = false,
+    settingsError = '',
+    settingsValue = null,
+    importing = false,
+    exporting = false,
+    backupError = '',
+    backupMessage = '',
+    importSource = $bindable('cf-navs'),
+    onOpenCreateCategory = undefined,
+    onEditCategory = undefined,
+    onDeleteCategory = undefined,
+    onBatchDeleteCategories = undefined,
+    onOpenCreateBookmark = undefined,
+    onEditBookmark = undefined,
+    onDeleteBookmark = undefined,
+    onBatchDeleteBookmarks = undefined,
+    onBatchMoveBookmarks = undefined,
+    onSubmitSettings = undefined,
+    onVerifyDevice = undefined,
+    onChangePassword = undefined,
+    onSortCategories = undefined,
+    onSortBookmarks = undefined,
+    onExportData = undefined,
+    onImportData = undefined,
+  }: AdminTabContentProps = $props()
 </script>
 
 <div class="admin-content" id="admin-main" tabindex="-1">
@@ -91,8 +131,8 @@
   {:else if activeTab === 'settings'}
     <section class="settings-panel-wrap">
       {#if settingsPanelComponent}
-        <svelte:component
-          this={settingsPanelComponent}
+        {@const SettingsPanelView = settingsPanelComponent}
+        <SettingsPanelView
           value={settingsValue}
           loading={settingsLoading}
           saving={settingsSaving}
