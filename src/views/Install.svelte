@@ -10,23 +10,33 @@
     | 'session_store_unreachable'
     | 'status_error'
 
-  export let mode: InstallViewMode = 'needs_install'
-  export let missingBindings: Array<'DB' | 'SESSION'> = []
-  export let schemaVersion: number | null = null
-  export let installing = false
-  export let error = ''
-  export let onInstall: (value: {
-    setupToken: string
-    username: string
-    password: string
-  }) => Promise<void> | void
-  export let onRetryStatus: () => Promise<void> | void
+  interface InstallProps {
+    mode?: InstallViewMode
+    missingBindings?: Array<'DB' | 'SESSION'>
+    schemaVersion?: number | null
+    installing?: boolean
+    error?: string
+    /** 安装回调，参数为 {setupToken, username, password} */
+    onInstall: (value: { setupToken: string; username: string; password: string }) => Promise<void> | void
+    /** 重新检查配置回调 */
+    onRetryStatus: () => Promise<void> | void
+  }
 
-  let setupToken = ''
-  let username = 'admin'
-  let password = ''
-  let passwordConfirmation = ''
-  let localError = ''
+  let {
+    mode = 'needs_install',
+    missingBindings = [],
+    schemaVersion = null,
+    installing = false,
+    error = '',
+    onInstall,
+    onRetryStatus,
+  }: InstallProps = $props()
+
+  let setupToken = $state('')
+  let username = $state('admin')
+  let password = $state('')
+  let passwordConfirmation = $state('')
+  let localError = $state('')
 
   function configurationCopy(): { title: string; message: string; action: string } {
     if (mode === 'setup_token_missing') {
@@ -64,8 +74,8 @@
     }
   }
 
-  $: formError = localError || error
-  $: configuration = mode === 'needs_install' ? null : configurationCopy()
+  let formError = $derived(localError || error)
+  let configuration = $derived(mode === 'needs_install' ? null : configurationCopy())
 
   async function handleSubmit(): Promise<void> {
     localError = ''
@@ -136,10 +146,10 @@
             <span>{error}</span>
           </div>
         {/if}
-        <button class="install-submit" type="button" on:click={onRetryStatus}>{configuration.action}</button>
+        <button class="install-submit" type="button" onclick={onRetryStatus}>{configuration.action}</button>
       </div>
     {:else}
-      <form class="install-form" aria-busy={installing} on:submit|preventDefault={handleSubmit}>
+      <form class="install-form" aria-busy={installing} onsubmit={(event) => { event.preventDefault(); void handleSubmit() }}>
         <div class="field">
         <label for="setup-token">部署密钥</label>
         <input
@@ -204,7 +214,7 @@
         <div class="install-error" role="alert">
           <strong>安装未完成</strong>
           <span>{formError}</span>
-          <button type="button" on:click={onRetryStatus} disabled={installing}>重新检查安装状态</button>
+          <button type="button" onclick={onRetryStatus} disabled={installing}>重新检查安装状态</button>
         </div>
       {/if}
 
