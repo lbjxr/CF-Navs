@@ -2,12 +2,22 @@
   import { LOGO_SURF_COLOR_SCHEMES, type LogoSurfColorScheme } from '../lib/icons'
   import type { AsyncVoid } from '../../shared/types'
 
+  interface LogoSchemeSelectorProps {
+    selectedLogoSchemeName?: string
+    iconSource?: string
+    currentLogoScheme: LogoSurfColorScheme
+    logoPreviewText?: string
+    /** 选择配色回调 */
+    onSelectScheme?: (scheme: LogoSurfColorScheme) => AsyncVoid
+  }
 
-  export let selectedLogoSchemeName = ''
-  export let iconSource = ''
-  export let currentLogoScheme: LogoSurfColorScheme
-  export let logoPreviewText = 'NAV'
-  export let onSelectScheme: ((scheme: LogoSurfColorScheme) => AsyncVoid) | undefined = undefined
+  let {
+    selectedLogoSchemeName = '',
+    iconSource = '',
+    currentLogoScheme,
+    logoPreviewText = 'NAV',
+    onSelectScheme,
+  }: LogoSchemeSelectorProps = $props()
 </script>
 
 <div class="logo-scheme-section field-wide">
@@ -21,7 +31,7 @@
         type="button"
         class="scheme-button"
         class:selected={selectedLogoSchemeName === scheme.name && iconSource === 'logo_surf'}
-        on:click={() => onSelectScheme?.(scheme)}
+        onclick={() => onSelectScheme?.(scheme)}
         title={`${scheme.name}: ${scheme.bgColor} / ${scheme.textColor}`}
       >
         <span class="scheme-preview" style="background: {scheme.bgColor}; color: {scheme.textColor};">

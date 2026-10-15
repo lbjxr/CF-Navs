@@ -2,14 +2,28 @@
   import type { PublicSettings } from '../../shared/types'
   import SearchBox from './SearchBox.svelte'
 
-  export let pageTitle = ''
-  export let siteTitleColor = 'inherit'
-  export let siteTitleFontSize = 32
-  export let settings: PublicSettings | null = null
-  export let query = ''
-  export let topNavigation = false
-  export let preview = false
-  export let themeOverride: 'light' | 'dark' | null = null
+  interface HomeHeroSearchProps {
+    pageTitle?: string
+    siteTitleColor?: string
+    siteTitleFontSize?: number
+    settings?: PublicSettings | null
+    /** 双向绑定：搜索关键词 */
+    query?: string
+    topNavigation?: boolean
+    preview?: boolean
+    themeOverride?: 'light' | 'dark' | null
+  }
+
+  let {
+    pageTitle = '',
+    siteTitleColor = 'inherit',
+    siteTitleFontSize = 32,
+    settings = null,
+    query = $bindable(''),
+    topNavigation = false,
+    preview = false,
+    themeOverride = null,
+  }: HomeHeroSearchProps = $props()
 </script>
 
 <section
