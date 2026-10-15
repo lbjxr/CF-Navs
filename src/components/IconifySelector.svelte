@@ -1,8 +1,7 @@
 <script lang="ts">
-  import type { IconifyCandidate } from '../../shared/types'
+  import type { AsyncVoid, IconifyCandidate } from '../../shared/types'
   import BookmarkIconCandidateButton from './BookmarkIconCandidateButton.svelte'
 
-  type AsyncVoid<T = void> = T | Promise<T>
 
   export let iconifyName = ''
   export let iconifyPreviewUrl = ''

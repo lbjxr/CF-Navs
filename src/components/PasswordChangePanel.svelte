@@ -1,8 +1,5 @@
 <script lang="ts">
-  import type { ChangePasswordReq } from '../../shared/types'
-
-  type AsyncVoid<T = void> = T | Promise<T>
-
+  import type { AsyncVoid, ChangePasswordReq } from '../../shared/types'
   export let saving = false
   export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
 

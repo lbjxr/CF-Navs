@@ -6,6 +6,7 @@ import {
   SETTINGS_KEYS,
   CARD_SIZE_DEFAULTS,
   CATEGORY_DISPLAY_DEFAULTS,
+  defaultSearchEngineSetting,
   normalizeCardIconSize,
   normalizeCardSizeSetting,
   normalizeCategoryDisplaySetting,
@@ -48,13 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   custom_css: '',
   custom_js: '',
   image_host_url: '',
-  search_engine: {
-    current: 'Google',
-    engines: [
-      { name: 'Google', icon: '', url_template: 'https://www.google.com/search?q={q}' },
-      { name: 'Bing', icon: '', url_template: 'https://www.bing.com/search?q={q}' },
-    ],
-  },
+  search_engine: defaultSearchEngineSetting(),
   card_size: { ...CARD_SIZE_DEFAULTS },
   card_style: 'info',
   card_icon_size: 60,

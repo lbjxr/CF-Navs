@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS error_report_rate_limits (
 CREATE INDEX IF NOT EXISTS idx_bookmarks_category ON bookmarks(category_id);
 CREATE INDEX IF NOT EXISTS idx_bookmarks_sort ON bookmarks(category_id, sort);
 CREATE INDEX IF NOT EXISTS idx_bookmarks_sort_global ON bookmarks(sort, id);
+CREATE INDEX IF NOT EXISTS idx_bookmarks_public_click ON bookmarks(is_private, click_count DESC, sort ASC, id ASC);
 CREATE INDEX IF NOT EXISTS idx_categories_sort ON categories(sort);
 CREATE INDEX IF NOT EXISTS idx_categories_sort_id ON categories(sort, id);
 CREATE INDEX IF NOT EXISTS idx_categories_parent_sort_id ON categories(parent_id, sort, id);

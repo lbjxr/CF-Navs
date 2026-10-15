@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { BookmarkBatchMoveReq, ChangePasswordReq } from '../../../shared/types'
+  import type { AsyncVoid, BookmarkBatchMoveReq, ChangePasswordReq } from '../../../shared/types'
   import BackupPanel from '../BackupPanel.svelte'
   import BookmarkListPanel from './BookmarkListPanel.svelte'
   import CategoryListPanel from './CategoryListPanel.svelte'
@@ -12,7 +12,6 @@
 
   type AdminCategory = AdminCategorySummary
   type AdminBookmark = AdminBookmarkSummary
-  type AsyncVoid<T = void> = T | Promise<T>
   type SettingsPanelComponent = typeof import('../SettingsPanel.svelte').default
 
   export let activeTab: AdminTab = 'categories'

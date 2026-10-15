@@ -8,6 +8,7 @@ import {
 } from '../lib/bootstrap'
 import { hashPassword } from '../lib/crypto'
 import { getSettingValues, setSettingValue } from '../lib/db'
+import { ADMIN_PASSWORD_MAX_LENGTH, ADMIN_PASSWORD_MIN_LENGTH } from '../../shared/passwordPolicy'
 import { fail, ok } from '../lib/response'
 import { createSession } from '../lib/session'
 import { hasSessionBinding } from '../lib/sessionStore'
@@ -23,15 +24,14 @@ import { clearAllCachedSessions, clearAllSessions } from '../middleware/auth'
 import { getClientIp } from '../middleware/rateLimit'
 import type { HonoEnv } from '../types'
 
-const MIN_PASSWORD_LENGTH = 8
-const MAX_PASSWORD_LENGTH = 12
 const CONTROL_CHARACTERS = /\p{Cc}/u
 
-// 恢复端点专用密码策略（有意区别于 /install 的 12–256）：长度 8–12，且至少包含
-// 小写/大写/数字/符号 四类中的两类。登录不再校验长度，此策略不影响后续登录。
+// 恢复端点密码策略：长度与 /install 统一为 12–256（见 shared 密码策略），
+// 额外要求至少包含小写/大写/数字/符号四类中的两类。登录不再校验长度，
+// 此策略不影响后续登录。
 export function isValidRecoverPassword(value: unknown): value is string {
   if (typeof value !== 'string') return false
-  if (value.length < MIN_PASSWORD_LENGTH || value.length > MAX_PASSWORD_LENGTH) return false
+  if (value.length < ADMIN_PASSWORD_MIN_LENGTH || value.length > ADMIN_PASSWORD_MAX_LENGTH) return false
   if (CONTROL_CHARACTERS.test(value)) return false
   let classes = 0
   if (/[a-z]/.test(value)) classes++
@@ -150,7 +150,7 @@ recoverRoutes.post('/recover', async (c) => {
 
   // 只重置密码：不接受、不校验、不写入用户名。
   if (!isValidRecoverPassword(body.password)) {
-    return noStore(c.json(fail(ErrCode.BAD_REQUEST, 'password must be 8-12 characters with at least two character types')))
+    return noStore(c.json(fail(ErrCode.BAD_REQUEST, 'password must be 12-256 characters with at least two character types')))
   }
 
   try {

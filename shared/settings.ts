@@ -1,4 +1,13 @@
-import type { CardSizeSetting, CategoryDisplaySetting, PublicSettings, Settings } from './types'
+import type { CardSizeSetting, CategoryDisplaySetting, PublicSettings, SearchEngine, SearchEngineSetting, Settings } from './types'
+
+export const DEFAULT_SEARCH_ENGINES: SearchEngine[] = [
+  { name: 'Google', icon: '', url_template: 'https://www.google.com/search?q={q}' },
+  { name: 'Bing', icon: '', url_template: 'https://www.bing.com/search?q={q}' },
+]
+
+export function defaultSearchEngineSetting(): SearchEngineSetting {
+  return { current: 'Google', engines: DEFAULT_SEARCH_ENGINES.map((engine) => ({ ...engine })) }
+}
 
 export const CATEGORY_DISPLAY_DEFAULTS: CategoryDisplaySetting = {
  root_font_size: 16,

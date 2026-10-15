@@ -1,9 +1,8 @@
 <script lang="ts">
-  import type { PublicBookmark } from '../../shared/types'
+  import type { AsyncVoid, PublicBookmark } from '../../shared/types'
   import BookmarkIcon from './BookmarkIcon.svelte'
   import './bookmarkCardTooltip.css'
 
-  type AsyncVoid<T = void> = T | Promise<T>
 
   export let bookmark: PublicBookmark
   export let openInNewTab = true
