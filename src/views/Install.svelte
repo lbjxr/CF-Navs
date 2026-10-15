@@ -1,5 +1,6 @@
 <script lang="ts">
   import { SETUP_TOKEN_ASCII_ERROR, isAsciiPrintableToken } from '../lib/setupTokenInput'
+  import { ADMIN_PASSWORD_MAX_LENGTH, ADMIN_PASSWORD_MIN_LENGTH } from '../../shared/passwordPolicy'
 
   type InstallViewMode =
     | 'needs_install'
@@ -81,8 +82,8 @@
       localError = '请输入管理员用户名。'
       return
     }
-    if (password.length < 12) {
-      localError = '管理员密码至少需要 12 个字符。'
+    if (password.length < ADMIN_PASSWORD_MIN_LENGTH || password.length > ADMIN_PASSWORD_MAX_LENGTH) {
+      localError = `管理员密码需为 ${ADMIN_PASSWORD_MIN_LENGTH}–${ADMIN_PASSWORD_MAX_LENGTH} 位。`
       return
     }
     if (password !== passwordConfirmation) {

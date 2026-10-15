@@ -3,6 +3,11 @@ import type { IconCopyMetadata } from './iconLocalCopy'
 // CF-Navs 前后端共享类型与 API 契约（单一事实来源）
 // 前端 src/ 与后端 worker/ 都从这里 import，禁止各自重新定义。
 
+// ========== 通用工具类型 ==========
+
+// 允许同步或异步的回调返回值（曾逐字重复于 20+ 个 .svelte 文件，现收敛到此）。
+export type AsyncVoid<T = void> = T | Promise<T>
+
 // ========== 实体 ==========
 
 export interface Category {

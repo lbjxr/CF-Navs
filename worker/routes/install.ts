@@ -4,6 +4,7 @@ import { ErrCode } from '../../shared/types'
 import { hashPassword } from '../lib/crypto'
 import { getSettingValues, setSettingValue } from '../lib/db'
 import { initializeSchema } from '../lib/installSchema'
+import { ADMIN_PASSWORD_MAX_LENGTH, ADMIN_PASSWORD_MIN_LENGTH } from '../../shared/passwordPolicy'
 import { fail, ok } from '../lib/response'
 import { createSession } from '../lib/session'
 import { hasSessionBinding } from '../lib/sessionStore'
@@ -27,8 +28,6 @@ const INSTALL_SCHEMA_VERSION = 1
 const KV_PROBE_KEY = '__cf_navs_install_probe__'
 const INSTALL_CLAIM_TTL_MS = 10 * 60 * 1000
 const INSTALL_CLAIM_PREFIX = '__cf_navs_install_claim__:'
-const MIN_PASSWORD_LENGTH = 12
-const MAX_PASSWORD_LENGTH = 256
 const MAX_USERNAME_LENGTH = 64
 const CONTROL_CHARACTERS = /\p{Cc}/u
 
@@ -254,8 +253,8 @@ installRoutes.post('/install', async (c) => {
   if (!username || username.length > MAX_USERNAME_LENGTH || CONTROL_CHARACTERS.test(username)) {
     return noStore(c.json(fail(ErrCode.BAD_REQUEST, `username must be 1-${MAX_USERNAME_LENGTH} characters without control characters`)))
   }
-  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
-    return noStore(c.json(fail(ErrCode.BAD_REQUEST, `password must be ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH} characters`)))
+  if (typeof password !== 'string' || password.length < ADMIN_PASSWORD_MIN_LENGTH || password.length > ADMIN_PASSWORD_MAX_LENGTH) {
+    return noStore(c.json(fail(ErrCode.BAD_REQUEST, `password must be ${ADMIN_PASSWORD_MIN_LENGTH}-${ADMIN_PASSWORD_MAX_LENGTH} characters`)))
   }
 
   let claimToken: string | null = null

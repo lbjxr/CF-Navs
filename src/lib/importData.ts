@@ -1,6 +1,7 @@
 import type { BackupData, Bookmark, Category, ImportReq, Settings } from '../../shared/types'
 import { normalizeCategories } from '../../shared/categoryHierarchy'
 import { decodeHtmlEntities } from '../../shared/decodeHtmlEntities'
+import { faviconImUrl } from '../../shared/icons'
 import { isRecord } from './guards'
 import { iconifyIcon } from './icons'
 
@@ -32,7 +33,7 @@ function normalizeUrl(value: unknown): string {
 function faviconForUrl(url: string): string {
   try {
     const { hostname } = new URL(url)
-    return hostname ? `https://favicon.im/${hostname}?larger=true` : ''
+    return faviconImUrl(hostname)
   } catch {
     return ''
   }

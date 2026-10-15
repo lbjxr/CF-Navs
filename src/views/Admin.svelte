@@ -12,7 +12,7 @@
 </script>
 
 <script lang="ts">
-  import type { BookmarkBatchMoveReq, ChangePasswordReq } from '../../shared/types'
+  import type { AsyncVoid, BookmarkBatchMoveReq, ChangePasswordReq } from '../../shared/types'
   import AdminSidebar from '../components/AdminSidebar.svelte'
   import AdminPageHeader from '../components/admin/AdminPageHeader.svelte'
   import AdminTabContent from '../components/admin/AdminTabContent.svelte'
@@ -22,7 +22,6 @@
   import type { AdminTab, CategorySortHandler } from '../lib/adminTypes'
   import type { SortHandler } from '../lib/sortableList'
 
-  type AsyncVoid<T = void> = T | Promise<T>
 
   export let isAuthenticated = false
   export let authLoading = false
