@@ -3,32 +3,54 @@
   // 取代分散的 .inline-input + 外置按钮写法。
   // 用法：
   //   <InputGroup bind:value type="number" suffixUnit="px" />           常驻单位后缀
-  //   <InputGroup bind:value>                                            默认 slot 放单位下拉
-  //     <select slot="suffix" ...>...</select>
+  //   <InputGroup bind:value>                                            默认 snippet 放单位下拉
+  //     {#snippet suffix()}<select ...>...</select>{/snippet}
   //   </InputGroup>
-  //   <InputGroup bind:value><button slot="suffix" ...>抓取</button></InputGroup>  内部后缀按钮
-  import { createEventDispatcher } from 'svelte'
+  //   <InputGroup bind:value>                                            内部后缀按钮
+  //     {#snippet suffix()}<button ...>抓取</button>{/snippet}
+  //   </InputGroup>
+  //
+  // runes 试点：$props + $bindable(value)，输入经 oninput 回调通知。
+  // suffix 后缀区使用 snippet（替代 legacy 具名 slot）。
+  import type { Snippet } from 'svelte'
 
-  export let value: string | number = ''
-  export let type: 'text' | 'number' | 'url' = 'text'
-  export let placeholder = ''
-  export let disabled = false
-  export let min: number | undefined = undefined
-  export let max: number | undefined = undefined
-  export let step: number | undefined = undefined
-  export let ariaLabel: string | undefined = undefined
-  export let inputId: string | undefined = undefined
-  // 常驻单位后缀文本（如 px / %）；与 suffix slot 二选一
-  export let suffixUnit: string | undefined = undefined
+  interface InputGroupProps {
+    value?: string | number
+    type?: 'text' | 'number' | 'url'
+    placeholder?: string
+    disabled?: boolean
+    min?: number
+    max?: number
+    step?: number
+    ariaLabel?: string
+    inputId?: string
+    /** 常驻单位后缀文本（如 px / %）；与 suffix snippet 二选一 */
+    suffixUnit?: string
+    /** 后缀区 snippet（如单位下拉或操作按钮） */
+    suffix?: Snippet
+    /** 输入回调，参数为解析后的值 */
+    oninput?: (value: string | number) => void
+  }
 
-  const dispatch = createEventDispatcher<{ input: string | number; value: string | number }>()
+  let {
+    value = $bindable(''),
+    type = 'text',
+    placeholder = '',
+    disabled = false,
+    min = undefined,
+    max = undefined,
+    step = undefined,
+    ariaLabel = undefined,
+    inputId = undefined,
+    suffixUnit = undefined,
+    suffix,
+    oninput,
+  }: InputGroupProps = $props()
 
   function handleInput(event: Event) {
     const raw = (event.currentTarget as HTMLInputElement).value
     value = type === 'number' ? (raw === '' ? '' : Number(raw)) : raw
-    // input 用于显式监听；value 让 <InputGroup bind:value> 遵循 Svelte 绑定约定。
-    dispatch('value', value)
-    dispatch('input', value)
+    oninput?.(value)
   }
 </script>
 
@@ -44,12 +66,12 @@
     {step}
     value={value === '' ? '' : value}
     aria-label={ariaLabel}
-    on:input={handleInput}
+    oninput={handleInput}
   />
   {#if suffixUnit}
     <span class="ui-input-group-unit" aria-hidden="true">{suffixUnit}</span>
   {:else}
-    <span class="ui-input-group-suffix"><slot name="suffix" /></span>
+    <span class="ui-input-group-suffix">{@render suffix?.()}</span>
   {/if}
 </div>
 

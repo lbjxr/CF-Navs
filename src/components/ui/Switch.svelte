@@ -1,23 +1,36 @@
 <script lang="ts">
   // 统一行内开关。替换设置页原来的 .toggle-field + 原生 checkbox 大卡片。
   // 可访问：role="switch" / aria-checked，键盘 Space/Enter 可切换，支持 disabled。
-  import { createEventDispatcher } from 'svelte'
+  //
+  // runes 试点：纯受控组件——父组件单向传入 checked，状态变更经 onchange 回调
+  // 交给父组件更新；组件内部不再改写 checked。
+  import type { Snippet } from 'svelte'
 
-  export let checked = false
-  export let disabled = false
-  export let label = ''
-  // 可选 id，便于外部 <label for> 或测试定位
-  export let id: string | undefined = undefined
-  export let ariaLabel: string | undefined = undefined
+  interface SwitchProps {
+    checked?: boolean
+    disabled?: boolean
+    label?: string
+    /** 可选 id，便于外部 <label for> 或测试定位 */
+    id?: string
+    ariaLabel?: string
+    /** 状态切换回调，参数为切换后的新值 */
+    onchange?: (checked: boolean) => void
+    children?: Snippet
+  }
 
-  const dispatch = createEventDispatcher<{ change: boolean; checked: boolean }>()
+  let {
+    checked = false,
+    disabled = false,
+    label = '',
+    id = undefined,
+    ariaLabel = undefined,
+    onchange,
+    children,
+  }: SwitchProps = $props()
 
   function toggle() {
     if (disabled) return
-    checked = !checked
-    // change 用于显式监听；checked 让 <Switch bind:checked> 遵循 Svelte 绑定约定。
-    dispatch('checked', checked)
-    dispatch('change', checked)
+    onchange?.(!checked)
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -38,14 +51,14 @@
   aria-checked={checked}
   aria-label={ariaLabel ?? (label || undefined)}
   {disabled}
-  on:click={toggle}
-  on:keydown={handleKeydown}
+  onclick={toggle}
+  onkeydown={handleKeydown}
 >
   <span class="ui-switch-track" aria-hidden="true">
     <span class="ui-switch-thumb"></span>
   </span>
   {#if label}<span class="ui-switch-label">{label}</span>{/if}
-  <slot />
+  {@render children?.()}
 </button>
 
 <style>

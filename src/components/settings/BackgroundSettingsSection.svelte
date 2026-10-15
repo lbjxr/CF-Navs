@@ -28,8 +28,8 @@
   <legend>配色方案</legend>
   <GradientPresetSelector
     {activeGradientPresetId}
-    on:custom={selectCustomPreset}
-    on:select={(event) => selectPreset(event.detail)}
+    oncustom={selectCustomPreset}
+    onselect={(preset) => selectPreset(preset)}
   />
   {#if activeGradientPresetId === 'custom'}
     <div class="custom-accent-fields settings-grid">

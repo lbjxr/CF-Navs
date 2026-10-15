@@ -1,31 +1,47 @@
 <script lang="ts">
   // range 封装，数值显示在滑块右侧；格式化策略集中在 src/lib/sliderFormat.ts。
-  import { createEventDispatcher } from 'svelte'
+  // runes 试点：$props + $bindable(value) + $derived(display)，输入经 oninput 回调通知。
   import { formatSliderValue, type SliderFormatOptions } from '../../lib/sliderFormat'
 
-  export let value = 0
-  export let min = 0
-  export let max = 100
-  export let step = 1
-  export let disabled = false
-  export let label = ''
-  export let ariaLabel: string | undefined = undefined
-  export let inputId: string | undefined = undefined
-  // 数值显示格式；默认 raw
-  export let format: SliderFormatOptions['format'] = 'raw'
-  export let zeroLabel: string | undefined = undefined
-  export let countUnit: string | undefined = undefined
-  export let percentDigits = 0
+  interface SliderProps {
+    value?: number
+    min?: number
+    max?: number
+    step?: number
+    disabled?: boolean
+    label?: string
+    ariaLabel?: string
+    inputId?: string
+    /** 数值显示格式；默认 raw */
+    format?: SliderFormatOptions['format']
+    zeroLabel?: string
+    countUnit?: string
+    percentDigits?: number
+    /** 输入回调，参数为解析后的数值 */
+    oninput?: (value: number) => void
+  }
 
-  const dispatch = createEventDispatcher<{ input: number; value: number }>()
+  let {
+    value = $bindable(0),
+    min = 0,
+    max = 100,
+    step = 1,
+    disabled = false,
+    label = '',
+    ariaLabel = undefined,
+    inputId = undefined,
+    format = 'raw',
+    zeroLabel = undefined,
+    countUnit = undefined,
+    percentDigits = 0,
+    oninput,
+  }: SliderProps = $props()
 
-  $: display = formatSliderValue(value, { format, zeroLabel, countUnit, percentDigits })
+  let display = $derived(formatSliderValue(value, { format, zeroLabel, countUnit, percentDigits }))
 
   function handleInput(event: Event) {
     value = Number((event.currentTarget as HTMLInputElement).value)
-    // input 用于显式监听；value 让 <Slider bind:value> 遵循 Svelte 绑定约定。
-    dispatch('value', value)
-    dispatch('input', value)
+    oninput?.(value)
   }
 </script>
 
@@ -46,7 +62,7 @@
     value={value}
     aria-label={ariaLabel ?? (label || undefined)}
     aria-valuetext={display}
-    on:input={handleInput}
+    oninput={handleInput}
   />
 </div>
 

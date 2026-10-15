@@ -34,7 +34,7 @@
         max={20}
         step={1}
         bind:value={form.most_visited_count}
-        on:input={() => void syncForm()}
+        oninput={() => void syncForm()}
       />
     </div>
 
@@ -43,7 +43,7 @@
       <Switch
         checked={form.site_title_show}
         ariaLabel="显示站点标题"
-        on:change={(event) => setField('site_title_show', event.detail)}
+        onchange={(next) => setField('site_title_show', next)}
       />
     </div>
 
@@ -52,7 +52,7 @@
       <Switch
         checked={form.search_box_show}
         ariaLabel="显示搜索框"
-        on:change={(event) => setField('search_box_show', event.detail)}
+        onchange={(next) => setField('search_box_show', next)}
       />
     </div>
 
@@ -62,7 +62,7 @@
         checked={form.search_engine_selector_show}
         disabled={saving || !form.search_box_show}
         ariaLabel="显示引擎选择器"
-        on:change={(event) => setField('search_engine_selector_show', event.detail)}
+        onchange={(next) => setField('search_engine_selector_show', next)}
       />
     </div>
   </div>

@@ -6,6 +6,10 @@ const DEFAULT_CONFIG = {
   enabled: false,
 }
 
+// API 版本前缀：扩展固定走版本化路径（/api/v1），不跟随服务端 main 分支的破坏性变更。
+// 旧的 /api 前缀保留兼容，仅作过渡。
+const API_VERSION_PREFIX = '/api/v1'
+
 function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '')
 }
@@ -16,7 +20,7 @@ async function getConfig() {
 }
 
 async function login(baseUrl, username, password) {
-  const response = await fetch(`${normalizeBaseUrl(baseUrl)}/api/login`, {
+  const response = await fetch(`${normalizeBaseUrl(baseUrl)}${API_VERSION_PREFIX}/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({ username: String(username || '').trim(), password }),
@@ -37,7 +41,7 @@ async function syncBookmarks(bookmarks) {
     throw new Error('登录会话已过期，请打开扩展重新登录')
   }
 
-  const response = await fetch(`${config.baseUrl}/api/browser-sync/bookmarks`, {
+  const response = await fetch(`${config.baseUrl}${API_VERSION_PREFIX}/browser-sync/bookmarks`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

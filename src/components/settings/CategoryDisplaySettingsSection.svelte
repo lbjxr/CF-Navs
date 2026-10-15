@@ -44,7 +44,7 @@
         <span>标题颜色</span>
         <ColorAlphaInput
           bind:value={form.category_display.root_title_color}
-          on:change={() => void syncForm()}
+          onchange={() => void syncForm()}
           placeholder="留空跟随主题色"
           inputLabel="一级分类标题颜色值"
         />
@@ -77,7 +77,7 @@
         <span>标题颜色</span>
         <ColorAlphaInput
           bind:value={form.category_display.child_title_color}
-          on:change={() => void syncForm()}
+          onchange={() => void syncForm()}
           placeholder="留空跟随主题色"
           inputLabel="二级分类标题颜色值"
         />

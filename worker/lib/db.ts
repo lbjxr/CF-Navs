@@ -50,6 +50,7 @@ export {
   setSettingValue,
   getDataVersion,
   touchDataVersion,
+  casDataVersion,
   updateSettings,
   writeSettingsPatch,
 } from './db/settings'

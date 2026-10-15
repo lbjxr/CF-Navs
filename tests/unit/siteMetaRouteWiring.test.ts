@@ -21,22 +21,30 @@ describe('site meta route wiring', () => {
 
     expect(paths.length).toBeGreaterThan(0)
     for (const path of paths) {
-      expect(index).toContain(`app.use('/api${path}', authRequired)`)
+      // registerApiRoutes(base) 用 `${base}${path}` 模板同时覆盖 /api 与 /api/v1
+      expect(index).toContain('`${base}' + path + '`, authRequired)')
     }
   })
 
+  it('mounts the same handlers under both /api and /api/v1', () => {
+    expect(index).toContain("registerApiRoutes('/api')")
+    expect(index).toContain("registerApiRoutes('/api/v1')")
+    // 别名挂载：复用同一 handler 模块，不复制代码
+    expect(index).toContain('app.route(base, faviconRoutes)')
+  })
+
   it('registers the auth middleware before mounting the routes', () => {
-    expect(index.indexOf("app.use('/api/fetch-site-meta', authRequired)")).toBeLessThan(
-      index.indexOf("app.route('/api', faviconRoutes)"),
+    expect(index.indexOf('`${base}/fetch-site-meta' + "`, authRequired)")).toBeLessThan(
+      index.indexOf('app.route(base, faviconRoutes)'),
     )
   })
 
   it('covers the nested browser-sync endpoint with CORS middleware', () => {
-    expect(index.indexOf("app.use('/api/browser-sync/*', corsHeaders)")).toBeGreaterThan(
-      index.indexOf("app.use('/api/browser-sync', corsHeaders)"),
+    expect(index.indexOf('`${base}/browser-sync/*' + '`, corsHeaders)')).toBeGreaterThan(
+      index.indexOf('`${base}/browser-sync' + '`, corsHeaders)'),
     )
-    expect(index.indexOf("app.use('/api/browser-sync/*', corsHeaders)")).toBeLessThan(
-      index.indexOf("app.route('/api/browser-sync', browserSyncRoutes)"),
+    expect(index.indexOf('`${base}/browser-sync/*' + ', corsHeaders)')).toBeLessThan(
+      index.indexOf('app.route(`${base}/browser-sync`, browserSyncRoutes)'),
     )
   })
 
