@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { AdminBookmarkSummary, AdminCategorySummary } from '../../lib/appData'
   import { buildBookmarkBatchMoveRequest } from '../../lib/batchMove'
-  import type { BookmarkBatchMovePosition, BookmarkBatchMoveReq } from '../../../shared/types'
+  import type { AsyncVoid, BookmarkBatchMovePosition, BookmarkBatchMoveReq } from '../../../shared/types'
   import {
     clampAdminListPage,
     createAdminListPage,
@@ -29,7 +29,6 @@
   import './adminListPanels.css'
   import { DEFAULT_PAGE_SIZE } from '../../lib/pagination'
 
-  type AsyncVoid<T = void> = T | Promise<T>
   type AdminCategory = AdminCategorySummary
   type AdminBookmark = AdminBookmarkSummary
 

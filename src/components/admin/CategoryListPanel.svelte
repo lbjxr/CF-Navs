@@ -18,8 +18,8 @@
   import { iconAccessKey } from '../../lib/iconAccessKey'
   import { sortableList } from '../../lib/sortableList'
   import './adminListPanels.css'
+  import type { AsyncVoid } from '../../../shared/types'
 
-  type AsyncVoid<T = void> = T | Promise<T>
   type AdminCategory = AdminCategorySummary
   type AdminBookmark = AdminBookmarkSummary
 
