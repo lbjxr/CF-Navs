@@ -4,8 +4,13 @@
   import Slider from '../ui/Slider.svelte'
   import ColorAlphaInput from '../ColorAlphaInput.svelte'
 
-  export let form: SettingsFormModel
-  export let saving = false
+  interface CategoryDisplaySettingsSectionProps {
+    /** 双向绑定：设置表单 */
+    form: SettingsFormModel
+    saving?: boolean
+  }
+
+  let { form = $bindable(), saving = false }: CategoryDisplaySettingsSectionProps = $props()
 
   async function syncForm(): Promise<void> {
     await tick()
@@ -13,7 +18,7 @@
   }
 </script>
 
-<fieldset class="group group-wide category-display-settings" disabled={saving} on:input={() => void syncForm()}>
+<fieldset class="group group-wide category-display-settings" disabled={saving} oninput={() => void syncForm()}>
   <legend>分类标题字体与图标</legend>
   <p class="group-desc">按分类层级统一调整首页、导航和搜索分组的标题字号与图标尺寸。移动端自动使用 0.88 缩放，不额外增加一套设置。</p>
 

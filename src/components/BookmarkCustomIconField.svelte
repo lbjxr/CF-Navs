@@ -8,14 +8,27 @@
     getTextIconPreview,
   } from '../lib/bookmarkFormIcons'
 
+  interface BookmarkCustomIconFieldProps {
+    form: BookmarkFormValue
+    iconifyName?: string
+    imageHostUrl?: string
+    loading?: boolean
+    faviconError?: string
+    /** 图标输入回调 */
+    onIconInput?: (value: string) => AsyncVoid
+    /** 打开图床回调 */
+    onOpenImageHost?: () => AsyncVoid
+  }
 
-  export let form: BookmarkFormValue
-  export let iconifyName = ''
-  export let imageHostUrl = ''
-  export let loading = false
-  export let faviconError = ''
-  export let onIconInput: ((value: string) => AsyncVoid) | undefined = undefined
-  export let onOpenImageHost: (() => AsyncVoid) | undefined = undefined
+  let {
+    form,
+    iconifyName = '',
+    imageHostUrl = '',
+    loading = false,
+    faviconError = '',
+    onIconInput,
+    onOpenImageHost,
+  }: BookmarkCustomIconFieldProps = $props()
 
   function handleIconInput(event: Event) {
     const nextIcon = (event.currentTarget as HTMLInputElement).value
@@ -34,7 +47,7 @@
       value={form.icon}
       type="text"
       placeholder="图标 URL / 表情，如 ⭐"
-      on:input={handleIconInput}
+      oninput={handleIconInput}
     />
     {#if form.icon && canPreviewIcon(form.icon)}
       <span class="icon-preview" title="图标预览">
@@ -49,7 +62,7 @@
       <button
         type="button"
         class="ghost-button upload-button"
-        on:click={handleOpenImageHost}
+        onclick={handleOpenImageHost}
         disabled={loading}
         title="打开图床上传图标"
       >
