@@ -7,45 +7,75 @@
   type BookmarkOption = { id: number | string; category_id: number | string; title: string }
   type RootSelectionState = { checked: boolean; indeterminate: boolean }
 
-  export let isAuthenticated = false
-  export let importing = false
-  export let exporting = false
-  export let backupError = ''
-  export let backupMessage = ''
-  export let importSource: ImportSource = 'cf-navs'
-  export let categories: CategoryOption[] = []
-  export let bookmarks: BookmarkOption[] = []
-  export let onExportData: ((selection: BackupSelection) => AsyncVoid) | undefined = undefined
-  export let onImportData: ((file: File, source: ImportSource, mode: 'replace' | 'merge') => AsyncVoid) | undefined = undefined
-
-  let importInput: HTMLInputElement | null = null
-  let importMode: 'replace' | 'merge' = 'replace'
-  let selectedCategoryIds = new Set<number>()
-  let expandedRootIds = new Set<number>()
-  let includeSettings = true
-  let initializedSelection = false
-
-  $: roots = categories
-    .filter((category) => category.parent_id === null || !categories.some((candidate) => Number(candidate.id) === Number(category.parent_id)))
-    .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || Number(a.id) - Number(b.id))
-  $: childrenByParent = categories.reduce((result, category) => {
-    if (category.parent_id === null) return result
-    const parentId = Number(category.parent_id)
-    const children = result.get(parentId) ?? []
-    children.push(category)
-    result.set(parentId, children)
-    return result
-  }, new Map<number, CategoryOption[]>())
-  $: childrenByParent.forEach((children) => children.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || Number(a.id) - Number(b.id)))
-  $: bookmarkCountByCategory = bookmarks.reduce((result, bookmark) => {
-    result.set(Number(bookmark.category_id), (result.get(Number(bookmark.category_id)) ?? 0) + 1)
-    return result
-  }, new Map<number, number>())
-  $: if (!initializedSelection && categories.length > 0) {
-    selectedCategoryIds = new Set(categories.map((category) => Number(category.id)))
-    expandedRootIds = new Set(roots.map((root) => Number(root.id)))
-    initializedSelection = true
+  interface BackupPanelProps {
+    isAuthenticated?: boolean
+    importing?: boolean
+    exporting?: boolean
+    backupError?: string
+    backupMessage?: string
+    importSource?: ImportSource
+    categories?: CategoryOption[]
+    bookmarks?: BookmarkOption[]
+    onExportData?: (selection: BackupSelection) => AsyncVoid
+    onImportData?: (file: File, source: ImportSource, mode: 'replace' | 'merge') => AsyncVoid
   }
+
+  let {
+    isAuthenticated = false,
+    importing = false,
+    exporting = false,
+    backupError = '',
+    backupMessage = '',
+    importSource = $bindable('cf-navs'),
+    categories = [],
+    bookmarks = [],
+    onExportData = undefined,
+    onImportData = undefined,
+  }: BackupPanelProps = $props()
+
+  let importInput: HTMLInputElement | null = $state(null)
+  let importMode: 'replace' | 'merge' = $state('replace')
+  let selectedCategoryIds = $state(new Set<number>())
+  let expandedRootIds = $state(new Set<number>())
+  let includeSettings = $state(true)
+  let initializedSelection = $state(false)
+
+  let roots = $derived(
+    categories
+      .filter(
+        (category) =>
+          category.parent_id === null ||
+          !categories.some((candidate) => Number(candidate.id) === Number(category.parent_id)),
+      )
+      .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || Number(a.id) - Number(b.id)),
+  )
+  let childrenByParent = $derived.by(() => {
+    const result = categories.reduce((acc, category) => {
+      if (category.parent_id === null) return acc
+      const parentId = Number(category.parent_id)
+      const children = acc.get(parentId) ?? []
+      children.push(category)
+      acc.set(parentId, children)
+      return acc
+    }, new Map<number, CategoryOption[]>())
+    result.forEach((children) =>
+      children.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || Number(a.id) - Number(b.id)),
+    )
+    return result
+  })
+  let bookmarkCountByCategory = $derived(
+    bookmarks.reduce((result, bookmark) => {
+      result.set(Number(bookmark.category_id), (result.get(Number(bookmark.category_id)) ?? 0) + 1)
+      return result
+    }, new Map<number, number>()),
+  )
+  $effect.pre(() => {
+    if (!initializedSelection && categories.length > 0) {
+      selectedCategoryIds = new Set(categories.map((category) => Number(category.id)))
+      expandedRootIds = new Set(roots.map((root) => Number(root.id)))
+      initializedSelection = true
+    }
+  })
 
   function rootSelectionState(root: CategoryOption, selectedIds: Set<number>): RootSelectionState {
     const ids = [Number(root.id), ...(childrenByParent.get(Number(root.id)) ?? []).map((child) => Number(child.id))]
@@ -144,8 +174,8 @@
         <h3 id="export-backup-title">导出当前数据</h3>
         <p>选择要导出的分类；一级分类会连带其二级分类与归属书签。</p>
         <div class="export-selection-toolbar" aria-label="导出选择快捷操作">
-          <button type="button" class="link-button" on:click={selectAll} disabled={categories.length === 0}>全选</button>
-          <button type="button" class="link-button" on:click={clearSelection} disabled={selectedCategoryIds.size === 0}>清空</button>
+          <button type="button" class="link-button" onclick={selectAll} disabled={categories.length === 0}>全选</button>
+          <button type="button" class="link-button" onclick={clearSelection} disabled={selectedCategoryIds.size === 0}>清空</button>
           <label class="settings-toggle">
             <input type="checkbox" bind:checked={includeSettings} />
             <span>导出站点设置</span>
@@ -168,7 +198,7 @@
                       checked={rootState.checked}
                       aria-checked={rootState.indeterminate ? 'mixed' : rootState.checked}
                       use:indeterminate={rootState.indeterminate}
-                      on:change={() => toggleRoot(root)}
+                      onchange={() => toggleRoot(root)}
                     />
                     <span class="category-tree-title">{root.title}</span>
                     <span class="category-tree-count">{bookmarkCountByCategory.get(rootId) ?? 0}</span>
@@ -180,7 +210,7 @@
                       aria-expanded={isExpanded}
                       aria-controls={`export-category-children-${root.id}`}
                       aria-label={`${isExpanded ? '收起' : '展开'} ${root.title} 子分类`}
-                      on:click={() => toggleRootExpanded(rootId)}
+                      onclick={() => toggleRootExpanded(rootId)}
                     >
                       <span aria-hidden="true">{isExpanded ? '−' : '+'}</span>
                     </button>
@@ -193,7 +223,7 @@
                         <input
                           type="checkbox"
                           checked={selectedCategoryIds.has(Number(child.id))}
-                          on:change={() => toggleCategory(child)}
+                          onchange={() => toggleCategory(child)}
                         />
                         <span class="category-tree-title">{child.title}</span>
                         <span class="category-tree-count">{bookmarkCountByCategory.get(Number(child.id)) ?? 0}</span>
@@ -209,12 +239,12 @@
         {/if}
         </div>
       </div>
-      <button type="button" class="primary-button" on:click={handleExport} disabled={!isAuthenticated || importing || exporting || selectedCategoryIds.size === 0}>
+      <button type="button" class="primary-button" onclick={handleExport} disabled={!isAuthenticated || importing || exporting || selectedCategoryIds.size === 0}>
         {#if exporting}获取最新数据...{:else}导出备份{/if}
       </button>
     </section>
 
-    <section class="backup-operation" aria-labelledby="import-backup-title" on:dragover|preventDefault on:drop={handleDrop}>
+    <section class="backup-operation" aria-labelledby="import-backup-title" ondragover={(event) => event.preventDefault()} ondrop={handleDrop}>
       <div class="backup-operation-copy">
         <h3 id="import-backup-title">导入数据</h3>
         <p>支持点击或拖放 JSON、HTML、HTM 文件，格式会自动识别。</p>
@@ -222,14 +252,14 @@
       <div class="import-actions">
         <label class="import-source-field" for="import-source">
           <span>导入来源</span>
-          <select class="native-select" id="import-source" bind:value={importSource} on:change={() => { if (importSource === 'browser-html') importMode = 'merge' }} disabled={!isAuthenticated || importing}>
+          <select class="native-select" id="import-source" bind:value={importSource} onchange={() => { if (importSource === 'browser-html') importMode = 'merge' }} disabled={!isAuthenticated || importing}>
             <option value="cf-navs">CF-Navs 备份</option>
             <option value="sunpanel">SunPanel 导出</option>
             <option value="browser-html">浏览器书签 HTML</option>
           </select>
         </label>
         <label class="import-source-field"><span>导入模式</span><select class="native-select" bind:value={importMode} disabled={!isAuthenticated || importing}><option value="merge">追加合并</option><option value="replace">覆盖现有数据</option></select></label>
-        <button type="button" class="ghost-button" on:click={triggerImport} disabled={!isAuthenticated || importing}>
+        <button type="button" class="ghost-button" onclick={triggerImport} disabled={!isAuthenticated || importing}>
           {#if importing}导入中...{:else}选择文件并导入{/if}
         </button>
         <input
@@ -237,7 +267,7 @@
           class="import-input"
           type="file"
           accept="application/json,text/html,.json,.html,.htm,.sun-panel.json,.sunpanel.json"
-          on:change={handleImportChange}
+          onchange={handleImportChange}
         />
       </div>
     </section>

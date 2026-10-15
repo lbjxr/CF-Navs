@@ -23,13 +23,25 @@
 
   type SettingsPanelValue = SettingsFormModel
 
-  export let value: Partial<SettingsPanelValue> | null = null
-  export let loading = false
-  export let saving = false
-  export let error = ''
-  export let onSubmit: ((payload: SettingsPanelValue) => AsyncVoid) | undefined = undefined
-  export let onVerifyDevice: (() => Promise<void>) | undefined = undefined
-  export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
+  interface SettingsPanelProps {
+    value?: Partial<SettingsPanelValue> | null
+    loading?: boolean
+    saving?: boolean
+    error?: string
+    onSubmit?: (payload: SettingsPanelValue) => AsyncVoid
+    onVerifyDevice?: () => Promise<void>
+    onChangePassword?: (payload: ChangePasswordReq) => AsyncVoid
+  }
+
+  let {
+    value = null,
+    loading = false,
+    saving = false,
+    error = '',
+    onSubmit = undefined,
+    onVerifyDevice = undefined,
+    onChangePassword = undefined,
+  }: SettingsPanelProps = $props()
 
   const settingsSections = [
     { id: 'basic', label: '站点设置', hint: '标题、首页显示与默认主题' },
@@ -42,58 +54,65 @@
     { id: 'account', label: '账号安全', hint: '修改管理员密码' },
   ]
 
-  let form: SettingsPanelValue = cloneSettingsForm(emptySettingsForm)
-  let initialForm: SettingsPanelValue = cloneSettingsForm(emptySettingsForm)
-  let formKey = ''
-  let activeSectionId = 'basic'
-  let previewTheme: 'light' | 'dark' = 'light'
+  let form: SettingsPanelValue = $state(cloneSettingsForm(emptySettingsForm))
+  let initialForm: SettingsPanelValue = $state(cloneSettingsForm(emptySettingsForm))
+  let formKey = $state('')
+  let activeSectionId = $state('basic')
+  let previewTheme: 'light' | 'dark' = $state('light')
 
-  $: nextKey = JSON.stringify({ value, loading })
-  $: if (nextKey !== formKey) {
-    formKey = nextKey
-    initialForm = createSettingsFormState(value)
-    form = cloneSettingsForm(initialForm)
-  }
+  let nextKey = $derived(JSON.stringify({ value, loading }))
+  $effect.pre(() => {
+    if (nextKey !== formKey) {
+      formKey = nextKey
+      initialForm = createSettingsFormState(value)
+      form = cloneSettingsForm(initialForm)
+    }
+  })
 
-  $: normalizedForm = normalizeSettingsForm(form)
-  $: normalizedInitialForm = normalizeSettingsForm(initialForm)
+  let normalizedForm = $derived(normalizeSettingsForm(form))
+  let normalizedInitialForm = $derived(normalizeSettingsForm(initialForm))
   // initial 侧只在外部 value/loading 变化时重算，缓存其序列化结果，
   // 脏检查每次只序列化当前表单（原来两次）。
-  $: initialFormKey = JSON.stringify(normalizedInitialForm)
-  $: isDirty = JSON.stringify(normalizedForm) !== initialFormKey
-  $: hasTitle = normalizedForm.site_title.length > 0
-  $: enginesValid =
+  let initialFormKey = $derived(JSON.stringify(normalizedInitialForm))
+  let isDirty = $derived(JSON.stringify(normalizedForm) !== initialFormKey)
+  let hasTitle = $derived(normalizedForm.site_title.length > 0)
+  let enginesValid = $derived(
     normalizedForm.search_engine.engines.length > 0 &&
-    normalizedForm.search_engine.engines.every(
-      (engine) => engine.name.length > 0 && engine.url_template.includes('{q}'),
-    )
-  $: lightBackgroundValid = normalizedForm.backgrounds.light.value.length > 0
-  $: darkBackgroundValid = normalizedForm.backgrounds.dark.value.length > 0
-  $: backgroundValid = lightBackgroundValid && darkBackgroundValid
-  $: cardSizeValid =
+      normalizedForm.search_engine.engines.every(
+        (engine) => engine.name.length > 0 && engine.url_template.includes('{q}'),
+      ),
+  )
+  let lightBackgroundValid = $derived(normalizedForm.backgrounds.light.value.length > 0)
+  let darkBackgroundValid = $derived(normalizedForm.backgrounds.dark.value.length > 0)
+  let backgroundValid = $derived(lightBackgroundValid && darkBackgroundValid)
+  let cardSizeValid = $derived(
     Number.isFinite(normalizedForm.card_size.width) &&
-    normalizedForm.card_size.width >= CARD_SIZE_LIMITS.width.min &&
-    normalizedForm.card_size.width <= CARD_SIZE_LIMITS.width.max &&
-    Number.isFinite(normalizedForm.card_size.height) &&
-    normalizedForm.card_size.height >= CARD_SIZE_LIMITS.height.min &&
-    normalizedForm.card_size.height <= CARD_SIZE_LIMITS.height.max
-  $: contentLayoutValid =
+      normalizedForm.card_size.width >= CARD_SIZE_LIMITS.width.min &&
+      normalizedForm.card_size.width <= CARD_SIZE_LIMITS.width.max &&
+      Number.isFinite(normalizedForm.card_size.height) &&
+      normalizedForm.card_size.height >= CARD_SIZE_LIMITS.height.min &&
+      normalizedForm.card_size.height <= CARD_SIZE_LIMITS.height.max,
+  )
+  let contentLayoutValid = $derived(
     Number.isFinite(normalizedForm.content_layout.max_width) &&
-    normalizedForm.content_layout.max_width > 0 &&
-    Number.isFinite(normalizedForm.content_layout.margin_x) &&
-    Number.isFinite(normalizedForm.content_layout.margin_top) &&
-    Number.isFinite(normalizedForm.content_layout.margin_bottom)
-  $: canSave =
+      normalizedForm.content_layout.max_width > 0 &&
+      Number.isFinite(normalizedForm.content_layout.margin_x) &&
+      Number.isFinite(normalizedForm.content_layout.margin_top) &&
+      Number.isFinite(normalizedForm.content_layout.margin_bottom),
+  )
+  let canSave = $derived(
     Boolean(onSubmit) &&
-    !loading &&
-    !saving &&
-    hasTitle &&
-    enginesValid &&
-    backgroundValid &&
-    cardSizeValid &&
-    contentLayoutValid &&
-    isDirty
-  async function handleSubmit() {
+      !loading &&
+      !saving &&
+      hasTitle &&
+      enginesValid &&
+      backgroundValid &&
+      cardSizeValid &&
+      contentLayoutValid &&
+      isDirty,
+  )
+  async function handleSubmit(event: SubmitEvent) {
+    event.preventDefault()
     if (!canSave) {
       return
     }
@@ -130,10 +149,10 @@
       <p class="status-desc">请稍候，正在准备当前配置。</p>
     </div>
   {:else}
-    <form id="settings-form" class="settings-form" on:submit|preventDefault={handleSubmit}>
+    <form id="settings-form" class="settings-form" onsubmit={handleSubmit}>
       <aside class="settings-submenu" aria-label="设置功能区">
         {#each settingsSections as section (section.id)}
-          <button type="button" class:active={activeSectionId === section.id} on:click={() => activeSectionId = section.id}>
+          <button type="button" class:active={activeSectionId === section.id} onclick={() => activeSectionId = section.id}>
             <strong>{section.label}</strong><span>{section.hint}</span>
           </button>
         {/each}
