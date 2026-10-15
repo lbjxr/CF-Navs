@@ -1,4 +1,4 @@
-<script context="module" lang="ts">
+<script module lang="ts">
   import type { AdminBookmarkSummary, AdminCategorySummary } from '../lib/appData'
   import type {
     BookmarkFormValue as BookmarkFormValueType,
@@ -23,31 +23,106 @@
   import type { SortHandler } from '../lib/sortableList'
   import { createLazyComponentLoader } from '../lib/appLazyComponent'
 
+  interface AdminProps {
+    isAuthenticated?: boolean
+    authLoading?: boolean
+    categories?: AdminCategory[]
+    bookmarks?: AdminBookmark[]
+    categoriesLoading?: boolean
+    bookmarksLoading?: boolean
+    savingCategory?: boolean
+    deletingCategoryId?: string | number | null
+    deletingBookmarkId?: string | number | null
+    categoryError?: string
+    categoryModalOpen?: boolean
+    settingsLoading?: boolean
+    settingsSaving?: boolean
+    settingsError?: string
+    settingsValue?: Partial<SettingsFormValue> | null
+    categoryModalMode?: 'create' | 'edit'
+    activeCategory?: Partial<CategoryFormValue> | null
+    canSeeHome?: boolean
+    importing?: boolean
+    exporting?: boolean
+    backupError?: string
+    backupMessage?: string
+    onOpenLogin?: (() => AsyncVoid) | undefined
+    onLogout?: (() => AsyncVoid) | undefined
+    onSwitchToHome?: (() => AsyncVoid) | undefined
+    onOpenCreateCategory?: (() => AsyncVoid) | undefined
+    onEditCategory?: ((category: AdminCategory) => AsyncVoid) | undefined
+    onDeleteCategory?: ((category: AdminCategory) => AsyncVoid) | undefined
+    onBatchDeleteCategories?: ((ids: number[]) => AsyncVoid) | undefined
+    onCloseCategoryModal?: (() => AsyncVoid) | undefined
+    onSubmitCategory?: ((payload: CategoryFormValue) => AsyncVoid) | undefined
+    onOpenCreateBookmark?: ((categoryId?: string | number) => AsyncVoid) | undefined
+    onEditBookmark?: ((bookmark: AdminBookmark) => AsyncVoid) | undefined
+    onDeleteBookmark?: ((bookmark: AdminBookmark) => AsyncVoid) | undefined
+    onBatchDeleteBookmarks?: ((ids: number[]) => AsyncVoid) | undefined
+    onBatchMoveBookmarks?: ((payload: BookmarkBatchMoveReq) => AsyncVoid) | undefined
+    onSubmitSettings?: ((payload: SettingsFormValue) => AsyncVoid) | undefined
+    onVerifyDevice?: (() => Promise<void>) | undefined
+    onChangePassword?: ((payload: ChangePasswordReq) => AsyncVoid) | undefined
+    onSortCategories?: CategorySortHandler | undefined
+    onSortBookmarks?: SortHandler | undefined
+    /** 切换后台标签时通知外层：访问分析需要强制拉取最新点击数据。 */
+    onSelectTab?: ((tab: AdminTab) => AsyncVoid) | undefined
+    onExportData?: ((selection: BackupSelection) => AsyncVoid) | undefined
+    onImportData?: ((file: File, source: ImportSource, mode: 'replace' | 'merge') => AsyncVoid) | undefined
+  }
 
-  export let isAuthenticated = false
-  export let authLoading = false
-  export let categories: AdminCategory[] = []
-  export let bookmarks: AdminBookmark[] = []
-  export let categoriesLoading = false
-  export let bookmarksLoading = false
-  export let savingCategory = false
-  export let deletingCategoryId: string | number | null = null
-  export let deletingBookmarkId: string | number | null = null
-  export let categoryError = ''
-  export let categoryModalOpen = false
-  export let settingsLoading = false
-  export let settingsSaving = false
-  export let settingsError = ''
-  export let settingsValue: Partial<SettingsFormValue> | null = null
-  export let categoryModalMode: 'create' | 'edit' = 'create'
-  export let activeCategory: Partial<CategoryFormValue> | null = null
-  export let canSeeHome = false
+  let {
+    isAuthenticated = false,
+    authLoading = false,
+    categories = [],
+    bookmarks = [],
+    categoriesLoading = false,
+    bookmarksLoading = false,
+    savingCategory = false,
+    deletingCategoryId = null,
+    deletingBookmarkId = null,
+    categoryError = '',
+    categoryModalOpen = false,
+    settingsLoading = false,
+    settingsSaving = false,
+    settingsError = '',
+    settingsValue = null,
+    categoryModalMode = 'create',
+    activeCategory = null,
+    canSeeHome = false,
+    importing = false,
+    exporting = false,
+    backupError = '',
+    backupMessage = '',
+    onOpenLogin = undefined,
+    onLogout = undefined,
+    onSwitchToHome = undefined,
+    onOpenCreateCategory = undefined,
+    onEditCategory = undefined,
+    onDeleteCategory = undefined,
+    onBatchDeleteCategories = undefined,
+    onCloseCategoryModal = undefined,
+    onSubmitCategory = undefined,
+    onOpenCreateBookmark = undefined,
+    onEditBookmark = undefined,
+    onDeleteBookmark = undefined,
+    onBatchDeleteBookmarks = undefined,
+    onBatchMoveBookmarks = undefined,
+    onSubmitSettings = undefined,
+    onVerifyDevice = undefined,
+    onChangePassword = undefined,
+    onSortCategories = undefined,
+    onSortBookmarks = undefined,
+    onSelectTab = undefined,
+    onExportData = undefined,
+    onImportData = undefined,
+  }: AdminProps = $props()
 
-  let activeTab: AdminTab = 'categories'
+  let activeTab = $state<AdminTab>('categories')
 
-  $: imageHostUrl = settingsValue?.image_host_url ?? ''
-  let CategoryEditModalComponent: typeof import('../components/CategoryEditModal.svelte').default | null = null
-  let SettingsPanelComponent: typeof import('../components/SettingsPanel.svelte').default | null = null
+  let imageHostUrl = $derived(settingsValue?.image_host_url ?? '')
+  let CategoryEditModalComponent = $state<typeof import('../components/CategoryEditModal.svelte').default | null>(null)
+  let SettingsPanelComponent = $state<typeof import('../components/SettingsPanel.svelte').default | null>(null)
   const ensureCategoryEditModal = createLazyComponentLoader({
     load: () => import('../components/CategoryEditModal.svelte'),
     getCurrent: () => CategoryEditModalComponent,
@@ -62,45 +137,18 @@
       SettingsPanelComponent = component
     },
   })
-  $: if (categoryModalOpen) {
-    void ensureCategoryEditModal()
-  }
-  $: if (activeTab === 'settings') {
-    void ensureSettingsPanel()
-  }
+  $effect.pre(() => {
+    if (categoryModalOpen) {
+      void ensureCategoryEditModal()
+    }
+  })
+  $effect.pre(() => {
+    if (activeTab === 'settings') {
+      void ensureSettingsPanel()
+    }
+  })
 
-  export let onOpenLogin: (() => AsyncVoid) | undefined = undefined
-  export let onLogout: (() => AsyncVoid) | undefined = undefined
-  export let onSwitchToHome: (() => AsyncVoid) | undefined = undefined
-
-  export let onOpenCreateCategory: (() => AsyncVoid) | undefined = undefined
-  export let onEditCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
-  export let onDeleteCategory: ((category: AdminCategory) => AsyncVoid) | undefined = undefined
-  export let onBatchDeleteCategories: ((ids: number[]) => AsyncVoid) | undefined = undefined
-  export let onCloseCategoryModal: (() => AsyncVoid) | undefined = undefined
-  export let onSubmitCategory: ((payload: CategoryFormValue) => AsyncVoid) | undefined = undefined
-
-  export let onOpenCreateBookmark: ((categoryId?: string | number) => AsyncVoid) | undefined = undefined
-  export let onEditBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
-  export let onDeleteBookmark: ((bookmark: AdminBookmark) => AsyncVoid) | undefined = undefined
-  export let onBatchDeleteBookmarks: ((ids: number[]) => AsyncVoid) | undefined = undefined
-  export let onBatchMoveBookmarks: ((payload: BookmarkBatchMoveReq) => AsyncVoid) | undefined = undefined
-  export let onSubmitSettings: ((payload: SettingsFormValue) => AsyncVoid) | undefined = undefined
-  export let onVerifyDevice: (() => Promise<void>) | undefined = undefined
-  export let onChangePassword: ((payload: ChangePasswordReq) => AsyncVoid) | undefined = undefined
-  export let onSortCategories: CategorySortHandler | undefined = undefined
-  export let onSortBookmarks: SortHandler | undefined = undefined
-  // 切换后台标签时通知外层：访问分析需要强制拉取最新点击数据。
-  export let onSelectTab: ((tab: AdminTab) => AsyncVoid) | undefined = undefined
-
-  export let importing = false
-  export let exporting = false
-  export let backupError = ''
-  export let backupMessage = ''
-  export let onExportData: ((selection: BackupSelection) => AsyncVoid) | undefined = undefined
-  export let onImportData: ((file: File, source: ImportSource, mode: 'replace' | 'merge') => AsyncVoid) | undefined = undefined
-
-  let importSource: ImportSource = 'cf-navs'
+  let importSource = $state<ImportSource>('cf-navs')
 
   function handleSelectTab(tab: AdminTab): void {
     activeTab = tab
@@ -176,8 +224,7 @@
 </div>
 
 {#if CategoryEditModalComponent}
-  <svelte:component
-    this={CategoryEditModalComponent}
+  <CategoryEditModalComponent
     open={categoryModalOpen}
     loading={savingCategory}
     error={categoryError}
