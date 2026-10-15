@@ -4,10 +4,23 @@
   import Switch from '../ui/Switch.svelte'
   import Tooltip from '../ui/Tooltip.svelte'
 
-  export let form: SettingsFormModel
-  export let saving = false
+  interface CardSettingsSectionProps {
+    /** 双向绑定：设置表单 */
+    form: SettingsFormModel
+    saving?: boolean
+  }
 
-  $: form.card_show_description = form.card_description_mode === 'always'
+  let { form = $bindable(), saving = false }: CardSettingsSectionProps = $props()
+
+  // 描述显示策略与卡片风格联动：详情风格下恒定显示描述。
+  // 注意：form 是 $bindable 且父组件是 legacy，嵌套写入会通知父组件重渲染；
+  // 必须加 guard 只在值真正变化时写，否则 effect 会无限自触发（legacy $: 无此问题）。
+  $effect.pre(() => {
+    const next = form.card_description_mode === 'always'
+    if (form.card_show_description !== next) {
+      form.card_show_description = next
+    }
+  })
 
   async function syncForm(): Promise<void> {
     await tick()
@@ -19,8 +32,8 @@
   id="settings-section-card"
   class="group group-wide group-card"
   disabled={saving}
-  on:input={() => void syncForm()}
-  on:change={() => void syncForm()}
+  oninput={() => void syncForm()}
+  onchange={() => void syncForm()}
 >
   <legend>卡片展示</legend>
   <div class="settings-subsection">

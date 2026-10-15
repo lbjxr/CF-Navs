@@ -5,9 +5,13 @@
     disabled: '未启用', 'pending-reload': '已保存，将在下次刷新或重新打开页面时启用', 'waiting-auth': '等待有效的登录校验', checking: '正在检查此设备的副本', ready: '已启用',
     expired: '离线期限已到期，联网校验后可恢复', unsupported: '当前服务端不支持本地副本', unavailable: '存储不可用', 'cleanup-failed': '清理未完成',
   }
-  export let onVerify: (() => Promise<void>) | undefined = undefined
-  let busy = false
-  let localError = ''
+  interface DeviceIconCachePanelProps {
+    onVerify?: () => Promise<void>
+  }
+
+  let { onVerify = undefined }: DeviceIconCachePanelProps = $props()
+  let busy = $state(false)
+  let localError = $state('')
   async function act(operation: () => Promise<void>) {
     busy = true; localError = ''
     try { await operation() } catch { localError = '操作未完成，请检查网络或浏览器存储权限后重试。' } finally { busy = false }
@@ -21,11 +25,11 @@
 {#if ICON_LOCAL_COPY_ENABLED}
 <section class="device-cache" aria-labelledby="device-cache-title">
   <div class="device-heading"><div><h3 id="device-cache-title">此设备的图标副本</h3><p>只影响此浏览器，不随全站设置保存或备份。</p></div><span class="device-tag">本机</span></div>
-  <label class="trust-choice"><input type="checkbox" checked={$iconDevice.trusted} disabled={busy} on:change={(event) => toggle(event.currentTarget.checked)} /><span>在此设备保留书签图标</span></label>
+  <label class="trust-choice"><input type="checkbox" checked={$iconDevice.trusted} disabled={busy} onchange={(event) => toggle(event.currentTarget.checked)} /><span>在此设备保留书签图标</span></label>
   <p class="privacy-note">可能包含当前登录范围内的私密图片。副本保存在此设备上，并非加密保险箱；共用电脑请勿启用。断网时无法立即获知远端撤回，离线最长 24 小时且不晚于会话到期。</p>
   <dl><div><dt>有效条目</dt><dd>{$iconDevice.stats.entries} / 1,000</dd></div><div><dt>图片正文</dt><dd>{size($iconDevice.stats.bodyBytes)} / {size(ICON_COPY_BODY_BUDGET)}</dd></div><div><dt>最近成功校验</dt><dd>{$iconDevice.checkedAt ? new Date($iconDevice.checkedAt).toLocaleString() : '尚未校验'}</dd></div></dl>
   <p class="device-status" role="status" aria-live="polite">{phaseText[$iconDevice.phase]}{#if $iconDevice.error}：{$iconDevice.error}{/if}{#if localError}：{localError}{/if}</p>
-  <div class="device-actions"><button type="button" disabled={busy || !onVerify} on:click={verify}>联网校验</button><button type="button" disabled={busy} on:click={clear}>清理此设备图标副本</button><button type="button" disabled={busy || !$iconDevice.trusted} on:click={() => toggle(false)}>关闭并清理</button></div>
+  <div class="device-actions"><button type="button" disabled={busy || !onVerify} onclick={verify}>联网校验</button><button type="button" disabled={busy} onclick={clear}>清理此设备图标副本</button><button type="button" disabled={busy || !$iconDevice.trusted} onclick={() => toggle(false)}>关闭并清理</button></div>
   <p class="device-footnote">只清理本机副本，不删除云端书签或图片；之后仅按需恢复当前使用的图标。</p>
 </section>
 {/if}

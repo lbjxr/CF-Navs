@@ -1,25 +1,38 @@
 <script lang="ts">
-  export let open = false
-  export let loading = false
-  export let error = ''
-  export let onSubmit:
-    | ((payload: { username: string; password: string }) => void | Promise<void>)
-    | undefined = undefined
-  export let onCancel: (() => void) | undefined = undefined
-  export let onForgotPassword: (() => void) | undefined = undefined
-
-  let username = ''
-  let password = ''
-  let formKey = ''
-
-  $: nextKey = open ? 'open' : 'closed'
-  $: if (nextKey !== formKey) {
-    formKey = nextKey
-    if (open) {
-      username = ''
-      password = ''
-    }
+  interface LoginModalProps {
+    open?: boolean
+    loading?: boolean
+    error?: string
+    onSubmit?:
+      | ((payload: { username: string; password: string }) => void | Promise<void>)
+      | undefined
+    onCancel?: (() => void) | undefined
+    onForgotPassword?: (() => void) | undefined
   }
+
+  let {
+    open = false,
+    loading = false,
+    error = '',
+    onSubmit = undefined,
+    onCancel = undefined,
+    onForgotPassword = undefined,
+  }: LoginModalProps = $props()
+
+  let username = $state('')
+  let password = $state('')
+  let formKey = $state('')
+
+  let nextKey = $derived(open ? 'open' : 'closed')
+  $effect.pre(() => {
+    if (nextKey !== formKey) {
+      formKey = nextKey
+      if (open) {
+        username = ''
+        password = ''
+      }
+    }
+  })
 
   async function handleSubmit() {
     await onSubmit?.({
@@ -45,10 +58,10 @@
           <p class="modal-eyebrow">管理员登录</p>
           <h2 id="login-modal-title">请输入账号信息</h2>
         </div>
-        <button type="button" class="ghost-button" on:click={handleCancel} disabled={loading}>取消</button>
+        <button type="button" class="ghost-button" onclick={handleCancel} disabled={loading}>取消</button>
       </div>
 
-      <form class="modal-form" on:submit|preventDefault={handleSubmit}>
+      <form class="modal-form" onsubmit={(event) => { event.preventDefault(); void handleSubmit() }}>
         <label>
           <span>用户名</span>
           <input bind:value={username} type="text" placeholder="请输入用户名" autocomplete="username" required />
@@ -70,11 +83,11 @@
         {/if}
 
         {#if onForgotPassword}
-          <button type="button" class="forgot-link" on:click={onForgotPassword} disabled={loading}>忘记密码？</button>
+          <button type="button" class="forgot-link" onclick={onForgotPassword} disabled={loading}>忘记密码？</button>
         {/if}
 
         <div class="modal-actions">
-          <button type="button" class="ghost-button" on:click={handleCancel} disabled={loading}>取消</button>
+          <button type="button" class="ghost-button" onclick={handleCancel} disabled={loading}>取消</button>
           <button type="submit" class="primary-button" disabled={loading || !username.trim() || !password}>
             {#if loading}登录中...{:else}登录{/if}
           </button>
