@@ -427,7 +427,15 @@ export const iconifyApi = {
 }
 
 export const settingsApi = {
-  update: (payload: SettingsUpdateReq) => jsonRequest<Settings>('/settings', 'PUT', payload, true),
+  // dataVersion 是调用方上次读取到的 data_version；传入时服务端做 CAS，冲突回 409。
+  // 不传时保持原行为（直接覆盖），兼容旧客户端与冒烟测试。
+  update: (payload: SettingsUpdateReq, dataVersion?: string | null) =>
+    jsonRequest<Settings>(
+      '/settings',
+      'PUT',
+      dataVersion ? { ...payload, data_version: dataVersion } : payload,
+      true,
+    ),
 }
 
 export const dataApi = {

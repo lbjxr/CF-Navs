@@ -488,4 +488,8 @@ export interface BatchDeleteCategoriesResp {
 }
 
 // PUT /api/settings  —— 部分更新，传哪些 key 改哪些
-export type SettingsUpdateReq = Partial<Settings>
+// data_version 是乐观并发令牌（不是设置项，不会写入 settings 表）：
+// 携带时服务端做原子 CAS，版本已变则回 409；不携带时保持原行为（直接覆盖）。
+export type SettingsUpdateReq = Partial<Settings> & {
+  data_version?: string
+}
