@@ -100,6 +100,20 @@
 
 第一次使用时，请选一种部署方式完整走完，不要混用两套流程。无论使用哪种方式，最终都通过 `/install` 初始化数据库和管理员账号。
 
+### 自托管（Docker）
+
+不想用 Cloudflare 也可以自托管：本仓库同仓提供 Node + SQLite 的
+Docker 部署（运行时在 `server/`，部署资产在 `docker/`），应用功能与
+Cloudflare 版一致，数据从 Cloudflare 迁入有现成的导入工具：
+
+```bash
+git clone https://github.com/lbjxr/CF-Navs.git
+cd CF-Navs/docker
+```
+
+部署、反向代理、数据迁移、备份恢复与安全边界见
+[DOCKER_DEPLOY.md](docs/guides/DOCKER_DEPLOY.md)。
+
 CF-Navs 需要以下 Cloudflare 资源：
 
 | 资源 | 绑定名 | 用途 |
