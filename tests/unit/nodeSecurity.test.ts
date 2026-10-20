@@ -82,6 +82,7 @@ function makeNodeApp(trust: Pick<ServerConfig, 'trustProxy' | 'trustProxyCidrs'>
       pending.push(promise)
     },
     passThroughOnException: () => {},
+    props: {},
   }
   const req = async (path: string, init: RequestInit = {}): Promise<Response> => {
     const res = await app.request(`${BASE}${path}`, init, env, executionCtx)
