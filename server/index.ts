@@ -5,16 +5,22 @@ import { mkdirSync } from 'node:fs'
 import { serve } from '@hono/node-server'
 import { createApp } from '../worker/app'
 import { loadConfig } from './config'
-import { assembleEnv, createPlaceholderAssets, createPlaceholderKv } from './nodeEnv'
+import { assembleEnv, createPlaceholderAssets } from './nodeEnv'
+import { createResponseCache, installGlobalCache } from './responseCache'
 import { createExecutionContext } from './runtime'
 import { createSqliteD1 } from './sqliteD1'
+import { createSqliteKv } from './sqliteKv'
 
 const config = loadConfig()
 mkdirSync(config.dataDir, { recursive: true })
 const d1 = createSqliteD1(config.sqlitePath)
+const kv = createSqliteKv(config.kvPath)
+installGlobalCache(
+  createResponseCache({ maxEntries: config.cacheMaxEntries, maxBytes: config.cacheMaxBytes }).cache,
+)
 const env = assembleEnv(config, {
   db: d1.db,
-  kv: createPlaceholderKv(), // 阶段 3 换 sqliteKv
+  kv: kv.kv,
   assets: createPlaceholderAssets(), // 阶段 4 换 fileAssets
 })
 const { ctx, drain } = createExecutionContext()
@@ -38,6 +44,7 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`[node] received ${signal}, shutting down…`)
   server.close()
   await drain()
+  kv.close()
   d1.close()
   process.exit(0)
 }
