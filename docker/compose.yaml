@@ -3,6 +3,11 @@
 #   cp .env.example .env   # 填 SETUP_TOKEN
 #   docker compose pull && docker compose up -d   # 拉预构建镜像（推荐，免本地构建）
 #   docker compose up -d --build                  # 或从仓库源码构建（二选一）
+
+# 项目名钉死为 cf-navs：数据卷名由它派生（cf-navs_cf-navs-data）。
+# 若让 compose 按所在目录推导，布局调整（如本文件从仓库根移入 docker/）
+# 会换出一个全新空卷，老数据看似"丢失"——钉死后与文件位置无关。
+name: cf-navs
 services:
   cf-navs:
     build:
