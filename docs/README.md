@@ -37,6 +37,7 @@
 
 - [快速开始](guides/QUICKSTART.md)
 - [完整部署指南](guides/DEPLOYMENT.md)
+- [Docker 自托管部署](guides/DOCKER_DEPLOY.md)
 - [常见问题排查](guides/TROUBLESHOOTING.md)
 - [Sun-Panel 数据导入](guides/SUNPANEL_IMPORT.md)
 

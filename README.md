@@ -217,7 +217,7 @@ git clone --branch docker https://github.com/lbjxr/CF-Navs.git
 ```
 
 部署、反向代理、数据迁移、备份恢复与安全边界见该分支的
-[DOCKER_DEPLOY.md](DOCKER_DEPLOY.md)。
+[DOCKER_DEPLOY.md](docs/guides/DOCKER_DEPLOY.md)。
 
 ## 本地开发
 
