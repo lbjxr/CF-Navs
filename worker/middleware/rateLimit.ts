@@ -9,7 +9,17 @@ const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5
 const LOGIN_RATE_LIMIT_WINDOW_SECONDS = 10 * 60
 const LOGIN_RATE_LIMIT_WINDOW_MS = LOGIN_RATE_LIMIT_WINDOW_SECONDS * 1000
 
-export function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string {
+/**
+ * 信任边界（方案阶段 4）：Node 入口经 server/requestContext 解析出可信 IP 并
+ * 注入 c.set('clientIp') 时，优先采用注入值，绝不读取可能被客户端伪造的转发头；
+ * Worker 路径不注入，走 Cloudflare 边缘强制写入的 cf-connecting-ip 头。
+ */
+export function getClientIp(c: {
+  req: { header: (name: string) => string | undefined }
+  get?: (key: 'clientIp') => string | undefined
+}): string {
+  const injected = c.get?.('clientIp')
+  if (injected) return injected
   const forwarded = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip')
   return forwarded?.split(',')[0]?.trim() || 'unknown'
 }

@@ -5,7 +5,9 @@ import { mkdirSync } from 'node:fs'
 import { serve } from '@hono/node-server'
 import { createApp } from '../worker/app'
 import { loadConfig } from './config'
-import { assembleEnv, createPlaceholderAssets } from './nodeEnv'
+import { createFileAssets, loadHeaderRules } from './fileAssets'
+import { assembleEnv } from './nodeEnv'
+import { clientIpMiddleware } from './requestContext'
 import { createResponseCache, installGlobalCache } from './responseCache'
 import { createExecutionContext } from './runtime'
 import { createSqliteD1 } from './sqliteD1'
@@ -18,13 +20,14 @@ const kv = createSqliteKv(config.kvPath)
 installGlobalCache(
   createResponseCache({ maxEntries: config.cacheMaxEntries, maxBytes: config.cacheMaxBytes }).cache,
 )
+const assets = createFileAssets(config.distDir, await loadHeaderRules(config.distDir))
 const env = assembleEnv(config, {
   db: d1.db,
   kv: kv.kv,
-  assets: createPlaceholderAssets(), // 阶段 4 换 fileAssets
+  assets,
 })
 const { ctx, drain } = createExecutionContext()
-const app = createApp()
+const app = createApp({ preMiddleware: clientIpMiddleware(config) })
 
 const server = serve(
   {

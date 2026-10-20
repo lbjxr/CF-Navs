@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { MiddlewareHandler } from 'hono'
 import { ErrCode } from '../shared/types'
 import { withAssetCacheHeaders } from './lib/assetHeaders'
 import { fetchAssetResponse } from './lib/assetRouting'
@@ -76,8 +77,18 @@ protectedApi.route('/', dataRoutes) // /import
  * 共用同一份路由组合，运行时差异只在注入的 Env。
  * 顺序即安全边界：公开子应用必须先于受保护子应用挂载。
  */
-export function createApp(): Hono<HonoEnv> {
+export interface CreateAppOptions {
+  /**
+   * 根应用挂载业务路由前先执行的中间件。Node 入口用它注入请求上下文
+   * （如客户端 IP）；Cloudflare Worker 入口不传，行为完全不变。
+   */
+  preMiddleware?: MiddlewareHandler<HonoEnv>
+}
+
+export function createApp(options: CreateAppOptions = {}): Hono<HonoEnv> {
   const app = new Hono<HonoEnv>()
+
+  if (options.preMiddleware) app.use('*', options.preMiddleware)
 
   app.route('/api', publicApi)
   app.route('/api', protectedApi)
