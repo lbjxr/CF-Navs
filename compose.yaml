@@ -1,10 +1,11 @@
 # CF-Navs 自托管（docker 独立分支）。用法见 docs/guides/DOCKER_DEPLOY.md。
 #   cp .env.example .env   # 填 SETUP_TOKEN
-#   docker compose up -d --build
+#   docker compose pull && docker compose up -d   # 拉预构建镜像（推荐，免本地构建）
+#   docker compose up -d --build                  # 或从本分支源码构建（二选一）
 services:
   cf-navs:
     build: .
-    image: cf-navs:docker
+    image: ghcr.io/lbjxr/cf-navs:docker
     container_name: cf-navs
     restart: unless-stopped
     # 只绑宿主机回环：对外服务由 Nginx/Caddy 反向代理提供（见 docs/guides/DOCKER_DEPLOY.md）。

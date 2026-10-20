@@ -12,6 +12,23 @@ cd CF-Navs
 
 要求：Docker Engine（Compose v2）、1 核 1G 以上机器。
 
+### 方式 A：预构建镜像（推荐，免本地构建）
+
+CI 在每次推送后把镜像发布到 GHCR（`amd64` / `arm64` 双架构），1G 小机器
+不用在本地构建：
+
+```bash
+cp .env.example .env
+# 填 SETUP_TOKEN（openssl rand -hex 24 生成）
+docker compose pull
+docker compose up -d
+```
+
+镜像标签：`docker` 跟踪本分支最新构建；`sha-<短哈希>` 对应具体提交；
+版本发布另有形如 `1.0.0` 的标签（见第 7 节）。
+
+### 方式 B：从源码构建
+
 ```bash
 cp .env.example .env
 # 填 SETUP_TOKEN（openssl rand -hex 24 生成）
@@ -113,16 +130,23 @@ KV 库（`kv.db`）包含限流计数和撤销名单，通常无需备份；真�
   不支持多副本共用 SQLite、网络文件系统上的 SQLite。
 - 1C1G 规格参考：容器内存限制 512MB（compose 默认），应用常驻约 100–200MB。
   **不要在 1G 机器上执行镜像构建**（`npm ci` + Vite 构建可能 OOM）：
-  在本地或 CI 构建镜像后推送到仓库再拉取，或先给构建机加约 2G swap。
+  用第 1 节方式 A 的预构建镜像，或先给构建机加约 2G swap 再走方式 B。
 - 进程内响应缓存有上限（默认 500 条 / 32MB），重启清空；业务数据与 KV 不受影响。
 
 ## 7. 升级
 
+预构建镜像方式：
+
 ```bash
-git pull                       # 拉取 docker 分支更新
-docker compose up -d --build   # 重建并重启
+git pull                # compose 等文件保持与分支一致
+docker compose pull     # 拉新镜像
+docker compose up -d    # 换镜像重启
 ```
 
+源码构建方式把后两步换成 `docker compose up -d --build`。
+
 应用启动时会自动跑版本化迁移（与 Cloudflare 路径同一套）。升级前建议先按
-第 4 节备份。`docker` 分支按版本打 tag（如 `docker-v1.0.0`），生产建议
-锁定 tag 而不是跟踪分支最新提交。
+第 4 节备份。`docker` 分支按版本打 tag（如 `docker-v1.0.0`），CI 会同时
+发布去掉前缀的版本镜像（如 `ghcr.io/lbjxr/cf-navs:1.0.0`）；生产建议把
+compose 里的 `image:` 标签从 `docker` 改成具体版本锁定，而不是跟踪分支
+最新提交。
