@@ -1,0 +1,32 @@
+# CF-Navs 自托管（docker 独立分支）。用法见 DOCKER_DEPLOY.md。
+#   cp .env.example .env   # 填 SETUP_TOKEN
+#   docker compose up -d --build
+services:
+  cf-navs:
+    build: .
+    image: cf-navs:docker
+    container_name: cf-navs
+    restart: unless-stopped
+    # 只绑宿主机回环：对外服务由 Nginx/Caddy 反向代理提供（见 DOCKER_DEPLOY.md）。
+    # 直接把应用端口暴露公网会绕过反代，切勿改成 0.0.0.0，除非你清楚 IP 信任边界。
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      SETUP_TOKEN: "${SETUP_TOKEN:?请在 .env 中设置 SETUP_TOKEN（首次安装令牌）}"
+      # 端口只发布在宿主机回环时，直连对端恒为本机代理链，可信任其转发头。
+      # 若改了端口绑定或拓扑，按 DOCKER_DEPLOY.md 收紧 TRUST_PROXY_CIDRS。
+      TRUST_PROXY: "true"
+      TRUST_PROXY_CIDRS: ""
+      CACHE_MAX_BYTES: "33554432"
+    volumes:
+      - cf-navs-data:/data
+    # 1 核 1G 规格参考值：应用常驻内存远低于此，主要防异常膨胀拖垮宿主机。
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  cf-navs-data:

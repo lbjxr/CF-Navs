@@ -26,7 +26,7 @@
     "deploy": "npm run build && node scripts/wrangler-config.mjs deploy",
     "db:init": "node scripts/wrangler-config.mjs d1 execute DB --local --file=./schema.sql",
     "db:init:remote": "node scripts/wrangler-config.mjs d1 execute DB --remote --file=./schema.sql",
-    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node24 --format=esm --loader:.sql=text --outfile=dist-server/index.mjs",
+    "build:server": "esbuild server/index.ts server/migrate.ts --bundle --platform=node --target=node24 --format=esm --loader:.sql=text --outdir=dist-server --out-extension:.js=.mjs",
     "start:server": "node --experimental-sqlite dist-server/index.mjs",
     "type-check:server": "tsc --noEmit -p tsconfig.server.json"
   },
