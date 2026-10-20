@@ -35,6 +35,54 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+### 方式 C：面板部署（1Panel / 宝塔）
+
+两个面板都自带 Docker 管理与反向代理，全程不用终端。前提：1Panel 直接
+可用；宝塔先在软件商店安装「Docker 管理器」。
+
+把下面这份编排粘贴到面板的容器编排里创建即可（已去掉源码构建行，只拉
+预构建镜像）。只需改一处：`SETUP_TOKEN` 换成你自己的令牌
+（`openssl rand -hex 24` 生成，或用面板终端/任意密码工具生成）：
+
+```yaml
+services:
+  cf-navs:
+    image: ghcr.io/lbjxr/cf-navs:docker
+    container_name: cf-navs
+    restart: unless-stopped
+    # 只绑宿主机回环：对外服务由面板的反向代理提供，切勿改成 0.0.0.0
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      SETUP_TOKEN: "改成你的安装令牌"
+      TRUST_PROXY: "true"
+      TRUST_PROXY_CIDRS: ""
+      CACHE_MAX_BYTES: "33554432"
+    volumes:
+      - cf-navs-data:/data
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  cf-navs-data:
+```
+
+- **1Panel**：容器 → 编排 → 创建编排，粘贴上文并确认，面板会自动拉取
+  镜像并启动；然后到「网站」创建一个反向代理网站，代理地址填
+  `127.0.0.1:3000`，再在该网站的 HTTPS 里申请证书。
+- **宝塔**：Docker → 容器编排 → 添加编排，粘贴上文并创建；然后到
+  「网站」添加反向代理，目标 URL 填 `http://127.0.0.1:3000`，再在
+  SSL 里一键申请证书。
+
+两个面板的反代模板默认都带 `X-Real-IP` 覆盖写，与第 2 节的要求一致，
+一般无需额外配置；升级在面板的编排里执行「拉取新镜像并重新创建」
+即可（原理同第 7 节）。完成后通过反代域名访问站点，用 SETUP_TOKEN
+完成安装向导。
+
 然后用浏览器打开 `http://<服务器IP>:3000`，用 SETUP_TOKEN 完成安装向导。
 
 容器只监听宿主机回环（`127.0.0.1:3000`），**生产必须套反向代理 + 域名**，
