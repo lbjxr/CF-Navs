@@ -45,6 +45,7 @@
 ## 技术参考
 
 - [项目概览](reference/PROJECT_OVERVIEW.md)
+- [分支与发版流程](reference/BRANCHING_AND_RELEASE.md)
 - [GitHub Issues 需求与发布追溯（R-01～R-08）](reference/GITHUB_ISSUES_REQUIREMENTS.md)
 - [API 契约](reference/API_CONTRACT.md)
 - [技术说明](reference/TECHNICAL_NOTES.md)

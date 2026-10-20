@@ -1,7 +1,9 @@
 # CF-Navs 自托管部署指南（docker 独立分支）
 
 本分支（`docker`）是 Node + SQLite + Docker 的独立版本线，永不合并回
-`main`/`develop`。使用者直接拉取该分支部署：
+`main`/`develop`。分支定位与发版同步流程见
+[分支与发版流程](../reference/BRANCHING_AND_RELEASE.md)。使用者直接拉取
+该分支部署：
 
 ```bash
 git clone --branch docker https://github.com/lbjxr/CF-Navs.git
