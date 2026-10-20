@@ -4,7 +4,7 @@ vi.mock('../../schema.sql', () => ({ default: 'CREATE TABLE settings (key TEXT P
 
 import { createApp } from '../../worker/app'
 import type { ServerConfig } from '../../server/config'
-import { createStage1Env } from '../../server/nodeEnv'
+import { createPlaceholderEnv } from '../../server/nodeEnv'
 
 // 阶段 1 出口条件：共享 createApp() 工厂在 Node Env 下可运行——
 // /api/health 响应、受保护路由无 token 时 fail-closed(401)。
@@ -27,7 +27,7 @@ const config: ServerConfig = {
 
 describe('node runtime 装配（阶段 1）', () => {
   const app = createApp()
-  const env = createStage1Env(config)
+  const env = createPlaceholderEnv(config)
 
   it('GET /api/health → 200', async () => {
     const res = await app.request('https://navs.example.test/api/health', {}, env)

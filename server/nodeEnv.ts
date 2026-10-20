@@ -54,7 +54,8 @@ export function assembleEnv(config: ServerConfig, parts: NodeEnvParts): Env {
   }
 }
 
-export function createStage1Env(config: ServerConfig): Env {
+/** 全部占位实现（阶段 1 出口验证用；生产入口逐阶段换真实适配器）。 */
+export function createPlaceholderEnv(config: ServerConfig): Env {
   return assembleEnv(config, {
     db: createPlaceholderD1(),
     kv: createPlaceholderKv(),
