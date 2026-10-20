@@ -206,6 +206,19 @@ npm run deploy                 # Secret 生效后重新部署
 - [完整部署指南](docs/guides/DEPLOYMENT.md)
 - [常见问题排查](docs/guides/TROUBLESHOOTING.md)
 
+### 自托管（Docker 分支）
+
+不想用 Cloudflare 也可以自托管：`docker` 是独立分支（Node + SQLite + Docker，
+不与本分支合并）。拉取该分支后用 Docker Compose 部署，数据从 Cloudflare
+迁入有现成的导入工具：
+
+```bash
+git clone --branch docker https://github.com/lbjxr/CF-Navs.git
+```
+
+部署、反向代理、数据迁移、备份恢复与安全边界见该分支的
+[DOCKER_DEPLOY.md](DOCKER_DEPLOY.md)。
+
 ## 本地开发
 
 开发环境使用 Node.js 22.12+（22.x）或 24+，推荐与 CI 一致的 Node.js 24 LTS。

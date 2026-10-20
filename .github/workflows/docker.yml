@@ -1,0 +1,59 @@
+name: Docker branch
+
+# docker 是独立版本线：本工作流只为该分支服务，验证 Node 运行时与镜像构建。
+on:
+  push:
+    branches:
+      - docker
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check (app + server)
+        run: |
+          npm run type-check
+          npm run type-check:server
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build frontend + server bundle
+        run: |
+          npm run build
+          npm run build:server
+
+      - name: Node smoke (health + app shell)
+        run: |
+          DATA_DIR=/tmp/cf-navs-ci PORT=3210 SETUP_TOKEN=ci-token node --experimental-sqlite dist-server/index.mjs &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:3210/api/health; then break; fi
+            sleep 0.5
+          done
+          curl -sf http://127.0.0.1:3210/api/health
+          curl -sf http://127.0.0.1:3210/ | grep -qi '<html' && echo 'shell ok'
+
+      - name: Docker image build
+        run: docker build -t cf-navs:docker-ci .

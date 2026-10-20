@@ -21,6 +21,7 @@ export default tseslint.config(
     ignores: [
       'browser-extension/**',
       'dist/**',
+      'dist-server/**',
       'node_modules/**',
       '.wrangler/**',
       'tmp/**',
