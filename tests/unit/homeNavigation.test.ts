@@ -106,18 +106,18 @@ describe('home navigation helpers', () => {
       { root: 2, selected: 2 },
     ])
   })
-  it('空一级默认选「本分类」(root)，由聚合区填充而非首个子分类', () => {
+  it('空一级默认回落到按 sort 排序的首个子分类', () => {
     const emptyRoot = buildCategoryForest([
       { id: 4, parent_id: null, title: 'Empty root', icon: null, sort: 0 },
       { id: 5, parent_id: 4, title: 'First child', icon: null, sort: 0 },
     ])[0]
     const bookmarks = new Map([[5, [bookmark(5, 5)]]])
 
-    expect(resolveHomeCategoryForRoot(emptyRoot, undefined, bookmarks).id).toBe(4)
-    expect(resolveHomeCategoryForRoot(emptyRoot, 4, bookmarks).id).toBe(4)
+    expect(resolveHomeCategoryForRoot(emptyRoot, undefined, bookmarks).id).toBe(5)
+    expect(resolveHomeCategoryForRoot(emptyRoot, 4, bookmarks).id).toBe(5)
     expect(resolveHomeCategoryForRoot(emptyRoot, 'category-5', bookmarks).id).toBe(5)
-    expect(getHomeCategoryGroups([emptyRoot], new Map([[4, 4]]), bookmarks)[0].selected.id).toBe(4)
-    expect(getHomeCategoryGroups([emptyRoot], new Map(), bookmarks)[0].selected.id).toBe(4)
+    expect(getHomeCategoryGroups([emptyRoot], new Map([[4, 4]]), bookmarks)[0].selected.id).toBe(5)
+    expect(getHomeCategoryGroups([emptyRoot], new Map(), bookmarks)[0].selected.id).toBe(5)
   })
 
   it('getCategoryHotBookmarks: 频次优先 + sort 回填 + 封顶', () => {

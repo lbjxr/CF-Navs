@@ -224,17 +224,23 @@ export function resolveHomeCategorySelection(
 export function resolveHomeCategoryForRoot(
   root: CategoryNode<PublicCategory>,
   activeId: string | number | null | undefined,
-  _categoryBookmarks?: ReadonlyMap<number, PublicBookmark[]>,
+  categoryBookmarks?: ReadonlyMap<number, PublicBookmark[]>,
 ): CategoryNode<PublicCategory> {
   const normalizedId = String(activeId ?? '')
 
-  // REQ-17：空一级（自身无直属书签）不再默认选首个子分类，而是默认选「本分类」(root)，
-  // 由 Home 在 root 被选中且触发条件成立时渲染子树聚合「常用」列表（见 getCategoryHotBookmarks）。
-  if (normalizedId === String(root.id) || normalizedId === `category-${root.id}`) return root
+  // 一级直属书签为空时，默认展示按 sort 排在最前的二级分类；
+  // category.children 已由 buildCategoryForest 按 sort、id 排好序。
+  const defaultCategory = categoryBookmarks
+    && (categoryBookmarks.get(root.id)?.length ?? 0) === 0
+    && root.children.length > 0
+    ? root.children[0]
+    : root
+
+  if (normalizedId === String(root.id) || normalizedId === `category-${root.id}`) return defaultCategory
 
   return root.children.find((child) => (
     normalizedId === String(child.id) || normalizedId === `category-${child.id}`
-  )) ?? root
+  )) ?? defaultCategory
 }
 
 export function getHomeCategoryGroups(
