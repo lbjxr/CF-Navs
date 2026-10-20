@@ -65,6 +65,7 @@
     "ws": "^8.21.0"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.5",
     "hono": "^4.13.5",
     "sortablejs": "^1.15.3"
   }
