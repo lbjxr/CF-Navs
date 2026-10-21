@@ -74,7 +74,7 @@
     },
     {
       "kind": "block",
-      "hash": "f9e45ec70008b4b8"
+      "hash": "6757a436299bfd7c"
     },
     {
       "kind": "block",
@@ -82,7 +82,23 @@
     },
     {
       "kind": "block",
-      "hash": "b6279c338e4e5053"
+      "hash": "e4dde80e8de2f6bd"
+    },
+    {
+      "kind": "block",
+      "hash": "0dacd09c368f934a"
+    },
+    {
+      "kind": "block",
+      "hash": "fba422c2956963be"
+    },
+    {
+      "kind": "fence",
+      "hash": "6a7dc73f772a0438"
+    },
+    {
+      "kind": "block",
+      "hash": "f073de040358f098"
     },
     {
       "kind": "block",
