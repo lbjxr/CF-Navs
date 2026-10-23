@@ -114,6 +114,10 @@ cd CF-Navs/docker
 部署、反向代理、数据迁移、备份恢复与安全边界见
 [DOCKER_DEPLOY.md](docs/guides/DOCKER_DEPLOY.md)。
 
+> ⚠️ 2026-10-23 安全提示：2026-10-21 之前发布的预构建镜像含一个
+> Node.js 高危漏洞（已修复版本为 v24.22.1），在下一个正式版本镜像发布前，
+> 请按指南的方式 B 从源码构建部署，详见 [DOCKER_DEPLOY.md](docs/guides/DOCKER_DEPLOY.md)。
+
 CF-Navs 需要以下 Cloudflare 资源：
 
 | 资源 | 绑定名 | 用途 |
