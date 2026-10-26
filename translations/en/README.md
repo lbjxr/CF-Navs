@@ -112,6 +112,10 @@ cd CF-Navs/docker
 For deployment, reverse proxy, data migration, backup and recovery, and security boundaries, see
 [DOCKER_DEPLOY.md](../../docs/guides/DOCKER_DEPLOY.md).
 
+> ⚠️ 2026-10-23 Security Notice: Prebuilt images released before 2026-10-21 contain a
+> high-severity vulnerability in Node.js (the fixed version is v24.22.1). Before the next official image is released,
+> please follow Method B in the guide to build and deploy from source code. For details, see [DOCKER_DEPLOY.md](../../docs/guides/DOCKER_DEPLOY.md).
+
 CF-Navs requires the following Cloudflare resources:
 
 | Resource | Binding Name | Purpose |
