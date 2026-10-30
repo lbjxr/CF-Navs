@@ -114,9 +114,8 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.55),
       inset 0 -1px 0 rgba(255, 255, 255, 0.1),
       0 4px 14px rgba(15, 23, 42, 0.08);
-    transition:
-      transform var(--transition-fast),
-      border-color var(--transition-fast);
+    /* Moving the hover target makes bottom-edge hit tests alternate and flickers the glass/tooltip. */
+    transition: border-color var(--transition-fast);
   }
 
   .bookmark-card:focus-visible {
@@ -125,7 +124,6 @@
     box-shadow:
       0 0 0 3px rgba(56, 189, 248, 0.25),
       0 8px 24px rgba(15, 23, 42, 0.16) !important;
-    transform: translateY(-2px);
   }
 
   .bookmark-card-icon {
@@ -147,7 +145,6 @@
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.65),
       0 8px 20px rgba(15, 23, 42, 0.12);
-    transform: translateY(-1px);
   }
 
   .bookmark-icon-title {
