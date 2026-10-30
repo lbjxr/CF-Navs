@@ -117,13 +117,16 @@ async function waitFor(fn) {
 }
 function readCard() {
   const card = document.querySelector('[data-hover-probe]')
+  const shell = card.closest('.bookmark-card-shell')
   const r = card.getBoundingClientRect()
   const css = getComputedStyle(card)
   return {
     x: r.x, y: r.y, width: r.width, height: r.height, bottom: r.bottom,
     hover: card.matches(':hover'), focused: card.matches(':focus-visible'),
     tooltip: Number(getComputedStyle(card, '::after').opacity),
+    tooltipDisplay: getComputedStyle(card, '::after').display,
     hasTooltip: card.classList.contains('bookmark-tooltip-anchor'),
+    shellHover: shell.matches(':hover'), shellZIndex: getComputedStyle(shell).zIndex,
     backdrop: css.backdropFilter, shadow: css.boxShadow,
   }
 }
@@ -145,6 +148,7 @@ async function jitter(point, expected) {
   assert(result.travel < 0.01, `Card moved ${result.travel}px under the pointer`)
   assert.equal(result.last.hover, expected, 'Edge hit area changed')
   if (result.last.hasTooltip) assert.equal(result.last.tooltip, expected ? 1 : 0, 'Tooltip did not settle')
+  assert.equal(result.last.shellZIndex, expected && result.last.hasTooltip ? '1' : '0', 'Only a visible tooltip may promote the card shell')
   return result
 }
 
@@ -170,6 +174,7 @@ async function runScenario({ theme, style, descriptionMode = 'hover', scale = 1.
     await move(mobile ? 385 : 1595, 5)
     await sleep(200)
     const base = await session.call(readCard)
+    assert.equal(base.shellZIndex, '0', 'Idle cards must not be promoted')
     assert.match(base.backdrop, /blur\(20px\)/, 'Glass surface was removed')
     result.noOverflow = await session.call(() => document.documentElement.scrollWidth <= innerWidth)
     assert(result.noOverflow, 'Horizontal overflow')
@@ -178,11 +183,29 @@ async function runScenario({ theme, style, descriptionMode = 'hover', scale = 1.
       assert(result.touch.noHover, 'Touch emulation missing')
       assert.equal(result.touch.tooltipDisplay, 'none')
     } else {
+      // Test the transparent rounded corner, not just the link's moving hit area.
+      // CDP clips use document coordinates even after scrollIntoView.
+      const cardClip = await session.call(() => {
+        const r = document.querySelector('[data-hover-probe]').getBoundingClientRect()
+        return { x: Math.floor(r.x + scrollX) - 12, y: Math.floor(r.y + scrollY) - 12, width: Math.ceil(r.width) + 24, height: Math.ceil(r.height) + 24, scale: 1 }
+      })
+      const cornerBefore = (await session.send('Page.captureScreenshot', { format: 'png', clip: cardClip })).data
+      await move(base.x + 1, base.bottom - 1)
+      await sleep(200)
+      const corner = await session.call(readCard)
+      assert(!corner.hover && corner.shellHover, 'Probe must hit the empty shell corner, not the link')
+      assert.equal(corner.shellZIndex, '0', 'Empty corner hover promoted the glass layer')
+      const cornerAfter = (await session.send('Page.captureScreenshot', { format: 'png', clip: cardClip })).data
+      assert.equal(cornerAfter === cornerBefore, true, 'Empty corner hover changed the card pixels')
+      result.emptyCornerUnchanged = true
+      await move(1595, 5)
+      await sleep(200)
       const upperClip = await session.call(() => {
         const cards = [...document.querySelectorAll('.bookmark-card')].slice(0, 5)
         const first = cards[0].getBoundingClientRect()
         const last = cards.at(-1).getBoundingClientRect()
-        return { x: Math.floor(first.x) - 10, y: Math.floor(first.bottom) - 10, width: Math.ceil(last.right - first.x) + 20, height: 40, scale: 1 }
+        if (first.y < 0 || first.bottom + 30 > innerHeight) throw new Error('Upper-row probe must be visible')
+        return { x: Math.floor(first.x + scrollX) - 10, y: Math.floor(first.bottom + scrollY) - 10, width: Math.ceil(last.right - first.x) + 20, height: 40, scale: 1 }
       })
       assert(upperClip.y >= 0, 'Upper-row visual probe must remain in the viewport')
       const upperBefore = (await session.send('Page.captureScreenshot', { format: 'png', clip: upperClip })).data
@@ -194,6 +217,7 @@ async function runScenario({ theme, style, descriptionMode = 'hover', scale = 1.
         { x: base.x + 0.2, y: base.y + base.height / 2 },
         { x: base.x + base.width - 0.2, y: base.y + base.height / 2 },
         { x: base.x + 4, y: base.bottom - 8 },
+        { x: base.x + 1, y: base.bottom - 1 },
       ]
       for (const point of points) {
         await move(1595, 5)
@@ -214,8 +238,27 @@ async function runScenario({ theme, style, descriptionMode = 'hover', scale = 1.
       await sleep(200)
       result.keyboard = await session.call(readCard)
       assert(result.keyboard.focused, 'Real Tab did not focus the card')
+      assert.equal(result.keyboard.shellZIndex, result.keyboard.hasTooltip ? '1' : '0', 'Keyboard promotion must match tooltip visibility')
       assert.match(result.keyboard.shadow, /3px/, 'Keyboard focus ring missing')
       assert(Math.abs(result.keyboard.y - base.y) < 0.01, 'Focus moved the card')
+      // Exercise the CSS states while a tooltip-capable link is still focused.
+      result.layerPriority = await session.call(() => {
+        const card = document.querySelector('[data-hover-probe]')
+        const shell = card.closest('.bookmark-card-shell')
+        try {
+          shell.classList.add('context-menu-open')
+          const menuZIndex = getComputedStyle(shell).zIndex
+          shell.classList.remove('context-menu-open')
+          card.classList.add('sort-mode')
+          return { menuZIndex, sortZIndex: getComputedStyle(shell).zIndex, sortTooltipDisplay: getComputedStyle(card, '::after').display }
+        } finally {
+          shell.classList.remove('context-menu-open')
+          card.classList.remove('sort-mode')
+        }
+      })
+      assert.equal(result.layerPriority.menuZIndex, '130', 'Tooltip promotion overrode the context-menu layer')
+      assert.equal(result.layerPriority.sortZIndex, '0', 'Sorting promoted a hidden tooltip')
+      if (result.keyboard.hasTooltip) assert.equal(result.layerPriority.sortTooltipDisplay, 'none')
       await session.call(() => document.activeElement.blur())
     }
     await writeFile(path.join(output, `scenario-${report.scenarios.length}.png`), Buffer.from(await session.screenshotBase64(), 'base64'))
@@ -266,6 +309,7 @@ try {
     }
   }
   for (const style of ['info', 'icon']) {
+    await runScenario({ theme: 'dark', style, scale: 1.5 })
     await runScenario({ theme: 'dark', style, scale: 2 })
     await runScenario({ theme: 'dark', style, reduced: true })
   }
@@ -277,7 +321,7 @@ try {
   report.failedRequests = session.failedRequests.map(request => ({ ...request, ...requests.get(request.requestId) }))
   report.httpErrors = session.responses.filter(response => response.status >= 400)
   report.cleanup = await session.cleanup()
-  report.passed = report.scenarios.length === 14 && report.scenarios.every(s => s.passed) && !report.error &&
+  report.passed = report.scenarios.length === 16 && report.scenarios.every(s => s.passed) && !report.error &&
     [report.requestErrors, report.consoleErrors, report.pageExceptions, report.failedRequests, report.httpErrors, report.cleanup.errors].every(items => items.length === 0) &&
     report.cleanup.remainingProcesses === 0 && report.cleanup.profileRemoved
   await writeFile(path.join(output, 'report.json'), JSON.stringify(report, null, 2))

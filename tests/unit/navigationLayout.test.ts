@@ -77,12 +77,16 @@ describe('navigation layout helpers', () => {
   // 顶部子菜单的全部交互——打开/关闭、键盘焦点入口、方向键循环、Escape 归还焦点、
   // 点浮层外关闭、失效父项清理——改由真 DOM 断言：见 tests/unit/topNavigationSubmenu.test.ts。
 
-  it('raises the hovered bookmark shell with its tooltip', () => {
+  // Wiring guard only; real hit testing, layer priority and pixels are covered by bookmark-hover-regression.mjs.
+  it('wires shell promotion to visible tooltip targets instead of the full rectangle', () => {
     const source = readFileSync('src/components/BookmarkCard.svelte', 'utf8')
 
     expect(source).toContain('z-index: 0;')
-    expect(source).toContain('.bookmark-card-shell:hover,')
-    expect(source).toContain('.bookmark-card-shell:focus-within')
+    expect(source).not.toContain('.bookmark-card-shell:hover,')
+    expect(source).not.toContain('.bookmark-card-shell:focus-within')
+    expect(source).toContain('@media (hover: hover)')
+    expect(source).toContain(':where(.bookmark-tooltip-anchor:not(.sort-mode):hover)')
+    expect(source).toContain(':where(.bookmark-tooltip-anchor:not(.sort-mode):focus-visible)')
     expect(source).toContain('z-index: 1;')
   })
 
