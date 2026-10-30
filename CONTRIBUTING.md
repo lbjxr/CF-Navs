@@ -76,6 +76,7 @@
 - 计算样式、`dvh` 与安全区、虚拟键盘、剪贴板用户手势、iOS 输入放大 **jsdom 证明不了**。计算样式与视口数值现在由 L3 的 CDP 脚本覆盖；真机独有的那几项进 L4。不要用源码文本断言假装覆盖了它们。
 - 源码文本断言（`readFileSync` + `toContain`）只用于"接线是否存在"，不用于证明行为。
 - 测试分两个 Vitest project（`vite.config.ts`）：**首行**是 `// @vitest-environment jsdom` 的文件进 `jsdom` project，走 `vmForks` 池（同一 worker 复用已加载的 jsdom，每个文件仍在全新 VM 上下文里求值）；其余进 `node` project，走默认 `forks`。全量从约 140 秒降到约 45～60 秒（双核机器；环境准备 58.6s → 3.7s），测试文件与用例数不变。注意：
+  - 默认 worker 数为 `min(4, max(2, availableParallelism() - 1))`，避免多核机器同时冷编译和加载 jsdom，把短用例挤到既有 5 秒期限之外；不提高 `testTimeout`，不跳过用例或取消隔离。需要覆盖时使用正整数环境变量 `VITEST_MAX_WORKERS`；当前 Vitest 4.1 的 `extends: true` 子项目会保留配置中的 worker 数，单传 `--maxWorkers` 不一定覆盖它们，须核对实际解析值。并发调整后必须跑全量测试，不能用单文件通过替代。
   - 只认首行。docblock 写在第二行的 jsdom 文件仍会在 jsdom 里跑，但落进 `node` project 的 `forks` 池，失去提速。
   - `vmForks` 下 `instanceof` 跨 realm 会失真（`node:sqlite` 返回的对象、Node 内置模块产出的 `Uint8Array` 等来自宿主 realm；改成 `vmForks` 跑全部文件时曾有 4 个纯逻辑用例因此失败）。不需要 DOM 的纯逻辑测试**不要**加 jsdom docblock；需要 DOM 又要断言这类对象时，改用结构断言（`ArrayBuffer.isView`、`toMatchObject`），不要把文件挪回 `forks` 了事。
   - 只需要一个对象引用、不触碰 DOM API 的测试应留在 `node` project（例如 `searchBoxVisibility` 用 `{}` 代替元素）。

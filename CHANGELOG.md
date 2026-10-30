@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **测试并发导致的偶发超时**：Vitest 默认 worker 数限制在 2～4，避免多核机器的模块冷加载与 jsdom 事件处理争用执行资源，使 `appServices` 和图像生命周期队列用例越过原有 5 秒期限；保留全部用例、原超时和 node/jsdom 隔离方式。工程规则补充可同时覆盖两个子项目的 `VITEST_MAX_WORKERS`，不再把仅改变顶层值的命令行参数当作有效降并发证据。
+
 ### 变更
 
 - **可选 GitHub Actions 部署（Issue #23）**：新增 `.github/workflows/deploy.yml`，在 Workers Builds / Git 导入不可用时可由推送触发 `npm ci`、构建、`setup:wrangler` 资源解析和 `wrangler deploy`。默认不启用，必须显式设置仓库变量 `CF_NAVS_DEPLOY_PROVIDER=github-actions`；默认部署仍是 Cloudflare 账号关联的 Git 构建。工作流只用 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` 访问目标账号，真实 D1/KV ID 只写入 runner 临时配置；启用前需断开 Cloudflare Git 集成以免重复部署。
