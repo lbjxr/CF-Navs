@@ -34,3 +34,4 @@ docs/screenshots/test-*
 
 # IDE configuration
 .idea/
+dist-server/

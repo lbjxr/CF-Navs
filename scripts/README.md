@@ -11,6 +11,7 @@
 ## 测试与审计
 
 - `npm test` 使用 Node 内置 SQLite 执行图标版本/迁移的真实 SQL 单元测试，传入 `--experimental-sqlite` 以兼容 Node 22.12；无需安装额外数据库依赖。Worker/D1 平台差异仍由 L1 检查。
+- `bookmark-hover-regression.mjs`：先 `npm run build`，再 `node scripts/bookmark-hover-regression.mjs`。隔离无头 Chrome 加载真实构建的首页，以 CDP 拦截提供 48 条合成书签；不启动服务器、不读取生产配置或凭据、不访问外部站点。覆盖两种卡片的边缘微移、透明圆角像素与叠放层级稳定、提示层、Tab 焦点、点击/触摸导航，以及明暗主题、DPR 1/1.25/1.5/2、减少动态效果和 390px 视口；滚动后的截图使用文档坐标。可传入另一份构建目录做修复前反向对照；`CHROME_EXE` 可指定浏览器。报告、截图与所有权清单保存在系统临时目录，finally 验证浏览器和 profile 清理；不代表硬件 GPU 或其他浏览器的合成验证。
 
 - `icon-storage-regression.mjs`：`npm run test:icon-storage` 在临时本地页面运行原生 IndexedDB 事务/双标签/离线读盘/配额/损坏修复验证，并以 100/500/1,000 条合成 SVG 分别进行五轮 20 项首批样本与全量读盘/解码测量，报告中位数、p95、最大值、IDB 读取数、正文/索引占用和 object URL 峰值。不读取测试站点配置或管理员凭据；使用独立无头 Chrome profile，报告与所有权清单写入系统临时目录，finally 清理并验证。该结果只代表存储/解码层，不是整页渲染或 D1 性能证据，也不是完整页面 E2E 的替代。
 - `category-icon-perf-regression.mjs`：`npm run regression:icons:perf` 在隔离 Worker/D1 与真实 Chrome 中创建 100 个书签、30 个分类，按首页分类、Sidebar 子菜单、搜索分组和后台分类列表执行五轮 cold/hot 入口测量，记录就绪耗时、分类物化请求、失败请求和清理结果。

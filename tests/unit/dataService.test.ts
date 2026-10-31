@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
 import type {
@@ -293,6 +294,11 @@ describe('dataService.refreshPublicData', () => {
 })
 
 describe('dataService.recordBookmarkClick', () => {
+  beforeEach(() => {
+    // 真实 registerClick 恒返回 Promise；裸 mock 返回 undefined 会让调用点的 .catch 抛错。
+    api.public.registerClick.mockResolvedValue(null)
+  })
+
   it('persists the optimistic click into the same-version snapshot so a refresh keeps it (anonymous)', async () => {
     const seeded: PublicData = { ...makePublicData('v1'), bookmarks: [{ ...makePublicBookmark(bookmark), click_count: 0 }] }
     applyPublicData(seeded, 'v1')
@@ -315,6 +321,24 @@ describe('dataService.recordBookmarkClick', () => {
 
     expect(get(publicStore).data?.bookmarks[0].click_count).toBe(1)
     expect(api.public.getData).not.toHaveBeenCalled()
+  })
+
+  it('swallows registerClick failures instead of leaking an unhandled rejection (PR #26)', async () => {
+    applyPublicData({ ...makePublicData('v1'), bookmarks: [{ ...makePublicBookmark(bookmark), click_count: 0 }] }, 'v1')
+    api.public.registerClick.mockRejectedValueOnce(new Error('network down'))
+
+    // 行为契约：登记失败不许同步抛错、不许影响本地乐观计数。
+    expect(() => recordBookmarkClick(bookmark.id)).not.toThrow()
+    expect(api.public.registerClick).toHaveBeenCalledWith(bookmark.id)
+    expect(get(publicStore).data?.bookmarks[0].click_count).toBe(1)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    // 接线断言：rejection 是否被吞只能发生在调用点接了 .catch 上。
+    // 本文件跑在 vmForks 的 jsdom 环境，vm 内的 unhandled rejection 传不到
+    // 宿主 process，行为层面测不出来，故按仓库既有的接线断言先例对源码形状兜底：
+    // 撤掉 .catch 本用例必红（已实测对照）。
+    const source = readFileSync('src/lib/dataService.ts', 'utf8')
+    expect(source).toMatch(/void api\.public\.registerClick\(bookmarkId\)\.catch\(\(\) => undefined\)/)
   })
 
   it('increments and persists the admin snapshot when logged in', () => {

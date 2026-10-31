@@ -72,8 +72,9 @@ export default defineConfig(({ mode }) => ({
   test: mode === 'test' ? (() => {
     const files = splitTestFiles()
     return {
-      // 默认 worker 数为「核数 - 1」，双核机器上只有 1 个 worker；至少用 2 个。
-      maxWorkers: Math.max(2, availableParallelism() - 1),
+      // Bound cold-transform/jsdom contention on many-core hosts without relaxing test timeouts.
+      // Keep the two-worker floor; VITEST_MAX_WORKERS can override both inherited projects.
+      maxWorkers: Math.min(4, Math.max(2, availableParallelism() - 1)),
       projects: [
         { extends: true, test: { name: 'node', include: files.node, environment: 'node' } },
         { extends: true, test: { name: 'jsdom', include: files.jsdom, environment: 'jsdom', pool: 'vmForks' } },

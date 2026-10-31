@@ -295,7 +295,9 @@ export function recordBookmarkClick(bookmarkId: number): void {
     const data = get(publicStore).data
     if (data) void writeCachedPublicData(data, currentDataVersion)
   }
-  void api.public.registerClick(bookmarkId)
+  // 计数是 fire-and-forget：失败（限流、网络异常）必须静默吞掉，
+  // 否则会冒泡成 unhandledrejection，被错误监控误报为前端异常（PR #26 问题 2）。
+  void api.public.registerClick(bookmarkId).catch(() => undefined)
 }
 
 function updatePublicDataLocally(transform: (data: PublicData) => PublicData): boolean {

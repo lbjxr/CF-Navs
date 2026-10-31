@@ -94,11 +94,27 @@ More interface screenshots can be found in [`docs/screenshots`](../../docs/scree
 
 ## Quick Deployment
 
-**Don't want to bother with servers? We recommend starting with a console-based deployment.** Prepare your GitHub and Cloudflare accounts, then complete the deployment by following "Fork → Link Repository → Set Installation Token → Initialize via Webpage." A normal installation does not require manual SQL execution or entering a Cloudflare API Token.
+**Don't want to mess with servers? We recommend starting with a console deployment.** Prepare your GitHub and Cloudflare accounts, then complete the deployment by following "Fork → Associate Repository → Set Installation Token → Initialize via Web". A normal installation does not require manually executing SQL or entering a Cloudflare API Token. If Workers Builds / Git import is unavailable, you can use the [GitHub Actions Alternative Deployment](../../docs/guides/DEPLOYMENT.md#方式三github-actions备选); however, associating a Cloudflare account is still the recommended default method.
 
 You can start with Cloudflare's free plan, but the free tier is not unlimited. Requests, databases, and KV operations each have quotas. For details, refer to the official documentation for [Workers](https://developers.cloudflare.com/workers/platform/pricing/), [D1](https://developers.cloudflare.com/d1/platform/pricing/), and [KV](https://developers.cloudflare.com/kv/platform/pricing/).
 
-When using it for the first time, please complete one deployment method in its entirety. Do not mix the two processes. Both methods will ultimately initialize the database and administrator account via `/install`.
+For your first use, please select a deployment method and complete the entire process. Do not mix the two procedures. Regardless of the method you use, the database and administrator account will ultimately be initialized via `/install`.
+
+### Self-hosted (Docker)
+
+You can also self-host without using Cloudflare: this repository also provides a Docker deployment for Node + SQLite (runtime is in `server/`, deployment assets are in `docker/`). The application features are identical to the Cloudflare version, and there is a ready-made import tool for migrating data from Cloudflare:
+
+```bash
+git clone https://github.com/lbjxr/CF-Navs.git
+cd CF-Navs/docker
+```
+
+For deployment, reverse proxy, data migration, backup and recovery, and security boundaries, see
+[DOCKER_DEPLOY.md](../../docs/guides/DOCKER_DEPLOY.md).
+
+> ⚠️ 2026-10-23 Security Notice: Prebuilt images released before 2026-10-21 contain a
+> high-severity vulnerability in Node.js (the fixed version is v24.22.1). Before the next official image is released,
+> please follow Method B in the guide to build and deploy from source code. For details, see [DOCKER_DEPLOY.md](../../docs/guides/DOCKER_DEPLOY.md).
 
 CF-Navs requires the following Cloudflare resources:
 

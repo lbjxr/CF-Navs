@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **书签透明圆角的残余微闪**：卡片外框不再因普通 hover / focus-within 无条件提高叠放层级，避免鼠标仅经过圆角透明区时改变毛玻璃合成。仅在支持悬停且提示层实际显示时提高层级，排序态不提升，右键菜单保留更高优先级；补充透明圆角、提示层和 1.5 倍 DPR 浏览器回归。硬件浏览器的临时样式 A/B/A 对照已确认局部微弱像素变化随该规则消失并恢复，不将其扩大为所有跨行闪影均已复现或解决。
+- **测试并发导致的偶发超时**：Vitest 默认 worker 数限制在 2～4，避免多核机器的模块冷加载与 jsdom 事件处理争用执行资源，使 `appServices` 和图像生命周期队列用例越过原有 5 秒期限；保留全部用例、原超时和 node/jsdom 隔离方式。工程规则补充可同时覆盖两个子项目的 `VITEST_MAX_WORKERS`，不再把仅改变顶层值的命令行参数当作有效降并发证据。
+- **书签卡片边缘悬停抖动**：详情与极简卡片不再通过 hover / 键盘聚焦位移改变链接命中区域，避免鼠标在底边微移时反复触发悬停、提示层闪动及毛玻璃重绘。保留毛玻璃、悬停描边、阴影与键盘焦点环；增加基于真实首页构建的隔离 Chrome 回归，覆盖边缘命中、上方卡片像素稳定、明暗主题、触摸和减少动态效果。硬件 GPU 合成与部署后表现仍需在目标环境复验。
+
 ### 变更
 
 - **可选 GitHub Actions 部署（Issue #23）**：新增 `.github/workflows/deploy.yml`，在 Workers Builds / Git 导入不可用时可由推送触发 `npm ci`、构建、`setup:wrangler` 资源解析和 `wrangler deploy`。默认不启用，必须显式设置仓库变量 `CF_NAVS_DEPLOY_PROVIDER=github-actions`；默认部署仍是 Cloudflare 账号关联的 Git 构建。工作流只用 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` 访问目标账号，真实 D1/KV ID 只写入 runner 临时配置；启用前需断开 Cloudflare Git 集成以免重复部署。

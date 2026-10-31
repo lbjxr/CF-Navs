@@ -655,9 +655,13 @@
     }
   }
 
-  .bookmark-card-shell:hover,
-  .bookmark-card-shell:focus-within {
-    z-index: 1;
+  /* Empty-corner hover must not recomposite the glass. Only visible tooltips need promotion;
+     :where keeps the explicit context-menu-open layer above them. */
+  @media (hover: hover) {
+    .bookmark-card-shell:has(> :global(:where(.bookmark-tooltip-anchor:not(.sort-mode):hover))),
+    .bookmark-card-shell:has(> :global(:where(.bookmark-tooltip-anchor:not(.sort-mode):focus-visible))) {
+      z-index: 1;
+    }
   }
 
   .bookmark-card-shell.is-info {

@@ -1,0 +1,41 @@
+# CF-Navs 自托管（单仓布局，部署资产都在 docker/ 里）。用法见 docs/guides/DOCKER_DEPLOY.md。
+#   cd docker
+#   cp .env.example .env   # 填 SETUP_TOKEN
+#   docker compose pull && docker compose up -d   # 拉预构建镜像（推荐，免本地构建）
+#   docker compose up -d --build                  # 或从仓库源码构建（二选一）
+
+# 项目名钉死为 cf-navs：数据卷名由它派生（cf-navs_cf-navs-data）。
+# 若让 compose 按所在目录推导，布局调整（如本文件从仓库根移入 docker/）
+# 会换出一个全新空卷，老数据看似"丢失"——钉死后与文件位置无关。
+name: cf-navs
+services:
+  cf-navs:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ghcr.io/lbjxr/cf-navs:latest
+    container_name: cf-navs
+    restart: unless-stopped
+    # 只绑宿主机回环：对外服务由 Nginx/Caddy 反向代理提供（见 docs/guides/DOCKER_DEPLOY.md）。
+    # 直接把应用端口暴露公网会绕过反代，切勿改成 0.0.0.0，除非你清楚 IP 信任边界。
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      SETUP_TOKEN: "${SETUP_TOKEN:?请在 docker/.env 中设置 SETUP_TOKEN（首次安装令牌）}"
+      # 端口只发布在宿主机回环时，直连对端恒为本机代理链，可信任其转发头。
+      # 若改了端口绑定或拓扑，按 docs/guides/DOCKER_DEPLOY.md 收紧 TRUST_PROXY_CIDRS。
+      TRUST_PROXY: "true"
+      TRUST_PROXY_CIDRS: ""
+      CACHE_MAX_BYTES: "33554432"
+    volumes:
+      - cf-navs-data:/data
+    # 1 核 1G 规格参考值：应用常驻内存远低于此，主要防异常膨胀拖垮宿主机。
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  cf-navs-data:
