@@ -5,6 +5,8 @@
 > tag 打在 `develop` 上，部署来源也是 `develop`；`main` 只在维护者主动要求时作为归档快照合入，不代表线上代码。
 > 完整发版流程见 [CONTRIBUTING.md](CONTRIBUTING.md) 第 6 节。版本制之前的记录按日期分节保留，不追认版本号。
 
+## v0.9.1 — 2026-10-31
+
 ## [Unreleased]
 
 ### 修复
