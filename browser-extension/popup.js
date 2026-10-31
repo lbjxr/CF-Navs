@@ -8,6 +8,7 @@ function showStatus(message, type = 'neutral') {
 function setBusy(isBusy) {
   $('login').disabled = isBusy
   $('disable').disabled = isBusy
+  $('pending').disabled = isBusy
   $('login').textContent = isBusy ? '正在连接...' : '登录并开启同步'
 }
 
@@ -42,7 +43,17 @@ $('login').addEventListener('click', () => {
       return
     }
     $('password').value = ''
-    showStatus('已开启同步 · 只处理之后新增的浏览器书签', 'success')
+    showStatus('已开启同步 · 新增收藏时将打开分类选择窗口', 'success')
+  })
+})
+
+$('pending').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ type: 'open-pending' }, (response) => {
+    if (chrome.runtime.lastError || !response?.ok) {
+      showStatus(response?.error || '没有待同步的收藏', 'error')
+      return
+    }
+    window.close()
   })
 })
 

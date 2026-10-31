@@ -58,6 +58,10 @@ publicApi.route('/', iconRoutes)
 // 透传中间件：先于受保护子应用执行，使 401 响应同样带上这些头。
 publicApi.options('/browser-sync/bookmarks', () => corsPreflight())
 publicApi.use('/browser-sync/*', corsHeaders)
+// 扩展在同步确认窗口读取分类树；写接口仍由 protectedApi 统一鉴权。
+publicApi.options('/categories', () => corsPreflight())
+publicApi.use('/categories', corsHeaders)
+publicApi.use('/categories/*', corsHeaders)
 
 export const protectedApi = new Hono<HonoEnv>()
 

@@ -17,6 +17,14 @@ async function findBrowserSyncCategory(db: D1Database): Promise<Category | null>
     .first<Category>()
 }
 
+async function findSyncCategory(db: D1Database, categoryId?: number): Promise<Category | null> {
+  if (categoryId === undefined) return findBrowserSyncCategory(db)
+  return await db
+    .prepare(`SELECT ${CATEGORY_FIELDS} FROM categories WHERE id = ?`)
+    .bind(categoryId)
+    .first<Category>()
+}
+
 /**
  * 幂等创建「浏览器新增收藏」根分类的单条语句：已存在时命中 0 行。
  * 作为语句而不是函数暴露，是为了能和设置写入 / 同步书签写入以及 data_version
@@ -61,9 +69,12 @@ export async function syncBrowserBookmarks(
   db: D1Database,
   input: BrowserSyncBookmark[],
   receipt?: MutationReceipt,
-): Promise<BrowserSyncResp> {
+  categoryId?: number,
+): Promise<BrowserSyncResp | null> {
   await ensureSchema(db)
-  const existing = await findBrowserSyncCategory(db)
+  const existing = await findSyncCategory(db, categoryId)
+  // 显式选择的分类必须已经存在，不能因过期界面或无效 id 静默写入默认分类。
+  if (categoryId !== undefined && !existing) return null
   const existingUrls = new Set<string>()
   if (existing) {
     const { results } = await db
@@ -107,9 +118,9 @@ export async function syncBrowserBookmarks(
            COALESCE((SELECT MAX(sort) FROM bookmarks WHERE category_id = target.cid), -1) + 1, ?
          FROM (SELECT ${categoryExpr} AS cid) AS target
          WHERE target.cid IS NOT NULL AND EXISTS (SELECT 1 FROM categories WHERE id = target.cid)
-         RETURNING id`,
+         RETURNING bookmarks.id`,
       )
-      .bind(categoryParam, bookmark!.title, bookmark!.url, bookmark!.icon, bookmark!.icon_source, now))
+      .bind(bookmark!.title, bookmark!.url, bookmark!.icon, bookmark!.icon_source, now, categoryParam))
   }
   const results = await mutation.commit(receipt)
   const insertResults = existing ? results : results.slice(1)

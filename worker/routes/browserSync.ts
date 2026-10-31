@@ -22,14 +22,17 @@ browserSyncRoutes.post('/bookmarks', async (c) => {
     !body ||
     !Array.isArray(body.bookmarks) ||
     body.bookmarks.length > MAX_BATCH_SIZE ||
-    !body.bookmarks.every((bookmark) => bookmark && typeof bookmark === 'object')
+    !body.bookmarks.every((bookmark) => bookmark && typeof bookmark === 'object') ||
+    (body.category_id !== undefined &&
+      (!Number.isInteger(body.category_id) || (body.category_id as number) <= 0))
   ) {
     return badRequest(c, 'invalid browser sync payload')
   }
 
   try {
     const receipt = createMutationReceipt()
-    const result = await syncBrowserBookmarks(c.env.DB, body.bookmarks, receipt)
+    const result = await syncBrowserBookmarks(c.env.DB, body.bookmarks, receipt, body.category_id)
+    if (!result) return c.json(fail(ErrCode.NOT_FOUND, 'category not found'))
     return mutationJson(c, result, receipt)
   } catch (error) {
     return serverError(c, 'failed to sync browser bookmarks', error)
