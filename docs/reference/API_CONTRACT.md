@@ -116,6 +116,8 @@
 
 全部需要登录。
 
+Chrome/Edge 扩展通过 `OPTIONS /api/categories` 预检后读取此列表；CORS 只影响扩展跨源调用能力，GET 仍必须携带有效 Bearer Session Token，未认证响应为 401。
+
 | 方法 | 路径 | 返回 | 说明 |
 | --- | --- | --- | --- |
 | GET | `/api/admin/data` | `AdminData` | 后台初始化聚合数据，一次返回分类、书签和完整 `Settings`，用于替代进入后台时分别请求公开数据和设置 |
@@ -330,9 +332,9 @@ HTTP(S) 图标抓取成功后，代理会直接返回图片字节并写入 Cloud
 
 | 方法 | 路径 | 请求 | 返回 |
 | --- | --- | --- | --- |
-| POST | `/api/browser-sync/bookmarks` | `{ bookmarks: { title: string, url: string }[] }`，最多 100 条 | `{ category_id, category_title, created, skipped }` |
+| POST | `/api/browser-sync/bookmarks` | `{ bookmarks: { title: string, url: string }[], category_id?: number }`，最多 100 条 | `{ category_id, category_title, created, skipped }` |
 
-服务端只接收 `http://` 和 `https://` 书签；重复 URL、空标题、非法 URL 或无效记录会计入 `skipped`。同步创建的书签默认写入 `https://favicon.im/<hostname>?larger=true`，`icon_source` 为 `favicon_im`，不在同步请求期间执行外部页面抓取。同步开关关闭时返回冲突错误，不会写入数据。浏览器收藏夹文件夹不会作为导航分类处理，所有记录固定写入“浏览器新增收藏”。
+服务端只接收 `http://` 和 `https://` 书签；目标分类内的重复 URL、空标题、非法 URL 或无效记录会计入 `skipped`。传入 `category_id` 时必须指向现存分类，否则返回 `1003`，不写入任何书签，也不回退到默认分类；省略时保持旧客户端行为，写入“浏览器新增收藏”。同步创建的书签默认写入 `https://favicon.im/<hostname>?larger=true`，`icon_source` 为 `favicon_im`，不在同步请求期间执行外部页面抓取。同步开关关闭时返回冲突错误，不会写入数据。浏览器收藏夹文件夹不会作为导航分类处理，扩展在每次同步确认前由用户选择分类。
 
 ## 导入接口
 

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>同步到 CF-Navs</title>
+    <style>
+      :root { color-scheme: light; font: 14px/1.5 "Segoe UI", sans-serif; }
+      * { box-sizing: border-box; }
+      body { width: 100%; min-width: 0; min-height: 530px; margin: 0; color: #172033; background: #f6f8fc; }
+      header { padding: 20px 22px; color: #fff; background: linear-gradient(135deg, #ff8a1f, #f2385b); }
+      header img { float: left; width: 38px; height: 38px; margin-right: 11px; border-radius: 11px; }
+      h1 { margin: 0; font-size: 18px; }
+      header p { margin: 1px 0 0; color: rgba(255,255,255,.82); font-size: 11px; }
+      main { clear: both; padding: 18px; }
+      .bookmark { margin-bottom: 16px; padding: 13px; border: 1px solid #e3e9f2; border-radius: 12px; background: #fff; }
+      .field + .field { margin-top: 12px; }
+      label { display: block; margin-bottom: 6px; color: #4b5870; font-size: 12px; font-weight: 700; }
+      input { width: 100%; height: 38px; padding: 0 10px; border: 1px solid #dce3ed; border-radius: 9px; outline: none; color: #172033; background: #fbfcfe; font: inherit; font-size: 12px; }
+      input[type="url"] { direction: ltr; }
+      input:focus { border-color: #ff8750; background: #fff; box-shadow: 0 0 0 3px rgba(255,129,75,.15); }
+      input:disabled { color: #8a96a8; background: #f4f6fa; cursor: wait; }
+      select { width: 100%; height: 42px; padding: 0 10px; border: 1px solid #dce3ed; border-radius: 10px; color: #172033; background: #fff; font: inherit; font-size: 12px; }
+      select:focus { outline: 3px solid rgba(255,129,75,.18); border-color: #ff8750; }
+      .hint { margin: 8px 0 0; color: #8a96a8; font-size: 11px; }
+      #status { min-height: 36px; margin: 14px 0 0; color: #64748b; font-size: 12px; }
+      #status.error { color: #b43c3c; }
+      #status.success { color: #16734b; }
+      .actions { display: grid; grid-template-columns: 1fr 2fr; gap: 9px; margin-top: 8px; }
+      button { min-height: 40px; border: 0; border-radius: 10px; color: #fff; background: linear-gradient(135deg, #f36b36, #e74354); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+      button.secondary { color: #64748b; background: #e9edf4; }
+      button:disabled { opacity: .55; cursor: wait; }
+      footer { margin: 15px 0 0; color: #9aa6b8; text-align: center; font-size: 10px; }
+    </style>
+  </head>
+  <body>
+    <header><img src="icon.png" alt=""><h1>收进导航页</h1><p>选择分类，确认后同步这条收藏</p></header>
+    <main>
+      <div class="bookmark">
+        <div class="field"><label for="bookmark-title">标题</label><input id="bookmark-title" type="text" maxlength="200" autocomplete="off" placeholder="书签标题" disabled></div>
+        <div class="field"><label for="bookmark-url">URL</label><input id="bookmark-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://example.com" disabled></div>
+      </div>
+      <label for="category">保存到分类</label>
+      <select id="category" disabled><option>正在加载分类...</option></select>
+      <p class="hint">一级和二级分类均可选择。本次只同步到所选分类。</p>
+      <p id="status" role="status" aria-live="polite"></p>
+      <div class="actions"><button id="later" class="secondary" type="button">稍后处理</button><button id="sync" type="button" disabled>确认同步</button></div>
+      <footer>稍后处理会保留记录，返回扩展首页后可继续处理。</footer>
+    </main>
+    <script src="sync-dialog.js"></script>
+  </body>
+</html>

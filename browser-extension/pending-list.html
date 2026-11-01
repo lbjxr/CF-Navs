@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>待同步浏览器收藏</title>
+    <style>
+      :root { color-scheme: light; font: 14px/1.5 "Segoe UI", sans-serif; }
+      * { box-sizing: border-box; }
+      body { width: 100%; min-width: 0; min-height: 610px; margin: 0; color: #172033; background: #f6f8fc; }
+      header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; color: #fff; background: linear-gradient(135deg, #ff8a1f, #f2385b); }
+      .brand { display: flex; align-items: center; min-width: 0; gap: 10px; }
+      header img { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px; }
+      h1 { margin: 0; font-size: 18px; }
+      header p { margin: 1px 0 0; color: rgba(255,255,255,.82); font-size: 11px; }
+      header button { flex: 0 0 auto; min-height: 34px; padding: 7px 10px; border: 1px solid rgba(255,255,255,.34); border-radius: 9px; color: #fff; background: rgba(255,255,255,.14); cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
+      header button:hover { background: rgba(255,255,255,.24); }
+      main { padding: 16px; }
+      .toolbar { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+      .select-all { display: inline-flex; align-items: center; gap: 7px; color: #4b5870; font-size: 12px; font-weight: 800; }
+      input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: #eb4f45; }
+      #summary { flex: 1 1 auto; min-width: 0; color: #8a96a8; font-size: 11px; }
+      #refresh { min-height: 32px; padding: 6px 10px; border: 1px solid #dce3ed; border-radius: 8px; color: #64748b; background: #fff; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
+      #refresh:hover { color: #d04e32; border-color: #ffd2c2; background: #fff7f3; }
+      .list { display: grid; gap: 9px; min-height: 190px; margin: 12px 0 0; padding: 0; list-style: none; }
+      .item { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 9px; padding: 12px; border: 1px solid #e0e6ef; border-radius: 12px; background: #fff; box-shadow: 0 5px 15px rgba(37,58,93,.05); }
+      .item.missing { border-color: #ffc7c7; background: #fff7f7; }
+      .item.changed { border-color: #f3d49a; background: #fffaf0; }
+      .item-check { padding-top: 2px; }
+      .item-main { min-width: 0; }
+      .item-title { display: block; overflow: hidden; color: #1d293d; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 800; }
+      .item-url { display: block; overflow: hidden; margin-top: 3px; color: #7f8ba0; direction: ltr; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+      .item-state { margin: 8px 0 0; color: #16734b; font-size: 11px; }
+      .item-state.missing { color: #b43c3c; }
+      .item-state.changed { color: #9a6300; }
+      .empty { display: grid; min-height: 190px; place-items: center; padding: 24px; border: 1px dashed #ccd6e4; border-radius: 12px; color: #8a96a8; background: rgba(255,255,255,.6); text-align: center; font-size: 12px; }
+      #status { min-height: 30px; margin: 10px 0 0; color: #64748b; font-size: 11px; }
+      #status.error { color: #b43c3c; }
+      #status.success { color: #16734b; }
+      .actions { display: grid; grid-template-columns: 1fr 1.5fr; gap: 9px; margin-top: 2px; }
+      .actions button { min-height: 40px; border: 0; border-radius: 10px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; }
+      .actions button:disabled, header button:disabled, #refresh:disabled { opacity: .55; cursor: wait; }
+      .danger { color: #b43c3c; background: #fff0f0; }
+      .danger:hover:not(:disabled) { background: #ffe2e2; }
+      .primary { color: #fff; background: linear-gradient(135deg, #f36b36, #e74354); box-shadow: 0 6px 14px rgba(228,72,67,.2); }
+      .primary:hover:not(:disabled) { box-shadow: 0 8px 17px rgba(228,72,67,.27); transform: translateY(-1px); }
+      footer { margin-top: 14px; color: #9aa6b8; text-align: center; font-size: 10px; }
+      @media (max-width: 420px) {
+        header { padding: 16px; }
+        main { padding: 14px; }
+        header button { padding-inline: 8px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand"><img src="icon.png" alt=""><div><h1>待同步收藏</h1><p>选择要收进导航页的浏览器书签</p></div></div>
+      <button id="home" type="button">返回首页</button>
+    </header>
+    <main>
+      <div class="toolbar">
+        <label class="select-all"><input id="select-all" type="checkbox" checked>全选</label>
+        <span id="summary">正在读取待同步收藏...</span>
+        <button id="refresh" type="button">刷新状态</button>
+      </div>
+      <ul id="list" class="list"></ul>
+      <p id="status" role="status" aria-live="polite"></p>
+      <div class="actions"><button id="remove-selected" class="danger" type="button" disabled>删除选中</button><button id="sync-selected" class="primary" type="button" disabled>同步选中</button></div>
+      <footer>未勾选的收藏会保留；删除后不再出现在待同步列表。</footer>
+    </main>
+    <script src="pending-list.js"></script>
+  </body>
+</html>

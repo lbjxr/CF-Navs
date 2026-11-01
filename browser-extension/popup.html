@@ -7,7 +7,7 @@
     <style>
       :root { color-scheme: light; font: 14px/1.5 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       * { box-sizing: border-box; }
-      body { width: 368px; margin: 0; color: #172033; background: #f6f8fc; }
+      body { width: 100%; min-width: 0; margin: 0; color: #172033; background: #f6f8fc; }
       .shell { overflow: hidden; }
       .hero { position: relative; padding: 22px 22px 20px; color: #fff; background: linear-gradient(135deg, #ff8a1f 0%, #ff5c35 48%, #f2385b 100%); }
       .hero::after { content: ""; position: absolute; width: 150px; height: 150px; right: -38px; top: -62px; border: 22px solid rgba(255,255,255,.14); border-radius: 50%; box-shadow: 0 0 0 16px rgba(255,255,255,.08); }
@@ -15,11 +15,8 @@
       .brand img { width: 48px; height: 48px; border-radius: 14px; box-shadow: 0 7px 18px rgba(110,25,33,.24); }
       .eyebrow { margin: 0 0 1px; color: rgba(255,255,255,.78); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
       h1 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
-      .subtitle { position: relative; z-index: 1; margin: 16px 0 0; max-width: 290px; color: rgba(255,255,255,.9); font-size: 12px; }
+      .subtitle { position: relative; z-index: 1; margin: 10px 0 0; max-width: 350px; color: rgba(255,255,255,.9); font-size: 11px; line-height: 1.6; }
       .content { padding: 16px; }
-      .chips { display: flex; gap: 7px; margin: 0 0 14px; }
-      .chip { padding: 4px 9px; border: 1px solid #dce4f0; border-radius: 999px; color: #64748b; background: #fff; font-size: 11px; font-weight: 700; }
-      .chip.accent { border-color: #ffd9c6; color: #d9572e; background: #fff6f1; }
       .card { padding: 15px; border: 1px solid #e3e9f2; border-radius: 16px; background: #fff; box-shadow: 0 8px 24px rgba(37,58,93,.07); }
       .section-title { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
       .section-icon { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 10px; color: #e85b2c; background: #fff0e9; }
@@ -27,11 +24,26 @@
       .section-title strong, .section-title small { display: block; }
       .section-title strong { font-size: 13px; }
       .section-title small { margin-top: 1px; color: #8a96a8; font-size: 11px; }
+      .connection-summary { display: flex; align-items: center; gap: 9px; margin: 0 0 13px; padding: 10px 11px; border-radius: 10px; color: #16734b; background: #ecfbf3; }
+      .connection-summary[hidden] { display: none; }
+      .connection-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: #20b36d; box-shadow: 0 0 0 3px rgba(32,179,109,.14); }
+      .connection-summary strong, .connection-summary small { display: block; }
+      .connection-summary strong { font-size: 11px; }
+      .connection-summary small { overflow: hidden; margin-top: 1px; color: #4f8b6d; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+      .credentials-panel { margin: 0 -4px; }
+      .credentials-panel summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 4px; border-radius: 8px; color: #4b5870; cursor: pointer; font-size: 11px; font-weight: 800; list-style: none; }
+      .credentials-panel summary::-webkit-details-marker { display: none; }
+      .credentials-panel summary::after { content: '⌄'; color: #8a96a8; font-size: 16px; line-height: 1; transition: transform .15s; }
+      .credentials-panel[open] summary::after { transform: rotate(180deg); }
+      .credentials-panel summary:hover { color: #d04e32; background: #fff7f3; }
+      .credentials-panel summary small { margin-left: auto; color: #9aa6b8; font-size: 10px; font-weight: 600; }
+      .credentials-fields { padding: 1px 4px 0; }
       label { display: block; margin: 12px 0 6px; color: #4b5870; font-size: 11px; font-weight: 800; }
       .input-wrap { position: relative; }
       .input-wrap > svg { position: absolute; top: 11px; left: 11px; width: 16px; height: 16px; color: #9aa6b8; pointer-events: none; }
       input { width: 100%; height: 38px; padding: 0 11px 0 35px; border: 1px solid #dce3ed; border-radius: 10px; outline: none; color: #172033; background: #fbfcfe; font: inherit; font-size: 12px; transition: border-color .15s, box-shadow .15s, background .15s; }
       input:focus { border-color: #ff8750; background: #fff; box-shadow: 0 0 0 3px rgba(255,129,75,.15); }
+      input:disabled { color: #8a96a8; background: #f4f6fa; cursor: wait; }
       .password-wrap input { padding-right: 42px; }
       .icon-button { position: absolute; top: 5px; right: 5px; display: grid; width: 28px; height: 28px; margin: 0; padding: 0; place-items: center; border: 0; color: #8a96a8; background: transparent; }
       .icon-button:hover { color: #e85b2c; background: #fff1e9; }
@@ -43,6 +55,7 @@
       .status-dot { flex: 0 0 auto; width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: #a8b2c1; }
       .notice.success .status-dot { background: #20b36d; box-shadow: 0 0 0 3px rgba(32,179,109,.14); }
       .notice.error .status-dot { background: #e05252; }
+      .form-actions { margin: 13px 4px 0; }
       .actions { display: grid; gap: 8px; margin-top: 12px; }
       button { width: 100%; min-height: 38px; padding: 9px 12px; border: 0; border-radius: 10px; color: white; background: linear-gradient(135deg, #f36b36, #e74354); box-shadow: 0 6px 14px rgba(228,72,67,.2); cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; transition: transform .15s, opacity .15s, box-shadow .15s; }
       button:hover { transform: translateY(-1px); box-shadow: 0 8px 17px rgba(228,72,67,.27); }
@@ -60,26 +73,32 @@
           <img src="icon.png" alt="CF-Navs">
           <div><p class="eyebrow">CF-NAVS</p><h1>浏览器书签同步</h1></div>
         </div>
-        <p class="subtitle">把之后新增的网页书签，轻松收进你的导航页。</p>
+        <p class="subtitle">单向同步 · Chrome / Edge · 安全会话 · 把之后新增的网页书签，轻松收进你的导航页。</p>
       </header>
       <main class="content">
-        <div class="chips"><span class="chip accent">单向同步</span><span class="chip">Chrome / Edge</span><span class="chip">安全会话</span></div>
         <section class="card">
           <div class="section-title">
             <span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 0 1 13.66-5.66L20 8.68M20 4v4.68h-4.68M20 12a8 8 0 0 1-13.66 5.66L4 15.32M4 20v-4.68h4.68"/></svg></span>
-            <div><strong>连接你的导航页</strong><small>新增书签会进入“浏览器新增收藏”</small></div>
+            <div><strong>连接你的导航页</strong><small>新增收藏时逐条选择目标分类</small></div>
           </div>
-          <label for="baseUrl">导航页地址</label>
-          <div class="input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><input id="baseUrl" type="url" placeholder="https://hao.example.com" autocomplete="url"></div>
-          <label for="username">管理员账号</label>
-          <div class="input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.1 3.1-5 7-5s6.2 1.9 7 5"/></svg><input id="username" type="text" autocomplete="username" placeholder="输入管理员账号"></div>
-          <label for="password">管理员密码</label>
-          <div class="input-wrap password-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><input id="password" type="password" autocomplete="current-password" placeholder="仅用于登录，不会保存密码"><button id="toggle-password" class="icon-button" type="button" aria-label="显示密码"><svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div>
-          <p class="hint">登录后只保存会话令牌，密码不会写入扩展。</p>
+          <div id="connection-summary" class="connection-summary" hidden><span class="connection-dot" aria-hidden="true"></span><div><strong>已连接导航页</strong><small id="connection-detail"></small></div></div>
+          <details id="credentials-panel" class="credentials-panel" open>
+            <summary><span id="credentials-title">连接导航页</span><small id="credentials-hint">首次使用需要登录</small></summary>
+            <div class="credentials-fields">
+              <label for="baseUrl">导航页地址</label>
+              <div class="input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><input id="baseUrl" type="url" placeholder="https://hao.example.com" autocomplete="url"></div>
+              <label for="username">管理员账号</label>
+              <div class="input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.1 3.1-5 7-5s6.2 1.9 7 5"/></svg><input id="username" type="text" autocomplete="username" placeholder="输入管理员账号"></div>
+              <label for="password">管理员密码</label>
+              <div class="input-wrap password-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><input id="password" type="password" autocomplete="current-password" placeholder="仅用于登录，不会保存密码"><button id="toggle-password" class="icon-button" type="button" aria-label="显示密码"><svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div>
+              <p class="hint">登录后只保存会话令牌，密码不会写入扩展。</p>
+              <div class="form-actions"><button id="login" type="button">登录并开启同步</button></div>
+            </div>
+          </details>
           <div id="status" class="notice" role="status" aria-live="polite"><span class="status-dot"></span><span id="status-text">尚未连接导航页</span></div>
-          <div class="actions"><button id="login" type="button">登录并开启同步</button><button id="disable" class="secondary" type="button">暂停同步并清除会话</button></div>
+          <div class="actions"><button id="pending" class="secondary" type="button">处理待同步收藏</button><button id="disable" class="secondary" type="button">暂停同步并清除会话</button></div>
         </section>
-        <p class="footer">不会删除导航页已有书签 · 只同步之后新增的网页</p>
+        <p class="footer">确认分类后才同步 · 不会删除导航页已有书签</p>
       </main>
     </div>
     <script src="popup.js"></script>

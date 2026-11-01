@@ -46,6 +46,7 @@ const EXPECTED_PUBLIC_ROUTES = [
   'GET /install/status',
   'GET /public/data',
   'OPTIONS /browser-sync/bookmarks',
+  'OPTIONS /categories',
   'OPTIONS /login',
   'POST /error-report',
   'POST /install',
@@ -113,11 +114,17 @@ describe('route auth by construction', () => {
     const preflight = await anonymous('OPTIONS', '/browser-sync/bookmarks')
     expect(preflight.status).toBe(204)
     expect(preflight.headers.get('Access-Control-Allow-Origin')).toBe('*')
+    const categoriesPreflight = await anonymous('OPTIONS', '/categories')
+    expect(categoriesPreflight.status).toBe(204)
+    expect(categoriesPreflight.headers.get('Access-Control-Allow-Origin')).toBe('*')
   })
 
   it('applies pass-through headers before auth so 401s carry them', async () => {
     const sync = await anonymous('POST', '/browser-sync/bookmarks')
     expect(sync.status).toBe(401)
     expect(sync.headers.get('Access-Control-Allow-Origin')).toBe('*')
+    const categories = await anonymous('GET', '/categories')
+    expect(categories.status).toBe(401)
+    expect(categories.headers.get('Access-Control-Allow-Origin')).toBe('*')
   })
 })

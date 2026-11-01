@@ -361,6 +361,51 @@ async function main() {
     check('非法 background.type 被拒绝', r.json?.code === 1002, `code=${r.json?.code}`)
   }
 
+  // 浏览器扩展逐条确认分类；旧客户端不传 category_id 时仍使用默认收件分类。
+  section('浏览器同步分类选择')
+  {
+    const enabled = await call('/api/settings', { method: 'PUT', token, body: { browser_sync_enabled: true } })
+    check('开启浏览器同步', enabled.json?.code === 0)
+    const preflight = await call('/api/categories', {
+      method: 'OPTIONS',
+      headers: { origin: 'chrome-extension://cf-navs-test', 'access-control-request-method': 'GET' },
+    })
+    check('扩展可预检分类列表', preflight.status === 204 && preflight.headers.get('access-control-allow-origin') === '*')
+    const categories = await call('/api/categories', { token, headers: { origin: 'chrome-extension://cf-navs-test' } })
+    check('分类列表鉴权响应带 CORS', categories.json?.code === 0 && categories.headers.get('access-control-allow-origin') === '*')
+
+    const selected = await call('/api/browser-sync/bookmarks', {
+      method: 'POST', token,
+      body: { category_id: catA.id, bookmarks: [{ title: 'Selected category', url: 'https://selected.example' }] },
+    })
+    check('同步到显式选择的分类', selected.json?.code === 0 && selected.json?.data?.category_id === catA.id, JSON.stringify(selected.json))
+    const selectedRows = (await call('/api/bookmarks', { token })).json?.data || []
+    const selectedRow = selectedRows.find(item => item.url === 'https://selected.example')
+    check('书签实际写入所选分类', selectedRow?.category_id === catA.id, JSON.stringify({ catA, selectedRows }))
+
+    const missing = await call('/api/browser-sync/bookmarks', {
+      method: 'POST', token,
+      body: { category_id: 999999, bookmarks: [{ title: 'Missing category', url: 'https://missing.example' }] },
+    })
+    check('不存在的分类返回 1003', missing.json?.code === 1003)
+    const missingRow = (await call('/api/bookmarks', { token })).json?.data?.find(item => item.url === 'https://missing.example')
+    check('无效分类不会静默写入默认分类', missingRow === undefined)
+
+    const legacy = await call('/api/browser-sync/bookmarks', {
+      method: 'POST', token,
+      body: { bookmarks: [{ title: 'Legacy category', url: 'https://legacy.example' }] },
+    })
+    check('旧客户端仍同步到默认分类', legacy.json?.code === 0 && legacy.json?.data?.category_title === '浏览器新增收藏')
+    const invalid = await call('/api/browser-sync/bookmarks', {
+      method: 'POST', token,
+      body: { category_id: -1, bookmarks: [{ title: 'Invalid category', url: 'https://invalid.example' }] },
+    })
+    check('非法 category_id 返回 1002', invalid.json?.code === 1002)
+    if (selectedRow?.id) await call(`/api/bookmarks/${selectedRow.id}`, { method: 'DELETE', token })
+    const legacyRow = (await call('/api/bookmarks', { token })).json?.data?.find(item => item.url === 'https://legacy.example')
+    if (legacyRow?.id) await call(`/api/bookmarks/${legacyRow.id}`, { method: 'DELETE', token })
+  }
+
   // 9. public/data（公开模式开）
   section('公开数据聚合')
   {

@@ -357,6 +357,8 @@ export interface BrowserSyncBookmark {
 
 export interface BrowserSyncReq {
   bookmarks: BrowserSyncBookmark[]
+  /** 省略时沿用旧客户端行为，写入固定的浏览器新增收藏分类。 */
+  category_id?: number
 }
 
 export interface BrowserSyncResp {
