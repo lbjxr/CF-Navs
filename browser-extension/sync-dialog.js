@@ -7,11 +7,35 @@ function showStatus(message, type = '') {
   $('status').className = type
 }
 
+function closePanel() {
+  if (window.parent !== window) {
+    window.parent.postMessage({ source: 'cf-navs-extension-panel', type: 'close-panel' }, '*')
+    return
+  }
+  window.close()
+}
+
+function returnToHome() {
+  const showHome = () => {
+    if (window.parent !== window) {
+      window.parent.postMessage({ source: 'cf-navs-extension-panel', type: 'show-panel', view: 'popup' }, '*')
+      return
+    }
+    window.close()
+  }
+  chrome.runtime.sendMessage({ type: 'clear-sync-selection' }, () => {
+    void chrome.runtime.lastError
+    showHome()
+  })
+}
+
 function setBusy(value) {
   busy = value
-  $('sync').disabled = value || !$('category').value
+  $('sync').disabled = value || !pending || !$('category').value
   $('later').disabled = value
   $('category').disabled = value
+  $('bookmark-title').disabled = value || !pending
+  $('bookmark-url').disabled = value || !pending
   $('sync').textContent = value ? '正在同步...' : '确认同步'
 }
 
@@ -26,9 +50,31 @@ function send(message) {
 }
 
 function renderBookmark(item) {
-  $('bookmark-title').textContent = item.title || item.url
-  $('bookmark-url').textContent = item.url
-  $('bookmark-url').title = item.url
+  $('bookmark-title').value = item.title || item.url || ''
+  $('bookmark-url').value = item.url || ''
+  $('bookmark-title').disabled = false
+  $('bookmark-url').disabled = false
+}
+
+function readBookmark() {
+  const title = $('bookmark-title').value.trim()
+  const url = $('bookmark-url').value.trim()
+  if (!title) {
+    showStatus('请输入书签标题。', 'error')
+    $('bookmark-title').focus()
+    return null
+  }
+
+  try {
+    const parsed = new URL(url)
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error()
+  } catch {
+    showStatus('请输入有效的书签 URL（需以 http:// 或 https:// 开头）。', 'error')
+    $('bookmark-url').focus()
+    return null
+  }
+
+  return { title, url }
 }
 
 function renderCategories(categories, selectedId) {
@@ -73,10 +119,17 @@ async function initialize() {
 
 $('sync').addEventListener('click', async () => {
   if (!pending || busy || !$('category').value) return
+  const bookmark = readBookmark()
+  if (!bookmark) return
   setBusy(true)
   showStatus('正在写入导航页...')
   try {
-    const response = await send({ type: 'confirm-sync', categoryId: Number($('category').value) })
+    const response = await send({
+      type: 'confirm-sync',
+      categoryId: Number($('category').value),
+      title: bookmark.title,
+      url: bookmark.url,
+    })
     if (response.pending) {
       pending = response.pending
       renderBookmark(pending)
@@ -86,7 +139,7 @@ $('sync').addEventListener('click', async () => {
       $('sync').disabled = true
       $('later').textContent = '关闭'
       pending = null
-      window.setTimeout(() => window.close(), 900)
+      window.setTimeout(closePanel, 900)
     }
   } catch (error) {
     showStatus(error.message || '同步失败，收藏仍保留在待同步列表。', 'error')
@@ -96,6 +149,6 @@ $('sync').addEventListener('click', async () => {
   }
 })
 
-$('later').addEventListener('click', () => window.close())
+$('later').addEventListener('click', returnToHome)
 
 initialize()
