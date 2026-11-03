@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CF-Navs 浏览器书签同步",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "新增浏览器书签时选择 CF-Navs 分类并单向同步。",
   "permissions": ["bookmarks", "storage", "scripting"],
   "host_permissions": ["http://*/*", "https://*/*"],
@@ -12,7 +12,9 @@
     {
       "matches": ["http://*/*", "https://*/*"],
       "js": ["content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": true
     }
   ],
   "web_accessible_resources": [
