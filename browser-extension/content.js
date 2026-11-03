@@ -3,6 +3,17 @@
   globalThis.__CF_NAVS_PANEL_CONTROLLER__ = true
 
   const PANEL_SOURCE = 'cf-navs-extension-panel'
+  const CONTENT_SOURCE = 'cf-navs-extension-content'
+
+  // Pointer events do not bubble out of an iframe. Child web pages report the
+  // interaction; only the top page owns the extension panel and its visibility.
+  if (window.top !== window) {
+    document.addEventListener('pointerdown', () => {
+      window.top.postMessage({ source: CONTENT_SOURCE, type: 'outside-pointerdown' }, '*')
+    }, true)
+    return
+  }
+
   const VIEW_CONFIG = {
     popup: {
       file: 'popup.html',
@@ -96,9 +107,18 @@
     return { ok: true, visible: false, view: panel.dataset.view || 'popup' }
   }
 
+  document.addEventListener('pointerdown', (event) => {
+    if (isPanelVisible() && !event.composedPath().includes(findPanel())) hidePanel()
+  }, true)
+
   window.addEventListener('message', (event) => {
     const panel = findPanel()
-    if (!panel || event.source !== panel.contentWindow || event.data?.source !== PANEL_SOURCE) return
+    if (!panel) return
+    if (event.data?.source === CONTENT_SOURCE && event.data.type === 'outside-pointerdown') {
+      if (event.source && event.source !== window && event.source !== panel.contentWindow) hidePanel()
+      return
+    }
+    if (event.source !== panel.contentWindow || event.data?.source !== PANEL_SOURCE) return
     if (event.data.type === 'close-panel') hidePanel()
     if (event.data.type === 'show-panel') showPanel(event.data.view)
   })
