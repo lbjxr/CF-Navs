@@ -22,8 +22,8 @@
   <a href="https://github.com/lbjxr/CF-Navs/fork">
     <img src="https://img.shields.io/badge/Fork_on_GitHub-181717?logo=github&logoColor=white" alt="Fork on GitHub">
   </a>
-  <a href="https://github.com/lbjxr/CF-Navs/stargazers">
-    <img src="https://img.shields.io/github/stars/lbjxr/CF-Navs?style=flat&logo=github&label=Star" alt="Star on GitHub">
+  <a href="https://github.com/lbjxr/CF-Navs/star">
+    <img src="https://img.shields.io/badge/%E2%AD%90_Star-FFC107?style=flat" alt="Star this project on GitHub">
   </a>
 </div>
 
@@ -130,7 +130,7 @@ This method is suitable for users who want to operate entirely in the browser an
 #### Step 1: Fork and Star This Repository
 
 [![Fork on GitHub](https://img.shields.io/badge/Fork-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/lbjxr/CF-Navs/fork)
-[![Star on GitHub](https://img.shields.io/badge/Star-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/lbjxr/CF-Navs/stargazers)
+[![Star this project on GitHub](https://img.shields.io/badge/%E2%AD%90_Star-FFC107?style=for-the-badge)](https://github.com/lbjxr/CF-Navs/star)
 
 Click **Fork** to create your own copy, then **Star** the project to follow updates.
 

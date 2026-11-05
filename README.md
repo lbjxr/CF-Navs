@@ -22,8 +22,8 @@
   <a href="https://github.com/lbjxr/CF-Navs/fork">
     <img src="https://img.shields.io/badge/Fork_on_GitHub-181717?logo=github&logoColor=white" alt="Fork on GitHub">
   </a>
-  <a href="https://github.com/lbjxr/CF-Navs/stargazers">
-    <img src="https://img.shields.io/github/stars/lbjxr/CF-Navs?style=flat&logo=github&label=Star" alt="Star on GitHub">
+  <a href="https://github.com/lbjxr/CF-Navs/star">
+    <img src="https://img.shields.io/badge/%E2%AD%90_Star-FFC107?style=flat" alt="Star this project on GitHub">
   </a>
 </div>
 
@@ -132,7 +132,7 @@ CF-Navs 需要以下 Cloudflare 资源：
 #### 步骤 1：Fork 本仓库并 Star
 
 [![Fork on GitHub](https://img.shields.io/badge/Fork-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/lbjxr/CF-Navs/fork)
-[![Star on GitHub](https://img.shields.io/badge/Star-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/lbjxr/CF-Navs/stargazers)
+[![Star this project on GitHub](https://img.shields.io/badge/%E2%AD%90_Star-FFC107?style=for-the-badge)](https://github.com/lbjxr/CF-Navs/star)
 
 点击上方 **Fork** 按钮派生本仓库，再点 **Star** 关注项目更新。
 
