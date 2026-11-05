@@ -22,6 +22,9 @@
   <a href="https://github.com/lbjxr/CF-Navs/fork">
     <img src="https://img.shields.io/badge/Fork_on_GitHub-181717?logo=github&logoColor=white" alt="Fork on GitHub">
   </a>
+  <a href="https://github.com/lbjxr/CF-Navs">
+    <img src="https://img.shields.io/badge/%E2%AD%90_Star-FFC107?style=flat" alt="Star this project on GitHub">
+  </a>
 </div>
 
 **Languages:** [English](translations/en/README.md)
@@ -114,10 +117,6 @@ cd CF-Navs/docker
 部署、反向代理、数据迁移、备份恢复与安全边界见
 [DOCKER_DEPLOY.md](docs/guides/DOCKER_DEPLOY.md)。
 
-> ⚠️ 2026-10-23 安全提示：2026-10-21 之前发布的预构建镜像含一个
-> Node.js 高危漏洞（已修复版本为 v24.22.1），在下一个正式版本镜像发布前，
-> 请按指南的方式 B 从源码构建部署，详见 [DOCKER_DEPLOY.md](docs/guides/DOCKER_DEPLOY.md)。
-
 CF-Navs 需要以下 Cloudflare 资源：
 
 | 资源 | 绑定名 | 用途 |
@@ -130,11 +129,12 @@ CF-Navs 需要以下 Cloudflare 资源：
 
 适合希望全程在浏览器中操作、不想安装本地工具的用户。Cloudflare 关联你的 GitHub Fork 后，会从 `main` 生产分支自动构建和部署；以后同步上游更新时，也请更新这个分支。
 
-#### 步骤 1：Fork 本仓库
+#### 步骤 1：Fork 本仓库并 Star
 
 [![Fork on GitHub](https://img.shields.io/badge/Fork-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/lbjxr/CF-Navs/fork)
+[![Star this project on GitHub](https://img.shields.io/badge/%E2%AD%90_Star-FFC107?style=for-the-badge)](https://github.com/lbjxr/CF-Navs)
 
-点击上方 **"Fork on GitHub"** 按钮，并点上 ⭐ Star！
+点击上方 **Fork** 按钮派生本仓库；打开仓库主页后点右上角 **Star** 关注项目更新。
 
 #### 步骤 2：部署到 Cloudflare Workers
 

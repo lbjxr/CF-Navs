@@ -22,6 +22,9 @@
   <a href="https://github.com/lbjxr/CF-Navs/fork">
     <img src="https://img.shields.io/badge/Fork_on_GitHub-181717?logo=github&logoColor=white" alt="Fork on GitHub">
   </a>
+  <a href="https://github.com/lbjxr/CF-Navs">
+    <img src="https://img.shields.io/badge/%E2%AD%90_Star-FFC107?style=flat" alt="Star this project on GitHub">
+  </a>
 </div>
 
 **Languages:** [简体中文](../../README.md)
@@ -112,10 +115,6 @@ cd CF-Navs/docker
 For deployment, reverse proxy, data migration, backup and recovery, and security boundaries, see
 [DOCKER_DEPLOY.md](../../docs/guides/DOCKER_DEPLOY.md).
 
-> ⚠️ 2026-10-23 Security Notice: Prebuilt images released before 2026-10-21 contain a
-> high-severity vulnerability in Node.js (the fixed version is v24.22.1). Before the next official image is released,
-> please follow Method B in the guide to build and deploy from source code. For details, see [DOCKER_DEPLOY.md](../../docs/guides/DOCKER_DEPLOY.md).
-
 CF-Navs requires the following Cloudflare resources:
 
 | Resource | Binding Name | Purpose |
@@ -128,11 +127,12 @@ CF-Navs requires the following Cloudflare resources:
 
 This method is suitable for users who want to operate entirely in the browser and avoid installing local tools. After Cloudflare links to your GitHub fork, it will automatically build and deploy from the `main` production branch. When synchronizing upstream updates later, please also update this branch.
 
-#### Step 1: Fork This Repository
+#### Step 1: Fork and Star This Repository
 
 [![Fork on GitHub](https://img.shields.io/badge/Fork-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/lbjxr/CF-Navs/fork)
+[![Star this project on GitHub](https://img.shields.io/badge/%E2%AD%90_Star-FFC107?style=for-the-badge)](https://github.com/lbjxr/CF-Navs)
 
-Click the **"Fork on GitHub"** button above and give it a ⭐ Star!
+Click **Fork** to create your own copy, then click **Star** in the top-right corner of the repository page to follow updates.
 
 #### Step 2: Deploy to Cloudflare Workers
 
