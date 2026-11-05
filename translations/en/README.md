@@ -22,7 +22,7 @@
   <a href="https://github.com/lbjxr/CF-Navs/fork">
     <img src="https://img.shields.io/badge/Fork_on_GitHub-181717?logo=github&logoColor=white" alt="Fork on GitHub">
   </a>
-  <a href="https://github.com/lbjxr/CF-Navs/star">
+  <a href="https://github.com/lbjxr/CF-Navs">
     <img src="https://img.shields.io/badge/%E2%AD%90_Star-FFC107?style=flat" alt="Star this project on GitHub">
   </a>
 </div>
@@ -130,9 +130,9 @@ This method is suitable for users who want to operate entirely in the browser an
 #### Step 1: Fork and Star This Repository
 
 [![Fork on GitHub](https://img.shields.io/badge/Fork-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/lbjxr/CF-Navs/fork)
-[![Star this project on GitHub](https://img.shields.io/badge/%E2%AD%90_Star-FFC107?style=for-the-badge)](https://github.com/lbjxr/CF-Navs/star)
+[![Star this project on GitHub](https://img.shields.io/badge/%E2%AD%90_Star-FFC107?style=for-the-badge)](https://github.com/lbjxr/CF-Navs)
 
-Click **Fork** to create your own copy, then **Star** the project to follow updates.
+Click **Fork** to create your own copy, then click **Star** in the top-right corner of the repository page to follow updates.
 
 #### Step 2: Deploy to Cloudflare Workers
 
