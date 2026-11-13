@@ -34,7 +34,7 @@ function statusText(item) {
   return '浏览器收藏仍存在。'
 }
 
-function createItem(item) {
+function createItem(item, selected) {
   const row = document.createElement('li')
   row.className = `item ${item.status}`
 
@@ -43,7 +43,7 @@ function createItem(item) {
   const checkbox = document.createElement('input')
   checkbox.type = 'checkbox'
   checkbox.className = 'item-select'
-  checkbox.checked = true
+  checkbox.checked = selected
   checkbox.dataset.key = item.key
   checkbox.setAttribute('aria-label', `选择同步 ${item.title || item.url}`)
   checkbox.addEventListener('change', updateSelectionState)
@@ -73,6 +73,8 @@ function getSelectedKeys() {
 function updateSelectionState() {
   const checkboxes = [...document.querySelectorAll('.item-select')]
   const selectedCount = getSelectedKeys().length
+  checkboxes.forEach((checkbox) => { checkbox.disabled = busy })
+  $('summary').textContent = items.length ? `共 ${items.length} 条，已选 ${selectedCount} 条` : '没有待同步收藏'
   $('select-all').disabled = busy || !items.length
   $('refresh').disabled = busy
   $('select-all').checked = checkboxes.length > 0 && selectedCount === checkboxes.length
@@ -82,6 +84,8 @@ function updateSelectionState() {
 }
 
 function renderItems() {
+  // Refreshing status or deleting a batch must never select other records.
+  const selectedKeys = new Set(getSelectedKeys())
   const list = $('list')
   list.replaceChildren()
   if (!items.length) {
@@ -90,25 +94,15 @@ function renderItems() {
     empty.textContent = '暂无待同步收藏。'
     list.append(empty)
   } else {
-    list.append(...items.map(createItem))
+    list.append(...items.map((item) => createItem(item, selectedKeys.has(item.key))))
   }
-  $('summary').textContent = items.length ? `共 ${items.length} 条，已动态检查浏览器收藏状态` : '没有待同步收藏'
-  $('select-all').disabled = busy || !items.length
-  $('refresh').disabled = busy
   updateSelectionState()
 }
 
 function setBusy(value) {
   busy = value
   $('home').disabled = value
-  $('select-all').disabled = value || !items.length
-  $('refresh').disabled = value
-  if (value) {
-    $('remove-selected').disabled = true
-    $('sync-selected').disabled = true
-  } else {
-    updateSelectionState()
-  }
+  updateSelectionState()
 }
 
 async function loadItems() {
@@ -120,7 +114,6 @@ async function loadItems() {
     renderItems()
     showStatus('状态已更新。', 'success')
   } catch (error) {
-    items = []
     renderItems()
     showStatus(error.message || '读取待同步收藏失败。', 'error')
   } finally {
