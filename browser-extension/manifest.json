@@ -19,7 +19,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["popup.html", "popup.js", "pending-list.html", "pending-list.js", "sync-dialog.html", "sync-dialog.js", "icon.png"],
+      "resources": ["popup.html", "popup.js", "pending-list.html", "pending-list.js", "sync-dialog.html", "sync-dialog.js", "panel-client.js", "icon.png"],
       "matches": ["http://*/*", "https://*/*"]
     }
   ],

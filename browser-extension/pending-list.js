@@ -1,6 +1,10 @@
 const $ = (id) => document.getElementById(id)
 let items = []
 let busy = false
+let refreshQueued = false
+let restoredSelection = null
+let restoredScroll = 0
+const panel = createPanelClient('pending-list', () => ({ selectedKeys: restoredSelection || getSelectedKeys() }), loadItems)
 
 function showStatus(message, type = '') {
   $('status').textContent = message
@@ -8,21 +12,12 @@ function showStatus(message, type = '') {
 }
 
 function send(message) {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(message, (response) => {
-      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message))
-      else if (!response?.ok) reject(new Error(response?.error || '操作失败'))
-      else resolve(response)
-    })
-  })
+  return panel.send(message)
 }
 
-function returnToHome() {
-  if (window.parent !== window) {
-    window.parent.postMessage({ source: 'cf-navs-extension-panel', type: 'show-panel', view: 'popup' }, '*')
-    return
-  }
-  window.close()
+async function returnToHome() {
+  try { await panel.navigate('popup') }
+  catch (error) { showStatus(error.message || '返回首页失败，请重试。', 'error') }
 }
 
 function statusText(item) {
@@ -85,7 +80,7 @@ function updateSelectionState() {
 
 function renderItems() {
   // Refreshing status or deleting a batch must never select other records.
-  const selectedKeys = new Set(getSelectedKeys())
+  const selectedKeys = new Set(restoredSelection || getSelectedKeys())
   const list = $('list')
   list.replaceChildren()
   if (!items.length) {
@@ -106,18 +101,23 @@ function setBusy(value) {
 }
 
 async function loadItems() {
+  if (busy) { refreshQueued = true; return }
   setBusy(true)
   showStatus('正在读取浏览器收藏状态...')
   try {
     const response = await send({ type: 'get-pending-list' })
     items = Array.isArray(response.items) ? response.items : []
     renderItems()
+    restoredSelection = null
+    if (restoredScroll) { window.scrollTo(0, restoredScroll); restoredScroll = 0 }
+    await panel.save()
     showStatus('状态已更新。', 'success')
   } catch (error) {
     renderItems()
     showStatus(error.message || '读取待同步收藏失败。', 'error')
   } finally {
     setBusy(false)
+    if (refreshQueued) { refreshQueued = false; loadItems() }
   }
 }
 
@@ -127,6 +127,7 @@ async function startSelectedSync() {
   setBusy(true)
   showStatus('正在打开同步确认...')
   try {
+    await panel.save()
     await send({ type: 'start-selected-sync', keys })
   } catch (error) {
     showStatus(error.message || '打开同步确认失败。', 'error')
@@ -142,6 +143,7 @@ async function removeSelected() {
   showStatus('正在删除待同步记录...')
   try {
     await send({ type: 'remove-pending', keys })
+    setBusy(false)
     await loadItems()
   } catch (error) {
     showStatus(error.message || '删除待同步收藏失败。', 'error')
@@ -160,4 +162,13 @@ $('select-all').addEventListener('change', () => {
   updateSelectionState()
 })
 
-loadItems()
+setBusy(true)
+panel.restore().then((draft) => {
+  restoredSelection = draft?.selectedKeys || null
+  restoredScroll = draft?.scrollY || 0
+  setBusy(false)
+  return loadItems()
+}).catch((error) => {
+  setBusy(false)
+  showStatus(error.message || '读取待同步收藏失败。', 'error')
+})

@@ -14,6 +14,8 @@ type MessageListener = (
 ) => boolean
 
 const backgroundScript = readFileSync('browser-extension/background.js', 'utf8')
+const sessionScript = readFileSync('browser-extension/panel-session.js', 'utf8')
+const clientScript = readFileSync('browser-extension/panel-client.js', 'utf8')
 const pendingScript = readFileSync('browser-extension/pending-list.js', 'utf8')
 const pendingHtml = readFileSync('browser-extension/pending-list.html', 'utf8')
 const windows: JSDOM[] = []
@@ -46,8 +48,8 @@ async function createPendingPanel(initial = fixtures) {
     sendMessage: vi.fn(async () => ({ ok: true })),
     onActivated: event(), onUpdated: event(), onRemoved: event(),
   }
-  runInNewContext(backgroundScript, {
-    URL, console,
+  runInNewContext(`${sessionScript}\n${backgroundScript}`, {
+    URL, console, structuredClone, importScripts: vi.fn(),
     chrome: {
       storage, tabs,
       bookmarks: {
@@ -73,6 +75,7 @@ async function createPendingPanel(initial = fixtures) {
   Object.defineProperty(dom.window, 'chrome', { value: { runtime: { sendMessage } } })
   const confirm = vi.fn(() => true)
   dom.window.confirm = confirm
+  dom.window.eval(clientScript)
   dom.window.eval(pendingScript)
 
   const input = (selector: string) => {
@@ -277,7 +280,7 @@ describe('browser extension pending selection', () => {
     panel.input('#sync-selected').click()
     await vi.waitFor(() => expect(panel.session.syncSelectionKeys).toEqual(['bookmark:22']))
     expect(panel.stored()).toEqual(fixtures)
-    expect(panel.tabs.sendMessage).toHaveBeenCalledWith(1, { type: 'show-panel', view: 'sync' })
+    expect(panel.tabs.sendMessage).toHaveBeenCalledWith(1, { type: 'show-panel', view: 'sync', revision: 1 })
   })
 
   it('deletes one legacy record with a URL key without affecting other missing records', async () => {
