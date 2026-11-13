@@ -38,7 +38,12 @@
   let panelFrame = null
 
   function registerWebTab() {
-    chrome.runtime.sendMessage({ type: 'register-web-tab' }, () => void chrome.runtime.lastError)
+    // Reloading an extension invalidates old content scripts until the web page
+    // is refreshed. A visibility event from that old document must be harmless.
+    if (!chrome.runtime?.id) return
+    try {
+      chrome.runtime.sendMessage({ type: 'register-web-tab' }, () => void chrome.runtime.lastError)
+    } catch { /* The extension was reloaded while this page remained open. */ }
   }
 
   function findPanel() {
@@ -77,25 +82,41 @@
     ].join(';')
   }
 
-  function showPanel(view = 'popup') {
+  function resumePanel(panel) {
+    panel.contentWindow?.postMessage({
+      source: 'cf-navs-extension-host', type: 'resume-panel',
+      revision: Number(panel.dataset.revision || 0),
+    }, '*')
+  }
+
+  function showPanel(view = 'popup', revision = 0) {
     const nextView = VIEW_CONFIG[view] ? view : 'popup'
     const config = VIEW_CONFIG[nextView]
+    if (document.visibilityState === 'hidden') return { ok: true, visible: false, view: nextView }
     let panel = findPanel()
-    if (!panel) {
+    const replace = panel && (panel.dataset.view !== nextView || panel.dataset.revision !== String(revision))
+    if (!panel || replace) {
+      // A view/session transition creates an actual new document. Updating the
+      // old frame's size and data-view alone can leave its old content visible.
+      const previous = panel
       panel = document.createElement('iframe')
       panel.dataset.cfNavsPanel = 'true'
+      panel.dataset.view = nextView
+      panel.dataset.revision = String(revision)
       panel.setAttribute('frameborder', '0')
       panel.setAttribute('scrolling', 'no')
       panel.setAttribute('aria-label', config.title)
+      const url = new URL(chrome.runtime.getURL(config.file))
+      if (revision) url.searchParams.set('panel', String(revision))
+      panel.src = url.href
+      applyPanelStyle(panel, nextView)
       panelFrame = panel
       ;(document.body || document.documentElement).append(panel)
+      previous?.remove()
+    } else {
+      applyPanelStyle(panel, nextView)
+      resumePanel(panel)
     }
-
-    if (panel.dataset.view !== nextView) {
-      panel.dataset.view = nextView
-      panel.src = chrome.runtime.getURL(config.file)
-    }
-    applyPanelStyle(panel, nextView)
     return { ok: true, visible: true, view: nextView }
   }
 
@@ -119,21 +140,39 @@
       return
     }
     if (event.source !== panel.contentWindow || event.data?.source !== PANEL_SOURCE) return
+    if (event.data.type === 'panel-ready' && Number.isSafeInteger(event.data.revision) &&
+        event.data.revision >= Number(panel.dataset.revision)) {
+      panel.dataset.revision = String(event.data.revision)
+    }
     if (event.data.type === 'close-panel') hidePanel()
-    if (event.data.type === 'show-panel') showPanel(event.data.view)
+    if (event.data.type === 'show-panel' && event.data.view === 'popup') {
+      chrome.runtime.sendMessage({
+        type: 'navigate-panel', view: 'popup',
+        panel: { view: panel.dataset.view, revision: Number(panel.dataset.revision) },
+      }, () => void chrome.runtime.lastError)
+    }
   })
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'toggle-panel') {
-      sendResponse(isPanelVisible() ? hidePanel() : showPanel(message.view))
+      const panel = findPanel()
+      const sameSession = panel?.dataset.view === message.view &&
+        panel?.dataset.revision === String(message.revision || 0)
+      sendResponse(isPanelVisible() && sameSession ? hidePanel() : showPanel(message.view, message.revision))
       return false
     }
     if (message?.type === 'show-panel') {
-      sendResponse(showPanel(message.view))
+      sendResponse(showPanel(message.view, message.revision))
       return false
     }
     if (message?.type === 'hide-panel') {
       sendResponse(hidePanel())
+      return false
+    }
+    if (message?.type === 'refresh-panel') {
+      const panel = findPanel()
+      if (panel?.dataset.view === message.view && panel.dataset.revision === String(message.revision || 0)) resumePanel(panel)
+      sendResponse({ ok: true, visible: isPanelVisible() })
       return false
     }
     return false
@@ -142,5 +181,7 @@
   if (document.visibilityState === 'visible') registerWebTab()
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') registerWebTab()
+    else hidePanel()
   })
+  window.addEventListener('pagehide', hidePanel)
 })()

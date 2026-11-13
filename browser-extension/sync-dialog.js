@@ -1,6 +1,20 @@
 const $ = (id) => document.getElementById(id)
 let pending = null
 let busy = false
+let loading = false
+let refreshQueued = false
+let remoteSyncing = false
+let draft = null
+let edited = false
+const panel = createPanelClient('sync', readDraft, initialize)
+
+function readDraft() {
+  if (!pending) return draft || {}
+  return {
+    key: pending.key, title: $('bookmark-title').value, url: $('bookmark-url').value,
+    categoryId: $('category').value, edited,
+  }
+}
 
 function showStatus(message, type = '') {
   $('status').textContent = message
@@ -8,45 +22,27 @@ function showStatus(message, type = '') {
 }
 
 function closePanel() {
-  if (window.parent !== window) {
-    window.parent.postMessage({ source: 'cf-navs-extension-panel', type: 'close-panel' }, '*')
-    return
-  }
-  window.close()
+  panel.close().catch(() => undefined)
 }
 
-function returnToHome() {
-  const showHome = () => {
-    if (window.parent !== window) {
-      window.parent.postMessage({ source: 'cf-navs-extension-panel', type: 'show-panel', view: 'popup' }, '*')
-      return
-    }
-    window.close()
-  }
-  chrome.runtime.sendMessage({ type: 'clear-sync-selection' }, () => {
-    void chrome.runtime.lastError
-    showHome()
-  })
+async function returnToHome() {
+  try { await panel.navigate('popup') }
+  catch (error) { showStatus(error.message || '返回首页失败，请重试。', 'error') }
 }
 
 function setBusy(value) {
   busy = value
-  $('sync').disabled = value || !pending || !$('category').value
+  const locked = value || remoteSyncing
+  $('sync').disabled = locked || !pending || !$('category').value
   $('later').disabled = value
-  $('category').disabled = value
-  $('bookmark-title').disabled = value || !pending
-  $('bookmark-url').disabled = value || !pending
-  $('sync').textContent = value ? '正在同步...' : '确认同步'
+  $('category').disabled = locked || !pending
+  $('bookmark-title').disabled = locked || !pending
+  $('bookmark-url').disabled = locked || !pending
+  $('sync').textContent = locked ? '正在同步...' : '确认同步'
 }
 
 function send(message) {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(message, (response) => {
-      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message))
-      else if (!response?.ok) reject(new Error(response?.error || '操作失败'))
-      else resolve(response)
-    })
-  })
+  return panel.send(message)
 }
 
 function renderBookmark(item) {
@@ -94,61 +90,109 @@ function renderCategories(categories, selectedId) {
       select.append(new Option(`　${root.title} / ${child.title}`, String(child.id)))
     }
   }
-  const validSelection = byId.has(Number(selectedId)) ? String(selectedId) : String(roots[0].id)
+  const validSelection = byId.has(Number(selectedId)) ? String(selectedId)
+    : selectedId ? '' : String(roots[0]?.id || '')
+  if (!validSelection) select.prepend(new Option('请选择有效分类', ''))
   select.value = validSelection
   select.disabled = false
   $('sync').disabled = false
 }
 
 async function initialize() {
+  if (busy || loading) { refreshQueued = true; return }
+  loading = true
   try {
     const response = await send({ type: 'get-sync-dialog' })
+    if (!response.pending) {
+      pending = null
+      draft = { completed: true }
+      remoteSyncing = false
+      showStatus('当前批次已处理完成，可返回首页查看其他待同步收藏。', 'success')
+      $('later').textContent = '返回首页'
+      setBusy(false)
+      await panel.save()
+      return
+    }
+    const sameBookmark = pending?.key === response.pending.key
+    const saved = response.draft?.key === response.pending.key ? response.draft
+      : draft?.key === response.pending.key ? draft : null
+    const selectedCategory = sameBookmark ? $('category').value : saved?.categoryId || response.selectedCategoryId
+    if (!sameBookmark) {
+      edited = saved?.edited === true
+      renderBookmark(edited ? saved : response.pending)
+    }
     pending = response.pending
-    renderBookmark(pending)
+    remoteSyncing = response.syncing === true
+    draft = null
     const categories = response.categories
       .slice()
       .sort((a, b) => Number(a.sort ?? 0) - Number(b.sort ?? 0) || Number(a.id) - Number(b.id))
-    renderCategories(categories, response.selectedCategoryId)
-    showStatus(pending.count > 1 ? `还有 ${pending.count} 条待同步收藏，将逐条确认。` : '')
+    renderCategories(categories, selectedCategory)
+    showStatus(remoteSyncing ? '正在同步此收藏，请等待结果。'
+      : pending.count > 1 ? `还有 ${pending.count} 条待同步收藏，将逐条确认。` : '')
+    setBusy(false)
+    await panel.save()
+    if (!sameBookmark && saved?.scrollY) window.scrollTo(0, saved.scrollY)
   } catch (error) {
-    renderCategories([], null)
-    $('later').textContent = '关闭'
+    remoteSyncing = false
+    if (!pending) renderCategories([], null)
+    else setBusy(false)
     showStatus(`${error.message || '无法读取收藏或分类'} 收藏仍保留，可从扩展窗口重试。`, 'error')
+  } finally {
+    loading = false
+    if (refreshQueued && !busy) { refreshQueued = false; initialize() }
   }
 }
 
+for (const id of ['bookmark-title', 'bookmark-url', 'category']) {
+  $(id).addEventListener('input', () => { edited = true })
+  $(id).addEventListener('change', () => {
+    edited = true
+    if (id === 'category') setBusy(busy)
+  })
+}
+
 $('sync').addEventListener('click', async () => {
-  if (!pending || busy || !$('category').value) return
+  if (!pending || busy || remoteSyncing || !$('category').value) return
   const bookmark = readBookmark()
   if (!bookmark) return
   setBusy(true)
   showStatus('正在写入导航页...')
   try {
+    await panel.save()
     const response = await send({
       type: 'confirm-sync',
+      key: pending.key,
       categoryId: Number($('category').value),
       title: bookmark.title,
       url: bookmark.url,
     })
     if (response.pending) {
       pending = response.pending
+      edited = false
       renderBookmark(pending)
       showStatus(`已同步，剩余 ${pending.count} 条待确认。`, 'success')
     } else {
-      showStatus('全部收藏已同步，可以关闭窗口。', 'success')
+      showStatus('当前批次已同步，可以返回首页。', 'success')
       $('sync').disabled = true
-      $('later').textContent = '关闭'
+      $('later').textContent = '返回首页'
       pending = null
+      draft = { completed: true }
       window.setTimeout(closePanel, 900)
     }
   } catch (error) {
     showStatus(error.message || '同步失败，收藏仍保留在待同步列表。', 'error')
   } finally {
     setBusy(false)
+    await panel.save()
     if (!pending) $('sync').disabled = true
+    if (refreshQueued) { refreshQueued = false; initialize() }
   }
 })
 
 $('later').addEventListener('click', returnToHome)
 
-initialize()
+panel.restore().then((saved) => {
+  draft = saved
+  return initialize()
+}).catch((error) => showStatus(error.message || '读取同步草稿失败。', 'error'))

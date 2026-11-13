@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 type PanelView = 'popup' | 'sync' | 'pending-list'
-type PanelMessage = { type: string; view?: PanelView }
+type PanelMessage = { type: string; view?: PanelView; revision?: number }
 type PanelResponse = { ok: boolean; visible: boolean; view?: PanelView }
 type MessageListener = (
   message: PanelMessage,
@@ -19,6 +19,7 @@ const windows: JSDOM[] = []
 function createRuntime() {
   const listeners: MessageListener[] = []
   const runtime = {
+    id: 'test-extension',
     lastError: undefined,
     sendMessage: vi.fn((_message: PanelMessage, callback?: () => void) => callback?.()),
     // No extension server is needed to exercise the real iframe DOM. Extension
@@ -252,6 +253,64 @@ describe('browser extension panel dismissal', () => {
     expect(host.send({ type: 'toggle-panel', view: 'popup' }).visible).toBe(true)
     expect(host.panel()).toBe(frame)
     expect(host.dom.window.document.querySelectorAll('iframe[data-cf-navs-panel="true"]')).toHaveLength(1)
+  })
+
+  it('hides on tab switches without discarding the frame or showing it again on return', () => {
+    const host = createPanelHost()
+    host.send({ type: 'show-panel', view: 'sync', revision: 4 })
+    const frame = host.panel()
+    let visibility = 'visible'
+    Object.defineProperty(host.dom.window.document, 'visibilityState', { get: () => visibility })
+
+    visibility = 'hidden'
+    host.dom.window.document.dispatchEvent(new host.dom.window.Event('visibilitychange'))
+    expect(frame.hidden).toBe(true)
+    expect(frame.isConnected).toBe(true)
+    visibility = 'visible'
+    host.dom.window.document.dispatchEvent(new host.dom.window.Event('visibilitychange'))
+    expect(frame.hidden).toBe(true)
+    host.send({ type: 'toggle-panel', view: 'sync', revision: 4 })
+    expect(host.panel()).toBe(frame)
+    expect(frame.hidden).toBe(false)
+  })
+
+  it('replaces the document on an explicit view change instead of resizing stale content', () => {
+    const host = createPanelHost()
+    host.send({ type: 'show-panel', view: 'pending-list', revision: 1 })
+    const previous = host.panel()
+    host.send({ type: 'show-panel', view: 'popup', revision: 2 })
+    expect(previous.isConnected).toBe(false)
+    expect(host.panel()).not.toBe(previous)
+    expect(host.panel().dataset.view).toBe('popup')
+    expect(host.panel().dataset.revision).toBe('2')
+    expect(host.panel().getAttribute('aria-label')).toBe('CF-Navs 浏览器书签同步')
+  })
+
+  it('replaces a stale cached document when the same view has a newer session', () => {
+    const host = createPanelHost()
+    host.send({ type: 'show-panel', view: 'sync', revision: 1 })
+    const previous = host.panel()
+    host.send({ type: 'toggle-panel', view: 'sync', revision: 3 })
+    expect(previous.isConnected).toBe(false)
+    expect(host.panel().dataset.revision).toBe('3')
+    expect(host.panel().hidden).toBe(false)
+  })
+
+  it('does not display a delayed show request in a background tab', () => {
+    const host = createPanelHost()
+    Object.defineProperty(host.dom.window.document, 'visibilityState', { value: 'hidden' })
+    expect(host.send({ type: 'show-panel', view: 'sync', revision: 4 }).visible).toBe(false)
+    expect(host.dom.window.document.querySelector('iframe[data-cf-navs-panel]')).toBeNull()
+  })
+
+  it('keeps bfcache pages hidden after pagehide and tolerates extension reloads', () => {
+    const host = createPanelHost()
+    host.send({ type: 'show-panel', view: 'sync' })
+    host.dom.window.dispatchEvent(new host.dom.window.Event('pagehide'))
+    expect(host.panel().hidden).toBe(true)
+    host.runtime.sendMessage.mockImplementationOnce(() => { throw new Error('Extension context invalidated.') })
+    expect(() => host.dom.window.document.dispatchEvent(new host.dom.window.Event('visibilitychange'))).not.toThrow()
+    expect(host.panel().hidden).toBe(true)
   })
 
   it('wires the content script into web frames and their about:blank children', () => {

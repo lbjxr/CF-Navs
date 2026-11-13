@@ -1,3 +1,5 @@
+importScripts('panel-session.js')
+
 const DEFAULT_CONFIG = {
   baseUrl: '',
   token: '',
@@ -8,10 +10,30 @@ const DEFAULT_CONFIG = {
 const PENDING_KEY = 'pendingSyncBookmarks'
 const RECENT_WEB_TAB_KEY = 'recentWebTabId'
 const SYNC_SELECTION_KEY = 'syncSelectionKeys'
+const PANEL_SESSION_KEY = 'panelSession'
 let recentWebTabId = null
 let pendingMutation = Promise.resolve()
 let syncSelectionKeys = null
 let syncSelectionLoaded = false
+let syncSelectionRevision = 0
+let panelIntent = 0
+let syncingKey = null
+const panelSession = createPanelSession({
+  read: async () => chrome.storage.session
+    ? (await chrome.storage.session.get({ [PANEL_SESSION_KEY]: null }))[PANEL_SESSION_KEY] : null,
+  write: async (state) => {
+    if (chrome.storage.session) await chrome.storage.session.set({ [PANEL_SESSION_KEY]: state })
+  },
+})
+
+function messageContext(message, sender) {
+  return message.panel ? { ...message.panel, tabId: sender.tab?.id ?? null } : null
+}
+
+async function requireCurrentPanel(message, sender) {
+  const context = messageContext(message, sender)
+  if (context && !await panelSession.isCurrent(context)) throw new Error('弹窗已切换，请在当前页面继续操作')
+}
 
 function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '')
@@ -84,15 +106,18 @@ async function loadSyncSelection() {
   if (syncSelectionLoaded || !chrome.storage.session) return syncSelectionKeys
   try {
     const stored = await chrome.storage.session.get({ [SYNC_SELECTION_KEY]: null })
-    syncSelectionKeys = Array.isArray(stored[SYNC_SELECTION_KEY]) ? stored[SYNC_SELECTION_KEY] : null
+    if (!syncSelectionLoaded) {
+      syncSelectionKeys = Array.isArray(stored[SYNC_SELECTION_KEY]) ? stored[SYNC_SELECTION_KEY] : null
+    }
   } catch {
-    syncSelectionKeys = null
+    if (!syncSelectionLoaded) syncSelectionKeys = null
   }
   syncSelectionLoaded = true
   return syncSelectionKeys
 }
 
 async function setSyncSelection(keys) {
+  syncSelectionRevision += 1
   syncSelectionKeys = [...new Set((Array.isArray(keys) ? keys : []).filter((key) => typeof key === 'string' && key))]
   syncSelectionLoaded = true
   if (!chrome.storage.session) return
@@ -104,6 +129,7 @@ async function setSyncSelection(keys) {
 }
 
 async function clearSyncSelection() {
+  syncSelectionRevision += 1
   syncSelectionKeys = null
   syncSelectionLoaded = true
   if (!chrome.storage.session) return
@@ -246,7 +272,7 @@ async function clearRecentWebTab() {
 async function rememberWebTab(tabId, tab = null) {
   if (!Number.isInteger(tabId)) return
   const candidate = tab || await chrome.tabs.get(tabId).catch(() => null)
-  if (isWebTab(candidate)) {
+  if (isWebTab(candidate) && candidate.active) {
     await setRecentWebTab(tabId)
   } else if (recentWebTabId === tabId && typeof candidate?.url === 'string') {
     await clearRecentWebTab()
@@ -261,6 +287,12 @@ async function resolveWebTabId(preferredTabId = null) {
       await setRecentWebTab(preferredTabId)
       return preferredTabId
     }
+  }
+
+  const activeTabId = await getActiveTabId()
+  if (activeTabId != null) {
+    await setRecentWebTab(activeTabId)
+    return activeTabId
   }
 
   if (Number.isInteger(recentWebTabId)) {
@@ -302,25 +334,46 @@ async function sendPanelMessage(tabId, message, injectIfMissing = false) {
   return send()
 }
 
-async function openSyncDialog(tabId = null, preserveSelection = false) {
+async function presentPanel(tabId, view, toggle = false, intent = ++panelIntent) {
+  const targetTabId = await resolveWebTabId(tabId)
+  if (intent !== panelIntent) return true
+  const previous = await panelSession.get()
+  const state = await panelSession.open(view, targetTabId)
+  if (intent !== panelIntent) return true
+  if (previous.tabId != null && previous.tabId !== targetTabId) {
+    await sendPanelMessage(previous.tabId, { type: 'hide-panel' })
+  }
+  if (targetTabId == null) return false
+  return sendPanelMessage(targetTabId, {
+    type: toggle ? 'toggle-panel' : 'show-panel', view: state.view, revision: state.revision,
+  }, true)
+}
+
+async function refreshCurrentPanel() {
+  const state = await panelSession.get()
+  return sendPanelMessage(state.tabId, { type: 'refresh-panel', view: state.view, revision: state.revision })
+}
+
+async function openSyncDialog(tabId = null, preserveSelection = false, intent = ++panelIntent) {
   if (!preserveSelection) await clearSyncSelection()
-  const targetTabId = await resolveWebTabId(tabId)
-  return sendPanelMessage(targetTabId, { type: 'show-panel', view: 'sync' }, true)
+  return presentPanel(tabId, 'sync', false, intent)
 }
 
-async function openPendingList(tabId = null) {
+async function openPendingList(tabId = null, intent = ++panelIntent) {
   await clearSyncSelection()
-  const targetTabId = await resolveWebTabId(tabId)
-  return sendPanelMessage(targetTabId, { type: 'show-panel', view: 'pending-list' }, true)
+  return presentPanel(tabId, 'pending-list', false, intent)
 }
 
-async function togglePanel(tabId, view) {
-  const targetTabId = await resolveWebTabId(tabId)
-  return sendPanelMessage(targetTabId, { type: 'toggle-panel', view }, true)
+async function togglePanel(tabId) {
+  const intent = ++panelIntent
+  const state = await panelSession.get()
+  const view = state.view || ((await getPending()).length ? 'pending-list' : 'popup')
+  return presentPanel(tabId, view, true, intent)
 }
 
 async function enqueue(bookmark, browserBookmarkId = null) {
   if (!bookmark?.url) return
+  const intent = ++panelIntent
   const targetTabId = await resolveWebTabId()
   await mutatePending(async () => {
     const pending = await getPending()
@@ -341,7 +394,19 @@ async function enqueue(bookmark, browserBookmarkId = null) {
     await chrome.storage.local.set({ [PENDING_KEY]: pending })
   })
   const config = await getConfig()
-  if (config.enabled && config.baseUrl && config.token) await openSyncDialog(targetTabId)
+  if (intent !== panelIntent) return
+  if (config.enabled && config.baseUrl && config.token) {
+    const state = await panelSession.get()
+    const selection = await loadSyncSelection()
+    const keepBatch = state.view === 'sync' && state.drafts.sync?.key &&
+      !state.drafts.sync.completed && (!Array.isArray(selection) || selection.length > 0)
+    const queued = (await getPending()).find((item) => item.url === bookmark.url)
+    if (intent !== panelIntent) return
+    if (queued) await panelSession.prepareSync(pendingKey(queued), keepBatch)
+    await openSyncDialog(targetTabId, keepBatch, intent)
+  } else {
+    await refreshCurrentPanel()
+  }
 }
 
 chrome.tabs.onActivated.addListener(({ tabId }) => {
@@ -357,10 +422,13 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
 
 chrome.tabs.onUpdated.addListener((tabId, _changeInfo, tab) => {
   if (tab.active) rememberWebTab(tabId, tab).catch(() => undefined)
+  // Same-document routing does not emit visibilitychange or destroy the frame.
+  if (_changeInfo.url) sendPanelMessage(tabId, { type: 'hide-panel' }).catch(() => undefined)
 })
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (tabId === recentWebTabId) clearRecentWebTab().catch(() => undefined)
+  panelSession.forgetTab(tabId).catch((error) => console.warn('[CF-Navs] failed to retain closed-tab draft', error))
 })
 
 chrome.bookmarks.onCreated.addListener((id, bookmark) => {
@@ -368,38 +436,73 @@ chrome.bookmarks.onCreated.addListener((id, bookmark) => {
 })
 
 chrome.action.onClicked.addListener((tab) => {
-  getPending().then((pending) => {
-    return togglePanel(tab?.id, pending.length ? 'pending-list' : 'popup')
-  }).then((opened) => {
+  togglePanel(tab?.id).then((opened) => {
     if (!opened) console.warn('[CF-Navs] current tab cannot host the extension panel')
   }).catch((error) => console.warn('[CF-Navs] failed to toggle extension panel', error))
 })
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (['get-panel-context', 'save-panel-draft', 'navigate-panel', 'hide-current-panel'].includes(message?.type)) {
+    ;(async () => {
+      if (message.type === 'get-panel-context') {
+        const state = await panelSession.bind(messageContext(message, sender))
+        return { ok: true, revision: state.revision, draft: state.drafts[message.panel?.view] || null }
+      }
+      await requireCurrentPanel(message, sender)
+      if (message.type === 'save-panel-draft') {
+        const saved = await panelSession.saveDraft(messageContext(message, sender), message.draft)
+        if (!saved) throw new Error('弹窗已切换，请在当前页面继续操作')
+        return { ok: true }
+      }
+      if (message.type === 'hide-current-panel') {
+        const state = await panelSession.get()
+        await sendPanelMessage(state.tabId, { type: 'hide-panel' })
+        return { ok: true }
+      }
+      if (message.view !== 'popup') throw new Error('未知的扩展页面')
+      const intent = ++panelIntent
+      await clearSyncSelection()
+      const opened = await presentPanel(sender.tab?.id, 'popup', false, intent)
+      if (!opened) throw new Error('当前页面无法显示扩展悬窗，请切换到普通网页')
+      return { ok: true }
+    })().then(sendResponse).catch((error) => sendResponse({ ok: false, error: error.message }))
+    return true
+  }
   if (message?.type === 'register-web-tab') {
     rememberWebTab(sender.tab?.id, sender.tab).then(() => sendResponse({ ok: true }))
     return true
   }
 
   if (message?.type === 'get-config') {
-    getConfig().then((config) => sendResponse({ ok: true, config }))
+    getConfig().then(async (config) => {
+      await requireCurrentPanel(message, sender)
+      sendResponse({ ok: true, config })
+    }).catch((error) => sendResponse({ ok: false, error: error.message }))
     return true
   }
 
   if (message?.type === 'get-sync-dialog') {
-    Promise.all([getPending(), loadSyncSelection(), apiRequest('/api/categories')])
-      .then(async ([pending, selection, categories]) => {
+    requireCurrentPanel(message, sender).then(() => apiRequest('/api/categories'))
+      .then(async (categories) => {
+        // Read the queue/draft after the network request: another tab or a new
+        // bookmark can change them while categories are still loading.
+        const [pending, selection, state] = await Promise.all([getPending(), loadSyncSelection(), panelSession.get()])
+        await requireCurrentPanel(message, sender)
         const candidates = filterPendingBySelection(pending, selection)
         if (!candidates.length) {
-          if (Array.isArray(selection)) await clearSyncSelection()
-          sendResponse({ ok: false, error: '没有待同步的收藏' })
+          sendResponse({ ok: true, pending: null, categories: [], syncing: false })
           return
         }
+        const current = candidates.find((item) => pendingKey(item) === state.drafts.sync?.key) || candidates[0]
+        const key = pendingKey(current)
         const config = await getConfig()
+        await requireCurrentPanel(message, sender)
         const selectedCategoryId = config.lastCategoryId
         sendResponse({
           ok: true,
-          pending: { ...candidates[0], count: candidates.length },
+          pending: { ...current, key, count: candidates.length },
+          draft: state.drafts.sync?.key === key ? state.drafts.sync : null,
+          syncing: syncingKey === key,
           categories: Array.isArray(categories) ? categories : [],
           selectedCategoryId,
         })
@@ -415,38 +518,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false
     }
     mutatePending(async () => {
+      await requireCurrentPanel(message, sender)
       const pending = await getPending()
       const selection = await loadSyncSelection()
+      const selectionRevision = syncSelectionRevision
       const candidates = filterPendingBySelection(pending, selection)
       if (!candidates.length) {
-        if (Array.isArray(selection)) await clearSyncSelection()
         throw new Error('没有待同步的收藏')
       }
-      const currentKey = pendingKey(candidates[0])
+      const currentKey = message.key || pendingKey(candidates[0])
+      const current = candidates.find((item) => pendingKey(item) === currentKey)
+      if (!current) throw new Error('这条收藏已处理或不在当前批次，请重新打开弹窗')
       const currentIndex = pending.findIndex((item) => pendingKey(item) === currentKey)
       if (currentIndex < 0) throw new Error('没有待同步的收藏')
       const edited = normalizeEditableBookmark({
-        title: message.title ?? candidates[0].title,
-        url: message.url ?? candidates[0].url,
+        title: message.title ?? current.title,
+        url: message.url ?? current.url,
       })
       const updatedPending = pending.slice()
       updatedPending[currentIndex] = { ...updatedPending[currentIndex], ...edited }
       await chrome.storage.local.set({ [PENDING_KEY]: updatedPending })
-      const result = await syncBookmarks([edited], categoryId)
-      const remaining = updatedPending.filter((_item, index) => index !== currentIndex)
-      await chrome.storage.local.set({ [PENDING_KEY]: remaining, lastCategoryId: categoryId })
-      let remainingSelection = null
-      if (Array.isArray(selection)) {
-        const remainingKeys = new Set(remaining.map(pendingKey))
-        remainingSelection = selection.filter((key) => key !== currentKey && remainingKeys.has(key))
-        if (remainingSelection.length) await setSyncSelection(remainingSelection)
-        else await clearSyncSelection()
-      }
-      const nextCandidates = filterPendingBySelection(remaining, remainingSelection)
-      return {
-        ok: true,
-        result,
-        pending: nextCandidates.length ? { ...nextCandidates[0], count: nextCandidates.length } : null,
+      syncingKey = currentKey
+      try {
+        const result = await syncBookmarks([edited], categoryId)
+        const remaining = updatedPending.filter((_item, index) => index !== currentIndex)
+        await chrome.storage.local.set({ [PENDING_KEY]: remaining, lastCategoryId: categoryId })
+        let remainingSelection = await loadSyncSelection()
+        if (selectionRevision === syncSelectionRevision && Array.isArray(selection)) {
+          const remainingKeys = new Set(remaining.map(pendingKey))
+          remainingSelection = selection.filter((key) => key !== currentKey && remainingKeys.has(key))
+          // An empty selected batch is complete, not permission to sync the rest.
+          await setSyncSelection(remainingSelection)
+        }
+        const nextCandidates = filterPendingBySelection(remaining, remainingSelection)
+        const next = nextCandidates[0]
+        await panelSession.finishSync(currentKey, next ? pendingKey(next) : null)
+        return {
+          ok: true,
+          result,
+          pending: next ? { ...next, key: pendingKey(next), count: nextCandidates.length } : null,
+        }
+      } finally {
+        syncingKey = null
+        await refreshCurrentPanel()
       }
     })
     .then(sendResponse)
@@ -472,41 +586,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === 'open-pending') {
-    getPending().then((pending) => {
+    ;(async () => {
+      await requireCurrentPanel(message, sender)
+      const intent = ++panelIntent
+      const pending = await getPending()
       if (!pending.length) {
         sendResponse({ ok: false, error: '没有待同步的收藏' })
         return
       }
-      return openPendingList(sender.tab?.id).then((opened) => {
+      return openPendingList(sender.tab?.id, intent).then((opened) => {
         if (!opened) throw new Error('当前页面无法显示扩展悬窗，请切换到普通网页')
         sendResponse({ ok: true })
       })
-    }).catch((error) => sendResponse({ ok: false, error: error.message || '打开失败' }))
+    })().catch((error) => sendResponse({ ok: false, error: error.message || '打开失败' }))
     return true
   }
 
   if (message?.type === 'get-pending-list') {
-    getPendingList()
-      .then((items) => sendResponse({ ok: true, items }))
+    requireCurrentPanel(message, sender).then(getPendingList)
+      .then(async (items) => {
+        await requireCurrentPanel(message, sender)
+        sendResponse({ ok: true, items })
+      })
       .catch((error) => sendResponse({ ok: false, error: error.message || '读取待同步收藏失败' }))
     return true
   }
 
   if (message?.type === 'start-selected-sync') {
     const keys = Array.isArray(message.keys) ? message.keys : []
-    getPending()
-      .then(async (pending) => {
-        const selectedKeys = [...new Set(keys.filter((key) => typeof key === 'string' && key))]
-        const availableKeys = selectedKeys.filter((key) => pending.some((item) => pendingKey(item) === key))
-        if (!availableKeys.length) throw new Error('请至少选择一条待同步收藏')
-        await setSyncSelection(availableKeys)
-        const opened = await openSyncDialog(sender.tab?.id, true)
-        if (!opened) {
-          await clearSyncSelection()
-          throw new Error('当前页面无法显示扩展悬窗，请切换到普通网页')
-        }
-        sendResponse({ ok: true })
-      })
+    ;(async () => {
+      await requireCurrentPanel(message, sender)
+      const intent = ++panelIntent
+      const pending = await getPending()
+      const selectedKeys = [...new Set(keys.filter((key) => typeof key === 'string' && key))]
+      const availableKeys = selectedKeys.filter((key) => pending.some((item) => pendingKey(item) === key))
+      if (!availableKeys.length) throw new Error('请至少选择一条待同步收藏')
+      await setSyncSelection(availableKeys)
+      await panelSession.prepareSync(availableKeys[0], false)
+      const opened = await openSyncDialog(sender.tab?.id, true, intent)
+      if (!opened) {
+        await clearSyncSelection()
+        throw new Error('当前页面无法显示扩展悬窗，请切换到普通网页')
+      }
+      sendResponse({ ok: true })
+    })()
       .catch((error) => sendResponse({ ok: false, error: error.message || '打开同步确认失败' }))
     return true
   }
@@ -518,6 +641,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false
     }
     mutatePending(async () => {
+      await requireCurrentPanel(message, sender)
       const pending = await getPending()
       const remaining = pending.filter((item) => !keys.has(pendingKey(item)))
       await chrome.storage.local.set({ [PENDING_KEY]: remaining })
