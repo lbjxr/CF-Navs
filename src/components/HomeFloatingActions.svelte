@@ -1,11 +1,12 @@
 <svelte:options runes />
 
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onDestroy, onMount } from 'svelte'
   import type { ThemeMode } from '../../shared/types'
 
   type AsyncVoid<T = void> = T | Promise<T>
   const BACK_TO_TOP_VISIBILITY_OFFSET = 320
+  const MENU_CLOSE_DELAY_MS = 3000
 
   interface Props {
     isAuthenticated?: boolean
@@ -59,10 +60,12 @@
     void onOpenGuide?.()
   }
 
-  // 所有视口统一由「更多」触发器控制操作组；顶部导航在中小视口向下弹出。
+  // 菜单自己持有悬停状态和收起计时器；触发器与操作组之间移动时取消收起。
   let menuTrigger: HTMLButtonElement | null = null
   let menuGroup: HTMLElement | null = null
   let menuOpen = $state(false)
+  let pointerInsideMenu = false
+  let menuCloseTimer: ReturnType<typeof setTimeout> | null = null
   const menuId = 'home-actions-menu'
 
   const currentThemeLabel = $derived(activeThemeMode === 'auto'
@@ -75,13 +78,47 @@
   const themeToggleIcon = $derived(activeThemeMode === 'auto' ? 'A' : activeTheme === 'dark' ? '☾' : '☀')
 
   function toggleMenu() {
+    cancelMenuClose()
     menuOpen = !menuOpen
   }
 
   function closeMenu(focusTrigger = false) {
+    cancelMenuClose()
     menuOpen = false
     if (focusTrigger) menuTrigger?.focus()
   }
+
+  function cancelMenuClose() {
+    if (menuCloseTimer !== null) clearTimeout(menuCloseTimer)
+    menuCloseTimer = null
+  }
+
+  function scheduleMenuClose() {
+    cancelMenuClose()
+    if (!menuOpen || pointerInsideMenu || menuGroup?.contains(document.activeElement)) return
+    menuCloseTimer = setTimeout(() => closeMenu(), MENU_CLOSE_DELAY_MS)
+  }
+
+  function handleMenuPointerEnter(event: PointerEvent) {
+    if (event.pointerType === 'touch') return
+    pointerInsideMenu = true
+    cancelMenuClose()
+    menuOpen = true
+  }
+
+  function handleMenuPointerLeave(event: PointerEvent) {
+    if (event.pointerType === 'touch') return
+    pointerInsideMenu = false
+    scheduleMenuClose()
+  }
+
+  function handleMenuFocusOut(event: FocusEvent) {
+    const target = event.relatedTarget as Node | null
+    if (target && (menuTrigger?.contains(target) || menuGroup?.contains(target))) return
+    scheduleMenuClose()
+  }
+
+  onDestroy(cancelMenuClose)
 
   function handleToggleTheme() {
     closeMenu()
@@ -167,7 +204,17 @@
       <path d="m20 20-3.5-3.5" />
     </svg>
   </button>
-  <div class="actions-group" id={menuId} bind:this={menuGroup}>
+  <div
+    class="actions-group"
+    id={menuId}
+    bind:this={menuGroup}
+    role="group"
+    aria-label="设置操作"
+    onpointerenter={handleMenuPointerEnter}
+    onpointerleave={handleMenuPointerLeave}
+    onfocusin={cancelMenuClose}
+    onfocusout={handleMenuFocusOut}
+  >
     <button
       type="button"
       class="icon-button guide-button"
@@ -247,12 +294,17 @@
     aria-expanded={menuOpen}
     aria-controls={menuId}
     onclick={toggleMenu}
+    onpointerenter={handleMenuPointerEnter}
+    onpointerleave={handleMenuPointerLeave}
+    onfocusin={cancelMenuClose}
+    onfocusout={handleMenuFocusOut}
     bind:this={menuTrigger}
-    title="更多操作"
-    aria-label="更多操作"
+    title="设置菜单"
+    aria-label="设置菜单"
   >
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 6h.01M12 12h.01M12 18h.01" />
+      <path d="m9.5 3-.5 2-1.7 1-2-.6-2.5 4.2 1.5 1.4v2l-1.5 1.4 2.5 4.2 2-.6 1.7 1 .5 2h5l.5-2 1.7-1 2 .6 2.5-4.2-1.5-1.4v-2l1.5-1.4-2.5-4.2-2 .6-1.7-1-.5-2Z" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   </button>
 </div>
@@ -307,7 +359,7 @@
     height: 1.3rem;
     fill: none;
     stroke: currentColor;
-    stroke-width: 2.6;
+    stroke-width: 1.8;
     stroke-linecap: round;
     stroke-linejoin: round;
   }

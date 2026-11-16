@@ -31,7 +31,10 @@ async function scrollToY(y: number) {
   await tick()
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 describe('home floating actions', () => {
   it('页面在顶部时不显示回到顶部，滚下去之后才出现', async () => {
@@ -108,7 +111,7 @@ describe('home floating actions', () => {
 })
 
 describe('右上角显隐菜单', () => {
-  it('渲染竖三点「更多」触发器，默认收起且带 disclosure 语义', () => {
+  it('渲染齿轮设置触发器，默认收起且带 disclosure 语义', () => {
     render(HomeFloatingActions, { props: { isAuthenticated: true } })
     const trigger = screen.getByTestId('home-actions-menu-trigger')
 
@@ -117,8 +120,89 @@ describe('右上角显隐菜单', () => {
     expect(trigger.getAttribute('aria-controls')).toBe('home-actions-menu')
     // 图标是 svg，可访问名只由 aria-label 提供，不靠字符
     expect(trigger.querySelector('svg')).not.toBeNull()
-    expect(trigger.getAttribute('aria-label')).toBe('更多操作')
+    expect(trigger.querySelector('svg circle')).not.toBeNull()
+    expect(trigger.getAttribute('aria-label')).toBe('设置菜单')
     expect(trigger.textContent?.trim()).toBe('')
+  })
+
+  it('鼠标悬停展开，移开满三秒才收起', async () => {
+    vi.useFakeTimers()
+    render(HomeFloatingActions)
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+
+    await fireEvent.pointerEnter(trigger, { pointerType: 'mouse' })
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    await fireEvent.pointerLeave(trigger, { pointerType: 'mouse' })
+    await vi.advanceTimersByTimeAsync(2999)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    await vi.advanceTimersByTimeAsync(1)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('经过间隙进入菜单或重新悬停时取消收起，下一次移开重新计时', async () => {
+    vi.useFakeTimers()
+    render(HomeFloatingActions)
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+    const group = screen.getByRole('group', { name: '设置操作' })
+
+    await fireEvent.pointerEnter(trigger)
+    await fireEvent.pointerLeave(trigger)
+    await vi.advanceTimersByTimeAsync(1000)
+    await fireEvent.pointerEnter(group)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+
+    await fireEvent.pointerLeave(group)
+    await vi.advanceTimersByTimeAsync(2000)
+    await fireEvent.pointerEnter(trigger)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    await fireEvent.pointerLeave(trigger)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('键盘聚焦菜单操作时保持展开，焦点移出后延迟收起', async () => {
+    vi.useFakeTimers()
+    render(HomeFloatingActions)
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+    await fireEvent.pointerEnter(trigger)
+    await fireEvent.pointerLeave(trigger)
+    const guide = screen.getByRole('button', { name: '使用指南' })
+    guide.focus()
+
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    guide.blur()
+    await vi.advanceTimersByTimeAsync(2999)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    await vi.advanceTimersByTimeAsync(1)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('卸载时清理待执行的收起计时器', async () => {
+    vi.useFakeTimers()
+    const { unmount } = render(HomeFloatingActions)
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+    await fireEvent.pointerEnter(trigger)
+    await fireEvent.pointerLeave(trigger)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(vi.getTimerCount()).toBe(1)
+
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('触屏轻触仍通过点击切换，不触发悬停展开', async () => {
+    render(HomeFloatingActions)
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+    const touchEnter = Object.assign(new Event('pointerenter'), { pointerType: 'touch' })
+    await fireEvent(trigger, touchEnter)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    await fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    await fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
   })
 
   it('点击触发器展开，再次点击收起', async () => {
