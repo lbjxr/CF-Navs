@@ -13,8 +13,10 @@
   import { isAuthenticated } from '../lib/stores'
   import { recordBookmarkClick } from '../lib/dataService'
   import SpotlightBookmarkIcon from './SpotlightBookmarkIcon.svelte'
+  import BookmarkQuickAddButton from './BookmarkQuickAddButton.svelte'
   import { isBookmarkIconAccessRequired, getPublicCategoryIds } from '../lib/adminListState'
   import { iconAccessKey } from '../lib/iconAccessKey'
+  import { getBookmarkQuickAddUrl } from '../lib/bookmarkQuickAdd'
 
   interface Props {
     open?: boolean
@@ -22,6 +24,7 @@
     categories?: PublicCategory[]
     onClose?: () => void
     onViewBookmark?: (bookmark: PublicBookmark) => void
+    onCreateBookmark?: (url: string) => void | Promise<void>
   }
 
   let {
@@ -30,6 +33,7 @@
     categories = [],
     onClose = undefined,
     onViewBookmark = undefined,
+    onCreateBookmark = undefined,
   }: Props = $props()
 
   const RESULT_LIMIT = 50
@@ -55,6 +59,9 @@
     ? getMostVisitedBookmarks(bookmarks, MOST_VISITED_LIMIT)
     : matched.slice(0, RESULT_LIMIT))
   const overflowCount = $derived(isEmptyQuery ? 0 : Math.max(0, matched.length - RESULT_LIMIT))
+  const quickAddUrl = $derived($isAuthenticated && onCreateBookmark && results.length === 0
+    ? getBookmarkQuickAddUrl(query)
+    : null)
   // 登录态下结果里可能含私密书签；只有需要授权的行才带 key（Issue #28）。
   // 与首页一致按登录态门控：登出后即使 store 里还有残留 key 也不下发。
   const publicCategoryIds = $derived(getPublicCategoryIds(categories))
@@ -144,7 +151,13 @@
       return
     }
 
-    if (results.length === 0) return
+    if (results.length === 0) {
+      if (quickAddUrl && event.key === 'Enter' && event.target === inputEl) {
+        event.preventDefault()
+        createBookmarkFromQuery()
+      }
+      return
+    }
 
     if (event.key === 'ArrowDown') {
       event.preventDefault()
@@ -171,6 +184,10 @@
 
   function categoryTitle(categoryId: number): string {
     return categoryTitles.get(categoryId) ?? ''
+  }
+
+  function createBookmarkFromQuery(): void {
+    if (quickAddUrl) void onCreateBookmark?.(quickAddUrl)
   }
 
   // 键盘导航把高亮项滚入可视区（对齐 Sidebar/CategoryTreeSelect 的 scrollIntoView 用法）。
@@ -244,7 +261,7 @@
             </span>
           </li>
         {/each}
-        {#if results.length === 0}
+        {#if results.length === 0 && !quickAddUrl}
           <li class="spotlight-empty" role="option" aria-selected="false" aria-disabled="true">
             {isEmptyQuery ? '输入关键词以搜索书签' : '没有匹配的书签'}
           </li>
@@ -254,8 +271,15 @@
         {/if}
       </ul>
 
+      {#if quickAddUrl}
+        <div class="spotlight-empty spotlight-quick-add">
+          <span>没有匹配的书签</span>
+          <BookmarkQuickAddButton onCreate={createBookmarkFromQuery} />
+        </div>
+      {/if}
+
       <div class="spotlight-footer">
-        <span>↑↓ 选择 · Enter 打开 · Esc 关闭</span>
+        <span>{quickAddUrl ? 'Enter 新增书签 · Esc 关闭' : '↑↓ 选择 · Enter 打开 · Esc 关闭'}</span>
       </div>
     </div>
   </div>
@@ -385,6 +409,10 @@
     cursor: pointer;
   }
 
+  .spotlight-results:empty {
+    padding: 0;
+  }
+
   .spotlight-option.active {
     background: var(--spotlight-active-bg);
     outline: 1px solid var(--spotlight-active-outline);
@@ -429,6 +457,14 @@
     text-align: center;
     color: var(--spotlight-muted);
     font-size: 11px;
+  }
+
+  .spotlight-quick-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
   }
 
   .spotlight-footer {

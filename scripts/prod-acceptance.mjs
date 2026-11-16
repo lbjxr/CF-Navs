@@ -24,7 +24,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CdpSession, sleep } from './lib/cdpSession.mjs'
-import { pageModalMetrics, pageModalControl, pageModalsClosed, assessModalActions, waitForModal, pageModalFault } from './lib/modalAcceptanceProbe.mjs'
+import { pageModalMetrics, pageModalControl, pageGuideState, pageModalsClosed, assessModalActions, waitForModal, pageModalFault } from './lib/modalAcceptanceProbe.mjs'
 import {
   pickExportSample,
   verifyExportDownload,
@@ -535,6 +535,18 @@ async function runModalChecks(session) {
     else { await click('more'); await click('add') }
     await waitForModal(async () => (await session.call(pageModalMetrics)).results.bookmarkModal?.visible, 'bookmark dialog')
   }
+  const dismissFirstVisitGuide = async () => {
+    const state = await waitForModal(async () => {
+      const current = await session.call(pageGuideState)
+      return current.seen || current.present ? current : null
+    }, 'first-visit guide state')
+    if (state.closed) return
+    await click('guide-close')
+    await waitForModal(async () => {
+      const current = await session.call(pageGuideState)
+      return current.closed ? current : null
+    }, 'first-visit guide close')
+  }
   try {
     for (const [label, viewport] of [
       ['desktop', { width: 1440, height: 900, mobile: false, scale: 1 }],
@@ -549,7 +561,8 @@ async function runModalChecks(session) {
         await session.send('Page.bringToFront')
         stage = 'interaction'
         await waitForModal(() => session.call(function homeReady() { return Boolean(document.querySelector('[data-home-category-scope]')) }), 'home category')
-        if (!await session.call(pageModalControl, 'category')) await click('actions')
+        await dismissFirstVisitGuide()
+        if (!await session.call(pageModalControl, 'category')) await click('more')
         await click('category')
         await waitForModal(async () => (await session.call(pageModalMetrics)).results.categoryModal?.visible, 'category dialog')
         await sleep(250)

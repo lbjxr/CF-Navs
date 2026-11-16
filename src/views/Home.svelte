@@ -4,6 +4,7 @@
   import { onDestroy, onMount, tick, untrack } from 'svelte'
   import { observeSortToolbar } from '../lib/homeSortToolbar'
   import { observeSearchBoxVisibility } from '../lib/searchBoxVisibility'
+  import { getBookmarkQuickAddUrl } from '../lib/bookmarkQuickAdd'
   import Sidebar from '../components/Sidebar.svelte'
   import CategorySection from '../components/CategorySection.svelte'
   import CategoryIcon from '../components/CategoryIcon.svelte'
@@ -64,13 +65,12 @@
     title?: string
     isAuthenticated?: boolean
     authLoading?: boolean
-    onOpenCreateBookmark?: (categoryId?: string | number) => AsyncVoid
+    onOpenCreateBookmark?: (categoryId?: string | number, initialUrl?: string) => AsyncVoid
     onEditBookmark?: (bookmark: PublicBookmark) => AsyncVoid
     onReorganizeBookmarks?: (categoryOrders: BookmarkReorganizeReq['category_orders']) => AsyncVoid
     onOpenCreateCategory?: (parentId?: string | number | null) => AsyncVoid
     focusCategoryId?: number | null
     onSwitchToAdmin?: () => AsyncVoid
-    onOpenCreateRootCategory?: () => AsyncVoid
     onLogout?: () => AsyncVoid
     onOpenLogin?: () => AsyncVoid
     activeTheme?: 'light' | 'dark'
@@ -92,7 +92,6 @@
     onOpenCreateCategory = undefined,
     focusCategoryId = null,
     onSwitchToAdmin = undefined,
-    onOpenCreateRootCategory = undefined,
     onLogout = undefined,
     onOpenLogin = undefined,
     activeTheme = 'light',
@@ -183,6 +182,15 @@
 
   const totalBookmarks = $derived(sortedBookmarks.length)
   const visibleBookmarkCount = $derived(visibleBookmarks.length)
+  const quickAddUrl = $derived(isAuthenticated && onOpenCreateBookmark
+    && searchQuery === deferredSearchQuery && visibleBookmarkCount === 0
+    ? getBookmarkQuickAddUrl(deferredSearchQuery)
+    : null)
+
+  function createBookmarkFromSearch(): void {
+    if (quickAddUrl) void onOpenCreateBookmark?.(undefined, quickAddUrl)
+  }
+
   const pageTitle = $derived(title || settings?.site_title || '导航首页')
   const siteTitleColor = $derived(settings?.site_title_color?.trim() || 'inherit')
   const siteTitleFontSize = $derived(clampTitleFontSize(settings?.site_title_font_size))
@@ -511,7 +519,7 @@
     {activeTheme}
     {activeThemeMode}
     {onToggleTheme}
-    {onOpenCreateRootCategory}
+    {onOpenCreateBookmark}
     {onSwitchToAdmin}
     {onLogout}
     {onOpenLogin}
@@ -622,7 +630,10 @@
             {/each}
           </div>
         {:else}
-          <HomeEmptyPanel {hasSearchQuery} />
+          <HomeEmptyPanel
+            {hasSearchQuery}
+            onCreateBookmark={quickAddUrl ? createBookmarkFromSearch : undefined}
+          />
         {/if}
       {:else if mostVisitedBookmarks.length > 0 || categoryGroups.length > 0}
         {#if mostVisitedBookmarks.length > 0}

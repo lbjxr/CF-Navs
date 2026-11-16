@@ -52,7 +52,9 @@ export function assessModalActions(actions) {
 
 export async function pageModalControl(kind) {
   const find = () => {
-    if (kind === 'category') return document.querySelector('[data-testid="home-create-root-category"]')
+    if (kind === 'guide-close') return document.querySelector('#guideCloseBtn, [data-testid="home-guide-overlay"] button[aria-label="关闭指南"]')
+    if (kind === 'category') return [...document.querySelectorAll('.section-actions button[aria-label="新建子分类"], .scope-more-item')]
+      .find((element) => element.textContent.trim() === '新建子分类' && element.getClientRects().length > 0)
     if (kind === 'category-cancel') return document.querySelector('[aria-labelledby="category-modal-title"] .modal-header button')
     if (kind === 'actions') return document.querySelector('[data-testid="home-actions-menu-trigger"]')
     if (kind === 'desktop-add') return document.querySelector('.section-actions button[aria-label="新增书签"]')
@@ -75,6 +77,16 @@ export async function pageModalControl(kind) {
   const x = box.left + box.width / 2, y = box.top + box.height / 2
   const hit = document.elementFromPoint(x, y)
   return hit === element || element.contains(hit) ? { x, y } : null
+}
+
+export function pageGuideState() {
+  const overlay = document.querySelector('[data-testid="home-guide-overlay"]')
+  const seen = localStorage.getItem('cf-navs:guide-seen') === '1'
+  return {
+    seen,
+    present: Boolean(overlay),
+    closed: seen && (!overlay || overlay.classList.contains('closed')),
+  }
 }
 
 export function pageModalsClosed() {

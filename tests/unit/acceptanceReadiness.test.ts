@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { assessModalActions, pageModalMetrics, pageModalsClosed, waitForModal, pageModalFault } from '../../scripts/lib/modalAcceptanceProbe.mjs'
+import { assessModalActions, pageModalMetrics, pageGuideState, pageModalsClosed, waitForModal, pageModalFault } from '../../scripts/lib/modalAcceptanceProbe.mjs'
 
 function bounds(element: Element, left: number, top: number, width: number, height: number) {
   Object.defineProperty(element, 'getBoundingClientRect', { configurable: true, value: () => ({ left, top, right: left + width, bottom: top + height, x: left, y: top, width, height }) })
@@ -21,7 +21,7 @@ function fixture() {
 const measure = () => pageModalMetrics().results.bookmarkActions
 
 beforeEach(() => { vi.stubGlobal('innerWidth', 390); vi.stubGlobal('innerHeight', 844) })
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); document.body.innerHTML = '' })
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); localStorage.clear(); document.body.innerHTML = '' })
 
 describe('acceptance modal readiness and action bar contract', () => {
   it('waits for lazy UI readiness without synthesizing input', async () => {
@@ -114,6 +114,14 @@ describe('acceptance modal readiness and action bar contract', () => {
     expect(cancel).not.toHaveBeenCalled()
     card.remove()
     expect(pageModalsClosed()).toBe(true)
+  })
+  it('distinguishes a loading or open first-visit guide from a closed one', () => {
+    expect(pageGuideState()).toEqual({ seen: false, present: false, closed: false })
+    document.body.innerHTML = '<div data-testid="home-guide-overlay"><div id="guideBackdrop"><button id="guideCloseBtn">关闭</button></div></div>'
+    expect(pageGuideState()).toEqual({ seen: false, present: true, closed: false })
+    localStorage.setItem('cf-navs:guide-seen', '1')
+    document.querySelector('[data-testid="home-guide-overlay"]')!.classList.add('closed')
+    expect(pageGuideState()).toEqual({ seen: true, present: true, closed: true })
   })
 })
 
