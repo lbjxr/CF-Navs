@@ -77,7 +77,7 @@ export interface BookmarkController {
   getState: () => BookmarkEditorState
   /** 关闭并清空书签编辑框（同时推进编辑意图）；登出 / 改密时也会调用。 */
   reset: () => void
-  openCreate: (categoryId?: string | number) => Promise<void>
+  openCreate: (categoryId?: string | number, initialUrl?: string) => Promise<void>
   openEdit: (bookmark: { id: string | number }) => Promise<void>
   close: () => Promise<void>
   submit: (form: BookmarkFormValue) => Promise<void>
@@ -118,7 +118,7 @@ export function createBookmarkController(deps: BookmarkControllerDeps): Bookmark
     emit()
   }
 
-  async function openCreate(categoryId?: string | number): Promise<void> {
+  async function openCreate(categoryId?: string | number, initialUrl = ''): Promise<void> {
     editIntent.next()
     if (!deps.isLoggedIn()) {
       await deps.openLogin()
@@ -133,7 +133,7 @@ export function createBookmarkController(deps: BookmarkControllerDeps): Bookmark
     const fallbackCategoryId = categoryId ?? deps.readAdminData().categories[0]?.id
     await deps.ensureLazyComponent('BookmarkEditModal')
     modalMode = 'create'
-    active = createBookmarkDraft(fallbackCategoryId)
+    active = createBookmarkDraft(fallbackCategoryId, initialUrl)
     modalOpen = true
     emit()
   }

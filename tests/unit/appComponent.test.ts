@@ -936,6 +936,18 @@ describe('App Install / Recover lazy loading', () => {
 })
 
 describe('App global keydown, spotlight and bookmark view', () => {
+  it('closes Spotlight before handing its URL to the shared bookmark editor', async () => {
+    await mountApp({ reveal: true, config: { site_title: 'Cfg', public_mode: true }, publicData: makePublicData() })
+    keydown({ key: 'k', ctrlKey: true })
+    await settle()
+    const spotlight = mounted('SearchSpotlight')!.props
+    h.bookmark.ctrl.openCreate.mockImplementation(() => {
+      expect(spotlight.open).toBe(false)
+    })
+    await (spotlight.onCreateBookmark as (url: string) => Promise<void>)('https://new.example/Case')
+    expect(h.bookmark.ctrl.openCreate).toHaveBeenCalledExactlyOnceWith(undefined, 'https://new.example/Case')
+  })
+
   it('opens Spotlight with Ctrl+K and "/" on a visible home, closes with Esc and Ctrl+K', async () => {
     await mountApp({ reveal: true, config: { site_title: 'Cfg', public_mode: true }, publicData: makePublicData() })
     const open = keydown({ key: 'k', ctrlKey: true })

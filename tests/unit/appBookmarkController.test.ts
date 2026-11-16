@@ -694,6 +694,25 @@ function runScenario(sc: Scenario, attach: (w: World) => Impl): Promise<Result> 
 }
 
 describe('app bookmark controller', () => {
+  it('prefills a URL without saving it and clears it on the next ordinary creation', async () => {
+    const world = new World({})
+    attachController(world)
+    const controller = createBookmarkController({
+      ...doubles(world),
+      onChange: () => {},
+      editIntent: createEditIntentCounter(),
+      setRootError: () => {},
+    })
+    await controller.openCreate(undefined, 'https://new.example/Case')
+    expect(controller.getState()).toMatchObject({
+      modalOpen: true, modalMode: 'create', active: { category_id: 1, title: '', url: 'https://new.example/Case' },
+    })
+    expect(calls(world)).not.toContain('api.create')
+    await controller.close()
+    await controller.openCreate(2)
+    expect(controller.getState().active).toMatchObject({ category_id: 2, title: '', url: '' })
+  })
+
   for (const sc of scenarios) {
     it(sc.name, async () => {
       const ours = await runScenario(sc, attachController)

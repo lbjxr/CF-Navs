@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import { tick } from 'svelte'
 import SearchSpotlight from '../../src/components/SearchSpotlight.svelte'
 import { api } from '../../src/lib/api'
-import { publicStore } from '../../src/lib/stores'
+import { authStore, publicStore } from '../../src/lib/stores'
 import type { PublicBookmark, PublicCategory } from '../../shared/types'
 
 const bookmark = (over: Record<string, unknown>): PublicBookmark => ({
@@ -27,8 +27,10 @@ const bookmark = (over: Record<string, unknown>): PublicBookmark => ({
 const categories = [
   { id: 1, parent_id: null, title: '工具', icon: '', sort: 1 },
 ] as unknown as PublicCategory[]
+const session = { token: 'unit-test-session', username: 'fixture', expires_at: Date.now() + 60_000 }
 
 beforeEach(() => {
+  authStore.setSession(null)
   vi.spyOn(api.public, 'registerClick').mockResolvedValue(null as never)
   vi.spyOn(publicStore, 'incrementClick').mockImplementation(() => undefined)
   // jsdom 不实现 scrollIntoView；键盘导航把高亮项滚入可视区时会调用它。
@@ -37,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  authStore.setSession(null)
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -227,5 +230,77 @@ describe('SearchSpotlight', () => {
 
     await fireEvent.click(screen.getByLabelText('关闭搜索'))
     expect(onClose).toHaveBeenCalledTimes(2)
+  })
+
+  it('登录后有效网址没有结果时显示新增书签，点击保留 URL 大小写', async () => {
+    authStore.setSession(session)
+    const onCreateBookmark = vi.fn()
+    render(SearchSpotlight, { props: { open: true, categories, onCreateBookmark } })
+    await fireEvent.input(screen.getByRole('combobox'), { target: { value: 'new.example/Case?q=Value' } })
+    const add = screen.getByRole('button', { name: '新增书签' })
+    expect(add.closest('[role="listbox"]')).toBeNull()
+    await fireEvent.click(add)
+    expect(onCreateBookmark).toHaveBeenCalledExactlyOnceWith('https://new.example/Case?q=Value')
+    expect(api.public.registerClick).not.toHaveBeenCalled()
+  })
+
+  it('输入框 Enter 可新增，输入法确认和按钮 Enter 不会重复调用', async () => {
+    authStore.setSession(session)
+    const onCreateBookmark = vi.fn()
+    render(SearchSpotlight, { props: { open: true, categories, onCreateBookmark } })
+    const input = screen.getByRole('combobox')
+    await fireEvent.input(input, { target: { value: 'https://new.example' } })
+    await fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(onCreateBookmark).not.toHaveBeenCalled()
+    await fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onCreateBookmark).toHaveBeenCalledExactlyOnceWith('https://new.example')
+
+    onCreateBookmark.mockClear()
+    const button = screen.getByRole('button', { name: '新增书签' })
+    await fireEvent.keyDown(button, { key: 'Enter' })
+    expect(onCreateBookmark).not.toHaveBeenCalled()
+    // jsdom 不合成原生按钮的 Enter click；真实浏览器回归覆盖键盘激活。
+    await fireEvent.click(button)
+    expect(onCreateBookmark).toHaveBeenCalledTimes(1)
+  })
+
+  it('新增按钮参与焦点循环，Esc 保持关闭语义', async () => {
+    authStore.setSession(session)
+    const onClose = vi.fn()
+    render(SearchSpotlight, { props: { open: true, categories, onCreateBookmark: vi.fn(), onClose } })
+    const input = screen.getByRole('combobox')
+    await fireEvent.input(input, { target: { value: 'new.example' } })
+    const button = screen.getByRole('button', { name: '新增书签' })
+    input.focus()
+    await fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(button)
+    await fireEvent.keyDown(button, { key: 'Tab' })
+    expect(document.activeElement).toBe(input)
+    await fireEvent.keyDown(input, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('匿名、无回调、普通词和已有结果均不显示新增按钮，登出立即隐藏', async () => {
+    const onCreateBookmark = vi.fn()
+    const { rerender } = render(SearchSpotlight, {
+      props: { open: true, categories, bookmarks: [bookmark({ id: 1, title: 'Saved', url: 'https://saved.example' })], onCreateBookmark },
+    })
+    const input = screen.getByRole('combobox')
+    await fireEvent.input(input, { target: { value: 'new.example' } })
+    expect(screen.queryByRole('button', { name: '新增书签' })).toBeNull()
+    authStore.setSession(session)
+    await tick()
+    expect(screen.getByRole('button', { name: '新增书签' })).toBeTruthy()
+    for (const value of ['普通关键词', 'javascript:alert(1)', 'saved.example']) {
+      await fireEvent.input(input, { target: { value } })
+      expect(screen.queryByRole('button', { name: '新增书签' })).toBeNull()
+    }
+    await fireEvent.input(input, { target: { value: 'new.example' } })
+    authStore.setSession(null)
+    await tick()
+    expect(screen.queryByRole('button', { name: '新增书签' })).toBeNull()
+    authStore.setSession(session)
+    await rerender({ onCreateBookmark: undefined })
+    expect(screen.queryByRole('button', { name: '新增书签' })).toBeNull()
   })
 })

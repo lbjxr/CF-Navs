@@ -209,6 +209,13 @@
     spotlightOpen = false
   }
 
+  async function createBookmarkFromSearch(url: string): Promise<void> {
+    closeSpotlight()
+    // 先让搜索面板归还焦点和滚动锁，再打开共用的书签表单。
+    await tick()
+    await bookmarkController.openCreate(undefined, url)
+  }
+
   function openBookmarkView(bookmark: PublicBookmark): void {
     viewBookmark = bookmark
   }
@@ -610,6 +617,7 @@
         categories={publicData?.categories ?? []}
         onClose={closeSpotlight}
         onViewBookmark={openBookmarkView}
+        onCreateBookmark={createBookmarkFromSearch}
       />
     {/if}
 

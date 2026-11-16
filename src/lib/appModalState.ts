@@ -9,11 +9,11 @@ export function createCategoryDraft(parentId: string | number | null = null): Pa
   }
 }
 
-export function createBookmarkDraft(categoryId: string | number | undefined): Partial<BookmarkFormValue> {
+export function createBookmarkDraft(categoryId: string | number | undefined, initialUrl = ''): Partial<BookmarkFormValue> {
   return {
     category_id: categoryId,
     title: '',
-    url: '',
+    url: initialUrl,
     icon: '',
     icon_background_color: '',
     description: '',
