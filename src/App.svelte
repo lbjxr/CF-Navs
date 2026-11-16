@@ -489,7 +489,6 @@
           isAuthenticated={$isAuthenticated}
           authLoading={$authStore.loading}
           onOpenCreateCategory={categoryController.openCreate}
-          onOpenCreateRootCategory={categoryController.openCreateRoot}
           focusCategoryId={homeFocusCategoryId}
           onOpenCreateBookmark={bookmarkController.openCreate}
           onEditBookmark={bookmarkController.openEdit}

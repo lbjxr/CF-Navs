@@ -82,31 +82,42 @@ describe('home floating actions', () => {
     expect(source).toContain('bottom: max(1rem, env(safe-area-inset-bottom));')
   })
 
-  it('只有登录态渲染新增主分类入口', () => {
+  it('只有登录态渲染新增书签入口', () => {
     render(HomeFloatingActions, { props: { isAuthenticated: false } })
-    expect(screen.queryByRole('button', { name: '新增主分类' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '新增书签' })).toBeNull()
 
     cleanup()
     render(HomeFloatingActions, { props: { isAuthenticated: true } })
-    const button = screen.getByRole('button', { name: '新增主分类' })
-    expect(button.getAttribute('data-testid')).toBe('home-create-root-category')
-    expect(button.getAttribute('title')).toBe('新增主分类')
+    const button = screen.getByRole('button', { name: '新增书签' })
+    expect(button.getAttribute('data-testid')).toBe('home-create-bookmark')
+    expect(button.getAttribute('title')).toBe('新增书签')
+    expect(screen.queryByRole('button', { name: '新增主分类' })).toBeNull()
   })
 
-  it('新增主分类用「文件夹 + 加号」图标，不用语义不明的裸加号', () => {
+  it('新增书签使用带加号的书签图标', () => {
     render(HomeFloatingActions, { props: { isAuthenticated: true } })
-    const button = screen.getByRole('button', { name: '新增主分类' })
+    const button = screen.getByRole('button', { name: '新增书签' })
 
     // 图标必须是 svg，且对无障碍树隐藏——可访问名只由 aria-label 提供
     const icon = button.querySelector('svg')
     expect(icon).not.toBeNull()
     expect(icon?.getAttribute('aria-hidden')).toBe('true')
-    // 文件夹轮廓 + 加号两笔，缺一笔就退化成语义不明的形状
+    // 书签轮廓与加号。
     expect(icon?.querySelectorAll('path').length).toBe(2)
-    expect(icon?.querySelector('path')?.getAttribute('d')).toContain('M3 8a2 2 0 0 1 2-2')
+    expect(icon?.querySelector('path')?.getAttribute('d')).toContain('l-7-4-7 4')
     // 按钮不再靠字符承载语义：可见文本必须为空
     expect(button.textContent?.trim()).toBe('')
     expect(source).not.toContain('＋')
+  })
+
+  it('新增书签调用现有新建回调并收起菜单', async () => {
+    const onOpenCreateBookmark = vi.fn()
+    render(HomeFloatingActions, { props: { isAuthenticated: true, onOpenCreateBookmark } })
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+    await fireEvent.click(trigger)
+    await fireEvent.click(screen.getByRole('button', { name: '新增书签' }))
+    expect(onOpenCreateBookmark).toHaveBeenCalledExactlyOnceWith()
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
   })
 })
 

@@ -17,7 +17,7 @@
     onSwitchToAdmin?: () => AsyncVoid
     onLogout?: () => AsyncVoid
     onOpenLogin?: () => AsyncVoid
-    onOpenCreateRootCategory?: () => AsyncVoid
+    onOpenCreateBookmark?: () => AsyncVoid
     topNavigation?: boolean
     sortActive?: boolean
     searchBoxVisible?: boolean
@@ -35,7 +35,7 @@
     onSwitchToAdmin,
     onLogout,
     onOpenLogin,
-    onOpenCreateRootCategory,
+    onOpenCreateBookmark,
     topNavigation = false,
     sortActive = false,
     searchBoxVisible = false,
@@ -135,9 +135,9 @@
     void onLogout?.()
   }
 
-  function handleOpenCreateRootCategory() {
+  function handleOpenCreateBookmark() {
     closeMenu()
-    void onOpenCreateRootCategory?.()
+    void onOpenCreateBookmark?.()
   }
 
   function handleOpenLogin() {
@@ -248,18 +248,17 @@
       >
         &#9881;
       </button>
-      <!-- 图标语义：裸加号不说明加的是什么，改为「文件夹 + 加号」明确是新增分类 -->
       <button
         type="button"
-        class="icon-button create-category-button"
-        data-testid="home-create-root-category"
-        onclick={handleOpenCreateRootCategory}
-        title="新增主分类"
-        aria-label="新增主分类"
+        class="icon-button create-bookmark-button"
+        data-testid="home-create-bookmark"
+        onclick={handleOpenCreateBookmark}
+        title="新增书签"
+        aria-label="新增书签"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M3 8a2 2 0 0 1 2-2h3.6l1.7 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-          <path d="M12 11.5v5M9.5 14h5" />
+          <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z" />
+          <path d="M12 7v6M9 10h6" />
         </svg>
       </button>
       <button
@@ -387,7 +386,7 @@
     stroke-linejoin: round;
   }
 
-  .create-category-button svg {
+  .create-bookmark-button svg {
     width: 1.3rem;
     height: 1.3rem;
     fill: none;
@@ -570,7 +569,7 @@
       font-size: 1rem;
     }
 
-    .create-category-button {
+    .create-bookmark-button {
       min-width: 36px;
       min-height: 36px;
     }

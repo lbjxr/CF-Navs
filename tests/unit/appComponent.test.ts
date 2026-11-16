@@ -376,7 +376,6 @@ describe('App boot splash and view switching', () => {
     expect(home.authLoading).toBe(false)
     expect(home.focusCategoryId).toBeNull()
     expect(home.onOpenCreateCategory).toBe(h.category.ctrl.openCreate)
-    expect(home.onOpenCreateRootCategory).toBe(h.category.ctrl.openCreateRoot)
     expect(home.onOpenCreateBookmark).toBe(h.bookmark.ctrl.openCreate)
     expect(home.onEditBookmark).toBe(h.bookmark.ctrl.openEdit)
     expect(home.onReorganizeBookmarks).toBe(h.bookmark.ctrl.reorganize)

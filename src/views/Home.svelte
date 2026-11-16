@@ -70,7 +70,6 @@
     onOpenCreateCategory?: (parentId?: string | number | null) => AsyncVoid
     focusCategoryId?: number | null
     onSwitchToAdmin?: () => AsyncVoid
-    onOpenCreateRootCategory?: () => AsyncVoid
     onLogout?: () => AsyncVoid
     onOpenLogin?: () => AsyncVoid
     activeTheme?: 'light' | 'dark'
@@ -92,7 +91,6 @@
     onOpenCreateCategory = undefined,
     focusCategoryId = null,
     onSwitchToAdmin = undefined,
-    onOpenCreateRootCategory = undefined,
     onLogout = undefined,
     onOpenLogin = undefined,
     activeTheme = 'light',
@@ -511,7 +509,7 @@
     {activeTheme}
     {activeThemeMode}
     {onToggleTheme}
-    {onOpenCreateRootCategory}
+    {onOpenCreateBookmark}
     {onSwitchToAdmin}
     {onLogout}
     {onOpenLogin}

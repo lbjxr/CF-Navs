@@ -549,7 +549,7 @@ async function runModalChecks(session) {
         await session.send('Page.bringToFront')
         stage = 'interaction'
         await waitForModal(() => session.call(function homeReady() { return Boolean(document.querySelector('[data-home-category-scope]')) }), 'home category')
-        if (!await session.call(pageModalControl, 'category')) await click('actions')
+        if (!await session.call(pageModalControl, 'category')) await click('more')
         await click('category')
         await waitForModal(async () => (await session.call(pageModalMetrics)).results.categoryModal?.visible, 'category dialog')
         await sleep(250)

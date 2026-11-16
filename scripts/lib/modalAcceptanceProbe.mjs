@@ -52,7 +52,8 @@ export function assessModalActions(actions) {
 
 export async function pageModalControl(kind) {
   const find = () => {
-    if (kind === 'category') return document.querySelector('[data-testid="home-create-root-category"]')
+    if (kind === 'category') return [...document.querySelectorAll('.section-actions button[aria-label="新建子分类"], .scope-more-item')]
+      .find((element) => element.textContent.trim() === '新建子分类' && element.getClientRects().length > 0)
     if (kind === 'category-cancel') return document.querySelector('[aria-labelledby="category-modal-title"] .modal-header button')
     if (kind === 'actions') return document.querySelector('[data-testid="home-actions-menu-trigger"]')
     if (kind === 'desktop-add') return document.querySelector('.section-actions button[aria-label="新增书签"]')
