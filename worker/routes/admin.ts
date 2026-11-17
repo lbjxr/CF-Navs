@@ -3,6 +3,7 @@ import { getAdminData } from '../lib/db'
 import { ok } from '../lib/response'
 import type { HonoEnv } from '../types'
 import { serverError } from '../lib/routeHelpers'
+import { appendServerTiming } from '../lib/serverTiming'
 
 export const adminRoutes = new Hono<HonoEnv>()
 
@@ -10,10 +11,15 @@ export const adminRoutes = new Hono<HonoEnv>()
 // 却要求每个写路由记得失效。后台聚合始终直读一次 D1 batch。
 adminRoutes.get('/data', async (c) => {
   try {
+    const startedAt = performance.now()
     const data = await getAdminData(c.env.DB)
-    return c.json(ok(data), 200, {
+    appendServerTiming(c, 'db', startedAt)
+    const serializeAt = performance.now()
+    const response = c.json(ok(data), 200, {
       'Cache-Control': 'no-store',
     })
+    appendServerTiming(c, 'serialize', serializeAt, response)
+    return response
   } catch (error) {
     return serverError(c, 'failed to load admin data', error)
   }

@@ -9,12 +9,23 @@ export interface EditIntentCounter {
   next: () => number
   /** 当前值，用来判断异步结果是否仍属于最新的编辑意图。 */
   current: () => number
+  /** Pending editors can close immediately when another editor takes ownership. */
+  subscribe: (listener: (value: number) => void) => () => void
 }
 
 export function createEditIntentCounter(): EditIntentCounter {
   let value = 0
+  const listeners = new Set<(value: number) => void>()
   return {
-    next: () => ++value,
+    next: () => {
+      value += 1
+      for (const listener of listeners) listener(value)
+      return value
+    },
     current: () => value,
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
   }
 }

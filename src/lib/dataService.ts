@@ -9,6 +9,7 @@ import { get } from 'svelte/store'
 import {
   type AdminData,
   type Bookmark,
+  type BookmarkEditData,
   type Category,
   type PublicData,
   type Settings,
@@ -500,6 +501,19 @@ export async function readAdminDataForEdit(): Promise<AdminData | null> {
   try {
     const data = await api.admin.getData({ keepSessionOnUnauthorized: true })
     return isCurrent() ? data : null
+  } catch (error) {
+    if (!isCurrent()) return null
+    throw error
+  }
+}
+
+/** A source read stays outside projected stores and snapshots, including on failure. */
+export async function readBookmarkForEdit(bookmarkId: number, signal?: AbortSignal): Promise<BookmarkEditData | null> {
+  if (!isLoggedIn()) return null
+  const isCurrent = captureSession()
+  try {
+    const bookmark = await api.bookmarks.getForEdit(bookmarkId, signal)
+    return isCurrent() ? bookmark : null
   } catch (error) {
     if (!isCurrent()) return null
     throw error

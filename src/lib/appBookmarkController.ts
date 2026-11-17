@@ -2,6 +2,7 @@ import type {
   AdminData,
   BatchDeleteBookmarksResp,
   Bookmark,
+  BookmarkEditData,
   BookmarkBatchMoveReq,
   BookmarkBatchMoveResp,
   BookmarkReorganizeReq,
@@ -26,12 +27,14 @@ import { createOptimisticSortState, runOptimisticSort } from './appSortQueue'
 //
 // 与 appCategoryController 同一形态：普通闭包控制器，持有书签编辑框状态，每次赋值后经 `onChange`
 // 推送整份快照（不新增 store 订阅）。编辑意图计数器与分类控制器共用同一个注入实例；
-// rootError 仍归 App 经回调写入。语句顺序与 await 位置与原 App 实现逐条一致。
+// 编辑读取与组件加载并行；显示状态先发布，权威数据就绪前禁止提交。
 
 export interface BookmarkEditorState {
   modalOpen: boolean
   modalMode: 'create' | 'edit'
   active: Partial<BookmarkFormValue> | null
+  reading: boolean
+  readError: string
   saving: boolean
   deletingId: number | null
   error: string
@@ -59,7 +62,7 @@ export interface BookmarkControllerDeps {
   openLogin: () => Promise<void>
   ensureLoggedInDataLoaded: () => Promise<boolean>
   ensureLazyComponent: (name: 'BookmarkEditModal') => Promise<unknown>
-  readAdminDataForEdit: () => Promise<AdminData | null>
+  readBookmarkForEdit: (bookmarkId: number, signal: AbortSignal) => Promise<BookmarkEditData | null>
   requestConfirmation: (input: ConfirmDialogInput) => Promise<boolean>
   applyLocalBookmarkUpsert: (bookmark: Bookmark) => Promise<void>
   applyLocalBookmarkDelete: (bookmarkId: number) => Promise<void>
@@ -79,6 +82,8 @@ export interface BookmarkController {
   reset: () => void
   openCreate: (categoryId?: string | number, initialUrl?: string) => Promise<void>
   openEdit: (bookmark: { id: string | number }) => Promise<void>
+  retryEdit: () => Promise<void>
+  destroy: () => void
   close: () => Promise<void>
   submit: (form: BookmarkFormValue) => Promise<void>
   remove: (bookmark: { id: string | number; title: string }) => Promise<void>
@@ -95,13 +100,18 @@ export function createBookmarkController(deps: BookmarkControllerDeps): Bookmark
   let modalOpen = false
   let modalMode: 'create' | 'edit' = 'create'
   let active: Partial<BookmarkFormValue> | null = null
+  let reading = false
+  let readError = ''
+  let editingId: number | null = null
+  let readIntent: number | null = null
+  let readAbort: AbortController | null = null
   let saving = false
   let deletingId: number | null = null
   let error = ''
   const sortState = createOptimisticSortState()
 
   function getState(): BookmarkEditorState {
-    return { modalOpen, modalMode, active, saving, deletingId, error }
+    return { modalOpen, modalMode, active, reading, readError, saving, deletingId, error }
   }
 
   function emit(): void {
@@ -110,6 +120,7 @@ export function createBookmarkController(deps: BookmarkControllerDeps): Bookmark
 
   function reset(): void {
     editIntent.next()
+    clearEditRead()
     modalOpen = false
     modalMode = 'create'
     active = null
@@ -117,6 +128,23 @@ export function createBookmarkController(deps: BookmarkControllerDeps): Bookmark
     saving = false
     emit()
   }
+
+  function clearEditRead(): void {
+    readAbort?.abort()
+    readAbort = null
+    readIntent = null
+    editingId = null
+    reading = false
+    readError = ''
+  }
+
+  const stopEditIntent = editIntent.subscribe((intent) => {
+    if (readIntent === null || readIntent === intent) return
+    clearEditRead()
+    modalOpen = false
+    active = null
+    emit()
+  })
 
   async function openCreate(categoryId?: string | number, initialUrl = ''): Promise<void> {
     editIntent.next()
@@ -145,26 +173,61 @@ export function createBookmarkController(deps: BookmarkControllerDeps): Bookmark
       await deps.openLogin()
       return
     }
+    const bookmarkId = Number(bookmark.id)
+    const abort = new AbortController()
+    readAbort = abort
+    readIntent = intent
+    editingId = bookmarkId
+    modalMode = 'edit'
+    active = null
+    modalOpen = true
+    reading = true
+    readError = ''
     error = ''
     emit()
+    const isCurrent = () => intent === editIntent.current() && deps.getSession() === editSession && deps.isLoggedIn()
+    const timeout = setTimeout(() => abort.abort(new Error('读取书签超时，请重试。')), 10_000)
+    let stopAbortWait = () => {}
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      const onAbort = () => reject(abort.signal.reason)
+      abort.signal.addEventListener('abort', onAbort, { once: true })
+      stopAbortWait = () => abort.signal.removeEventListener('abort', onAbort)
+    })
     try {
-      const data = await deps.readAdminDataForEdit()
-      if (!data || intent !== editIntent.current()) return
-      const current = data.bookmarks.find(item => item.id === Number(bookmark.id))
+      const ready = Promise.all([
+        deps.readBookmarkForEdit(bookmarkId, abort.signal),
+        deps.ensureLazyComponent('BookmarkEditModal'),
+      ])
+      const [current] = await Promise.race([ready, cancelled])
+      if (!isCurrent()) return
       if (!current) throw new Error('书签已不存在，请刷新后重试。')
-      await deps.ensureLazyComponent('BookmarkEditModal')
-      if (!deps.isLoggedIn() || deps.getSession() !== editSession || intent !== editIntent.current()) return
-      modalMode = 'edit'
+      if (current.id !== bookmarkId) throw new Error('书签数据不匹配，请重试。')
       active = toBookmarkForm(current)
-      modalOpen = true
+      reading = false
+      readIntent = null
       emit()
-      deps.refreshBookmarkIconCacheInBackground(Number(bookmark.id))
     } catch (caught) {
-      if (intent === editIntent.current()) deps.setRootError(`无法读取书签的原始编辑数据：${getErrorMessage(caught)}`)
+      const failure = abort.signal.aborted ? abort.signal.reason : caught
+      abort.abort()
+      if (!isCurrent()) return
+      reading = false
+      readError = `无法读取书签的原始编辑数据：${getErrorMessage(failure)} 请重试或取消。`
+      emit()
+    } finally {
+      clearTimeout(timeout)
+      stopAbortWait()
+      if (readAbort === abort) readAbort = null
+      if (intent === editIntent.current() && !isCurrent()) {
+        clearEditRead()
+        modalOpen = false
+        active = null
+        emit()
+      }
     }
   }
 
   async function submit(form: BookmarkFormValue): Promise<void> {
+    if (reading || readError) return
     // 同分类提交：意图只看表单，reset() 之后 mode 已经变回 'create'。
     const isEdit = form.id != null
     const submitSession = deps.getSession()
@@ -292,6 +355,15 @@ export function createBookmarkController(deps: BookmarkControllerDeps): Bookmark
     reset,
     openCreate,
     openEdit,
+    async retryEdit() {
+      if (modalOpen && modalMode === 'edit' && editingId !== null && !reading && !saving && deletingId === null) {
+        await openEdit({ id: editingId })
+      }
+    },
+    destroy() {
+      stopEditIntent()
+      reset()
+    },
     async close() {
       reset()
     },

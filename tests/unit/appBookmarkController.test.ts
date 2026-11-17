@@ -79,6 +79,7 @@ class World extends UseCaseWorld {
       ensureLoggedInDataLoaded: true,
       confirm: true,
       readAdminDataForEdit: rawData(),
+      readBookmarkForEdit: bm(10),
       'api.create': bm(50, 1, 'New'),
       'api.update': bm(10, 1, 'Edited'),
       'api.batchDelete': { deleted: 2 },
@@ -130,6 +131,7 @@ function doubles(w: World) {
     ensureLoggedInDataLoaded: () => w.call<boolean>('ensureLoggedInDataLoaded'),
     ensureLazyComponent: (name: string) => w.call('ensure', name),
     readAdminDataForEdit: () => w.call<AdminData | null>('readAdminDataForEdit'),
+    readBookmarkForEdit: (id: number, _signal: AbortSignal) => w.call<Bookmark>('readBookmarkForEdit', id),
     requestConfirmation: (input: ConfirmDialogInput) => w.call<boolean>('confirm', input),
     api: {
       bookmarks: {
@@ -279,12 +281,14 @@ const scenarios: Scenario[] = [
 
   // --- 编辑 ---
   {
-    name: 'edit: loads raw data and the modal, opens in edit mode, refreshes the icon in background',
+    name: 'edit: reads one authoritative bookmark and opens without refreshing the icon',
     drive: (impl, _w, s) => track(s, 'edit', impl.openEdit({ id: '10' })),
     check: ({ impl, world }) => {
-      expect(calls(world)).toEqual(['getSession', 'isLoggedIn', 'readAdminDataForEdit', 'ensure', 'isLoggedIn', 'getSession', 'refreshIconCache'])
-      expect(world.log.at(-1)).toMatchObject({ args: [10], state: { modalOpen: true, modalMode: 'edit' } })
-      expect(impl.read()).toMatchObject({ modalOpen: true, modalMode: 'edit', active: toBookmarkForm(bm(10)) })
+      expect(calls(world)).toContain('readBookmarkForEdit')
+      expect(calls(world)).not.toContain('readAdminDataForEdit')
+      expect(calls(world)).not.toContain('refreshIconCache')
+      expect(world.log.find(entry => entry.call === 'readBookmarkForEdit')).toMatchObject({ args: [10], state: { modalOpen: true, reading: true, active: null } })
+      expect(impl.read()).toMatchObject({ modalOpen: true, modalMode: 'edit', active: toBookmarkForm(bm(10)), reading: false, readError: '' })
     },
   },
   {
@@ -294,40 +298,43 @@ const scenarios: Scenario[] = [
     check: ({ world }) => { expect(calls(world)).toEqual(['getSession', 'isLoggedIn', 'openLogin']) },
   },
   {
-    name: 'edit with no raw data: nothing',
-    plan: { readAdminDataForEdit: [{ value: null }] },
+    name: 'edit with no raw data: retryable error without a form',
+    plan: { readBookmarkForEdit: [{ value: null }] },
     drive: (impl, _w, s) => track(s, 'edit', impl.openEdit({ id: 10 })),
     check: ({ impl, world }) => {
-      expect(calls(world)).not.toContain('ensure')
-      expect(impl.read()).toMatchObject({ modalOpen: false, rootError: '' })
+      expect(calls(world)).toContain('ensure')
+      expect(impl.read()).toMatchObject({ modalOpen: true, active: null, reading: false, rootError: '' })
+      expect(impl.read().readError).toContain('书签已不存在')
     },
   },
   {
     name: 'edit a bookmark that no longer exists: root error',
+    plan: { readBookmarkForEdit: [{ error: new Error('书签已不存在，请刷新后重试。') }] },
     drive: (impl, _w, s) => track(s, 'edit', impl.openEdit({ id: 99 })),
-    check: ({ impl }) => { expect(impl.read().rootError).toBe('无法读取书签的原始编辑数据：书签已不存在，请刷新后重试。') },
+    check: ({ impl }) => { expect(impl.read().readError).toContain('书签已不存在') },
   },
   {
-    name: 'edit when the modal chunk fails: root error',
+    name: 'edit when the modal chunk fails: retryable error on the shell',
     plan: { ensure: [{ error: new Error('chunk') }] },
     drive: (impl, _w, s) => track(s, 'edit', impl.openEdit({ id: 10 })),
     check: ({ impl, settled }) => {
       expect(settled).toEqual(['edit:ok'])
-      expect(impl.read()).toMatchObject({ modalOpen: false, rootError: '无法读取书签的原始编辑数据：chunk' })
+      expect(impl.read()).toMatchObject({ modalOpen: true, reading: false, rootError: '' })
+      expect(impl.read().readError).toContain('chunk')
     },
   },
   {
     name: 'edit superseded by a category action on the shared counter while reading: dropped',
-    plan: { readAdminDataForEdit: [{ defer: 'r' }] },
+    plan: { readBookmarkForEdit: [{ defer: 'r' }] },
     drive: async (impl, w, s) => {
       const p = track(s, 'edit', impl.openEdit({ id: 10 }))
       await flush()
       impl.bumpIntent()
-      await w.release('r', { value: rawData() })
+      await w.release('r', { value: bm(10) })
       await p
     },
     check: ({ impl, world }) => {
-      expect(calls(world)).not.toContain('ensure')
+      expect(calls(world)).toContain('ensure')
       expect(impl.read()).toMatchObject({ modalOpen: false, editIntent: 2 })
     },
   },
@@ -369,13 +376,13 @@ const scenarios: Scenario[] = [
       await p
     },
     check: ({ impl, world }) => {
-      expect(calls(world).slice(-1)).toEqual(['isLoggedIn'])
+      expect(calls(world)).not.toContain('refreshIconCache')
       expect(impl.read().modalOpen).toBe(false)
     },
   },
   {
     name: 'edit superseded and then failing: no root error',
-    plan: { readAdminDataForEdit: [{ defer: 'r' }] },
+    plan: { readBookmarkForEdit: [{ defer: 'r' }] },
     drive: async (impl, w, s) => {
       const p = track(s, 'edit', impl.openEdit({ id: 10 }))
       await flush()
@@ -716,11 +723,14 @@ describe('app bookmark controller', () => {
   for (const sc of scenarios) {
     it(sc.name, async () => {
       const ours = await runScenario(sc, attachController)
-      const legacy = await runScenario(sc, attachLegacy)
-
-      expect(ours.world.log).toEqual(legacy.world.log)
-      expect(ours.impl.read()).toEqual(legacy.impl.read())
-      expect(ours.settled).toEqual(legacy.settled)
+      // Edit opening deliberately changes the old wait-before-display sequence.
+      // Keep differential coverage for the unchanged create/mutation workflows.
+      if (!calls(ours.world).includes('readBookmarkForEdit')) {
+        const legacy = await runScenario(sc, attachLegacy)
+        expect(ours.world.log).toEqual(legacy.world.log)
+        expect(ours.impl.read()).toEqual(legacy.impl.read())
+        expect(ours.settled).toEqual(legacy.settled)
+      }
       expect(ours.world.gates.size).toBe(0)
       sc.check?.(ours)
     })
@@ -737,12 +747,100 @@ describe('app bookmark controller', () => {
       editIntent: createEditIntentCounter(),
       setRootError: () => {},
     })
-    expect(controller.getState()).toEqual({ modalOpen: false, modalMode: 'create', active: null, saving: false, deletingId: null, error: '' })
+    expect(controller.getState()).toEqual({ modalOpen: false, modalMode: 'create', active: null, reading: false, readError: '', saving: false, deletingId: null, error: '' })
     await controller.openEdit({ id: 10 })
     await controller.submit(form({ id: 10 }))
-    // 清错误 → 打开 → saving=true → reset → onSettled
-    expect(states.map(s => [s.modalOpen, s.saving])).toEqual([[false, false], [true, false], [true, true], [false, false], [false, false]])
+    // 先显示读取外壳 → 原始表单 → saving=true → reset → onSettled
+    expect(states.map(s => [s.modalOpen, s.saving])).toEqual([[true, false], [true, false], [true, true], [false, false], [false, false]])
     expect(states[2].active).toBe(states[1].active)
+  })
+
+  it('opens a cancellable shell and starts the component load while the raw read is pending', async () => {
+    const world = new World({ readBookmarkForEdit: [{ defer: 'read' }], ensure: [{ defer: 'chunk' }] })
+    attachController(world)
+    const read = vi.fn((id: number, _signal: AbortSignal) => world.call<Bookmark>('readBookmarkForEdit', id))
+    const controller = createBookmarkController({
+      ...doubles(world), readBookmarkForEdit: read, editIntent: createEditIntentCounter(), onChange: () => {}, setRootError: () => {},
+    })
+    const pending = controller.openEdit({ id: 10 })
+    expect(controller.getState()).toMatchObject({ modalOpen: true, reading: true, active: null })
+    expect(world.gates.has('read')).toBe(true)
+    expect(world.gates.has('chunk')).toBe(true)
+    const signal = read.mock.calls[0][1]
+    await controller.submit(form({ id: 10 }))
+    expect(calls(world)).not.toContain('api.update')
+    await controller.close()
+    expect(signal.aborted).toBe(true)
+    await world.release('read', { value: bm(10) })
+    await world.release('chunk')
+    await pending
+    expect(controller.getState()).toMatchObject({ modalOpen: false, active: null, reading: false })
+  })
+
+  it('keeps failed reads unsavable and retries with authoritative embedded icon fields', async () => {
+    const world = new World({ readBookmarkForEdit: [{ error: new Error('offline') }, { value: { ...bm(10), icon: 'data:image/svg+xml;base64,PHN2Zy8+', icon_source: 'custom' } }] })
+    attachController(world)
+    const controller = createBookmarkController({ ...doubles(world), editIntent: createEditIntentCounter(), onChange: () => {}, setRootError: vi.fn() })
+    await controller.openEdit({ id: 10 })
+    expect(controller.getState()).toMatchObject({ modalOpen: true, reading: false, active: null })
+    expect(controller.getState().readError).toContain('offline')
+    await controller.submit(form({ id: 10 }))
+    expect(calls(world)).not.toContain('api.update')
+    await controller.retryEdit()
+    expect(controller.getState()).toMatchObject({ reading: false, readError: '', active: { icon: 'data:image/svg+xml;base64,PHN2Zy8+', icon_source: 'custom' } })
+    expect(calls(world).filter(call => call === 'readBookmarkForEdit')).toHaveLength(2)
+    expect(calls(world)).not.toContain('refreshIconCache')
+  })
+
+  it('rejects a mismatched single-bookmark response rather than filling another form', async () => {
+    const world = new World({ readBookmarkForEdit: [{ value: bm(11) }] })
+    const controller = attachController(world)
+    await controller.openEdit({ id: 10 })
+    expect(controller.read()).toMatchObject({ active: null, reading: false, modalOpen: true })
+    expect(controller.read().readError).toContain('数据不匹配')
+  })
+
+  it('aborts an edit superseded by another bookmark and ignores its late success', async () => {
+    const world = new World({ readBookmarkForEdit: [{ defer: 'first' }, { value: bm(11) }] })
+    attachController(world)
+    const read = vi.fn((id: number, _signal: AbortSignal) => world.call<Bookmark>('readBookmarkForEdit', id))
+    const controller = createBookmarkController({ ...doubles(world), readBookmarkForEdit: read, editIntent: createEditIntentCounter(), onChange: () => {}, setRootError: () => {} })
+    const old = controller.openEdit({ id: 10 })
+    const firstSignal = read.mock.calls[0][1]
+    await controller.openEdit({ id: 11 })
+    expect(firstSignal.aborted).toBe(true)
+    await world.release('first', { value: bm(10) })
+    await old
+    expect(controller.getState()).toMatchObject({ active: { id: 11 }, reading: false, readError: '' })
+  })
+
+  it('aborts and releases the editor when the owning App is destroyed', async () => {
+    const world = new World({ readBookmarkForEdit: [{ defer: 'read' }] })
+    attachController(world)
+    const read = vi.fn((id: number, _signal: AbortSignal) => world.call<Bookmark>('readBookmarkForEdit', id))
+    const controller = createBookmarkController({ ...doubles(world), readBookmarkForEdit: read, editIntent: createEditIntentCounter(), onChange: () => {}, setRootError: () => {} })
+    const pending = controller.openEdit({ id: 10 })
+    controller.destroy()
+    expect(read.mock.calls[0][1].aborted).toBe(true)
+    await world.release('read', { error: new Error('aborted') })
+    await pending
+    expect(controller.getState()).toMatchObject({ modalOpen: false, active: null, readError: '' })
+  })
+
+  it('times out a stalled component load and never revives its late response', async () => {
+    vi.useFakeTimers()
+    try {
+      const world = new World({ ensure: [{ defer: 'chunk' }] })
+      attachController(world)
+      const controller = createBookmarkController({ ...doubles(world), editIntent: createEditIntentCounter(), onChange: () => {}, setRootError: () => {} })
+      const pending = controller.openEdit({ id: 10 })
+      await vi.advanceTimersByTimeAsync(10_000)
+      await pending
+      expect(controller.getState()).toMatchObject({ modalOpen: true, reading: false, active: null })
+      expect(controller.getState().readError).toContain('超时')
+      await world.release('chunk')
+      expect(controller.getState().active).toBeNull()
+    } finally { vi.useRealTimers() }
   })
 })
 
@@ -773,11 +871,12 @@ describe('shared edit intent between category and bookmark controllers', () => {
   }
 
   it('opening a category form drops a bookmark edit still reading its data', async () => {
-    const { world, editIntent, bookmarks, categories } = setup({ readAdminDataForEdit: [{ defer: 'b' }] })
+    const { world, editIntent, bookmarks, categories } = setup({ readBookmarkForEdit: [{ defer: 'b' }] })
     const pending = bookmarks.openEdit({ id: 10 })
     await flush()
     await categories.openCreate(null, true)
-    await world.release('b', { value: rawData() })
+    expect(bookmarks.getState().modalOpen).toBe(false)
+    await world.release('b', { value: bm(10) })
     await pending
     expect(bookmarks.getState().modalOpen).toBe(false)
     expect(categories.getState().modalOpen).toBe(true)
@@ -1017,6 +1116,8 @@ function attachLegacy(w: World): Impl {
       modalOpen: app.bookmarkModalOpen,
       modalMode: app.bookmarkModalMode,
       active: app.activeBookmark,
+      reading: false,
+      readError: '',
       saving: app.savingBookmark,
       deletingId: app.deletingBookmarkId,
       error: app.bookmarkError,

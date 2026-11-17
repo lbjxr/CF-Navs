@@ -42,6 +42,7 @@
   import { createEditIntentCounter } from './lib/appEditIntent'
   import { createCategoryController } from './lib/appCategoryController'
   import { createBookmarkController } from './lib/appBookmarkController'
+  import BookmarkModalShell from './components/BookmarkModalShell.svelte'
   import { createSettingsController } from './lib/appSettingsController'
   import {
     canSeeHomeView,
@@ -69,6 +70,7 @@
     persistCurrentAdminData,
     refreshBookmarkIconCacheInBackground,
     readAdminDataForEdit,
+    readBookmarkForEdit,
     confirmLoggedInDataAfterLocalMutation,
     refreshLoggedInData,
     refreshPublicData,
@@ -382,12 +384,15 @@
       bookmarkModalOpen = next.modalOpen
       bookmarkModalMode = next.modalMode
       if (activeBookmark !== next.active) activeBookmark = next.active
+      bookmarkReading = next.reading
+      bookmarkReadError = next.readError
       savingBookmark = next.saving
       deletingBookmarkId = next.deletingId
       bookmarkError = next.error
     },
     getSession: () => get(authStore).session,
     readAdminData: () => get(adminStore).data,
+    readBookmarkForEdit,
     applyLocalBookmarkUpsert,
     applyLocalBookmarkDelete,
     applyLocalBookmarkSort,
@@ -397,6 +402,8 @@
   let bookmarkModalOpen = $state(initialBookmarkState.modalOpen)
   let bookmarkModalMode = $state(initialBookmarkState.modalMode)
   let activeBookmark = $state.raw(initialBookmarkState.active)
+  let bookmarkReading = $state(initialBookmarkState.reading)
+  let bookmarkReadError = $state(initialBookmarkState.readError)
   let savingBookmark = $state(initialBookmarkState.saving)
   let deletingBookmarkId = $state(initialBookmarkState.deletingId)
   let bookmarkError = $state(initialBookmarkState.error)
@@ -446,6 +453,7 @@
   })
 
   onDestroy(() => {
+    bookmarkController.destroy()
     stopSystemDark?.()
     // 不 revoke 的话每次重建都会漏一个 blob URL。
     customScriptController?.destroy()
@@ -582,9 +590,18 @@
       />
     {/if}
 
+    {#if bookmarkModalOpen && (bookmarkReading || bookmarkReadError || !BookmarkEditModal)}
+      <BookmarkModalShell
+        mode={bookmarkModalMode}
+        reading={bookmarkReading}
+        readError={bookmarkReadError}
+        onCancel={bookmarkController.close}
+        onRetry={bookmarkController.retryEdit}
+      />
+    {/if}
     {#if BookmarkEditModal}
       <BookmarkEditModal
-        open={bookmarkModalOpen}
+        open={bookmarkModalOpen && !bookmarkReading && !bookmarkReadError}
         loading={savingBookmark}
         error={bookmarkError}
         mode={bookmarkModalMode}

@@ -17,6 +17,7 @@ import {
  batchMoveBookmarks,
  BookmarkReorganizeError,
  getBookmarkIconData,
+ getBookmarkForEdit,
  listBookmarks,
  sortBookmarks,
  updateBookmark,
@@ -29,6 +30,7 @@ import { parseBookmarkUpsertPayload } from '../lib/bookmarkPayload'
 import { fail, ok } from '../lib/response'
 import { badRequest, parseBatchIds, parseId, parseSortIds, readJson, serverError } from '../lib/routeHelpers'
 import type { HonoEnv } from '../types'
+import { appendServerTiming } from '../lib/serverTiming'
 
 const ICON_CACHE_REFRESH_TIMEOUT_MS = 1500
 
@@ -39,6 +41,25 @@ bookmarksRoutes.get('/', async (c) => {
   return c.json(ok(await listBookmarks(c.env.DB)))
  } catch (error) {
   return serverError(c, 'failed to list bookmarks', error)
+ }
+})
+
+bookmarksRoutes.get('/:id', async (c) => {
+ c.header('Cache-Control', 'private, no-store')
+ const id = parseId(c)
+ if (id == null) return badRequest(c, 'invalid bookmark id')
+
+ try {
+  const startedAt = performance.now()
+  const bookmark = await getBookmarkForEdit(c.env.DB, id)
+  appendServerTiming(c, 'db', startedAt)
+  if (!bookmark) return c.json(fail(ErrCode.NOT_FOUND, '书签已不存在，请刷新后重试。'))
+  const serializeAt = performance.now()
+  const response = c.json(ok(bookmark))
+  appendServerTiming(c, 'serialize', serializeAt, response)
+  return response
+ } catch (error) {
+  return serverError(c, 'failed to read bookmark edit data', error)
  }
 })
 

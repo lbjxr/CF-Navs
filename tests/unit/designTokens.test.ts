@@ -117,7 +117,7 @@ describe('modal control consistency', () => {
       'src/components/CategoryEditModal.svelte',
       'src/components/LoginModal.svelte',
       'src/components/ConfirmDialog.svelte',
-      'src/components/BookmarkEditModal.svelte',
+      'src/components/BookmarkModalShell.svelte',
     ]) {
       expect(styleBlocks(path), path).toContain('border-radius: var(--radius-xl)')
     }
@@ -125,7 +125,7 @@ describe('modal control consistency', () => {
 
   it('places confirmation overlays above the bookmark editor', () => {
     expect(declaredZIndex('src/components/ConfirmDialog.svelte', '.confirm-backdrop'))
-      .toBeGreaterThan(declaredZIndex('src/components/BookmarkEditModal.svelte', '.modal-backdrop'))
+      .toBeGreaterThan(declaredZIndex('src/components/BookmarkModalShell.svelte', '.modal-backdrop'))
   })
 
   it('keeps the iOS zoom guard able to win', () => {
