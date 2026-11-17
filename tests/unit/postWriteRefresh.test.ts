@@ -106,7 +106,7 @@ function bookmarkDeps(calls: Calls): BookmarkControllerDeps {
     openLogin: async () => {},
     ensureLoggedInDataLoaded: async () => true,
     ensureLazyComponent: async () => undefined,
-    readAdminDataForEdit: async () => null,
+    readBookmarkForEdit: async () => null,
     requestConfirmation: async () => true,
     applyLocalBookmarkUpsert: step('applyLocal'),
     applyLocalBookmarkDelete: step('applyLocal'),

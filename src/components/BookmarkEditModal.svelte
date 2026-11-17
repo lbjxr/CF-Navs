@@ -2,7 +2,6 @@
 
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte'
-  import { setPageScrollLocked } from '../lib/pageScrollLock'
   import {
     DEFAULT_LOGO_SURF_SCHEME,
     getIconCandidates,
@@ -45,7 +44,7 @@
   import BookmarkCustomIconField from './BookmarkCustomIconField.svelte'
   import BookmarkIconCandidatePicker from './BookmarkIconCandidatePicker.svelte'
   import BookmarkModalActions from './BookmarkModalActions.svelte'
-  import BookmarkModalHeader from './BookmarkModalHeader.svelte'
+  import BookmarkModalShell from './BookmarkModalShell.svelte'
   import ColorAlphaInput from './ColorAlphaInput.svelte'
   import IconifySelector from './IconifySelector.svelte'
   import LogoSchemeSelector from './LogoSchemeSelector.svelte'
@@ -99,10 +98,6 @@
   let candidateError = $state('')
 
   const nextKey = $derived(JSON.stringify({ open, mode, value, categories }))
-  $effect.pre(() => {
-    const locked = open
-    untrack(() => setPageScrollLocked(locked))
-  })
   // 键变化时整体重置表单；原语句其余引用都受键比较守卫，只以键为依赖。
   $effect.pre(() => {
     const key = nextKey
@@ -171,7 +166,7 @@
     confirmedIconifyName,
   }))
   $effect.pre(() => {
-    const enabled = showIconifyOptions
+    const enabled = open && showIconifyOptions
     const name = iconifyName
     untrack(() => scheduleIconifyCandidateSearch(enabled, name))
   })
@@ -364,15 +359,11 @@
 
   onDestroy(() => {
     clearIconifySearchTimer()
-    setPageScrollLocked(false)
   })
 </script>
 
 {#if open}
-  <div class="modal-backdrop">
-    <div class="modal-card" data-testid="bookmark-modal" role="dialog" aria-modal="true" aria-labelledby="bookmark-modal-title">
-      <BookmarkModalHeader {mode} {loading} {deleting} onCancel={handleCancel} />
-
+  <BookmarkModalShell {mode} {loading} {deleting} onCancel={handleCancel}>
       <form class="modal-form" onsubmit={handleSubmit}>
         <BookmarkBaseFields
           bind:categoryId={form.category_id}
@@ -460,52 +451,10 @@
           onDelete={handleDelete}
         />
       </form>
-    </div>
-  </div>
+  </BookmarkModalShell>
 {/if}
 
 <style>
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 1200;
-    display: grid;
-    place-items: center;
-    padding: 14px;
-    background: rgba(15, 23, 42, 0.56);
-    overflow: hidden;
-    overscroll-behavior: contain;
-  }
-
-  .modal-backdrop::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.18);
-    backdrop-filter: blur(2px);
-    pointer-events: none;
-  }
-
-  .modal-card {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    width: min(100%, 680px);
-    height: min(720px, calc(100vh - 28px));
-    height: min(720px, calc(100dvh - 28px));
-    max-height: calc(100vh - 28px);
-    max-height: calc(100dvh - 28px);
-    min-height: 0;
-    overflow: hidden;
-    overscroll-behavior: contain;
-    border-radius: var(--radius-xl);
-    background: #ffffff;
-    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
-    padding: 0;
-    scrollbar-gutter: stable;
-  }
-
   .modal-form {
     flex: 1 1 auto;
     min-height: 0;
@@ -541,17 +490,17 @@
     font-size: 13px;
   }
 
-  .modal-card :global(.color-picker-row) {
+  .modal-form :global(.color-picker-row) {
     gap: 6px;
   }
 
-  .modal-card :global(.color-picker-row input[type='text']) {
+  .modal-form :global(.color-picker-row input[type='text']) {
     border-radius: 9px;
     padding: 6px 9px;
     font-size: 13px;
   }
 
-  .modal-card :global(.color-swatch) {
+  .modal-form :global(.color-swatch) {
     width: 32px;
     height: 32px;
     flex-basis: 32px;
@@ -559,18 +508,6 @@
   }
 
   @media (max-width: 500px) {
-    .modal-backdrop {
-      padding: 10px;
-    }
-
-    .modal-card {
-      width: min(100%, 600px);
-      height: calc(100vh - 20px);
-      height: calc(100dvh - 20px);
-      max-height: calc(100vh - 20px);
-      max-height: calc(100dvh - 20px);
-    }
-
     .modal-form {
       grid-template-columns: 1fr;
       gap: 8px;

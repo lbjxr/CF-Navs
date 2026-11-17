@@ -61,7 +61,7 @@ describe('route auth by construction', () => {
   it('enumerates a meaningful protected surface', () => {
     const keys = protectedRoutes.map((route) => `${route.method} ${route.path}`)
     for (const expected of [
-      'GET /admin/data', 'POST /bookmarks', 'PUT /bookmarks/:id', 'DELETE /categories/:id', 'PUT /settings',
+      'GET /admin/data', 'GET /bookmarks/:id', 'POST /bookmarks', 'PUT /bookmarks/:id', 'DELETE /categories/:id', 'PUT /settings',
       'POST /import', 'GET /fetch-favicon', 'GET /fetch-site-meta', 'GET /icon-access', 'GET /iconify-search',
       'POST /browser-sync/bookmarks', 'POST /logout', 'POST /password', 'GET /me',
     ]) {

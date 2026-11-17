@@ -10,6 +10,7 @@ import {
   type BookmarkReorganizeReq,
   type ApiResponse,
   type Bookmark,
+  type BookmarkEditData,
   type BookmarkUpsertReq,
   type Category,
   type CategorySortReq,
@@ -296,6 +297,9 @@ export const categoriesApi = {
 }
 
 export const bookmarksApi = {
+  getForEdit: (id: number, signal?: AbortSignal) => request<BookmarkEditData>(`/bookmarks/${id}`, {
+    auth: true, cache: 'no-store', headers: NO_CACHE_HEADERS, keepSessionOnUnauthorized: true, signal,
+  }),
   create: (payload: BookmarkUpsertReq) => jsonRequest<Bookmark>('/bookmarks', 'POST', payload, true),
   update: (id: number, payload: BookmarkUpsertReq) => jsonRequest<Bookmark>(`/bookmarks/${id}`, 'PUT', payload, true),
   refreshIconCache: (id: number) =>

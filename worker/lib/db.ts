@@ -21,6 +21,7 @@ export {
 export {
   listBookmarks,
   listBookmarksWithIconBlobs,
+  getBookmarkForEdit,
   getBookmarkIconData,
   isBookmarkIconAnonymouslyVisibleById,
   createBookmark,

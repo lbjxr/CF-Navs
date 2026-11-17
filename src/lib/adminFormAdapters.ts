@@ -1,10 +1,9 @@
 import type {
-  Bookmark,
+  BookmarkEditData,
   BookmarkUpsertReq,
   Category,
   CategoryUpsertReq,
   IconSource,
-  PublicBookmark,
 } from '../../shared/types'
 import { normalizeBookmarkUrl } from '../../shared/urlPolicy'
 import type { BookmarkFormValue, CategoryFormValue } from './adminTypes'
@@ -49,7 +48,7 @@ export function toCategoryForm(category: Category): CategoryFormValue {
   }
 }
 
-export function toBookmarkForm(bookmark: Bookmark | PublicBookmark): BookmarkFormValue {
+export function toBookmarkForm(bookmark: BookmarkEditData): BookmarkFormValue {
   return {
     id: bookmark.id,
     category_id: bookmark.category_id,

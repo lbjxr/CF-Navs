@@ -24,6 +24,9 @@ This document records the current performance-sensitive behavior that should not
 
 ## Bookmark Icons
 
+- Bookmark editing shows a cancellable loading shell before network or lazy component loading completes. Both start concurrently; only the authoritative `GET /api/bookmarks/:id` source fields may populate a savable form. Failed or ten-second stalled reads offer retry/cancel; closing, changing session or starting another edit invalidates pending work.
+- Opening a bookmark editor must not fetch the whole admin aggregate or automatically refresh the icon cache. Post-save background icon refresh remains. Edit source responses are `private, no-store`; no extra persistent edit cache or startup prefetch is added. `Server-Timing` on the edit and aggregate endpoints separates server data access from browser transfer time.
+
 - Normal home rendering may lazy-load bookmark icons, but changes must not increase same-origin Cloudflare Worker request counts for the same browsing scenario without a measured budget update.
 - `perf:audit` 的图标请求预算（`PERF_MAX_ICON_REQUESTS`）为 **270**（2026-10-12 由 260 上调）。原 260 是 #31 第 3 点的基线（~255）；REQ-17 的一级分类聚合「常用」区固定上限 `CATEGORY_HOT_LIMIT=12`（与全局 `most_visited_count` 解耦）会让每个「空一级 + 有子分类」各多渲染至多 4 张卡片/图标，实测全流程由 ~255 升到 ~262。这是对已请求功能的有界、经测量的预算上调；突发并发仍受 #31 第 3 点的有界调度器约束，上调的只是总请求数上限。
 - HTTP(S) bookmark icons may use same-origin proxy URLs only where the current runtime path already does so.

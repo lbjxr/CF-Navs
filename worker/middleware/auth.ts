@@ -5,6 +5,7 @@ import type { Env, HonoEnv, SessionValue } from '../types'
 import { getJwtSecret, verifyJwt, rotateJwtSecret, refreshJwtSecretAfterVerifyFailure } from '../lib/jwt'
 import { isSessionRevoked } from '../lib/sessionRevocation'
 import { hasSessionBinding } from '../lib/sessionStore'
+import { appendServerTiming } from '../lib/serverTiming'
 
 const SESSION_MEMORY_CACHE_TTL_MS = 15_000
 const SESSION_MEMORY_CACHE_MAX = 256
@@ -124,7 +125,11 @@ export const authRequired: MiddlewareHandler<HonoEnv> = async (c, next) => {
     return c.json(fail(ErrCode.UNAUTHORIZED, 'unauthorized'), 401)
   }
 
+  const startedAt = performance.now()
   const session = await validateSession(c.env, token)
+  if (c.req.path === '/api/admin/data' || (c.req.method === 'GET' && /^\/api\/bookmarks\/[1-9][0-9]*$/.test(c.req.path))) {
+    appendServerTiming(c, 'auth', startedAt)
+  }
   if (!session) {
     return c.json(fail(ErrCode.UNAUTHORIZED, 'unauthorized'), 401)
   }

@@ -45,6 +45,12 @@ export interface Bookmark {
 export type PublicCategory = Omit<Category, 'created_at'>
 export type PublicBookmark = Omit<Bookmark, 'created_at'>
 
+/** GET /api/bookmarks/:id: authoritative source fields, without cached image bodies. */
+export type BookmarkEditData = Pick<Bookmark,
+  'id' | 'category_id' | 'title' | 'url' | 'icon' | 'icon_source' |
+  'icon_background_color' | 'description' | 'description_mode' | 'open_method' | 'is_private'
+>
+
 // 图标获取方式
 //  direct     = 直接抓取站点 favicon（服务端解析）
 //  favicon_im = 通过 favicon.im 获取
