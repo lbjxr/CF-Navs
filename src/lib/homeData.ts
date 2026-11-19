@@ -224,33 +224,25 @@ export function resolveHomeCategorySelection(
 export function resolveHomeCategoryForRoot(
   root: CategoryNode<PublicCategory>,
   activeId: string | number | null | undefined,
-  categoryBookmarks?: ReadonlyMap<number, PublicBookmark[]>,
 ): CategoryNode<PublicCategory> {
   const normalizedId = String(activeId ?? '')
 
-  // 一级直属书签为空时，默认展示按 sort 排在最前的二级分类；
-  // category.children 已由 buildCategoryForest 按 sort、id 排好序。
-  const defaultCategory = categoryBookmarks
-    && (categoryBookmarks.get(root.id)?.length ?? 0) === 0
-    && root.children.length > 0
-    ? root.children[0]
-    : root
-
-  if (normalizedId === String(root.id) || normalizedId === `category-${root.id}`) return defaultCategory
+  // #43：默认或明确选择一级时保留 root。空一级的子树常用聚合由 Home 渲染，
+  // 分类选择不依赖直属书签数量，否则聚合入口和一级选中态会被首个子分类覆盖。
+  if (normalizedId === String(root.id) || normalizedId === `category-${root.id}`) return root
 
   return root.children.find((child) => (
     normalizedId === String(child.id) || normalizedId === `category-${child.id}`
-  )) ?? defaultCategory
+  )) ?? root
 }
 
 export function getHomeCategoryGroups(
   forest: CategoryNode<PublicCategory>[],
   selectedCategoryIds: ReadonlyMap<number, number>,
-  categoryBookmarks?: ReadonlyMap<number, PublicBookmark[]>,
 ): HomeCategoryGroup[] {
   return forest.map((root) => ({
     root,
-    selected: resolveHomeCategoryForRoot(root, selectedCategoryIds.get(root.id), categoryBookmarks),
+    selected: resolveHomeCategoryForRoot(root, selectedCategoryIds.get(root.id)),
   }))
 }
 

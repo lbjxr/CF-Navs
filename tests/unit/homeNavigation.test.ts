@@ -95,7 +95,6 @@ describe('home navigation helpers', () => {
 
   it('defaults every root group to direct bookmarks and accepts only its own children', () => {
     expect(resolveHomeCategoryForRoot(forest[0], undefined).id).toBe(1)
-    expect(resolveHomeCategoryForRoot(forest[0], undefined, groupedBookmarks).id).toBe(1)
     expect(resolveHomeCategoryForRoot(forest[0], 'category-3').id).toBe(3)
     expect(resolveHomeCategoryForRoot(forest[0], 3).id).toBe(3)
     expect(resolveHomeCategoryForRoot(forest[0], 'category-2').id).toBe(1)
@@ -106,18 +105,21 @@ describe('home navigation helpers', () => {
       { root: 2, selected: 2 },
     ])
   })
-  it('空一级默认回落到按 sort 排序的首个子分类', () => {
+  it('空一级默认及明确选择均保留 root，只在明确选择本树子分类时切换（#43）', () => {
     const emptyRoot = buildCategoryForest([
       { id: 4, parent_id: null, title: 'Empty root', icon: null, sort: 0 },
-      { id: 5, parent_id: 4, title: 'First child', icon: null, sort: 0 },
+      { id: 5, parent_id: 4, title: 'Later child', icon: null, sort: 1 },
+      { id: 6, parent_id: 4, title: 'First child', icon: null, sort: 0 },
     ])[0]
-    const bookmarks = new Map([[5, [bookmark(5, 5)]]])
 
-    expect(resolveHomeCategoryForRoot(emptyRoot, undefined, bookmarks).id).toBe(5)
-    expect(resolveHomeCategoryForRoot(emptyRoot, 4, bookmarks).id).toBe(5)
-    expect(resolveHomeCategoryForRoot(emptyRoot, 'category-5', bookmarks).id).toBe(5)
-    expect(getHomeCategoryGroups([emptyRoot], new Map([[4, 4]]), bookmarks)[0].selected.id).toBe(5)
-    expect(getHomeCategoryGroups([emptyRoot], new Map(), bookmarks)[0].selected.id).toBe(5)
+    for (const id of [undefined, null, '', 4, 'category-4', 'missing', 'category-2']) {
+      expect(resolveHomeCategoryForRoot(emptyRoot, id).id).toBe(4)
+    }
+    expect(resolveHomeCategoryForRoot(emptyRoot, 'category-5').id).toBe(5)
+    expect(resolveHomeCategoryForRoot(emptyRoot, 6).id).toBe(6)
+    expect(getHomeCategoryGroups([emptyRoot], new Map([[4, 4]]))[0].selected.id).toBe(4)
+    expect(getHomeCategoryGroups([emptyRoot], new Map())[0].selected.id).toBe(4)
+    expect(getHomeCategoryGroups([emptyRoot], new Map([[4, 5]]))[0].selected.id).toBe(5)
   })
 
   it('getCategoryHotBookmarks: 频次优先 + sort 回填 + 封顶', () => {
