@@ -42,7 +42,7 @@ describe('category hierarchy visibility markup', () => {
     expect(card).toContain('.bookmark-card-shell.is-info {\n      min-width: 0;')
     expect(home).not.toContain('expandedCategoryIds')
     expect(home).toContain('<HomeCategoryScope')
-    expect(home).toContain('const categoryGroups = $derived(getHomeCategoryGroups(categoryForest, selectedCategoryIds, allCategoryBookmarks))')
+    expect(home).toContain('const categoryGroups = $derived(getHomeCategoryGroups(categoryForest, selectedCategoryIds))')
     expect(home).toContain('{#each categoryGroups as group (group.root.id)}')
     expect(home).toContain('{@const selectedCategory = group.selected}')
     expect(home).toContain('bookmarks={showHot ? hotBookmarks : selectedBookmarks}')

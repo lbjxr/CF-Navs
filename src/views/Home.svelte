@@ -132,7 +132,7 @@
   const allCategoryBookmarks = $derived(groupBookmarksByCategory(sortedBookmarks))
   const displayCategoryBookmarks = $derived(homeSortMode ? groupBookmarksByCategory(homeSortDraft) : allCategoryBookmarks)
   const navigationSections = $derived(getHomeSections(categoryForest, allCategoryBookmarks))
-  const categoryGroups = $derived(getHomeCategoryGroups(categoryForest, selectedCategoryIds, allCategoryBookmarks))
+  const categoryGroups = $derived(getHomeCategoryGroups(categoryForest, selectedCategoryIds))
   // 原 `$:` 以 navigationSections 与 activeId 自身为依赖；只在解析结果不同时写回。
   $effect.pre(() => {
     const next = resolveHomeActiveSectionId(navigationSections, activeId)
@@ -382,7 +382,7 @@
     if (nextRootId == null) return
     const root = categoryForest.find((category) => category.id === nextRootId)
     if (!root) return
-    const selected = resolveHomeCategoryForRoot(root, selectedCategoryIds.get(root.id), allCategoryBookmarks)
+    const selected = resolveHomeCategoryForRoot(root, selectedCategoryIds.get(root.id))
     const nextId = `category-${selected.id}`
     if (nextId !== activeId) activeId = nextId
   }
@@ -439,7 +439,7 @@
       const isRoot = selection.root?.id === categoryId
       const isChild = selection.child?.id === categoryId
       if (selection.root && (isRoot || isChild)) {
-        const selected = resolveHomeCategoryForRoot(selection.root, categoryId, allCategoryBookmarks)
+        const selected = resolveHomeCategoryForRoot(selection.root, categoryId)
         setSelectedCategory(selection.root.id, selected.id)
         activeId = `category-${selected.id}`
         scrollSpySuppressedUntil = performance.now() + 900
