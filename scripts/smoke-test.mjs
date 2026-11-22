@@ -167,6 +167,51 @@ async function main() {
     check('排序后 bm2 在前', list[0]?.id === bm2.id, `first=${list[0]?.id}`)
   }
 
+  section('编辑改分类的末尾位置与普通编辑保序')
+  {
+    const editBody = { title: 'GitHub(改)', url: 'https://github.com', open_method: 1 }
+    const emptyMove = await call(`/api/bookmarks/${bm1.id}`, {
+      method: 'PUT', token, body: { ...editBody, category_id: catB.id },
+    })
+    check('编辑移入空分类 code=0', emptyMove.json?.code === 0)
+    check('空分类从 sort=0 开始', emptyMove.json?.data?.category_id === catB.id && emptyMove.json?.data?.sort === 0)
+
+    const restore = await call(`/api/bookmarks/${bm1.id}`, {
+      method: 'PUT', token, body: { ...editBody, category_id: catA.id },
+    })
+    check('编辑移回源分类追加到末尾', restore.json?.code === 0 && restore.json?.data?.category_id === catA.id && restore.json?.data?.sort === 1)
+
+    const first = await call('/api/bookmarks', {
+      method: 'POST', token, body: { category_id: catB.id, title: 'Move target first', url: 'https://first.example/' },
+    })
+    const second = await call('/api/bookmarks', {
+      method: 'POST', token, body: { category_id: catB.id, title: 'Move target second', url: 'https://second.example/' },
+    })
+    check('创建两条目标分类夹具', first.json?.code === 0 && second.json?.code === 0)
+
+    const move = await call(`/api/bookmarks/${bm1.id}`, {
+      method: 'PUT', token, body: { ...editBody, category_id: catB.id },
+    })
+    check('编辑移入非空分类 code=0', move.json?.code === 0)
+    check('非空分类使用新的末尾 sort', move.json?.data?.category_id === catB.id && move.json?.data?.sort === 2)
+    const movedList = (await call('/api/bookmarks', { token })).json?.data || []
+    const targetIds = movedList.filter((bookmark) => bookmark.category_id === catB.id).map((bookmark) => bookmark.id)
+    check('回读目标分类为原顺序加移入书签', JSON.stringify(targetIds) === JSON.stringify([first.json?.data?.id, second.json?.data?.id, bm1.id]))
+
+    const sameCategoryEdit = await call(`/api/bookmarks/${bm1.id}`, {
+      method: 'PUT', token, body: { ...editBody, category_id: catB.id, description: '普通编辑保序' },
+    })
+    check('同分类普通编辑保留 sort', sameCategoryEdit.json?.code === 0 && sameCategoryEdit.json?.data?.sort === 2)
+
+    const moveBack = await call(`/api/bookmarks/${bm1.id}`, {
+      method: 'PUT', token, body: { ...editBody, category_id: catA.id },
+    })
+    check('再次换分类使用当前目标末尾', moveBack.json?.code === 0 && moveBack.json?.data?.sort === 1)
+    const deleteFirst = await call(`/api/bookmarks/${first.json?.data?.id}`, { method: 'DELETE', token })
+    const deleteSecond = await call(`/api/bookmarks/${second.json?.data?.id}`, { method: 'DELETE', token })
+    check('清理目标分类夹具', deleteFirst.json?.code === 0 && deleteSecond.json?.code === 0)
+  }
+
   // 写后只确认版本的前提（代码审查三轮第 31 项）：写响应包络上的 data_version 就是随后
   // /api/data/version 报告的版本，且写接口返回的行与 /api/admin/data 里的同一行一致。
   section('写响应 data_version 与本地应用一致性')

@@ -166,11 +166,16 @@ export async function updateBookmark(
   req.open_method === 2 ? 2 : req.open_method === 3 ? 3 : req.open_method === 1 ? 1 : null
  const hasDescriptionMode = Object.prototype.hasOwnProperty.call(req, 'description_mode')
  return await withSchemaRetry(db, async () => {
+  // 分类变化时在同一条更新中追加到目标末尾；普通编辑保留现有顺序。
   const update = db
    .prepare(
     `UPDATE bookmarks
          SET icon_revision = CASE WHEN icon IS ? AND icon_source IS ? THEN COALESCE(icon_revision, ?) ELSE ? END,
              icon_write_epoch = icon_write_epoch + CASE WHEN icon IS ? AND icon_source IS ? THEN 0 ELSE 1 END,
+             sort = CASE
+               WHEN category_id = ? THEN sort
+               ELSE COALESCE((SELECT MAX(sort) FROM bookmarks WHERE category_id = ?), -1) + 1
+             END,
              category_id = ?,
              title = ?,
              url = ?,
@@ -192,6 +197,8 @@ export async function updateBookmark(
    )
    .bind(
     nextIcon, nextIconSource, inlineRevision, inlineRevision, nextIcon, nextIconSource,
+    req.category_id,
+    req.category_id,
     req.category_id,
     req.title,
     req.url,
