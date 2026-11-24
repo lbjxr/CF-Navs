@@ -194,7 +194,7 @@ describe('SettingsHomePreview', () => {
 describe('SettingsPanel', () => {
   const baseValue = { ...DEFAULT_SETTINGS, site_title: 'CF-Navs' }
 
-  it('value 内容变化才重置表单；同内容新对象保留未保存的修改', async () => {
+  it('value 刷新保留未保存的修改；只有干净表单才同步新内容', async () => {
     const { rerender } = render(SettingsPanel, { props: { value: baseValue, onSubmit: vi.fn() } })
     const title = () => screen.getByDisplayValue(/CF-Navs|改过|服务端新值/) as HTMLInputElement
     await fireEvent.input(title(), { target: { value: '改过' } })
@@ -203,6 +203,10 @@ describe('SettingsPanel', () => {
     await rerender({ value: { ...baseValue }, onSubmit: vi.fn() })
     expect(title().value).toBe('改过')
     await rerender({ value: { ...baseValue, site_title: '服务端新值' }, onSubmit: vi.fn() })
+    expect(title().value).toBe('改过')
+    expect(document.body.textContent).toContain('有未保存更改')
+    await fireEvent.input(title(), { target: { value: 'CF-Navs' } })
+    await flush()
     expect(title().value).toBe('服务端新值')
     expect(document.body.textContent).toContain('配置已同步')
   })

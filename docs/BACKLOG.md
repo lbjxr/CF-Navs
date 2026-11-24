@@ -11,7 +11,6 @@
 
 | ID | 优先 | 事项 | 当前边界 | 详情 |
 | --- | --- | --- | --- | --- |
-| PROB-41 | P1 | 后台设置未保存草稿保护 | 按 PROB-40 之后顺序实施；明确草稿单一所有者，切栏目、回首页与保存失败不得静默丢稿 | [前端开发清单](plans/FRONTEND_DESIGN_REVIEW_DEVELOPMENT.md#prob-41后台设置未保存草稿保护) |
 | PROB-42 | P2 | 分类和来源文字对比度 | 文字与装饰强调色分离；自定义值不静默覆盖，预设与透明背景需实际合成验证 | [前端开发清单](plans/FRONTEND_DESIGN_REVIEW_DEVELOPMENT.md#prob-42分类和来源文字的对比度) |
 | PROB-43 | P2 | 启动 SVG 减少动态效果 | 覆盖实际 spinner/ring/dot 节点，保留加载状态；真实浏览器模拟 reduce 验证 | [前端开发清单](plans/FRONTEND_DESIGN_REVIEW_DEVELOPMENT.md#prob-43启动-svg-减少动态效果) |
 | PROB-44 | P2 | 搜索引擎选择器键盘模型 | 标准 select 或完整 listbox 操作，保留默认同步；与 REQ-19 的 SearchBox 修改串行 | [前端开发清单](plans/FRONTEND_DESIGN_REVIEW_DEVELOPMENT.md#prob-44搜索引擎选择器键盘模型) |

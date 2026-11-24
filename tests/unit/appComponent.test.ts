@@ -455,6 +455,7 @@ describe('App boot splash and view switching', () => {
     expect(admin.bookmarksLoading).toBe(false)
     expect(admin.settingsLoading).toBe(false)
     expect(admin.canSeeHome).toBe(true)
+    expect(admin.sessionIdentity).toBe(h.settings.deps.getSession())
     expect(admin.isAuthenticated).toBe(false)
     for (const [prop, fn] of [
       ['onOpenLogin', h.auth.ctrl.openLogin], ['onLogout', h.auth.ctrl.logout], ['onSelectTab', h.auth.ctrl.selectAdminTab],
@@ -1140,6 +1141,7 @@ describe('App confirm dialog, root error and data service callbacks', () => {
     expect(h.settings.deps.getAdminData().categories).toEqual([categoryA])
     expect(h.bookmark.deps.readAdminData().categories).toEqual([categoryA])
     expect(h.bookmark.deps.getSession()).toEqual(SESSION)
+    expect(h.settings.deps.getSession()).toEqual(SESSION)
     expect(h.boot.deps.getPathname()).toBe('/admin/')
     // 各控制器共享同一组依赖实例
     expect(h.category.deps.editIntent).toBe(h.bookmark.deps.editIntent)
@@ -1160,6 +1162,21 @@ describe('App confirm dialog, root error and data service callbacks', () => {
 })
 
 describe('App mount / destroy lifecycle', () => {
+  it('invalidates settings saves when the login session is replaced or cleared', async () => {
+    await mountApp({ reveal: true, config: { site_title: 'Cfg', public_mode: true }, publicData: makePublicData() })
+    h.settings.ctrl.reset.mockClear()
+    authStore.setSession(SESSION)
+    flushSync()
+    expect(h.settings.ctrl.reset).toHaveBeenCalledTimes(1)
+    authStore.setSession({ ...SESSION, token: 'test-replacement-session' })
+    flushSync()
+    expect(h.settings.ctrl.reset).toHaveBeenCalledTimes(2)
+    authStore.setSession(null)
+    flushSync()
+    expect(h.settings.ctrl.reset).toHaveBeenCalledTimes(3)
+    expect(h.settings.deps.getSession()).toBeNull()
+  })
+
   it('starts the media subscription, boot and focus refresh on mount and cleans up on destroy', async () => {
     const result = await mountApp({ publicData: makePublicData() })
     expect(h.boot.ctrl.start).toHaveBeenCalledTimes(1)

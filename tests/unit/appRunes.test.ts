@@ -24,6 +24,7 @@ describe('App.svelte runes mode', () => {
 
   it('runs side effects before DOM updates, like the legacy reactive statements', () => {
     expect(script).not.toMatch(/\$effect\(/)
-    expect(script.match(/\$effect\.pre\(/g)).toHaveLength(6)
+    // PROB-41 新增第七项：登录会话替换/失效时作废旧设置保存，行为由 appComponent 覆盖。
+    expect(script.match(/\$effect\.pre\(/g)).toHaveLength(7)
   })
 })

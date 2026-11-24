@@ -14,21 +14,31 @@
 </script>
 
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { onDestroy, tick, untrack } from 'svelte'
   import type { BookmarkBatchMoveReq, ChangePasswordReq } from '../../shared/types'
   import AdminSidebar from '../components/AdminSidebar.svelte'
   import AdminPageHeader from '../components/admin/AdminPageHeader.svelte'
   import AdminTabContent from '../components/admin/AdminTabContent.svelte'
+  import SettingsLeaveDialog from '../components/SettingsLeaveDialog.svelte'
   import type { BackupSelection } from '../lib/appBackup'
   import type { ImportSource } from '../lib/importData'
   import type { SettingsFormValue } from '../lib/appData'
   import type { AdminTab, CategorySortHandler } from '../lib/adminTypes'
   import type { SortHandler } from '../lib/sortableList'
+  import {
+    canFinishSettingsLeave,
+    needsSettingsLeaveConfirmation,
+    resolveSettingsLeaveAction,
+    type SettingsLeaveChoice,
+    type SettingsLeaveGuard,
+    type SettingsSubmitHandler,
+  } from '../lib/settingsLeave'
 
   type AsyncVoid<T = void> = T | Promise<T>
 
   interface Props {
     isAuthenticated?: boolean
+    sessionIdentity?: object | null
     authLoading?: boolean
     categories?: AdminCategory[]
     bookmarks?: AdminBookmark[]
@@ -60,7 +70,7 @@
     onDeleteBookmark?: (bookmark: AdminBookmark) => AsyncVoid
     onBatchDeleteBookmarks?: (ids: number[]) => AsyncVoid
     onBatchMoveBookmarks?: (payload: BookmarkBatchMoveReq) => AsyncVoid
-    onSubmitSettings?: (payload: SettingsFormValue) => AsyncVoid
+    onSubmitSettings?: SettingsSubmitHandler
     onChangePassword?: (payload: ChangePasswordReq) => AsyncVoid
     onSortCategories?: CategorySortHandler
     onSortBookmarks?: SortHandler
@@ -76,6 +86,7 @@
 
   let {
     isAuthenticated = false,
+    sessionIdentity = null,
     authLoading = false,
     categories = [],
     bookmarks = [],
@@ -159,9 +170,98 @@
 
   let importSource: ImportSource = $state('cf-navs')
 
+  type LeaveTarget = { kind: 'tab'; tab: AdminTab } | { kind: 'home' } | { kind: 'logout' }
+  let settingsLeaveGuard = $state.raw<SettingsLeaveGuard | null>(null)
+  let leaveTarget: LeaveTarget | null = $state.raw(null)
+  let leaveSaving = $state(false)
+  let leaveError = $state('')
+  let leaveEpoch = 0
+  let alive = true
+  let adminSessionIdentity = untrack(() => sessionIdentity)
+  const leaveState = $derived(settingsLeaveGuard?.getState() ?? { dirty: false, saving: false, canSave: false })
+
+  function clearLeaveRequest(): void {
+    leaveEpoch += 1
+    leaveTarget = null
+    leaveSaving = false
+    leaveError = ''
+  }
+
+  function registerSettingsLeaveGuard(guard: SettingsLeaveGuard | null): void {
+    if (guard === settingsLeaveGuard) return
+    clearLeaveRequest()
+    settingsLeaveGuard = guard
+  }
+
+  $effect.pre(() => {
+    const identity = sessionIdentity
+    const authenticated = isAuthenticated
+    untrack(() => {
+      if (identity !== adminSessionIdentity || !authenticated) {
+        adminSessionIdentity = identity
+        registerSettingsLeaveGuard(null)
+      }
+    })
+  })
+
+  onDestroy(() => {
+    alive = false
+    leaveEpoch += 1
+  })
+
+  function performNavigation(target: LeaveTarget): void {
+    if (target.kind === 'tab') {
+      activeTab = target.tab
+      void onSelectTab?.(target.tab)
+    } else if (target.kind === 'home') void onSwitchToHome?.()
+    else void onLogout?.()
+  }
+
+  function requestNavigation(target: LeaveTarget): void {
+    if (leaveTarget || leaveSaving || target.kind === 'tab' && target.tab === activeTab) return
+    const state = settingsLeaveGuard?.getState()
+    if (state?.saving) return
+    if (isAuthenticated && state && needsSettingsLeaveConfirmation(state)) {
+      leaveError = ''
+      leaveTarget = target
+      return
+    }
+    performNavigation(target)
+  }
+
+  async function chooseSettingsLeave(choice: SettingsLeaveChoice): Promise<void> {
+    const target = leaveTarget
+    const guard = settingsLeaveGuard
+    if (!target || !guard || !isAuthenticated || !alive || leaveSaving) return
+    const action = resolveSettingsLeaveAction(choice, guard.getState())
+    if (action === 'blocked') return
+    if (action === 'stay') {
+      clearLeaveRequest()
+      return
+    }
+    if (action === 'discard') {
+      guard.discard()
+      clearLeaveRequest()
+      performNavigation(target)
+      return
+    }
+    const epoch = ++leaveEpoch
+    leaveSaving = true
+    leaveError = ''
+    const outcome = await guard.save()
+    await tick()
+    if (!alive || !isAuthenticated || epoch !== leaveEpoch || guard !== settingsLeaveGuard || target !== leaveTarget) return
+    leaveSaving = false
+    if (!canFinishSettingsLeave(outcome, guard.getState())) {
+      leaveError = outcome.error || '设置还有未保存的更改，请继续编辑或再次保存。'
+      return
+    }
+    clearLeaveRequest()
+    performNavigation(target)
+  }
+
   function handleSelectTab(tab: AdminTab): void {
-    activeTab = tab
-    void onSelectTab?.(tab)
+    requestNavigation({ kind: 'tab', tab })
   }
 
 </script>
@@ -178,8 +278,8 @@
     {authLoading}
     {canSeeHome}
     {onOpenLogin}
-    {onLogout}
-    {onSwitchToHome}
+    onLogout={() => requestNavigation({ kind: 'logout' })}
+    onSwitchToHome={() => requestNavigation({ kind: 'home' })}
   />
 
   <!-- 左侧菜单 + 右侧内容布局 -->
@@ -194,6 +294,7 @@
     <AdminTabContent
       {activeTab}
       {isAuthenticated}
+      {sessionIdentity}
       {authLoading}
       {categories}
       {bookmarks}
@@ -221,6 +322,7 @@
       {onBatchDeleteBookmarks}
       {onBatchMoveBookmarks}
       {onSubmitSettings}
+      onRegisterSettingsLeaveGuard={registerSettingsLeaveGuard}
       {onChangePassword}
       {onSortCategories}
       {onSortBookmarks}
@@ -229,6 +331,13 @@
     />
   </div>
 
+  <SettingsLeaveDialog
+    open={Boolean(leaveTarget)}
+    saving={leaveSaving || leaveState.saving}
+    canSave={leaveState.canSave}
+    error={leaveError}
+    onChoose={(choice) => { void chooseSettingsLeave(choice) }}
+  />
 </div>
 
 {#if CategoryEditModalComponent}

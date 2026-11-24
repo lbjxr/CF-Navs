@@ -94,7 +94,7 @@ interface Snap extends SettingsControllerState {
 }
 
 interface Impl {
-  submit(payload: SettingsFormValue): Promise<void>
+  submit(payload: SettingsFormValue): Promise<void | boolean>
   changePassword(payload: ChangePasswordReq): Promise<void>
   exportData(selection: BackupSelectionInput): Promise<void>
   importData(file: File, source: ImportSource, mode: 'replace' | 'merge'): Promise<void>
@@ -209,6 +209,7 @@ interface Result { world: World; impl: Impl; settled: string[] }
 
 interface Scenario {
   name: string
+  legacyEquivalent?: boolean
   plan?: Plan
   drive: (impl: Impl, w: World, settled: string[]) => Promise<void>
   check?: (r: Result) => void
@@ -265,7 +266,9 @@ const scenarios: Scenario[] = [
     },
   },
   {
-    name: 'reset during a pending save: saving cleared at once, settled again when the request ends',
+    name: 'reset during a pending save: saving cleared and old errors cannot revive',
+    // PROB-41 有意改变旧实现的迟到保存行为，其余用例仍与历史实现逐项对照。
+    legacyEquivalent: false,
     plan: { 'api.settings.update': [{ defer: 'u' }] },
     drive: async (impl, w, s) => {
       const p = track(s, 'submit', impl.submit(settingsForm))
@@ -275,7 +278,7 @@ const scenarios: Scenario[] = [
       await w.release('u', { error: boom })
       await p
     },
-    check: ({ impl }) => { expect(impl.read()).toMatchObject({ saving: false, error: 'boom' }) },
+    check: ({ impl }) => { expect(impl.read()).toMatchObject({ saving: false, error: '' }) },
   },
   {
     name: 'reset clears the settings error',
@@ -480,11 +483,12 @@ describe('app settings controller', () => {
   for (const sc of scenarios) {
     it(sc.name, async () => {
       const ours = await runScenario(sc, attachController)
-      const legacy = await runScenario(sc, attachLegacy)
-
-      expect(ours.world.log).toEqual(legacy.world.log)
-      expect(ours.impl.read()).toEqual(legacy.impl.read())
-      expect(ours.settled).toEqual(legacy.settled)
+      if (sc.legacyEquivalent !== false) {
+        const legacy = await runScenario(sc, attachLegacy)
+        expect(ours.world.log).toEqual(legacy.world.log)
+        expect(ours.impl.read()).toEqual(legacy.impl.read())
+        expect(ours.settled).toEqual(legacy.settled)
+      }
       expect(ours.world.gates.size).toBe(0)
       sc.check?.(ours)
     })

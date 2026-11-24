@@ -33,6 +33,8 @@ export interface SettingsControllerDeps {
   }
   /** App 的认证视图意图（`createAuthViewIntent()`）：改密会作废仍在进行的登出视图切换。 */
   authViewIntent: { invalidate: () => void }
+  /** 与书签控制器相同，按发起时登录会话的引用隔离迟到的保存结果。 */
+  getSession?: () => LoginResp | null
   /** 当前 `adminData`（`$adminStore.data`），导入时作为合并 / 覆盖确认的依据。 */
   getAdminData: () => AdminData
   requestConfirmation: (input: ConfirmDialogInput) => Promise<boolean>
@@ -56,7 +58,8 @@ export interface SettingsController {
   getState: () => SettingsControllerState
   /** 清掉设置错误与保存中标志；登出 / 改密时调用。 */
   reset: () => void
-  submit: (payload: SettingsFormValue) => Promise<void>
+  /** 完成远端写入和本地应用才返回 true；失败或失效返回 false，业务错误仍发布到状态。 */
+  submit: (payload: SettingsFormValue) => Promise<boolean>
   /** 失败原样抛给调用方（改密面板据此展示错误）。 */
   changePassword: (payload: ChangePasswordReq) => Promise<void>
   exportData: (selection: BackupSelection) => Promise<void>
@@ -86,6 +89,7 @@ export function createSettingsController(deps: SettingsControllerDeps): Settings
   } = deps
   let saving = false
   let error = ''
+  let saveOperation = 0
   let importExport = createImportExportState()
 
   const getState = (): SettingsControllerState => ({ saving, error, importExport })
@@ -96,17 +100,22 @@ export function createSettingsController(deps: SettingsControllerDeps): Settings
   }
 
   function reset(): void {
+    saveOperation += 1
     error = ''
     saving = false
     emit()
   }
 
-  async function submit(payload: SettingsFormValue): Promise<void> {
+  async function submit(payload: SettingsFormValue): Promise<boolean> {
+    const operation = ++saveOperation
+    const session = deps.getSession?.()
+    const isCurrent = () => operation === saveOperation && session === deps.getSession?.()
     saving = true
     error = ''
     emit()
 
-    await runAdminMutation({
+    const result = await runAdminMutation({
+      isCurrent,
       run: () => api.settings.update(payload),
       onSuccess: (settings) => applyLocalSettings(settings),
       successMessage: () => '设置已保存',
@@ -119,6 +128,7 @@ export function createSettingsController(deps: SettingsControllerDeps): Settings
         emit()
       },
     })
+    return isCurrent() && result !== undefined
   }
 
   async function changePassword(payload: ChangePasswordReq): Promise<void> {

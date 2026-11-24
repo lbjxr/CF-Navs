@@ -1,7 +1,7 @@
 <svelte:options runes />
 
 <script lang="ts">
-  import { onDestroy, onMount, tick } from 'svelte'
+  import { onDestroy, onMount, tick, untrack } from 'svelte'
   import { get } from 'svelte/store'
   import { fade } from 'svelte/transition'
   import {
@@ -418,11 +418,20 @@
     },
     applyLocalSettings,
     applyLoggedInData,
+    getSession: () => get(authStore).session,
   })
   const initialSettingsState = settingsController.getState()
   let savingSettings = $state(initialSettingsState.saving)
   let settingsError = $state(initialSettingsState.error)
   let importExportState = $state.raw(initialSettingsState.importExport)
+  let settingsSession = get(authStore).session
+  $effect.pre(() => {
+    const session = $authStore.session
+    if (session !== settingsSession) untrack(() => {
+      settingsSession = session
+      settingsController.reset()
+    })
+  })
 
   // 登录 / 登出 / 进入后台 / 忘记密码与登录态数据加载、变更后刷新见 lib/appAuthController：
   // 不持有状态，loginModalOpen / currentView / rootError 仍归 App；登出经注入的函数按原顺序重置三个编辑状态。
@@ -526,6 +535,7 @@
     {:else if AdminPage}
       <AdminPage
         isAuthenticated={$isAuthenticated}
+        sessionIdentity={$authStore.session}
         authLoading={$authStore.loading}
         categories={adminCategories}
         bookmarks={adminBookmarks}

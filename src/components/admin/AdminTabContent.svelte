@@ -11,6 +11,7 @@
   import type { AdminTab, CategorySortHandler } from '../../lib/adminTypes'
   import type { ImportSource } from '../../lib/importData'
   import type { SortHandler } from '../../lib/sortableList'
+  import type { RegisterSettingsLeaveGuard, SettingsSubmitHandler } from '../../lib/settingsLeave'
 
   type AdminCategory = AdminCategorySummary
   type AdminBookmark = AdminBookmarkSummary
@@ -20,6 +21,7 @@
   interface Props {
     activeTab?: AdminTab
     isAuthenticated?: boolean
+    sessionIdentity?: object | null
     authLoading?: boolean
     categories?: AdminCategory[]
     bookmarks?: AdminBookmark[]
@@ -46,7 +48,8 @@
     onDeleteBookmark?: (bookmark: AdminBookmark) => AsyncVoid
     onBatchDeleteBookmarks?: (ids: number[]) => AsyncVoid
     onBatchMoveBookmarks?: (payload: BookmarkBatchMoveReq) => AsyncVoid
-    onSubmitSettings?: (payload: SettingsFormValue) => AsyncVoid
+    onSubmitSettings?: SettingsSubmitHandler
+    onRegisterSettingsLeaveGuard?: RegisterSettingsLeaveGuard
     onChangePassword?: (payload: ChangePasswordReq) => AsyncVoid
     onSortCategories?: CategorySortHandler
     onSortBookmarks?: SortHandler
@@ -57,6 +60,7 @@
   let {
     activeTab = 'categories',
     isAuthenticated = false,
+    sessionIdentity = null,
     authLoading = false,
     categories = [],
     bookmarks = [],
@@ -84,6 +88,7 @@
     onBatchDeleteBookmarks = undefined,
     onBatchMoveBookmarks = undefined,
     onSubmitSettings = undefined,
+    onRegisterSettingsLeaveGuard = undefined,
     onChangePassword = undefined,
     onSortCategories = undefined,
     onSortBookmarks = undefined,
@@ -139,6 +144,9 @@
           error={settingsError}
           onSubmit={onSubmitSettings}
           onChangePassword={onChangePassword}
+          sessionActive={isAuthenticated}
+          {sessionIdentity}
+          onRegisterLeaveGuard={onRegisterSettingsLeaveGuard}
         />
       {:else}
         <section class="panel">

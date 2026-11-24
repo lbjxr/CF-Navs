@@ -1,7 +1,7 @@
 <svelte:options runes />
 
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { onDestroy, tick, untrack } from 'svelte'
   import type { ChangePasswordReq } from '../../shared/types'
   import { CARD_SIZE_LIMITS } from '../../shared/settings'
   import {
@@ -22,6 +22,14 @@
   import SearchEngineSettingsSection from './settings/SearchEngineSettingsSection.svelte'
   import SettingsHomePreview from './settings/SettingsHomePreview.svelte'
   import PasswordChangePanel from './PasswordChangePanel.svelte'
+  import { getErrorMessage } from '../lib/api'
+  import {
+    isSettingsSaveAcknowledged,
+    type RegisterSettingsLeaveGuard,
+    type SettingsLeaveGuard,
+    type SettingsSaveOutcome,
+    type SettingsSubmitHandler,
+  } from '../lib/settingsLeave'
 
   type SettingsPanelValue = SettingsFormModel
   type AsyncVoid<T = void> = T | Promise<T>
@@ -31,17 +39,23 @@
     loading?: boolean
     saving?: boolean
     error?: string
-    onSubmit?: (payload: SettingsPanelValue) => AsyncVoid
+    onSubmit?: SettingsSubmitHandler
     onChangePassword?: (payload: ChangePasswordReq) => AsyncVoid
+    sessionActive?: boolean
+    sessionIdentity?: object | null
+    onRegisterLeaveGuard?: RegisterSettingsLeaveGuard
   }
 
   let {
     value = null,
     loading = false,
-    saving = false,
+    saving: savingProp = false,
     error = '',
     onSubmit = undefined,
     onChangePassword = undefined,
+    sessionActive = true,
+    sessionIdentity = null,
+    onRegisterLeaveGuard = undefined,
   }: Props = $props()
 
   const settingsSections = [
@@ -63,18 +77,21 @@
   let formKey = ''
   let activeSectionId = $state('basic')
   let previewTheme: 'light' | 'dark' = $state('light')
+  let localSaving = $state(false)
+  let localSaveError = $state('')
+  let saveRequest: Promise<SettingsSaveOutcome> | null = null
+  let formEpoch = 0
+  let wasSessionActive = true
+  let formSessionIdentity = untrack(() => sessionIdentity)
+  let alive = true
+  let registeredLeaveCallback: RegisterSettingsLeaveGuard | undefined
+  let registeredLeaveIdentity: object | null | undefined
+  let registeredLeaveActive = false
+  const saving = $derived(savingProp || localSaving || !sessionActive)
+  const displayedError = $derived(error || localSaveError)
 
-  const nextKey = $derived(JSON.stringify({ value, loading }))
-  // 键变化时整体重置；原语句其余引用都受键比较守卫，只以键为依赖。
-  $effect.pre(() => {
-    const key = nextKey
-    untrack(() => {
-      if (key === formKey) return
-      formKey = key
-      initialForm = createSettingsFormState(value)
-      form = cloneSettingsForm(initialForm)
-    })
-  })
+  const incomingForm = $derived(createSettingsFormState(value))
+  const incomingKey = $derived(JSON.stringify(normalizeSettingsForm(incomingForm)))
 
   const normalizedForm = $derived(normalizeSettingsForm(form))
   const normalizedInitialForm = $derived(normalizeSettingsForm(initialForm))
@@ -108,13 +125,123 @@
     contentLayoutValid &&
     isDirty)
 
+  // 刷新仅同步干净的表单。脏稿与待确认保存的 baseline 都不能被 value 提前更新覆盖。
+  $effect.pre(() => {
+    const incoming = incomingForm
+    const key = incomingKey
+    const active = sessionActive
+    const identity = sessionIdentity
+    const busy = saving
+    const dirty = isDirty
+    const isLoading = loading
+    untrack(() => {
+      if (!active || identity !== formSessionIdentity) {
+        if (wasSessionActive || identity !== formSessionIdentity) {
+          formEpoch += 1
+          saveRequest = null
+          localSaving = false
+          localSaveError = ''
+          formKey = ''
+          initialForm = cloneSettingsForm(emptySettingsForm)
+          form = cloneSettingsForm(initialForm)
+          activeSectionId = 'basic'
+          previewTheme = 'light'
+        }
+        formSessionIdentity = identity
+        wasSessionActive = active
+        if (!active) return
+      }
+      wasSessionActive = true
+      if (isLoading || busy || dirty || key === formKey) return
+      formKey = key
+      initialForm = cloneSettingsForm(incoming)
+      form = cloneSettingsForm(initialForm)
+    })
+  })
+
+  const leaveGuard: SettingsLeaveGuard = {
+    getState: () => ({ dirty: sessionActive && isDirty, saving: sessionActive && saving, canSave }),
+    save: saveSettings,
+    discard: () => {
+      initialForm = cloneSettingsForm(incomingForm)
+      form = cloneSettingsForm(initialForm)
+      formKey = incomingKey
+      localSaveError = ''
+    },
+  }
+
+  $effect(() => {
+    const register = onRegisterLeaveGuard
+    const active = sessionActive
+    const identity = sessionIdentity
+    // 转发 props 的 getter 可能因 value 更新重跑；只有真正的上下文变化才撤销句柄。
+    untrack(() => {
+      if (register === registeredLeaveCallback && active === registeredLeaveActive && identity === registeredLeaveIdentity) return
+      registeredLeaveCallback?.(null)
+      registeredLeaveCallback = register
+      registeredLeaveActive = active
+      registeredLeaveIdentity = identity
+      register?.(active ? leaveGuard : null)
+    })
+  })
+
+  $effect(() => {
+    if (!sessionActive || !isDirty) return
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
+  })
+
+  onDestroy(() => {
+    alive = false
+    formEpoch += 1
+    registeredLeaveCallback?.(null)
+  })
+
+  async function saveSettings(): Promise<SettingsSaveOutcome> {
+    if (saveRequest) return saveRequest
+    if (!canSave || !sessionActive || !onSubmit) return { saved: false, error: '请先完善设置后再保存。' }
+    const submit = onSubmit
+    const snapshot = normalizeSettingsForm(cloneSettingsForm(form))
+    const snapshotKey = JSON.stringify(snapshot)
+    const epoch = ++formEpoch
+    const identity = sessionIdentity
+    localSaving = true
+    localSaveError = ''
+    const isCurrent = () => alive && sessionActive && identity === sessionIdentity && epoch === formEpoch
+    saveRequest = (async () => {
+      try {
+        const ack = await Promise.resolve().then(() => submit(snapshot))
+        await tick()
+        if (!isCurrent()) return { saved: false, error: '' }
+        if (!isSettingsSaveAcknowledged(ack, error, snapshotKey, incomingKey)) {
+          localSaveError = error || '设置尚未保存，请重试或继续编辑。'
+          return { saved: false, error: localSaveError }
+        }
+        // 只确认本次提交快照；保存期间的后续编辑仍与它不同，继续保持 dirty。
+        initialForm = cloneSettingsForm(snapshot)
+        formKey = snapshotKey
+        return { saved: true, error: '' }
+      } catch (saveError) {
+        if (!isCurrent()) return { saved: false, error: '' }
+        localSaveError = getErrorMessage(saveError)
+        return { saved: false, error: localSaveError }
+      } finally {
+        if (isCurrent()) {
+          localSaving = false
+          saveRequest = null
+        }
+      }
+    })()
+    return saveRequest
+  }
+
   async function handleSubmit(event: SubmitEvent) {
     event.preventDefault()
-    if (!canSave) {
-      return
-    }
-
-    await onSubmit?.(normalizedForm)
+    await saveSettings()
   }
 
 </script>
@@ -133,10 +260,10 @@
     </div>
   </div>
 
-  {#if error}
+  {#if displayedError}
     <div class="error-banner" role="alert">
       <strong>保存失败</strong>
-      <p>{error}</p>
+      <p>{displayedError}</p>
     </div>
   {/if}
 
