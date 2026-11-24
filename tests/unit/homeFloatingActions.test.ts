@@ -241,6 +241,21 @@ describe('右上角显隐菜单', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
   })
 
+  it('打开登录前把焦点交给常驻菜单按钮，供原生 dialog 关闭时归还', async () => {
+    let focusAtOpen: Element | null = null
+    const onOpenLogin = vi.fn(() => { focusAtOpen = document.activeElement })
+    render(HomeFloatingActions, { props: { isAuthenticated: false, onOpenLogin } })
+    const trigger = screen.getByTestId('home-actions-menu-trigger')
+    await fireEvent.click(trigger)
+    const login = screen.getByTestId('home-login-button')
+    login.focus()
+    await fireEvent.click(login)
+    expect(onOpenLogin).toHaveBeenCalledExactlyOnceWith()
+    expect(focusAtOpen).toBe(trigger)
+    expect(document.activeElement).toBe(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
   it('使用指南入口调用页面导航回调', async () => {
     const onOpenGuide = vi.fn()
     render(HomeFloatingActions, { props: { isAuthenticated: false, onOpenGuide } })

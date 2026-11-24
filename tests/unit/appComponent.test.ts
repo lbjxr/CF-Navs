@@ -519,6 +519,7 @@ describe('App boot splash and view switching', () => {
     expect(login.open).toBe(false)
     expect(login.loading).toBe(false)
     expect(login.error).toBe('')
+    expect(login.canCancel).toBe(true)
     expect(login.onSubmit).toBe(h.auth.ctrl.login)
     expect(login.onCancel).toBe(h.auth.ctrl.closeLogin)
     expect(login.onForgotPassword).toBe(h.auth.ctrl.forgotPassword)
@@ -666,6 +667,7 @@ describe('App login gate', () => {
     expect(mounted('LoginModal')!.props.open).toBe(true)
     // 闸门写入的 currentView 也能被控制器读到
     expect(h.auth.deps.getCanSeeHome()).toBe(false)
+    expect(mounted('LoginModal')!.props.canCancel).toBe(false)
   })
 
   it('does not open while booting or when the view is not home, and re-opens when access is lost on home', async () => {
@@ -692,6 +694,7 @@ describe('App login gate', () => {
     await settle()
     expect(mounted('LoginModal')!.props.open).toBe(true)
     // 关掉登录框不会再次触发（视图已是 login）
+    expect(mounted('LoginModal')!.props.canCancel).toBe(false)
     h.boot.deps.setLoginModalOpen(false)
     flushSync()
     expect(mounted('LoginModal')!.props.open).toBe(false)

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { tick } from 'svelte'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import BackupPanel from '../../src/components/BackupPanel.svelte'
 import CategoryIcon from '../../src/components/CategoryIcon.svelte'
 import CategoryTreeSelect from '../../src/components/CategoryTreeSelect.svelte'
@@ -15,6 +15,7 @@ import type { SearchEngineSetting } from '../../shared/types'
 import BackupPanelBindHarness from '../helpers/statefulLeaf/BackupPanelBindHarness.svelte'
 import SearchBoxBindHarness from '../helpers/statefulLeaf/SearchBoxBindHarness.svelte'
 import TreeSelectBindHarness from '../helpers/statefulLeaf/TreeSelectBindHarness.svelte'
+import { installNativeDialogStub } from '../helpers/nativeDialog'
 vi.mock('../../src/lib/localIconView', () => import('../helpers/inactiveLocalIconView'))
 
 // 代码审查三轮第 21 项（APP_SPLIT_PLAN 第 8d 步）：9 个层级 0 有状态组件迁移到 runes 之前的行为基线。
@@ -29,8 +30,12 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = () => { }
 })
 
+let nativeDialog: ReturnType<typeof installNativeDialogStub>
+beforeEach(() => { nativeDialog = installNativeDialogStub() })
+
 afterEach(() => {
   cleanup()
+  nativeDialog.restore()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })

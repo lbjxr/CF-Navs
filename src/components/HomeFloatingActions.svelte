@@ -141,7 +141,7 @@
   }
 
   function handleOpenLogin() {
-    closeMenu()
+    closeMenu(true)
     void onOpenLogin?.()
   }
 

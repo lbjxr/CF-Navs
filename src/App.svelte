@@ -584,6 +584,7 @@
         open={loginModalOpen}
         loading={$authStore.loading}
         error={$authStore.error ?? ''}
+        canCancel={canSeeHome}
         onSubmit={authController.login}
         onCancel={authController.closeLogin}
         onForgotPassword={authController.forgotPassword}

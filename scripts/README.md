@@ -12,6 +12,7 @@
 
 - `npm test` 使用 Node 内置 SQLite 执行图标版本/迁移的真实 SQL 单元测试，传入 `--experimental-sqlite` 以兼容 Node 22.12；无需安装额外数据库依赖。Worker/D1 平台差异仍由 L1 检查。
 - `home-category-aggregation-regression.mjs`：先 `npm run build`，再 `node scripts/home-category-aggregation-regression.mjs`。隔离无头 Chrome 加载实际首页构建，CDP 拦截提供虚构分类和书签，覆盖空一级高频聚合、来源标注、空/非空子分类切换、一级标题与导航返回、Enter 激活、滚动后高亮，以及左侧/顶部/分行导航、两种卡片、明暗主题和 320/390/1024/1440/1600px 视口。可传入另一份构建目录作修复前对照；报告、截图和所有权清单保存在系统临时目录，finally 核对浏览器与 profile 清理。测试不启动应用服务器，不读取生产配置或凭据，缓存策略与生产服务不在该测试范围内。
+- `login-modal-regression.mjs`：先 `npm run build`，再 `node scripts/login-modal-regression.mjs`。隔离无头 Chrome 加载实际构建，全部请求由 CDP 提供合成数据，覆盖公开/私有登录、原生模态焦点、真实首页菜单回焦点、重复开关、请求中取消、失败重试、成功/找回密码切换及 320/390px 和短高度。报告、无凭据截图和所有权清单默认写入系统临时目录，`LOGIN_REGRESSION_OUTPUT` 可指定仓库外父目录；可传入另一份构建目录作反向对照。脚本不启动服务器、不读取生产配置或真实凭据，finally 核对浏览器与 profile 清理；该证据不代替鉴权 API、Service Worker 或真机验收。
 - `bookmark-hover-regression.mjs`：先 `npm run build`，再 `node scripts/bookmark-hover-regression.mjs`。隔离无头 Chrome 加载真实构建的首页，以 CDP 拦截提供 48 条合成书签；不启动服务器、不读取生产配置或凭据、不访问外部站点。覆盖两种卡片的边缘微移、透明圆角像素与叠放层级稳定、提示层、Tab 焦点、点击/触摸导航，以及明暗主题、DPR 1/1.25/1.5/2、减少动态效果和 390px 视口；滚动后的截图使用文档坐标。可传入另一份构建目录做修复前反向对照；`CHROME_EXE` 可指定浏览器。报告、截图与所有权清单保存在系统临时目录，finally 验证浏览器和 profile 清理；不代表硬件 GPU 或其他浏览器的合成验证。
 
 - `icon-storage-regression.mjs`：`npm run test:icon-storage` 在临时本地页面运行原生 IndexedDB 事务/双标签/离线读盘/配额/损坏修复验证，并以 100/500/1,000 条合成 SVG 分别进行五轮 20 项首批样本与全量读盘/解码测量，报告中位数、p95、最大值、IDB 读取数、正文/索引占用和 object URL 峰值。不读取测试站点配置或管理员凭据；使用独立无头 Chrome profile，报告与所有权清单写入系统临时目录，finally 清理并验证。该结果只代表存储/解码层，不是整页渲染或 D1 性能证据，也不是完整页面 E2E 的替代。
