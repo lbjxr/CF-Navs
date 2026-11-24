@@ -16,6 +16,7 @@
   import BookmarkCardInfo from './BookmarkCardInfo.svelte'
   import { getLoadedBookmarkContextMenu, loadBookmarkContextMenu, preloadBookmarkContextMenuWhenIdle } from '../lib/lazyBookmarkContextMenu'
   import BookmarkLinkModal from './BookmarkLinkModal.svelte'
+  import BookmarkDetailsDialog from './BookmarkDetailsDialog.svelte'
   import { getInfoCardTrackWidth, getIconCardTrackWidth } from '../lib/bookmarkCardLayout'
   import { createIconRetry } from '../lib/iconRetry'
   import { buildIconStyle } from '../lib/bookmarkIconDisplay'
@@ -105,6 +106,9 @@
   let stopIconVisibilityObserver: (() => void) | null = null
   let contextMenuOpen = $state(false)
   let modalOpen = $state(false)
+  let detailsOpen = $state(false)
+  let detailsBookmarkId: number | null = null
+  const detailsAvailable = $derived(!preview && !sortMode)
   // 以下只在副作用 / 处理器里比较或读写，不进模板。
   let iconStateKey = ''
   let windowListenersAttached = false
@@ -115,6 +119,19 @@
   let touchStartX = 0
   let touchStartY = 0
   const LONG_PRESS_MS = 500
+
+  // pre effects can run during initialization; every cleanup dependency must already exist.
+  $effect.pre(() => {
+    const id = bookmark.id
+    const available = detailsAvailable
+    untrack(() => {
+      if (!available || detailsBookmarkId !== null && detailsBookmarkId !== id) {
+        detailsOpen = false
+        clearLongPress()
+      }
+      detailsBookmarkId = id
+    })
+  })
 
   const openInNewTab = $derived(bookmark.open_method === 1)
   // 菜单组件按需加载：能打开菜单的卡片在空闲时预取，打开时若尚未就绪则等待加载完成再渲染。
@@ -209,7 +226,7 @@
   const tooltipText = $derived(bookmark.description ? `${bookmark.title}\n${bookmark.description}` : bookmark.title)
   const cardShellStyle = $derived(
     style === 'info'
-      ? `--card-configured-min-width: ${safeInfoCardWidth}px; ${height > 0 ? `height: ${height}px;` : ''}`
+      ? `--card-configured-min-width: ${safeInfoCardWidth}px; ${height > 0 && !detailsAvailable ? `height: ${height}px;` : ''}`
       : `width: ${compactShellWidth}px;`)
   const cardLinkStyle = $derived(height > 0 ? `height: ${height}px;` : '')
   $effect.pre(() => {
@@ -364,7 +381,7 @@
   }
 
   function handleTouchStart(event: TouchEvent) {
-    if (preview || contextMenuOpen) return
+    if (preview || contextMenuOpen || detailsOpen) return
     if (!canOpenBookmarkContextMenu({
       sortMode,
       canEdit,
@@ -500,6 +517,26 @@
     return () => offs.forEach((off) => off())
   }
 
+  // Native listeners must run before the card/drag ancestors; details is not a visit or long press.
+  const attachDetailsTriggerListeners: Attachment<HTMLButtonElement> = (node) => {
+    const stop = (event: Event) => {
+      event.stopPropagation()
+      clearLongPress()
+    }
+    const offs = [
+      on(node, 'pointerdown', stop),
+      on(node, 'touchstart', stop, { passive: true }),
+      on(node, 'click', (event) => {
+        stop(event)
+        if (!detailsAvailable) return
+        closeContextMenu()
+        node.focus({ preventScroll: true })
+        detailsOpen = true
+      }),
+    ]
+    return () => offs.forEach((off) => off())
+  }
+
   onMount(() => {
     setupIconObserver()
   })
@@ -573,6 +610,16 @@
     />
   {/if}
 
+  {#if detailsAvailable}
+    <button
+      type="button"
+      class="bookmark-details-trigger"
+      aria-label={`查看「${bookmark.title}」详情`}
+      aria-haspopup="dialog"
+      {@attach attachDetailsTriggerListeners}
+    >详情</button>
+  {/if}
+
   {#if sortMode && onMoveBookmark}
     <button
       type="button"
@@ -600,6 +647,10 @@
   {#if modalOpen}
     <BookmarkLinkModal title={bookmark.title} url={bookmark.url} onClose={closeModal} />
   {/if}
+
+  {#if detailsOpen && detailsAvailable}
+    <BookmarkDetailsDialog {bookmark} {sourceCategoryTitle} onClose={() => { detailsOpen = false }} />
+  {/if}
 </div>
 
 <style>
@@ -608,6 +659,37 @@
     z-index: 0;
     min-width: 0;
     contain: layout style;
+    container-type: inline-size;
+  }
+
+  .bookmark-details-trigger {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    min-width: 36px;
+    min-height: 28px;
+    padding: 4px;
+    border: 1px solid GrayText;
+    border-radius: var(--radius-sm);
+    background: ButtonFace;
+    color: ButtonText;
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+    cursor: pointer;
+  }
+  .bookmark-card-shell.is-info:has(> .bookmark-details-trigger) > :global(.bookmark-card-info) { padding-right: 52px; }
+  .bookmark-card-shell.is-icon > .bookmark-details-trigger {
+    position: static;
+    transform: none;
+    margin-top: 4px;
+  }
+  @container (max-width: 120px) {
+    .bookmark-details-trigger { position: static; transform: none; margin-top: 4px; }
+    .bookmark-card-shell.is-info:has(> .bookmark-details-trigger) > :global(.bookmark-card-info) { padding-right: 0.95rem; }
+  }
+  @media (pointer: coarse) {
+    .bookmark-details-trigger { min-width: 40px; min-height: 40px; }
   }
 
   .bookmark-card-shell.context-menu-open {

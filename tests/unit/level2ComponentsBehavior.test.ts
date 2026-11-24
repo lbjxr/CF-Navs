@@ -78,7 +78,8 @@ describe('BookmarkCard', () => {
     const shell = container.querySelector('.bookmark-card-shell') as HTMLElement
     expect(shell.classList.contains('is-info')).toBe(true)
     expect(shell.getAttribute('style')).toContain('--card-configured-min-width: 200px')
-    expect(shell.getAttribute('style')).toContain('height: 64px')
+    // The configured height belongs to the main card; a detail footer may extend the shell.
+    expect((container.querySelector('a.bookmark-card') as HTMLElement).style.height).toBe('64px')
     expect(container.textContent).not.toContain('描述文字')
 
     await rerender({ bookmark: makeBookmark(), style: 'icon', iconSize: 48, showIconTitle: true })

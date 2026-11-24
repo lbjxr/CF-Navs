@@ -1,5 +1,5 @@
 {
-  "_note": "首屏（dist/index.html 引用的入口与 modulepreload）体积预算，单位字节。由 scripts/check-bundle-size.mjs 在 CI 校验；有意增大首屏时同一提交调高并在 CHANGELOG 写明原因。2026-11-17 编辑读取外壳移入首屏：JS 262003 / gzip 90680，CSS 86033 / gzip 14712；JS 预算保持，CSS 预算按实测调整。",
+  "_note": "首屏（dist/index.html 引用的入口与 modulepreload）体积预算，单位字节。由 scripts/check-bundle-size.mjs 在 CI 校验；有意增大首屏时同一提交调高并在 CHANGELOG 写明原因。2026-11-17 编辑读取外壳移入首屏：JS 262003 / gzip 90680，CSS 86033 / gzip 14712。2026-11-24 REQ-18 增加可访问详情入口及原生弹窗样式，CSS 实测 89081 / gzip 15273，预算调整为 90000 / 15500；JS 预算保持。",
   "js": { "raw": 283000, "gzip": 97500 },
-  "css": { "raw": 87000, "gzip": 15000 }
+  "css": { "raw": 90000, "gzip": 15500 }
 }
