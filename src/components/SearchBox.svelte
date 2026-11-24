@@ -1,8 +1,9 @@
 <svelte:options runes />
 
 <script lang="ts">
-  import { onDestroy, untrack } from 'svelte'
+  import { onDestroy, tick, untrack } from 'svelte'
   import type { SearchEngineSetting } from '../../shared/types'
+  import { getSearchEngineNavigationIndex } from '../lib/searchEnginePicker'
 
   interface Props {
     searchEngine?: SearchEngineSetting | null
@@ -23,6 +24,15 @@
 
   let selectedName = $state('')
   let engineMenuOpen = $state(false)
+  let activeIndex = $state(0)
+  let engineTrigger: HTMLButtonElement | null = $state(null)
+  let engineMenu: HTMLDivElement | null = $state(null)
+  let searchInput: HTMLInputElement | null = $state(null)
+  const engineMenuId = $props.id()
+  // Focus is local to the picker and does not commit an engine selection.
+  let activeName = ''
+  let focusVersion = 0
+  let tabbingOut = false
   // 手动点选的引擎只在默认引擎不变时保持；默认引擎变更后让位于新默认值（Issue #25）。
   // 两者只在副作用与事件处理器里读写、不进模板，保持普通变量。
   let userSelected = false
@@ -58,10 +68,54 @@
   const currentEngine = $derived(engines.find((engine) => engine.name === selectedName) ?? null)
 
   $effect.pre(() => {
-    if (!showEngineSelector || engines.length <= 1) {
-      untrack(() => { engineMenuOpen = false })
-    }
+    const list = engines
+    const selected = selectedName
+    const available = showEngineSelector && !preview && list.length > 1
+    const open = engineMenuOpen
+    untrack(() => {
+      const focusedOption = engineMenu?.contains(document.activeElement) ? document.activeElement : null
+      if (!available) {
+        if (!open) return
+        closeEngineMenu()
+        // A removed/disabled picker must not leave focus on a discarded option.
+        const version = focusVersion
+        if (focusedOption) void tick().then(() => {
+          if (version === focusVersion && !engineMenuOpen && searchInput?.isConnected
+            && (document.activeElement === focusedOption || document.activeElement === document.body)) searchInput.focus()
+        })
+        return
+      }
+      if (!open) return
+      const name = list.some((engine) => engine.name === activeName) ? activeName : selected
+      activeIndex = Math.max(0, list.findIndex((engine) => engine.name === name))
+      activeName = list[activeIndex].name
+      if (focusedOption) void revealEngineOption()
+    })
   })
+
+  function closeEngineMenu(focusTrigger = false) {
+    engineMenuOpen = false
+    focusVersion += 1
+    tabbingOut = false
+    if (focusTrigger && engineTrigger?.isConnected && !engineTrigger.disabled) engineTrigger.focus()
+  }
+
+  function focusEngineOption(index: number) {
+    const option = engineMenu?.querySelectorAll<HTMLButtonElement>('[role="option"]')[index]
+    if (!option) return
+    focusVersion += 1
+    activeIndex = index
+    activeName = engines[index]?.name ?? ''
+    option.focus()
+  }
+
+  async function revealEngineOption() {
+    const version = ++focusVersion
+    await tick()
+    if (version === focusVersion && engineMenuOpen && !preview && engineMenu?.isConnected) {
+      focusEngineOption(activeIndex)
+    }
+  }
 
   function isIconImage(icon: string | null | undefined): boolean {
     return /^(https?:\/\/|data:image\/)/i.test(icon?.trim() ?? '')
@@ -73,28 +127,69 @@
 
   function toggleEngineMenu() {
     if (preview || engines.length <= 1) return
-    engineMenuOpen = !engineMenuOpen
+    if (engineMenuOpen) {
+      closeEngineMenu()
+      return
+    }
+    openEngineMenu()
+  }
+
+  function openEngineMenu() {
+    if (preview || !showEngineSelector || engines.length <= 1) return
+    activeIndex = Math.max(0, engines.findIndex((engine) => engine.name === selectedName))
+    activeName = engines[activeIndex].name
+    tabbingOut = false
+    engineMenuOpen = true
+    void revealEngineOption()
   }
 
   function selectEngine(name: string) {
+    if (preview || !engines.some((engine) => engine.name === name)) return
     selectedName = name
     userSelected = true
-    engineMenuOpen = false
+    closeEngineMenu(true)
   }
 
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      engineMenuOpen = false
+  function handlePickerKeydown(event: KeyboardEvent, optionIndex?: number) {
+    if (event.isComposing || event.keyCode === 229) return
+    tabbingOut = event.key === 'Tab'
+    if (event.key === 'Escape' && engineMenuOpen) {
+      event.preventDefault()
+      event.stopPropagation()
+      closeEngineMenu(true)
+      return
     }
+
+    if (optionIndex == null) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        openEngineMenu()
+      }
+      return
+    }
+    const nextIndex = getSearchEngineNavigationIndex(event.key, optionIndex, engines.length)
+    if (nextIndex == null) return
+    event.preventDefault()
+    focusEngineOption(nextIndex)
+  }
+
+  function handleOptionFocus(index: number) {
+    activeIndex = index
+    activeName = engines[index]?.name ?? ''
+  }
+
+  function handlePickerKeyup(event: KeyboardEvent) {
+    if (event.key === 'Tab') tabbingOut = false
   }
 
   function handlePickerFocusOut(event: FocusEvent) {
     const nextTarget = event.relatedTarget
-    if (nextTarget instanceof Node && event.currentTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+    if (!tabbingOut && nextTarget instanceof Node && event.currentTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
       return
     }
 
-    engineMenuOpen = false
+    // Let Tab choose its native next target before removing the focused option.
+    closeEngineMenu()
   }
 
   function handleSubmit(event: SubmitEvent) {
@@ -111,7 +206,7 @@
   }
 
   onDestroy(() => {
-    engineMenuOpen = false
+    closeEngineMenu()
   })
 </script>
 
@@ -127,15 +222,18 @@
       <button
         type="button"
         class="engine-icon-button"
+        bind:this={engineTrigger}
         aria-label={currentEngine ? `当前搜索引擎：${currentEngine.name}` : '选择搜索引擎'}
         aria-haspopup="listbox"
+        aria-controls={engineMenuId}
         aria-expanded={engineMenuOpen}
         disabled={preview || engines.length === 0}
         title={currentEngine ? `搜索引擎：${currentEngine.name}` : '选择搜索引擎'}
         onclick={toggleEngineMenu}
-        onkeydown={handleKeydown}
+        onkeydown={(event) => handlePickerKeydown(event)}
+        onkeyup={handlePickerKeyup}
       >
-        <span class="engine-current-icon">
+        <span class="engine-current-icon" aria-hidden="true">
           {#if currentEngine && isIconImage(currentEngine.icon)}
             <img src={currentEngine.icon} alt="" loading="lazy" decoding="async" />
           {:else}
@@ -147,18 +245,21 @@
       </button>
 
       {#if engineMenuOpen}
-        <div class="engine-menu" role="listbox" aria-label="选择搜索引擎">
-          {#each engines as engine}
+        <div class="engine-menu" id={engineMenuId} bind:this={engineMenu} role="listbox" aria-label="选择搜索引擎">
+          {#each engines as engine, index}
             <button
               type="button"
               class="engine-menu-item"
               class:is-selected={engine.name === selectedName}
               role="option"
+              tabindex={index === activeIndex ? 0 : -1}
               aria-selected={engine.name === selectedName}
               onclick={() => selectEngine(engine.name)}
-              onkeydown={handleKeydown}
+              onkeydown={(event) => handlePickerKeydown(event, index)}
+              onkeyup={handlePickerKeyup}
+              onfocus={() => handleOptionFocus(index)}
             >
-              <span class="engine-menu-icon">
+              <span class="engine-menu-icon" aria-hidden="true">
                 {#if isIconImage(engine.icon)}
                   <img src={engine.icon} alt="" loading="lazy" decoding="async" />
                 {:else}
@@ -176,6 +277,7 @@
   <label class="sr-only" for="search-query">搜索关键词</label>
   <input
     id="search-query"
+    bind:this={searchInput}
     bind:value={query}
     class="search-input"
     type="search"
