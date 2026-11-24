@@ -13,6 +13,7 @@
     topNavigation?: boolean
     preview?: boolean
     themeOverride?: 'light' | 'dark' | null
+    onCompositionChange?: (active: boolean) => void
   }
 
   let {
@@ -24,6 +25,7 @@
     topNavigation = false,
     preview = false,
     themeOverride = null,
+    onCompositionChange,
   }: Props = $props()
 </script>
 
@@ -45,6 +47,7 @@
         showEngineSelector={settings?.search_engine_selector_show ?? true}
         {preview}
         {themeOverride}
+        {onCompositionChange}
       />
     </div>
   {/if}

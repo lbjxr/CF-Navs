@@ -5,10 +5,11 @@
 
   interface Props {
     hasSearchQuery?: boolean
+    canSearchWeb?: boolean
     onCreateBookmark?: () => void | Promise<void>
   }
 
-  let { hasSearchQuery = false, onCreateBookmark }: Props = $props()
+  let { hasSearchQuery = false, canSearchWeb = false, onCreateBookmark }: Props = $props()
 </script>
 
 <section class="empty-panel">
@@ -19,7 +20,7 @@
         <BookmarkQuickAddButton onCreate={onCreateBookmark} />
       {/if}
     </div>
-    <p>换个关键词试试，或按 Enter 使用当前搜索引擎搜索。</p>
+    <p>{canSearchWeb ? '在搜索框按 Enter 或点「网页搜索」查找网页，也可以换个关键词筛选收藏。' : '换个关键词试试，或清空输入查看全部收藏。'}</p>
   {:else}
     <h2>暂无公开内容</h2>
     <p>当前还没有可展示的分类或书签，请稍后再来查看。</p>

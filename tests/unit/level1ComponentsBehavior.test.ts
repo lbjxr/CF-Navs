@@ -284,17 +284,17 @@ describe('HomeHeroSearch：legacy 父组件 bind:query', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('导航')
     expect((screen.getByRole('heading', { level: 1 }) as HTMLElement).style.color).toBe('rgb(18, 52, 86)')
 
-    await fireEvent.input(screen.getByPlaceholderText('输入关键词搜索'), { target: { value: 'svelte' } })
+    await fireEvent.input(screen.getByRole('searchbox', { name: '搜索关键词' }), { target: { value: 'svelte' } })
     await flush()
     expect(queries[queries.length - 1]).toBe('svelte')
 
     await fireEvent.click(screen.getByTestId('harness-clear'))
     await flush()
-    expect((screen.getByPlaceholderText('输入关键词搜索') as HTMLInputElement).value).toBe('')
+    expect((screen.getByRole('searchbox', { name: '搜索关键词' }) as HTMLInputElement).value).toBe('')
 
     await rerender({ settings: { site_title_show: false, search_box_show: false } as PublicSettings, preview: true, themeOverride: 'light' })
     expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
-    expect(screen.queryByPlaceholderText('输入关键词搜索')).toBeNull()
+    expect(screen.queryByRole('searchbox', { name: '搜索关键词' })).toBeNull()
     expect(container.querySelector('.hero-search')?.classList.contains('preview-light')).toBe(true)
   })
 })

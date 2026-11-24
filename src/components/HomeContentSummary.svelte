@@ -1,12 +1,19 @@
 <svelte:options runes />
 
 <script lang="ts">
+  import { untrack } from 'svelte'
+
   interface Props {
     hasSearchQuery?: boolean
     visibleCategoriesCount?: number
     visibleBookmarkCount?: number
     totalCategories?: number
     totalBookmarks?: number
+    /** Read-only query identity and filter readiness supplied by Home. */
+    query?: string
+    settled?: boolean
+    active?: boolean
+    showVisual?: boolean
   }
 
   let {
@@ -15,9 +22,68 @@
     visibleBookmarkCount = 0,
     totalCategories = 0,
     totalBookmarks = 0,
+    query = '',
+    settled = true,
+    active = true,
+    showVisual = true,
   }: Props = $props()
+
+  let announcement = $state('')
+  let hasSearched = false
+  let lastKey = ''
+  let wasActive = true
+  let rebasePending = false
+  let rebaseQuery = ''
+
+  // Only the speech snapshot is local; filtering and its single 120ms timer stay in Home.
+  $effect(() => {
+    const snapshot = { query, settled, active, hasSearchQuery, visibleBookmarkCount, totalBookmarks }
+    untrack(() => {
+      if (!snapshot.active) {
+        wasActive = false
+        announcement = ''
+        return
+      }
+      if (!wasActive) {
+        wasActive = true
+        rebasePending = true
+        rebaseQuery = snapshot.query
+      }
+      if (!snapshot.settled) {
+        announcement = ''
+        return
+      }
+      const key = JSON.stringify([snapshot.query, snapshot.hasSearchQuery, snapshot.visibleBookmarkCount, snapshot.totalBookmarks])
+      // Current native dialogs all use showModal(); consume results while their page is inert.
+      if (document.querySelector('dialog[open]')) {
+        lastKey = key
+        hasSearched ||= snapshot.hasSearchQuery
+        rebasePending = false
+        announcement = ''
+        return
+      }
+      if (rebasePending) {
+        rebasePending = false
+        if (snapshot.query === rebaseQuery) {
+          lastKey = key
+          hasSearched ||= snapshot.hasSearchQuery
+          return
+        }
+      }
+      if (!snapshot.hasSearchQuery && !hasSearched) return
+      hasSearched ||= snapshot.hasSearchQuery
+      if (key === lastKey) return
+      lastKey = key
+      announcement = snapshot.hasSearchQuery
+        ? snapshot.visibleBookmarkCount === 0 ? '没有匹配的收藏。' : `找到 ${snapshot.visibleBookmarkCount} 个收藏。`
+        : `已显示全部 ${snapshot.totalBookmarks} 个收藏。`
+    })
+  })
 </script>
 
+<!-- Always accessible, including when the visual summary is absent. -->
+<p class="search-announcement" data-testid="home-search-status" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>
+{#if showVisual}
 <div class="content-summary">
   <div>
     <p class="summary-label">当前内容</p>
@@ -30,8 +96,20 @@
     </h2>
   </div>
 </div>
+{/if}
 
 <style>
+  .search-announcement {
+    position: absolute;
+    clip-path: inset(50%);
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    white-space: nowrap;
+    border: 0;
+  }
   .content-summary {
     position: relative;
     overflow: hidden;

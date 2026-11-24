@@ -286,7 +286,7 @@ describe('Home', () => {
   it('搜索输入防抖 120ms 后过滤；清空后恢复分组视图', async () => {
     vi.useFakeTimers()
     const { container } = render(Home, { props: { categories: homeCategories, bookmarks: homeBookmarks } })
-    const input = screen.getByPlaceholderText('输入关键词搜索')
+    const input = screen.getByRole('searchbox', { name: '搜索关键词' })
     await fireEvent.input(input, { target: { value: 'figma' } })
     await tick()
     expect(container.querySelector('.search-results')).toBeNull()

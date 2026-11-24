@@ -103,10 +103,12 @@
   // HomeHeroSearch 以 `bind:query` 写回。
   let searchQuery = $state('')
   let deferredSearchQuery = $state('')
+  let searchComposing = $state(false)
   let searchFilterTimer: ReturnType<typeof setTimeout> | null = null
   let searchBoxVisible = $state(true)
   let stopSearchBoxObserver: (() => void) | null = null
   const searchBoxShow = $derived(settings?.search_box_show ?? true)
+  const canSearchWeb = $derived(searchBoxShow && (settings?.search_engine?.engines?.length ?? 0) > 0)
   let activeId = $state('')
   // 每次整体替换（setSelectedCategory）；不做深层代理。
   let selectedCategoryIds = $state.raw(new Map<number, number>())
@@ -156,7 +158,11 @@
 
   $effect.pre(() => {
     const query = searchQuery
-    if (query !== deferredSearchQuery) untrack(() => scheduleSearchFilterUpdate(query))
+    const filteredQuery = deferredSearchQuery
+    untrack(() => {
+      if (query !== filteredQuery) scheduleSearchFilterUpdate(query)
+      else cancelSearchFilterUpdate()
+    })
   })
   const normalizedSearchQuery = $derived(normalizeSearchQuery(deferredSearchQuery))
   const hasSearchQuery = $derived(normalizedSearchQuery.length > 0)
@@ -326,11 +332,13 @@
     }, SEARCH_FILTER_DEBOUNCE_MS)
   }
 
+  function cancelSearchFilterUpdate(): void {
+    if (typeof window !== 'undefined' && searchFilterTimer) window.clearTimeout(searchFilterTimer)
+    searchFilterTimer = null
+  }
+
   function clearSearchImmediately(): void {
-    if (typeof window !== 'undefined' && searchFilterTimer) {
-      window.clearTimeout(searchFilterTimer)
-      searchFilterTimer = null
-    }
+    cancelSearchFilterUpdate()
     searchQuery = ''
     deferredSearchQuery = ''
   }
@@ -490,10 +498,7 @@
   onDestroy(() => {
     stopSearchBoxObserver?.()
     stopSearchBoxObserver = null
-    if (typeof window !== 'undefined' && searchFilterTimer) {
-      window.clearTimeout(searchFilterTimer)
-      searchFilterTimer = null
-    }
+    cancelSearchFilterUpdate()
     if (typeof window !== 'undefined') {
       window.removeEventListener('scroll', scheduleActiveRootUpdate)
       if (scrollFrame != null) window.cancelAnimationFrame(scrollFrame)
@@ -538,6 +543,7 @@
     {settings}
     topNavigation={isTopNavigation}
     bind:query={searchQuery}
+    onCompositionChange={(active) => { searchComposing = active }}
   />
 
   <Sidebar
@@ -554,15 +560,19 @@
 
   <div class="content-layout" bind:this={contentAnchor}>
     <main class="content-panel">
-      {#if hasSearchQuery}
-        <HomeContentSummary
-          {hasSearchQuery}
-          visibleCategoriesCount={visibleCategories.length}
-          {visibleBookmarkCount}
-          totalCategories={sortedCategories.length}
-          {totalBookmarks}
-        />
+      <HomeContentSummary
+        {hasSearchQuery}
+        query={normalizeSearchQuery(searchQuery)}
+        settled={searchQuery === deferredSearchQuery && !searchComposing}
+        active={!guideOpen}
+        showVisual={hasSearchQuery}
+        visibleCategoriesCount={visibleCategories.length}
+        {visibleBookmarkCount}
+        totalCategories={sortedCategories.length}
+        {totalBookmarks}
+      />
 
+      {#if hasSearchQuery}
         {#if visibleCategoryForest.length > 0}
           <div class="search-results" aria-label="搜索结果">
             {#each visibleCategoryForest as category (category.id)}
@@ -632,6 +642,7 @@
         {:else}
           <HomeEmptyPanel
             {hasSearchQuery}
+            {canSearchWeb}
             onCreateBookmark={quickAddUrl ? createBookmarkFromSearch : undefined}
           />
         {/if}

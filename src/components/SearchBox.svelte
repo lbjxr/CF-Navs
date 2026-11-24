@@ -12,6 +12,7 @@
     showEngineSelector?: boolean
     preview?: boolean
     themeOverride?: 'light' | 'dark' | null
+    onCompositionChange?: (active: boolean) => void
   }
 
   let {
@@ -20,6 +21,7 @@
     showEngineSelector = true,
     preview = false,
     themeOverride = null,
+    onCompositionChange,
   }: Props = $props()
 
   let selectedName = $state('')
@@ -29,6 +31,8 @@
   let engineMenu: HTMLDivElement | null = $state(null)
   let searchInput: HTMLInputElement | null = $state(null)
   const engineMenuId = $props.id()
+  const searchHintId = `${engineMenuId}-hint`
+  let queryComposing = false
   // Focus is local to the picker and does not commit an engine selection.
   let activeName = ''
   let focusVersion = 0
@@ -117,6 +121,12 @@
     }
   }
 
+  $effect.pre(() => {
+    if (preview) untrack(() => {
+      if (queryComposing) handleCompositionChange(false)
+    })
+  })
+
   function isIconImage(icon: string | null | undefined): boolean {
     return /^(https?:\/\/|data:image\/)/i.test(icon?.trim() ?? '')
   }
@@ -194,7 +204,7 @@
 
   function handleSubmit(event: SubmitEvent) {
     event.preventDefault()
-    if (preview) return
+    if (preview || queryComposing) return
     const keyword = query.trim()
 
     if (!keyword || !currentEngine) {
@@ -205,8 +215,19 @@
     window.open(targetUrl, '_blank', 'noopener,noreferrer')
   }
 
+  function handleCompositionChange(active: boolean) {
+    queryComposing = active
+    onCompositionChange?.(active)
+  }
+
+  function handleQueryKeydown(event: KeyboardEvent) {
+    // Ordinary Enter keeps the native implicit submit path; only an IME confirmation is blocked.
+    if (event.key === 'Enter' && (queryComposing || event.isComposing || event.keyCode === 229)) event.preventDefault()
+  }
+
   onDestroy(() => {
     closeEngineMenu()
+    if (queryComposing) onCompositionChange?.(false)
   })
 </script>
 
@@ -281,15 +302,25 @@
     bind:value={query}
     class="search-input"
     type="search"
-    placeholder="输入关键词搜索"
+    placeholder="输入关键词筛选收藏"
     autocomplete="off"
+    aria-describedby={searchHintId}
     readonly={preview}
+    oncompositionstart={() => handleCompositionChange(true)}
+    oncompositionend={() => handleCompositionChange(false)}
+    onkeydown={handleQueryKeydown}
   />
 
-  <button class="search-button" type="submit" disabled={preview || !currentEngine || !query.trim()}>
-    <span class="search-button-text">搜索</span>
-    <span class="search-button-mobile-text" aria-hidden="true">搜</span>
+  <button class="search-button" type="submit" aria-label={currentEngine ? `网页搜索：${currentEngine.name}` : '网页搜索：未配置引擎'} aria-describedby={searchHintId} disabled={preview || !currentEngine || !query.trim()}>
+    <span class="search-button-text">网页搜索</span>
+    <span class="search-button-mobile-text" aria-hidden="true">网页</span>
   </button>
+  <p class="search-hint" id={searchHintId}>
+    输入关键词筛选本站收藏。
+    {#if currentEngine}点「网页搜索」使用 {currentEngine.name} 搜索网页，结果在新标签页打开。
+    {:else}当前未配置网页搜索引擎。{/if}
+    {#if preview}当前为只读预览。{/if}
+  </p>
 </form>
 
 <style>
@@ -304,6 +335,9 @@
   .search-box.has-engine-selector {
     grid-template-columns: 140px minmax(0, 1fr) 80px;
   }
+
+  .search-hint { grid-column: 1 / -1; margin: 0; font-size: var(--font-size-base); line-height: 1.5; text-align: left; overflow-wrap: anywhere; }
+  .search-box.preview-light .search-hint { color: #334155; }
 
   .search-input,
   .search-button {
@@ -337,6 +371,7 @@
 
   .search-button {
     cursor: pointer;
+    white-space: nowrap;
     background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
     color: #fff;
     font-weight: 600;

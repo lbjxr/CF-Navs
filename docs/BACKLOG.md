@@ -2,7 +2,7 @@
 
 > **这是内部工作项的唯一状态源。** 云端已有编号的缺陷与功能需求以 GitHub Issue 的开闭状态为准；本地发起的问题与需求不新开 Issue，状态就在本表。安全问题按 [SECURITY.md](../SECURITY.md) 处理，不开公开 Issue。规则见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
 >
-> - 更新日期：2026-11-24；基线：`develop`。
+> - 更新日期：2026-11-25；基线：`develop`。
 > - 只列**未完成**条目。完成后从本表删除，成果记入 `CHANGELOG.md`，证据与判断留在 `plans/` 的决策记录里。
 > - 编号沿用既有 `PROB-NN` / `REQ-NN`，不重新分配。`PROB-18c`、`PROB-20c` 这类后缀表示同一编号的后续阶段。
 > - 「详情」列指向决策记录：`PH` = [问题处理任务清单](plans/PROBLEM_HANDLING_TASK_LIST.md)，`RD` = [需求开发任务清单](plans/REQUIREMENT_DEVELOPMENT_TASK_LIST.md)。那两份文档**不再维护状态**，只保留证据。
@@ -11,7 +11,6 @@
 
 | ID | 优先 | 事项 | 当前边界 | 详情 |
 | --- | --- | --- | --- | --- |
-| REQ-19 | P2 | 收藏筛选与网页搜索提示及结果通知 | 区分输入筛选/提交外搜，稳定 polite 计数；不增加请求，不改变 Spotlight 独立状态 | [前端开发清单](plans/FRONTEND_DESIGN_REVIEW_DEVELOPMENT.md#req-19收藏筛选与网页搜索的提示及结果通知) |
 | REQ-20 | P3 | 窄屏站点标题换行与字号 | 尊重用户字号上限与隐藏设置；320px、200% 缩放、导航及预览真实排版检查 | [前端开发清单](plans/FRONTEND_DESIGN_REVIEW_DEVELOPMENT.md#req-20窄屏站点标题的换行与字号) |
 | REQ-15 | P1 | 可信设备图标本地优先：一期书签、二期分类 | P02～P06 已实现，分类已有桌面冷/热路径与联合预算证据；P07 整体发布出口和分类二期验收仍未完成。下列缺口是当前待办，不把已交付补丁或已通过场景重新列作未实现 | [需求](plans/BOOKMARK_ICON_LOCAL_FIRST_REQUIREMENTS.md) / [开发计划](plans/BOOKMARK_ICON_LOCAL_FIRST_DEVELOPMENT.md) |
 

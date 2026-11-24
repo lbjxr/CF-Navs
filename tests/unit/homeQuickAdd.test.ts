@@ -29,7 +29,7 @@ afterEach(() => {
 })
 
 async function inputQuery(query: string, settle = true): Promise<void> {
-  await fireEvent.input(screen.getByPlaceholderText('输入关键词搜索'), { target: { value: query } })
+  await fireEvent.input(document.querySelector('#search-query') as HTMLInputElement, { target: { value: query } })
   if (settle) await vi.advanceTimersByTimeAsync(120)
   await tick()
 }

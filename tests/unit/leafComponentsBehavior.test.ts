@@ -297,7 +297,10 @@ describe('HomeContentSummary / HomeEmptyPanel', () => {
     expect(document.querySelector('.empty-panel p')?.textContent).toBe('当前还没有可展示的分类或书签，请稍后再来查看。')
     await view.rerender({ hasSearchQuery: true })
     expect(screen.getByRole('heading').textContent).toBe('没有匹配的书签')
-    expect(document.querySelector('.empty-panel p')?.textContent).toBe('换个关键词试试，或按 Enter 使用当前搜索引擎搜索。')
+    expect(document.querySelector('.empty-panel p')?.textContent).toBe('换个关键词试试，或清空输入查看全部收藏。')
+    await view.rerender({ hasSearchQuery: true, canSearchWeb: true })
+    expect(screen.getByRole('heading').textContent).toBe('没有匹配的书签')
+    expect(document.querySelector('.empty-panel p')?.textContent).toBe('在搜索框按 Enter 或点「网页搜索」查找网页，也可以换个关键词筛选收藏。')
   })
 })
 
