@@ -218,20 +218,28 @@ select.native-select:disabled {
 .app-splash-spinner {
   width: 100%;
   height: 100%;
-  animation: splash-spin 2s linear infinite;
   transform-origin: center;
 }
 
 .app-splash-spinner .ring {
   stroke-linecap: round;
-  animation: splash-ring-dash 1.6s ease-in-out infinite;
-  transform-origin: center;
 }
 
 .app-splash-spinner .dot {
-  animation: splash-dot-pulse 1.6s ease-in-out infinite;
   transform-origin: center;
   filter: drop-shadow(0 0 6px #2dd4bf);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-splash-spinner {
+    animation: splash-spin 2s linear infinite;
+  }
+  .app-splash-spinner .ring {
+    animation: splash-ring-dash 1.6s ease-in-out infinite;
+  }
+  .app-splash-spinner .dot {
+    animation: splash-dot-pulse 1.6s ease-in-out infinite;
+  }
 }
 
 @keyframes splash-spin {
@@ -424,7 +432,6 @@ select.native-select:disabled {
 @media (prefers-reduced-motion: reduce) {
   .app-splash::after,
   .app-splash-card--loading::before,
-  .app-splash-mark span,
   .app-splash-track::before,
   .app-splash-bar {
     animation: none;

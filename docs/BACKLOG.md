@@ -11,7 +11,6 @@
 
 | ID | 优先 | 事项 | 当前边界 | 详情 |
 | --- | --- | --- | --- | --- |
-| PROB-43 | P2 | 启动 SVG 减少动态效果 | 覆盖实际 spinner/ring/dot 节点，保留加载状态；真实浏览器模拟 reduce 验证 | [前端开发清单](plans/FRONTEND_DESIGN_REVIEW_DEVELOPMENT.md#prob-43启动-svg-减少动态效果) |
 | PROB-44 | P2 | 搜索引擎选择器键盘模型 | 标准 select 或完整 listbox 操作，保留默认同步；与 REQ-19 的 SearchBox 修改串行 | [前端开发清单](plans/FRONTEND_DESIGN_REVIEW_DEVELOPMENT.md#prob-44搜索引擎选择器键盘模型) |
 | REQ-18 | P2 | 触屏完整阅读书签标题与说明 | 保留单击访问、长按编辑与排序；明确详情入口，卡片和预览按实际宽度验收 | [前端开发清单](plans/FRONTEND_DESIGN_REVIEW_DEVELOPMENT.md#req-18触屏完整阅读书签内容) |
 | REQ-19 | P2 | 收藏筛选与网页搜索提示及结果通知 | 区分输入筛选/提交外搜，稳定 polite 计数；不增加请求，不改变 Spotlight 独立状态 | [前端开发清单](plans/FRONTEND_DESIGN_REVIEW_DEVELOPMENT.md#req-19收藏筛选与网页搜索的提示及结果通知) |
