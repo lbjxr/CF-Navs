@@ -5,6 +5,7 @@
   import { cloneSettingsForm, type SettingsFormModel } from '../../lib/settingsForm'
   import Slider from '../ui/Slider.svelte'
   import ColorAlphaInput from '../ColorAlphaInput.svelte'
+  import { assessTextContrast } from '../../lib/colorContrast'
 
   interface Props {
     /** SettingsPanel 以 `bind:form` 传入；写回字段或整体替换都经 bindable setter 通知父组件。 */
@@ -13,6 +14,27 @@
   }
 
   let { form = $bindable(), saving = false }: Props = $props()
+  const hintId = $props.id()
+
+  function contrastHint(color: string): string {
+    if (!color.trim()) return ''
+    if (form.custom_css.trim()) return '已配置自定义 CSS，可能改变文字与背景；无法自动确认实际对比，请在首页检查。可留空跟随主题。'
+    let low = false
+    const readings = (['light', 'dark'] as const).map((theme) => {
+      const label = theme === 'light' ? '浅色' : '深色'
+      const reading = assessTextContrast(color, form.backgrounds[theme])
+      if (reading.ratio === null) {
+        const background = reading.reason === 'image' ? '图片背景' : reading.reason === 'gradient' ? '渐变背景' : '当前颜色或透明背景'
+        return `${label}：${background}无法自动确认，请在实际首页检查`
+      }
+      low ||= reading.ratio < 4.5
+      return `${label}首页背景（含遮罩）：${reading.ratio.toFixed(2)}:1`
+    })
+    return `${readings.join('；')}。${low ? '对比度不足（目标 4.5:1），可留空跟随主题，或调整文字颜色后复查。' : '普通文字目标为 4.5:1；比值仅适用于已知的背景与遮罩。'}自定义 CSS 可能改变实际背景，请在首页复查。`
+  }
+
+  const rootHint = $derived(contrastHint(form.category_display.root_title_color))
+  const childHint = $derived(contrastHint(form.category_display.child_title_color))
 
   async function syncForm(): Promise<void> {
     await tick()
@@ -54,7 +76,9 @@
           onchange={() => void syncForm()}
           placeholder="留空跟随主题色"
           inputLabel="一级分类标题颜色值"
+          ariaDescribedby={rootHint ? `${hintId}-root` : undefined}
         />
+        {#if rootHint}<p id={`${hintId}-root`} class="contrast-hint" data-testid="category-root-contrast">{rootHint}</p>{/if}
       </div>
     </section>
 
@@ -87,7 +111,9 @@
           onchange={() => void syncForm()}
           placeholder="留空跟随主题色"
           inputLabel="二级分类标题颜色值"
+          ariaDescribedby={childHint ? `${hintId}-child` : undefined}
         />
+        {#if childHint}<p id={`${hintId}-child`} class="contrast-hint" data-testid="category-child-contrast">{childHint}</p>{/if}
       </div>
     </section>
   </div>
@@ -146,6 +172,13 @@
     color: var(--sp-strong);
     font-size: 12px;
     font-weight: 600;
+  }
+
+  .contrast-hint {
+    margin: 0;
+    color: var(--sp-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
   }
 
   @media (max-width: 620px) {

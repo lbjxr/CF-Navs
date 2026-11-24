@@ -7,6 +7,7 @@
   import type { SettingsFormModel } from '../../lib/settingsForm'
   import BookmarkCard from '../BookmarkCard.svelte'
   import HomeHeroSearch from '../HomeHeroSearch.svelte'
+  import { assessTextContrast } from '../../lib/colorContrast'
 
   interface Props {
     settings: SettingsFormModel
@@ -87,6 +88,18 @@
   const showDescription = $derived(descriptionMode !== 'hidden')
   const mostVisitedBookmarks = $derived(getMostVisitedBookmarks(previewBookmarks, previewSettings.most_visited_count))
   const safePreviewCss = $derived(previewSettings.custom_css.replace(/<\/style/gi, '<\\/style'))
+  const contrastNotes = $derived([
+    { label: '一级分类', color: previewSettings.category_display.root_title_color },
+    { label: '二级分类', color: previewSettings.category_display.child_title_color },
+  ].filter(({ color }) => color.trim()).map(({ label, color }) => {
+    if (previewSettings.custom_css.trim()) return `${label}：已配置自定义 CSS，可能改变文字与背景；无法自动确认实际对比，请在首页检查。`
+    const reading = assessTextContrast(color, previewSettings.backgrounds[theme])
+    if (reading.ratio === null) {
+      const kind = reading.reason === 'image' ? '图片背景' : reading.reason === 'gradient' ? '渐变背景' : '颜色或透明背景'
+      return `${label}：${kind}无法自动确认，请检查预览和实际首页。`
+    }
+    return `${label}与当前${theme === 'light' ? '浅色' : '深色'}首页背景（含遮罩）：${reading.ratio.toFixed(2)}:1${reading.ratio < 4.5 ? '，对比度不足；可留空跟随主题或调整文字颜色' : '，达到普通文字 4.5:1 目标'}。`
+  }))
   const customContentPreview = $derived(`<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -142,6 +155,13 @@
       >深色</button>
     </div>
   </header>
+
+  {#if contrastNotes.length}
+    <div class="contrast-notes" data-testid="preview-category-contrast">
+      {#each contrastNotes as note}<p>{note}</p>{/each}
+      <p>仅核对已知背景与遮罩；自定义 CSS 和图片的实际渲染请在首页复查。</p>
+    </div>
+  {/if}
 
   <div class="preview-frame">
     <div
@@ -623,6 +643,18 @@
   .preview-nav-left button.active {
     background: color-mix(in srgb, var(--theme-accent-color, var(--custom-accent-color, var(--preview-accent-fallback, #2563eb))) 14%, transparent);
   }
+
+  .preview-nav button.active {
+    color: var(--theme-accent-text-color, var(--card-title-color, currentColor));
+  }
+
+  .contrast-notes {
+    padding: 8px 12px;
+    color: var(--sp-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+  }
+  .contrast-notes p { margin: 0; }
 
   .nav-mark {
     width: 6px;

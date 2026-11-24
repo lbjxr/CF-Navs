@@ -15,6 +15,8 @@ export type ThemeGradientPreset = {
   surface: 'glass' | 'flat'
   accentColor: string
   darkAccentColor: string
+  accentTextColor: string
+  darkAccentTextColor: string
   darkCardBackgroundColor: string
   lightCardTitleColor: string
   lightCardDescriptionColor: string
@@ -235,6 +237,8 @@ function createGradientPreset(
     surface: 'glass',
     accentColor: style.accent,
     darkAccentColor: style.darkAccent,
+    accentTextColor: style.accent,
+    darkAccentTextColor: style.darkAccent,
     darkCardBackgroundColor: '#0f172a',
     lightCardTitleColor: '#0f172a',
     lightCardDescriptionColor: '#475569',
@@ -268,6 +272,7 @@ function createFlatPreset(
     dark: { type: 'color', value: colors.darkPage, blur: 0, mask: 0, maskColor: '#000000' },
     cardBackgroundColor: colors.card, cardBackgroundOpacity: 0.9, cardTextColor: '', siteTitleColor: '', surface: 'flat',
     accentColor: colors.accent, darkAccentColor: colors.darkAccent, darkCardBackgroundColor: colors.darkCard,
+    accentTextColor: colors.title, darkAccentTextColor: colors.darkTitle,
     lightCardTitleColor: colors.title, lightCardDescriptionColor: colors.description,
     darkCardTitleColor: colors.darkTitle, darkCardDescriptionColor: colors.darkDescription,
   }

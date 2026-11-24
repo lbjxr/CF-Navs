@@ -266,9 +266,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--card-description-color, currentColor);
-    font-size: 0.62rem;
+    font-size: 11px;
+    line-height: 1.2;
     font-weight: 600;
-    opacity: 0.66;
+    opacity: 1;
   }
 
 </style>

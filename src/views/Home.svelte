@@ -837,6 +837,7 @@
     --home-stat-border: rgba(148, 163, 184, 0.24);
     --home-stat-shadow: 0 3px 10px rgba(15, 23, 42, 0.06);
     --home-accent-color: var(--theme-accent-color, var(--custom-accent-color, #2563eb));
+    --home-accent-text-color: var(--theme-accent-text-color, var(--home-accent-color));
     --category-root-font-size: var(--category-root-font-size-base, 16px);
     --category-root-icon-size: var(--category-root-icon-size-base, 20px);
     --category-child-font-size: min(var(--category-child-font-size-base, 14px), calc(var(--category-root-font-size) - 1px));
@@ -1080,6 +1081,13 @@
     max-width: var(--content-max-width, 1200px);
     margin: 2rem auto 0;
     color: inherit;
+  }
+
+  @media (forced-colors: active) {
+    .home-shell :global(.bookmark-card:focus-visible) {
+      outline: 2px solid Highlight !important;
+      outline-offset: 2px;
+    }
   }
 
   @media (max-width: 799px) {

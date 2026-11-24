@@ -6,11 +6,13 @@ import type { GradientPresetId, ThemeGradientPreset } from './themePresets'
 
 export type PresetRenderTokens = Pick<ThemeGradientPreset,
   | 'surface' | 'cardBackgroundColor' | 'darkCardBackgroundColor' | 'accentColor' | 'darkAccentColor'
+  | 'accentTextColor' | 'darkAccentTextColor'
   | 'lightCardTitleColor' | 'lightCardDescriptionColor' | 'darkCardTitleColor' | 'darkCardDescriptionColor'>
 
 function glass(accentColor: string, darkAccentColor: string): PresetRenderTokens {
   return {
     surface: 'glass', cardBackgroundColor: '#ffffff', darkCardBackgroundColor: '#0f172a', accentColor, darkAccentColor,
+    accentTextColor: accentColor, darkAccentTextColor: darkAccentColor,
     lightCardTitleColor: '#0f172a', lightCardDescriptionColor: '#475569', darkCardTitleColor: '#e5eefb', darkCardDescriptionColor: '#cbd5e1',
   }
 }
@@ -21,6 +23,7 @@ function flat(
 ): PresetRenderTokens {
   return {
     surface: 'flat', cardBackgroundColor, darkCardBackgroundColor, accentColor, darkAccentColor,
+    accentTextColor: lightCardTitleColor, darkAccentTextColor: darkCardTitleColor,
     lightCardTitleColor, lightCardDescriptionColor, darkCardTitleColor, darkCardDescriptionColor,
   }
 }

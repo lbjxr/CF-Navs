@@ -265,6 +265,14 @@ export function resolveThemeAccentColor(settings: PublicSettings | null, theme: 
     : (customAccentColor || fallbackAccentColor)
 }
 
+/** Text and decoration have separate contrast needs; custom colors retain their configured value. */
+export function resolveThemeAccentTextColor(settings: PublicSettings | null, theme: 'light' | 'dark'): string {
+  const preset = settings ? getPresetRenderTokens(settings.background_preset_id) : undefined
+  return preset
+    ? (theme === 'dark' ? preset.darkAccentTextColor : preset.accentTextColor)
+    : resolveThemeAccentColor(settings, theme)
+}
+
 export function buildHomeBackground(settings: PublicSettings | null, theme: 'light' | 'dark'): string {
   if (!settings) return ''
 
@@ -319,5 +327,6 @@ export function buildHomeBackground(settings: PublicSettings | null, theme: 'lig
     `--card-title-color: ${cardTitleColor};`,
     `--card-description-color: ${cardDescriptionColor};`,
     `--theme-accent-color: ${accentColor};`,
+    `--theme-accent-text-color: ${resolveThemeAccentTextColor(settings, theme)};`,
   ].join(' ')
 }

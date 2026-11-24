@@ -739,6 +739,7 @@
     --toc-border: rgba(255, 255, 255, 0.48);
     --toc-text: var(--home-text-color, #0f172a);
     --toc-accent: var(--home-accent-color, #2563eb);
+    --toc-accent-text: var(--home-accent-text-color, var(--toc-text));
     --toc-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
     --toc-slip: rgba(248, 250, 252, 0.9);
   }
@@ -883,12 +884,12 @@
 
   .top-item.active {
     background: var(--toc-item-hover-bg);
-    color: var(--toc-accent);
+    color: var(--toc-accent-text);
   }
 
   .top-item small {
-    color: inherit;
-    opacity: 0.62;
+    color: var(--card-description-color, var(--toc-text));
+    opacity: 1;
     font-size: 11px;
   }
 
@@ -921,7 +922,7 @@
   .top-submenu-toggle:focus-visible,
   .top-submenu-toggle[aria-expanded='true'] {
     background: var(--toc-item-hover-bg);
-    color: var(--toc-accent);
+    color: var(--toc-accent-text);
     outline: none;
   }
 
@@ -962,12 +963,13 @@
   .top-submenu button.active {
     border-color: var(--toc-item-border);
     background: var(--toc-item-hover-bg);
-    color: var(--toc-accent);
+    color: var(--toc-accent-text);
     outline: none;
   }
 
   .top-submenu small {
-    opacity: 0.64;
+    color: var(--card-description-color, var(--toc-text));
+    opacity: 1;
   }
 
   .top-submenu-title {
@@ -1148,7 +1150,8 @@
   }
 
   .toc-sidebar.expanded .toc-item small {
-    opacity: 0.62;
+    color: var(--card-description-color, var(--toc-text));
+    opacity: 1;
   }
 
   .toc-expand-button {
@@ -1170,7 +1173,7 @@
   .toc-expand-button:hover,
   .toc-expand-button:focus-visible {
     background: var(--toc-item-hover-bg);
-    color: var(--toc-accent);
+    color: var(--toc-accent-text);
     outline: none;
   }
 
@@ -1204,7 +1207,7 @@
   .toc-child-item.active {
     border-color: var(--toc-item-border);
     background: var(--toc-item-hover-bg);
-    color: var(--toc-accent);
+    color: var(--toc-accent-text);
     outline: none;
   }
 
@@ -1230,7 +1233,8 @@
   }
 
   .toc-child-item small {
-    opacity: 0.62;
+    color: var(--card-description-color, var(--toc-text));
+    opacity: 1;
   }
 
   .toc-sidebar.expanded .toc-item:hover,
@@ -1308,7 +1312,21 @@
   }
 
   .toc-item.active .toc-title {
-    color: var(--toc-accent);
+    color: var(--toc-accent-text);
+  }
+
+  @media (forced-colors: active) {
+    :is(.toc-mobile-btn, .toc-sidebar, .top-navigation) {
+      --toc-text: CanvasText;
+      --toc-accent-text: LinkText;
+      --toc-surface: Canvas;
+      --toc-surface-strong: Canvas;
+    }
+    button:focus-visible, .top-item-group:focus-within {
+      /* Override the more specific normal-state outline:none rules. */
+      outline: 2px solid Highlight !important;
+      outline-offset: 2px;
+    }
   }
 
   @media (max-width: 799px) {

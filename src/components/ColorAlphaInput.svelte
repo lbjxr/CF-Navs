@@ -19,6 +19,7 @@
     alpha?: number | null
     placeholder?: string
     inputLabel?: string
+    ariaDescribedby?: string
     swatchTitle?: string
     hueText?: string
     alphaText?: string
@@ -31,6 +32,7 @@
     alpha = $bindable(null),
     placeholder = '#ffffff',
     inputLabel = '颜色值',
+    ariaDescribedby = undefined,
     swatchTitle = '打开颜色选择器',
     hueText = '色相',
     alphaText = '透明度',
@@ -260,6 +262,7 @@
       {placeholder}
       maxlength="40"
       aria-label={inputLabel}
+      aria-describedby={ariaDescribedby}
       oninput={handleTextInput}
     />
     <button
