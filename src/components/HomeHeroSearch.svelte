@@ -37,7 +37,9 @@
   aria-label="站点搜索"
 >
   {#if settings?.site_title_show ?? true}
-    <h1 class="site-title" style="color: {siteTitleColor}; font-size: {siteTitleFontSize}px; -webkit-text-fill-color: {siteTitleColor === 'inherit' ? 'initial' : siteTitleColor}; background: none; -webkit-background-clip: unset;">{pageTitle}</h1>
+    <div class="site-title-container">
+      <h1 class="site-title" style="color: {siteTitleColor}; --site-title-font-size: {siteTitleFontSize}px; -webkit-text-fill-color: {siteTitleColor === 'inherit' ? 'initial' : siteTitleColor}; background: none; -webkit-background-clip: unset;">{pageTitle}</h1>
+    </div>
   {/if}
   {#if settings?.search_box_show ?? true}
     <div class="search-card">
@@ -66,12 +68,29 @@
     margin-top: calc(3.5rem + var(--content-margin-top, 0%));
   }
 
+  /* Keep size containment on the title so search menus retain their original stacking path. */
+  .site-title-container {
+    container-type: inline-size;
+  }
+
   .site-title {
     margin: 0;
+    font-size: var(--site-title-font-size);
     font-weight: 700;
     line-height: 1.1;
     overflow-wrap: anywhere;
+    text-wrap: balance;
     text-shadow: 0 2px 12px rgba(15, 23, 42, 0.22);
+  }
+
+  @supports (font-size: 1cqi) {
+    .site-title {
+      font-size: clamp(
+        min(var(--site-title-font-size), max(1.25rem, calc(var(--site-title-font-size) / 2.5))),
+        calc(1rem + 10cqi),
+        var(--site-title-font-size)
+      );
+    }
   }
 
   .search-card {

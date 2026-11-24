@@ -11,7 +11,6 @@
 
 | ID | 优先 | 事项 | 当前边界 | 详情 |
 | --- | --- | --- | --- | --- |
-| REQ-20 | P3 | 窄屏站点标题换行与字号 | 尊重用户字号上限与隐藏设置；320px、200% 缩放、导航及预览真实排版检查 | [前端开发清单](plans/FRONTEND_DESIGN_REVIEW_DEVELOPMENT.md#req-20窄屏站点标题的换行与字号) |
 | REQ-15 | P1 | 可信设备图标本地优先：一期书签、二期分类 | P02～P06 已实现，分类已有桌面冷/热路径与联合预算证据；P07 整体发布出口和分类二期验收仍未完成。下列缺口是当前待办，不把已交付补丁或已通过场景重新列作未实现 | [需求](plans/BOOKMARK_ICON_LOCAL_FIRST_REQUIREMENTS.md) / [开发计划](plans/BOOKMARK_ICON_LOCAL_FIRST_DEVELOPMENT.md) |
 
 REQ-15 剩余验收范围（2026-10-11 复核）：
