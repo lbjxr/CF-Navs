@@ -77,6 +77,7 @@
 - [开发任务规划（设置页 UI/UX + 顶部导航 + 部分导出）](plans/_archive/DEV_TASK_BREAKDOWN_UI_NAV_EXPORT.md)
 - [开发任务规划（R-01～R-08 Issue 需求）](plans/_archive/DEV_TASK_BREAKDOWN_GITHUB_ISSUES.md)
 - [前端体验与自用效率优化（需求评估）](plans/FRONTEND_EXPERIENCE_OPTIMIZATION_REQUIREMENTS.md)
+- [书签悬停相邻光晕排查（历史取证记录）](plans/BOOKMARK_HOVER_GLOW_INVESTIGATION.md)：保留观察边界与样式维护约束，原始录屏和环境资料留在仓库外。
 - [书签图标本地优先与隐私分级缓存（已裁定需求基线）](plans/BOOKMARK_ICON_LOCAL_FIRST_REQUIREMENTS.md)：七项产品选择已确认，包含书签第一阶段与分类第二阶段规划、10 MiB 联合预算、离线/撤回、迁移/回滚及验收；不构成开发授权。
 - [书签图标本地优先开发计划](plans/BOOKMARK_ICON_LOCAL_FIRST_DEVELOPMENT.md)：依据已裁定需求，明确架构与状态所有权、内容版本与专用协议、一期书签/二期分类工作包、迁移回滚及验收映射；仅为计划，尚未实施。
 - [设置页 UI/UX 改造规范（原始草案，已被 `SETTINGS_UI_UX_ADJUSTMENT_REQUIREMENTS.md` 取代）](plans/_archive/UI_UX_Plan.md)
