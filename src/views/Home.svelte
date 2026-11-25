@@ -862,6 +862,13 @@
     padding-top: var(--top-nav-padding, 5.25rem);
   }
 
+  @media (max-width: 1650px) {
+    .home-shell.top-navigation-layout {
+      /* 操作按钮在导航栏下方使用 rem 尺寸；仅文字放大时，实测导航高度仍需配合相同尺度的留白。 */
+      padding-top: max(var(--top-nav-padding, 5.25rem), 4.25rem);
+    }
+  }
+
   @media (min-width: 800px) {
     .home-shell.persistent-left-navigation {
       padding-left: calc(var(--toc-expanded-width) + 12px + var(--content-margin-x, 0px));
