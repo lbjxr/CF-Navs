@@ -498,7 +498,8 @@
     left: 0;
     z-index: 60;
     width: 100%;
-    min-width: 10.5rem;
+    /* Text-only zoom enlarges rem; the minimum must also respect the viewport cap. */
+    min-width: min(10.5rem, calc(100vw - 2rem));
     max-width: min(16rem, calc(100vw - 2rem));
     display: grid;
     gap: 0.25rem;
@@ -680,7 +681,7 @@
     }
 
     .engine-menu {
-      min-width: 9.5rem;
+      min-width: min(9.5rem, calc(100vw - 2rem));
     }
 
     .search-button-text {
