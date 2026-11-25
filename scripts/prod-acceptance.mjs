@@ -14,7 +14,7 @@
 // 不需要每次都权衡风险。
 //
 // ── 分层 ──────────────────────────────────────────────────────────────────────
-//   Tier 0（本脚本）：不产生任何服务端状态变化。登出只作废本次自己创建的会话。
+//   Tier 0（本脚本）：不改业务数据；登录创建的全部会话在 finally 中注销并验证失效。
 //   Tier 1（需逐次授权）：改设置再还原——S3 自定义 JS、REQ-08b 逐套预设视觉。
 //   Tier 2（生产禁止）：replace/merge 导入会清库；密码轮换。只在本地实例做。
 //
@@ -24,6 +24,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CdpSession, sleep } from './lib/cdpSession.mjs'
+import { createOwnedTestSessions } from './lib/ownedTestSessions.mjs'
 import { pageModalMetrics, pageModalControl, pageGuideState, pageModalsClosed, assessModalActions, waitForModal, pageModalFault } from './lib/modalAcceptanceProbe.mjs'
 import {
   pickExportSample,
@@ -96,8 +97,13 @@ function pageLogin(origin, username, password) {
     .then((response) => response.json())
     .then((body) => {
       if (body?.code === 0 && body?.data) {
-        localStorage.setItem('cf-navs.auth', JSON.stringify(body.data))
-        return { ok: true, token: body.data.token, expiresAt: body.data.expires_at ?? null }
+        const session = { ok: true, token: body.data.token, expiresAt: body.data.expires_at ?? null }
+        try {
+          localStorage.setItem('cf-navs.auth', JSON.stringify(body.data))
+        } catch {
+          return { ...session, ok: false, storageFailed: true }
+        }
+        return session
       }
       return { ok: false, code: body?.code ?? null }
     })
@@ -797,6 +803,7 @@ async function runLogoutRevocationCheck(session, token) {
 
 async function main() {
   const startedAt = new Date().toISOString()
+  const ownedSessions = createOwnedTestSessions({ baseUrl: TARGET_ORIGIN })
   const session = new CdpSession({
     chromeExe: CHROME_EXE,
     debugPort: DEBUG_PORT,
@@ -840,6 +847,8 @@ async function main() {
 
     phase('登录（仅用于读取管理数据）')
     const login = await session.call(pageLogin, TARGET_ORIGIN, credentials.username, credentials.password)
+    if (login.token) ownedSessions.register(login.token)
+    if (login.storageFailed) throw new Error('login storage initialization failed')
     if (!check('admin-login-succeeds', 'PROB-13', login.ok === true, `code=${login.code ?? 0}`)) {
       throw new Error('login failed; cannot run authenticated read-only probes')
     }
@@ -863,6 +872,9 @@ async function main() {
     await session.navigate(TARGET_URL)
     await sleep(1200)
     const relogin = await session.call(pageLogin, TARGET_ORIGIN, credentials.username, credentials.password)
+    if (relogin.token) ownedSessions.register(relogin.token)
+    if (relogin.storageFailed) throw new Error('relogin storage initialization failed')
+    if (!relogin.ok) throw new Error('relogin failed; cannot verify session revocation')
     report.revocation = await runLogoutRevocationCheck(session, relogin.token)
 
     report.consoleErrors = session.consoleErrors
@@ -885,7 +897,20 @@ async function main() {
     report.fatal = redactCredentials(String(error?.message ?? error), credentials)
     check('acceptance-run-completed', 'PROB-13', false, report.fatal)
   } finally {
-    cleanupOutcome = await session.cleanup()
+    try {
+      report.testSessions = await ownedSessions.cleanup()
+      check(
+        'all-owned-test-sessions-rejected',
+        'PROB-46',
+        report.testSessions.ok,
+        `total=${report.testSessions.total} rejected=${report.testSessions.revoked} failed=${report.testSessions.failed}`,
+      )
+    } catch {
+      report.testSessions = { ok: false, error: 'test session cleanup did not complete' }
+      check('all-owned-test-sessions-rejected', 'PROB-46', false, report.testSessions.error)
+    } finally {
+      cleanupOutcome = await session.cleanup()
+    }
   }
 
   report.checks = checks

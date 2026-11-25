@@ -109,6 +109,7 @@ npm run perf:audit
 | `modal-flow-no-server-writes` / `modal-flow-browser-diagnostics` | PROB-13 U1–U4 | 弹窗阶段无业务写入、非预期 HTTP/网络错误、Chrome Log 错误、console error 或页面异常；导航/交互及取消分别留证 |
 | `viewport-screenshots-captured` | PROB-17 | 430x932 / 768x1024 / 1440x900 三档截图落盘 |
 | `logout-accepted` + `revoked-token-rejected-within-window` | PROB-19v | 登出后旧 token 在窗口内被拒，并记录实际生效毫秒数 |
+| `all-owned-test-sessions-rejected` | PROB-46 | 首次登录、再次登录产生的全部本轮会话均在结束时确认被拒；异常路径也执行清理 |
 | `no-page-exceptions` / `no-console-errors` | PROB-13 | 全程无页面异常与 console error |
 
 > PROB-38 四项是图标隐私专项验收目标：当前 `accept:prod` 通用脚本尚未自动执行它们。当前提交已由本地 L1 smoke、真实隔离 Worker/Chrome 和单测覆盖；推送后应按上述 ID 运行只读专项探针并把结果写入发布记录，不能用通用首页/Cache Storage 通过推断 PROB-38 已通过。
@@ -160,6 +161,7 @@ S3 的已完成证据见 [变更记录](../../CHANGELOG.md#prob-13-自定义-js-
 - **端口被占用时默认拒绝**，不静默复用。那个实例可能是使用者自己的 Chrome，也可能是上一次被强杀留下的孤儿（进程收到 SIGKILL 时清理逻辑跑不到）。静默复用会让结果建立在未知浏览器状态上，还会让清理整段跳过。确实要连专用实例时设 `ACCEPT_ALLOW_EXISTING_CHROME=1`。
 - **临时 profile 名必须匹配 `cf-navs-chrome-profile-<id>`**，否则脚本拒绝启动。清理只按这个精确路径匹配进程，**绝不按进程名批量结束 Chrome**。
 - **清理结果属于测试结果**。场景全过但清理失败时报告「场景通过，清理失败」并以非零码退出，不报告完整通过。
+- 标准验收与性能审计在 `testSessions` 中记录本轮自建会话的清理数量、耗时和安全失败原因。删除本地登录状态或关闭浏览器不能代替服务端拒绝验证；单个会话失败时仍尝试剩余会话和资源清理。历史未登记会话的失效不在该结果内。
 - **密码轮换默认关闭**。`npm run regression:chrome` 原本会把管理员密码改成随机临时值再还原；进程在中途被打断时，临时密码只存在于内存里，管理员访问就永久丢失。现在需要 `REGRESSION_ALLOW_PASSWORD_ROTATION=1` 显式开启，跳过时那两条断言记为通过并在 `actual` 里标明 `skipped`。登出撤销的等价验证由 `accept:prod` 用只读方式覆盖，不需要动密码。
 - 报告与日志在输出前过 `redactCredentials()`。不要把 `verify.local.json`、报告 JSON 或终端输出贴进 Issue 或提交信息。
 

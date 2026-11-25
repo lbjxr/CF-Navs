@@ -23,6 +23,7 @@ import { CdpSession } from './lib/cdpSession.mjs'
 import { requireAdminCredentials } from './lib/verifyCredentials.mjs'
 import { resolveBaseUrl, resolveChromeProfileRoot, resolveSetting } from './lib/verifyTarget.mjs'
 import { loginInPage } from './lib/browserLogin.mjs'
+import { createOwnedTestSessions } from './lib/ownedTestSessions.mjs'
 
 const BASE_URL = resolveBaseUrl()
 const CHROME_DEBUG_PORT = resolveSetting('CHROME_DEBUG_PORT', 'chromeDebugPort', '9223')
@@ -198,11 +199,14 @@ async function waitForNetworkIdle(idleMs = 1500, maxMs = 35000) {
   harvestNetworkEvents()
 }
 
-async function login() {
+async function login(ownedSessions) {
   const result = await evaluate(
-    `(${loginInPage.toString()})(${JSON.stringify(TARGET_ORIGIN)}, ${JSON.stringify(ADMIN_USER)}, ${JSON.stringify(ADMIN_PASS)})`,
+    `(${loginInPage.toString()})(${JSON.stringify(TARGET_ORIGIN)}, ${JSON.stringify(ADMIN_USER)}, ${JSON.stringify(ADMIN_PASS)}, true)`,
   )
-  if (!result?.ok) throw new Error(`login failed: ${JSON.stringify(result?.body ?? result)}`)
+  // 使用此次登录响应的准确 Token；不从可能已被其它会话改写的 localStorage 回取。
+  if (result?.token) ownedSessions.register(result.token)
+  if (result?.storageFailed) throw new Error('login storage initialization failed')
+  if (!result?.ok) throw new Error(`login failed: status=${result?.status ?? 'unknown'} code=${result?.code ?? 'unknown'}`)
   return { username: result.username, expires_at: result.expires_at }
 }
 
@@ -655,12 +659,12 @@ async function clearAuth() {
 }
 
 /**
- * 保证 chromeDebugPort 上有一个可用的 DevTools 端点。
+ * 选择可用的 DevTools 端点，或准备一个尚未启动的隔离 Chrome 会话。
  *
  * 端口空着就启动隔离临时 Chrome；端口被占用但不是 DevTools 端点（例如恰好撞上使用者
  * 自己 Chrome 随机占用的端口）时给出可操作错误，而不是让后面的请求抛出 404。
  */
-async function ensureDevToolsEndpoint() {
+async function prepareDevToolsSession() {
   const endpoint = `http://127.0.0.1:${CHROME_DEBUG_PORT}`
 
   let listening = false
@@ -697,24 +701,25 @@ async function ensureDevToolsEndpoint() {
     headless: process.env.PERF_HEADED !== '1',
     noSandbox: process.env.CHROME_NO_SANDBOX === '1',
   })
-  await session.start()
   return session
 }
 
 async function main() {
   const startedAt = new Date().toISOString()
-  const launched = await ensureDevToolsEndpoint()
-  const target = await getPageTarget()
-  await connect(target)
-
-  await send('Page.enable')
-  await send('Runtime.enable')
-  await send('Network.enable')
+  const ownedSessions = createOwnedTestSessions({ baseUrl: TARGET_ORIGIN })
+  const launched = await prepareDevToolsSession()
+  let result = null
 
   try {
+    if (launched) await launched.start()
+    const target = await getPageTarget()
+    await connect(target)
+    await send('Page.enable')
+    await send('Runtime.enable')
+    await send('Network.enable')
     await send('Page.navigate', { url: TARGET_URL })
     await waitForNetworkIdle()
-    await login()
+    await login(ownedSessions)
     await navigateHome()
 
     const homeBeforeScroll = await getHomeStats()
@@ -727,7 +732,7 @@ async function main() {
     const storage = await getStorageStats()
     const networkSummary = summarizeNetwork()
 
-    const result = {
+    result = {
       startedAt,
       target: TARGET_URL,
       homeBeforeScroll,
@@ -740,34 +745,47 @@ async function main() {
     const checks = collectAuditChecks(result)
     result.checks = checks
 
-    console.log(JSON.stringify(result, null, 2))
-
     if (!ALLOW_FAILURES && checks.some((check) => !check.passed)) {
       process.exitCode = 1
     }
   } finally {
-    await clearAuth()
-    if (pageTargetCreatedByTest) {
-      try {
-        await send('Page.close', {}, 3000)
-      } catch {
-        if (pageTargetId) {
-          const endpoint = `http://127.0.0.1:${CHROME_DEBUG_PORT}`
-          await fetch(`${endpoint}/json/close/${pageTargetId}`).catch(() => undefined)
+    try {
+      const testSessions = await ownedSessions.cleanup()
+      if (result) result.testSessions = testSessions
+      if (!testSessions.ok) {
+        console.error('test session cleanup failed')
+        process.exitCode = 1
+      }
+    } catch {
+      if (result) result.testSessions = { ok: false, error: 'test session cleanup did not complete' }
+      console.error('test session cleanup did not complete')
+      process.exitCode = 1
+    } finally {
+      await clearAuth()
+      if (pageTargetCreatedByTest) {
+        try {
+          await send('Page.close', {}, 3000)
+        } catch {
+          if (pageTargetId) {
+            const endpoint = `http://127.0.0.1:${CHROME_DEBUG_PORT}`
+            await fetch(`${endpoint}/json/close/${pageTargetId}`).catch(() => undefined)
+          }
+        }
+      }
+      ws?.close()
+
+      if (launched) {
+        const outcome = await launched.cleanup()
+        if (result) result.cleanup = outcome
+        for (const warning of outcome.warnings) console.error('cleanup warning:', warning)
+        if (outcome.errors.length > 0) {
+          console.error('cleanup failed:', outcome.errors.join('; '))
+          process.exitCode = 1
         }
       }
     }
-    ws?.close()
-
-    if (launched) {
-      const outcome = await launched.cleanup()
-      for (const warning of outcome.warnings) console.error('cleanup warning:', warning)
-      if (outcome.errors.length > 0) {
-        console.error('cleanup failed:', outcome.errors.join('; '))
-        process.exitCode = 1
-      }
-    }
   }
+  if (result) console.log(JSON.stringify(result, null, 2))
 }
 
 main().catch((error) => {
