@@ -78,7 +78,7 @@ describe('BookmarkCard', () => {
     const shell = container.querySelector('.bookmark-card-shell') as HTMLElement
     expect(shell.classList.contains('is-info')).toBe(true)
     expect(shell.getAttribute('style')).toContain('--card-configured-min-width: 200px')
-    // The configured height belongs to the main card; a detail footer may extend the shell.
+    expect(shell.style.height).toBe('64px')
     expect((container.querySelector('a.bookmark-card') as HTMLElement).style.height).toBe('64px')
     expect(container.textContent).not.toContain('描述文字')
 
