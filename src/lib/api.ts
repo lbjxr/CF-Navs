@@ -69,6 +69,7 @@ const NO_CACHE_HEADERS = {
   'cache-control': 'no-cache',
   pragma: 'no-cache',
 }
+const INSTALL_STATUS_TIMEOUT_MS = 15_000
 
 let apiBaseUrl = '/api'
 
@@ -253,7 +254,27 @@ function jsonRequest<T>(
 }
 
 export const installApi = {
-  status: () => request<InstallStatusResp>('/install/status', { cache: 'no-store', headers: NO_CACHE_HEADERS }),
+  status: async (): Promise<InstallStatusResp> => {
+    const controller = new AbortController()
+    let timedOut = false
+    // Each boot probe owns its deadline through response-body parsing and retry.
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, INSTALL_STATUS_TIMEOUT_MS)
+    try {
+      return await request<InstallStatusResp>('/install/status', {
+        cache: 'no-store', headers: NO_CACHE_HEADERS, signal: controller.signal,
+      })
+    } catch (error) {
+      if (timedOut) {
+        throw new ApiError('安装状态检查超时，请检查网络后重试。', { cause: error })
+      }
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
+  },
   install: (payload: InstallReq, setupToken: string) =>
     jsonRequest<LoginResp>('/install', 'POST', payload, false, { 'X-Setup-Token': setupToken }),
 }
