@@ -24,6 +24,7 @@ import { requireAdminCredentials } from './lib/verifyCredentials.mjs'
 import { resolveBaseUrl, resolveChromeProfileRoot, resolveSetting } from './lib/verifyTarget.mjs'
 import { loginInPage } from './lib/browserLogin.mjs'
 import { createOwnedTestSessions } from './lib/ownedTestSessions.mjs'
+import { classifyHomeSearchMutations } from './lib/homeSearchMutations.mjs'
 
 const BASE_URL = resolveBaseUrl()
 const CHROME_DEBUG_PORT = resolveSetting('CHROME_DEBUG_PORT', 'chromeDebugPort', '9223')
@@ -263,7 +264,7 @@ async function runFullScroll() {
 
 async function runHomeSearch() {
   return evaluate(
-    `(${async function searchHome() {
+    `(${async function searchHome(classifyMutations) {
       const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
       const input = document.querySelector('.search-card input')
       if (!input) return { error: 'home search input not found' }
@@ -274,24 +275,32 @@ async function runHomeSearch() {
       // 窗内，不会误判为未防抖；未防抖实现则会在每次按键后一个 tick（远小于 60ms）内重渲染。
       const IMMEDIATE_WINDOW_MS = 60
 
+      // DOM identities remain in the page realm and are never returned in diagnostics.
+      const beforeCards = Array.from(document.querySelectorAll('.bookmark-card-shell'))
       const before = {
         nodes: document.querySelectorAll('*').length,
         links: document.querySelectorAll('a').length,
-        cards: document.querySelectorAll('.bookmark-card-shell').length,
+        cards: beforeCards.length,
         sections: document.querySelectorAll('[data-section-id]').length,
       }
 
       const start = performance.now()
       const batches = []
       const observer = new MutationObserver((list) => {
-        batches.push({ at: performance.now() - start, records: list.length })
+        batches.push({ at: performance.now() - start, ...classifyMutations(list) })
       })
       observer.observe(document.querySelector('main') || document.body, {
         childList: true,
         subtree: true,
         characterData: true,
       })
-      const total = () => batches.reduce((sum, batch) => sum + batch.records, 0)
+      const totals = () => batches.reduce((sum, batch) => ({
+        // Keep the existing mutations field for genuine result records only.
+        mutations: sum.mutations + batch.resultRecords,
+        rawMutations: sum.rawMutations + batch.rawRecords,
+        decorativeMutations: sum.decorativeMutations + batch.decorativeRecords,
+        cardStructureMutations: sum.cardStructureMutations + batch.cardStructureRecords,
+      }), { mutations: 0, rawMutations: 0, decorativeMutations: 0, cardStructureMutations: 0 })
 
       const keyTimes = []
       for (const value of ['n', 'np', 'npm']) {
@@ -305,27 +314,35 @@ async function runHomeSearch() {
         nodes: document.querySelectorAll('*').length,
         links: document.querySelectorAll('a').length,
         cards: document.querySelectorAll('.bookmark-card-shell').length,
-        mutations: total(),
+        ...totals(),
       }
 
       await delay(260)
+      const settledAt = performance.now() - start
+      const settledCards = Array.from(document.querySelectorAll('.bookmark-card-shell'))
+      const resultSetChanged = beforeCards.length !== settledCards.length ||
+        beforeCards.some((card, index) => card !== settledCards[index])
       const afterSettled = {
         nodes: document.querySelectorAll('*').length,
         links: document.querySelectorAll('a').length,
-        cards: document.querySelectorAll('.bookmark-card-shell').length,
+        cards: settledCards.length,
         sections: document.querySelectorAll('[data-section-id]').length,
-        mutations: total(),
+        ...totals(),
       }
 
       const lastKeyAt = keyTimes[keyTimes.length - 1]
       const gaps = keyTimes.slice(1).map((time, index) => Math.round(time - keyTimes[index]))
-      // 只统计「最后一次按键」之后、判定窗内的 mutation：防抖实现把重渲染推迟到 ~120ms 后（窗外），
+      // 只统计「最后一次按键」之后、判定窗内的真实结果批次，忽略已知图标子树的装饰替换：
+      // 防抖实现把重渲染推迟到 ~120ms 后（窗外），
       // 未防抖实现在按键后一个 tick 内重渲染（窗内）。用真实时间戳，卡顿不影响判定。
       const immediateAfterLastKey = batches.filter(
-        (batch) => batch.at > lastKeyAt && batch.at <= lastKeyAt + IMMEDIATE_WINDOW_MS,
+        (batch) => batch.resultRecords > 0 && batch.at >= lastKeyAt && batch.at <= lastKeyAt + IMMEDIATE_WINDOW_MS,
       ).length
-      // 正向佐证：防抖窗过后确实重渲染过（搜索链路在工作，不是「什么都没做」）。
-      const rebuiltAfterSettle = afterSettled.mutations > 0
+      // 正向佐证：窗后有明确卡片结构变更，且 settled 结果集合、顺序或节点身份真的改变。
+      // 未知节点、标题或图标变化不能代替搜索结果变化。
+      const rebuiltAfterSettle = resultSetChanged && batches.some(
+        (batch) => batch.cardStructureRecords > 0 && batch.at > lastKeyAt + IMMEDIATE_WINDOW_MS && batch.at <= settledAt,
+      )
 
       input.value = ''
       input.dispatchEvent(new Event('input', { bubbles: true }))
@@ -335,7 +352,7 @@ async function runHomeSearch() {
         links: document.querySelectorAll('a').length,
         cards: document.querySelectorAll('.bookmark-card-shell').length,
         sections: document.querySelectorAll('[data-section-id]').length,
-        mutations: total(),
+        ...totals(),
       }
 
       observer.disconnect()
@@ -344,13 +361,27 @@ async function runHomeSearch() {
         afterRapid,
         afterSettled,
         afterClear,
+        keyTimes,
         gaps,
         maxGap: gaps.length ? Math.max(...gaps) : 0,
         immediateWindowMs: IMMEDIATE_WINDOW_MS,
         immediateAfterLastKey,
         rebuiltAfterSettle,
+        resultSetChanged,
+        settledAt,
+        mutationSummary: {
+          rawRecords: afterClear.rawMutations,
+          resultRecords: afterClear.mutations,
+          decorativeRecords: afterClear.decorativeMutations,
+          cardStructureRecords: afterClear.cardStructureMutations,
+          rawBatches: batches.length,
+          resultBatches: batches.filter((batch) => batch.resultRecords > 0).length,
+          decorativeBatches: batches.filter((batch) => batch.resultRecords === 0).length,
+          mixedBatches: batches.filter((batch) => batch.resultRecords > 0 && batch.decorativeRecords > 0).length,
+        },
+        batches,
       }
-    }.toString()})()`,
+    }.toString()})(${classifyHomeSearchMutations.toString()})`,
     45000,
   )
 }
@@ -613,15 +644,18 @@ function collectAuditChecks(result) {
       // 时序稳健：只看「最后一次按键 + 60ms」窗内有没有立即重渲染（未防抖会命中），
       // 不再用连打全程的累计 mutation——那会在过载测量环境下把被拉长的按键间隔误判成缺防抖。
       'home search debounced before settle',
-      result.homeSearch.immediateAfterLastKey === 0,
+      result.homeSearch.immediateAfterLastKey === 0 && result.homeSearch.rebuiltAfterSettle === true,
       {
         immediateAfterLastKey: result.homeSearch.immediateAfterLastKey,
         afterRapidMutations: result.homeSearch.afterRapid?.mutations,
         gaps: result.homeSearch.gaps,
         afterSettledMutations: result.homeSearch.afterSettled?.mutations,
         rebuiltAfterSettle: result.homeSearch.rebuiltAfterSettle,
+        resultSetChanged: result.homeSearch.resultSetChanged,
+        mutationSummary: result.homeSearch.mutationSummary,
+        keyTimes: result.homeSearch.keyTimes,
       },
-      'no DOM rebuild within 60ms of the final keystroke (jank-immune debounce check)',
+      'no result rebuild within 60ms of the final keystroke, followed by a real result change after settle',
     ),
     auditCheck(
       'admin search completed',
