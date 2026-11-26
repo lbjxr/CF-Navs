@@ -76,7 +76,7 @@
     flex-direction: column;
     gap: 6px;
     position: sticky;
-    top: 24px;
+    top: 0;
     padding: 8px;
     border: 1px solid var(--admin-sidebar-border);
     border-radius: 16px;
