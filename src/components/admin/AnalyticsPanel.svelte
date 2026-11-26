@@ -25,6 +25,7 @@
 
   let { bookmarks = [], categories = [] }: Props = $props()
 
+  const topHeadingId = $props.id()
   let zeroVisitPage = $state(1)
 
   const sortedBookmarks = $derived([...bookmarks]
@@ -70,14 +71,15 @@
   <!-- 排行榜与冷门分析 -->
   <div class="analytics-grids">
     <!-- Top 20 热点排行 -->
-    <section class="admin-list-panel">
+    <section class="admin-list-panel top-visit-panel">
       <div class="admin-list-panel-header">
         <div>
           <p class="admin-panel-eyebrow">排行榜</p>
-          <h2>最常访问 Top 20</h2>
+          <h2 id={topHeadingId}>最常访问 Top 20</h2>
         </div>
       </div>
-      <div class="admin-panel-scroll-body" style="padding: 16px 20px;">
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex (The bounded ranking list needs a keyboard scroll target.) -->
+      <div class="admin-panel-scroll-body top-visit-scroll-body" style="padding: 16px 20px;" tabindex={topBookmarks.length > 0 ? 0 : undefined} role="region" aria-labelledby={topHeadingId}>
         {#if topBookmarks.length === 0}
           <div class="admin-empty-state" style="min-height: 150px;">
             <span class="admin-empty-state-icon">🔥</span>
@@ -196,10 +198,23 @@
 </div>
 
 <style>
+  .top-visit-panel,
   .zero-visit-panel {
     height: min(760px, calc(100vh - 220px));
-    grid-template-rows: auto minmax(0, 1fr) auto;
     min-width: 0;
+  }
+
+  .top-visit-panel {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .top-visit-scroll-body:focus-visible {
+    outline: 2px solid var(--admin-accent-strong);
+    outline-offset: -3px;
+  }
+
+  .zero-visit-panel {
+    grid-template-rows: auto minmax(0, 1fr) auto;
   }
 
   .zero-visit-scroll-body {

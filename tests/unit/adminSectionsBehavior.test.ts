@@ -63,6 +63,10 @@ describe('AnalyticsPanel', () => {
   it('统计与排行：按点击降序、最多 20 条且只含有点击的书签', () => {
     const bookmarks = manyBookmarks(25, (i) => (i < 22 ? i + 1 : 0))
     const { container } = render(AnalyticsPanel, { props: { bookmarks, categories } })
+    const scrollRegion = screen.getByRole('region', { name: '最常访问 Top 20' })
+    expect(scrollRegion.tabIndex).toBe(0)
+    scrollRegion.focus()
+    expect(document.activeElement).toBe(scrollRegion)
     const ranks = Array.from(container.querySelectorAll('.top-item strong')).map((node) => node.textContent)
     expect(ranks).toHaveLength(20)
     expect(ranks[0]).toBe('Site22')
@@ -75,6 +79,7 @@ describe('AnalyticsPanel', () => {
   it('零访问分页：翻页、数据缩减后页码夹回范围', async () => {
     const zero = manyBookmarks(23, () => 0)
     const { container, rerender } = render(AnalyticsPanel, { props: { bookmarks: zero, categories } })
+    expect(screen.getByRole('region', { name: '最常访问 Top 20' }).hasAttribute('tabindex')).toBe(false)
     const names = () => Array.from(container.querySelectorAll('.zero-item strong')).map((node) => node.getAttribute('title'))
     expect(names()[0]).toBe('Site01')
     await fireEvent.click(screen.getByRole('button', { name: '下一页' }))
