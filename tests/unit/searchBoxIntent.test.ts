@@ -23,12 +23,12 @@ function enter(over: KeyboardEventInit = {}) {
 }
 
 describe('SearchBox filter and external search intent', () => {
-  it('associates a visible explanation with the field/button and updates the selected engine without submitting', async () => {
+  it('keeps the field/button description outside the visual layout and updates the selected engine without submitting', async () => {
     const open = vi.fn()
     vi.stubGlobal('open', open)
     render(SearchBoxBindHarness, { searchEngine: setting, query: '' })
     const hint = document.getElementById(input().getAttribute('aria-describedby')!)!
-    expect(hint.classList.contains('search-hint')).toBe(true)
+    expect(hint.classList.contains('sr-only')).toBe(true)
     expect(hint.textContent).toContain('筛选本站收藏')
     expect(hint.textContent).toContain('使用 Alpha 搜索网页')
     expect(submitButton().getAttribute('aria-describedby')).toBe(hint.id)

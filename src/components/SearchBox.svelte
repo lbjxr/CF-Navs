@@ -315,7 +315,7 @@
     <span class="search-button-text">网页搜索</span>
     <span class="search-button-mobile-text" aria-hidden="true">网页</span>
   </button>
-  <p class="search-hint" id={searchHintId}>
+  <p class="sr-only" id={searchHintId}>
     输入关键词筛选本站收藏。
     {#if currentEngine}点「网页搜索」使用 {currentEngine.name} 搜索网页，结果在新标签页打开。
     {:else}当前未配置网页搜索引擎。{/if}
@@ -335,9 +335,6 @@
   .search-box.has-engine-selector {
     grid-template-columns: 140px minmax(0, 1fr) 80px;
   }
-
-  .search-hint { grid-column: 1 / -1; margin: 0; font-size: var(--font-size-base); line-height: 1.5; text-align: left; overflow-wrap: anywhere; }
-  .search-box.preview-light .search-hint { color: #334155; }
 
   .search-input,
   .search-button {
